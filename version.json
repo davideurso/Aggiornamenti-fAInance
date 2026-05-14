@@ -2,6 +2,6 @@
   "version": "0.5",
   "versionCode": 5,
   "releaseDate": "2026-05-14",
-  "notes": "Logo fAInance, dati personali nel profilo, valuta secondaria configurabile per sezione",
+  "notes": "Fix pagina bianca, logo fAInance, profilo utente con dati personali modificabili",
   "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/app-debug.apk"
 }
