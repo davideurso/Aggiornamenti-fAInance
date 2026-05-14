@@ -1,7 +1,7 @@
 {
-  "version": "0.7.0",
-  "versionCode": 7,
+  "version": "0.8.0",
+  "versionCode": 8,
   "releaseDate": "2026-05-14",
-  "notes": "Fix crash Android, nome fAInance",
-  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.7.0.apk"
+  "notes": "Login, logo fAInance, profilo utente, valuta secondaria per sezione, import con linee guida",
+  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.8.0.apk"
 }
