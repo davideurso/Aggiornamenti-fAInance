@@ -1,7 +1,7 @@
 {
-  "version": "0.9.0",
-  "versionCode": 9,
+  "version": "0.9.1",
+  "versionCode": 10,
   "releaseDate": "2026-05-14",
-  "notes": "Firebase login, dati sincronizzati su cloud, riordino categorie con pulsanti, export/backup funzionante, formato valuta secondaria corretto, sezione Profilo nelle impostazioni",
-  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.9.0.apk"
+  "notes": "Fix export e backup con condivisione Android, fix dati profilo, cambio password, fix Google login",
+  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.9.1.apk"
 }
