@@ -1,7 +1,7 @@
 {
-  "version": "0.1",
-  "versionCode": 1,
+  "version": "0.2",
+  "versionCode": 2,
   "releaseDate": "2026-05-14",
-  "notes": "Prima versione pubblica — fAInance v0.1",
-  "apkUrl": ""
+  "notes": "Valuta secondaria ovunque, linee guida import, popup conferma caricamento, fix riordino categorie",
+  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/app-debug.apk"
 }
