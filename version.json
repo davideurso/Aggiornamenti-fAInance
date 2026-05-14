@@ -1,7 +1,1 @@
-{
-  "version": "0.2",
-  "versionCode": 2,
-  "releaseDate": "2026-05-14",
-  "notes": "Valuta secondaria ovunque, linee guida import, popup conferma caricamento, fix riordino categorie",
-  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/app-debug.apk"
-}
+{ "version": "0.3", "versionCode": 3, "releaseDate": "2026-05-14", "notes": "Login con account, dati persistenti agli aggiornamenti, avviso backup prima di aggiornare", "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/app-debug.apk" } 
