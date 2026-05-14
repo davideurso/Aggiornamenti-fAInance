@@ -1,7 +1,7 @@
 {
-  "version": "0.5",
+  "version": "0.5.1",
   "versionCode": 5,
   "releaseDate": "2026-05-14",
-  "notes": "Fix pagina bianca, logo fAInance, profilo utente con dati personali modificabili",
-  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/app-debug.apk"
+  "notes": "Fix pagina bianca, logo fAInance, profilo utente con dati personali",
+  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.5.1.apk"
 }
