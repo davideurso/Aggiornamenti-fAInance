@@ -1,7 +1,7 @@
 {
-  "version": "0.8.0",
-  "versionCode": 8,
+  "version": "0.9.0",
+  "versionCode": 9,
   "releaseDate": "2026-05-14",
-  "notes": "Login, logo fAInance, profilo utente, valuta secondaria per sezione, import con linee guida",
-  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.8.0.apk"
+  "notes": "Firebase login, dati sincronizzati su cloud, riordino categorie con pulsanti, export/backup funzionante, formato valuta secondaria corretto, sezione Profilo nelle impostazioni",
+  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.9.0.apk"
 }
