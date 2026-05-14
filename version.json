@@ -1,1 +1,7 @@
-{ "version": "0.3", "versionCode": 3, "releaseDate": "2026-05-14", "notes": "Login con account, dati persistenti agli aggiornamenti, avviso backup prima di aggiornare", "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/app-debug.apk" } 
+{
+  "version": "0.4",
+  "versionCode": 4,
+  "releaseDate": "2026-05-14",
+  "notes": "Dati persistenti per utente, export file funzionante, valuta secondaria configurabile per sezione",
+  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/app-debug.apk"
+}
