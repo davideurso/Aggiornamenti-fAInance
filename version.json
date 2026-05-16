@@ -1,7 +1,7 @@
 {
-  "version": "0.9.1",
-  "versionCode": 10,
+  "version": "0.9.2",
+  "versionCode": 11,
   "releaseDate": "2026-05-14",
-  "notes": "Fix export e backup con condivisione Android, fix dati profilo, cambio password, fix Google login",
+  "notes": "fix Google login",
   "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-debug-0.9.1.apk"
 }
