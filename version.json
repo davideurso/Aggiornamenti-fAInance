@@ -1,7 +1,7 @@
 {
-  "version": "1.1.2",
-  "versionCode": 52,
-  "releaseDate": "2026-05-25",
-  "notes": "limita il Consulente AI ai soli temi di fAInance e aggiorna l'immagine AI nelle sezioni dell'app",
-  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-1.1.2.apk"
+  "version": "1.2.0",
+  "versionCode": 89,
+  "releaseDate": "2026-05-29",
+  "notes": "Versione stabile di fAInance. Migliorate le categorie e le impostazioni.",
+  "apkUrl": "https://github.com/davideurso/Aggiornamenti-fAInance/raw/main/fAInance-1.2.0.apk"
 }
