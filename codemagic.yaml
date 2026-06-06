@@ -14,15 +14,26 @@ workflows:
         script: |
           npm install
 
+      - name: Add iOS platform if missing
+        script: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+
       - name: Build web app
         script: |
           npm run build
 
-      - name: Sync Capacitor
+      - name: Sync Capacitor iOS
         script: |
           npx cap sync ios
 
-      - name: Build iOS project
+      - name: Install CocoaPods
+        script: |
+          cd ios/App
+          pod install
+
+      - name: Build iOS simulator app
         script: |
           cd ios/App
           xcodebuild \
