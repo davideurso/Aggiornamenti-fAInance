@@ -36,7 +36,7 @@ workflows:
       - name: Inspect iOS folder
         script: |
           echo "Contenuto cartella ios:"
-          find ios -maxdepth 3 -type f | sort
+          find ios -maxdepth 4 -type f | sort
 
       - name: Install CocoaPods if Podfile exists
         script: |
@@ -52,16 +52,28 @@ workflows:
 
       - name: Build iOS simulator app
         script: |
-          if [ -d "ios/App" ]; then
-            cd ios/App
+          cd ios/App
+
+          if [ -f "App.xcworkspace" ] || [ -d "App.xcworkspace" ]; then
+            echo "Uso App.xcworkspace"
             xcodebuild \
               -workspace App.xcworkspace \
               -scheme App \
               -configuration Debug \
               -sdk iphonesimulator \
               -derivedDataPath build
+          elif [ -d "App.xcodeproj" ]; then
+            echo "Uso App.xcodeproj"
+            xcodebuild \
+              -project App.xcodeproj \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -derivedDataPath build
           else
-            echo "Cartella ios/App non trovata"
+            echo "Né App.xcworkspace né App.xcodeproj trovati."
+            echo "Contenuto ios/App:"
+            ls -la
             exit 1
           fi
 
