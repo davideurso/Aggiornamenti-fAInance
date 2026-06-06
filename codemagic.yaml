@@ -14,6 +14,11 @@ workflows:
         script: |
           npm install
 
+      - name: Install Capacitor iOS platform
+        script: |
+          CAP_VERSION=$(node -p "const p=require('./package.json'); const v=(p.dependencies && p.dependencies['@capacitor/core']) || (p.devDependencies && p.devDependencies['@capacitor/core']) || 'latest'; console.log(v)")
+          npm install @capacitor/ios@$CAP_VERSION
+
       - name: Add iOS platform if missing
         script: |
           if [ ! -d "ios" ]; then
