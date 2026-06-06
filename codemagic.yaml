@@ -33,20 +33,37 @@ workflows:
         script: |
           npx cap sync ios
 
-      - name: Install CocoaPods
+      - name: Inspect iOS folder
         script: |
-          cd ios/App
-          pod install
+          echo "Contenuto cartella ios:"
+          find ios -maxdepth 3 -type f | sort
+
+      - name: Install CocoaPods if Podfile exists
+        script: |
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App
+            pod install
+          elif [ -f "ios/Podfile" ]; then
+            cd ios
+            pod install
+          else
+            echo "Nessun Podfile trovato. Continuo senza pod install."
+          fi
 
       - name: Build iOS simulator app
         script: |
-          cd ios/App
-          xcodebuild \
-            -workspace App.xcworkspace \
-            -scheme App \
-            -configuration Debug \
-            -sdk iphonesimulator \
-            -derivedDataPath build
+          if [ -d "ios/App" ]; then
+            cd ios/App
+            xcodebuild \
+              -workspace App.xcworkspace \
+              -scheme App \
+              -configuration Debug \
+              -sdk iphonesimulator \
+              -derivedDataPath build
+          else
+            echo "Cartella ios/App non trovata"
+            exit 1
+          fi
 
     artifacts:
       - ios/App/build/Build/Products/**/*.app
