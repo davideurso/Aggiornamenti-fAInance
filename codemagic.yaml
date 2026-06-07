@@ -1,13 +1,27 @@
 workflows:
   ios-capacitor-workflow:
-    name: iOS Capacitor Build
+    name: iOS Capacitor App Store Build
     max_build_duration: 60
     instance_type: mac_mini_m2
 
     environment:
+      groups:
+        - appstore-connect
+
       node: latest
       xcode: latest
       cocoapods: default
+
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: it.fainanceapp.app
+
+      vars:
+        BUNDLE_ID: "it.fainanceapp.app"
+        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_SCHEME: "App"
+        APP_VERSION: "1.5.2"
+        BUILD_NUMBER: "131"
 
     scripts:
       - name: Install dependencies
@@ -43,44 +57,53 @@ workflows:
           if [ -f "ios/App/Podfile" ]; then
             cd ios/App
             pod install
+            cd ../..
           elif [ -f "ios/Podfile" ]; then
             cd ios
             pod install
+            cd ..
           else
             echo "Nessun Podfile trovato. Continuo senza pod install."
           fi
 
-      - name: Build iOS simulator app
+      - name: Set iOS version and build number
         script: |
           cd ios/App
 
-          if [ -f "App.xcworkspace" ] || [ -d "App.xcworkspace" ]; then
-            echo "Uso App.xcworkspace"
-            xcodebuild \
-              -workspace App.xcworkspace \
-              -scheme App \
-              -configuration Debug \
-              -sdk iphonesimulator \
-              -derivedDataPath build
-          elif [ -d "App.xcodeproj" ]; then
-            echo "Uso App.xcodeproj"
-            xcodebuild \
-              -project App.xcodeproj \
-              -scheme App \
-              -configuration Debug \
-              -sdk iphonesimulator \
-              -derivedDataPath build
-          else
-            echo "Né App.xcworkspace né App.xcodeproj trovati."
-            echo "Contenuto ios/App:"
-            ls -la
-            exit 1
+          if [ -f "App/Info.plist" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" App/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" App/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" App/Info.plist || true
           fi
 
+          if [ -d "App.xcodeproj" ]; then
+            xcrun agvtool new-marketing-version "$APP_VERSION" || true
+            xcrun agvtool new-version -all "$BUILD_NUMBER" || true
+          fi
+
+          cd ../..
+
+      - name: Set up code signing
+        script: |
+          keychain initialize
+
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+          keychain add-certificates
+          xcode-project use-profiles
+
+      - name: Build iOS IPA
+        script: |
+          xcode-project build-ipa \
+            --workspace "$XCODE_WORKSPACE" \
+            --scheme "$XCODE_SCHEME"
+
     artifacts:
-      - ios/App/build/Build/Products/**/*.app
-      - ios/App/build/Build/Products/**/*.ipa
-      - ios/App/build/Build/Products/**/*.xcarchive
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
     publishing:
       email:
