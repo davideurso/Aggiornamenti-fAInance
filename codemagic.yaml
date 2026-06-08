@@ -91,41 +91,56 @@ workflows:
         script: |
           keychain initialize
           keychain add-certificates
-
           xcode-project use-profiles
 
       - name: Force Xcode signing settings
         script: |
-          PBXPROJ="ios/App/App.xcodeproj/project.pbxproj"
+          python3 - <<'PY'
+          import os
+          import re
 
-          sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;/g" "$PBXPROJ"
+          pbxproj = "ios/App/App.xcodeproj/project.pbxproj"
+          bundle_id = os.environ["BUNDLE_ID"]
+          team_id = os.environ["APPLE_TEAM_ID"]
+          profile_name = os.environ["PROFILE_NAME"]
 
-          if grep -q "DEVELOPMENT_TEAM" "$PBXPROJ"; then
-            sed -i '' "s/DEVELOPMENT_TEAM = [^;]*;/DEVELOPMENT_TEAM = $APPLE_TEAM_ID;/g" "$PBXPROJ"
-          else
-            sed -i '' "/PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;/a\\
-				DEVELOPMENT_TEAM = $APPLE_TEAM_ID;
-            " "$PBXPROJ"
-          fi
+          with open(pbxproj, "r", encoding="utf-8") as f:
+              text = f.read()
 
-          if grep -q "CODE_SIGN_STYLE" "$PBXPROJ"; then
-            sed -i '' "s/CODE_SIGN_STYLE = [^;]*;/CODE_SIGN_STYLE = Manual;/g" "$PBXPROJ"
-          else
-            sed -i '' "/PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;/a\\
-				CODE_SIGN_STYLE = Manual;
-            " "$PBXPROJ"
-          fi
+          text = re.sub(
+              r"PRODUCT_BUNDLE_IDENTIFIER = [^;]*;",
+              f"PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};",
+              text
+          )
 
-          if grep -q "PROVISIONING_PROFILE_SPECIFIER" "$PBXPROJ"; then
-            sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";/g" "$PBXPROJ"
-          else
-            sed -i '' "/PRODUCT_BUNDLE_IDENTIFIER = $BUNDLE_ID;/a\\
-				PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\";
-            " "$PBXPROJ"
-          fi
+          build_settings_blocks = re.findall(r"buildSettings = \{[\s\S]*?\n\s*\};", text)
 
-          echo "Signing settings patched:"
-          grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER" "$PBXPROJ" | head -80
+          for block in build_settings_blocks:
+              new_block = block
+
+              def set_or_add(setting, value):
+                  nonlocal new_block
+                  pattern = rf"{setting} = [^;]*;"
+                  line = f"                {setting} = {value};"
+                  if re.search(pattern, new_block):
+                      new_block = re.sub(pattern, line.strip(), new_block)
+                  else:
+                      new_block = new_block.replace("buildSettings = {", "buildSettings = {\n" + line, 1)
+
+              set_or_add("DEVELOPMENT_TEAM", team_id)
+              set_or_add("CODE_SIGN_STYLE", "Manual")
+              set_or_add("PROVISIONING_PROFILE_SPECIFIER", f'"{profile_name}"')
+              set_or_add("PRODUCT_BUNDLE_IDENTIFIER", bundle_id)
+
+              text = text.replace(block, new_block)
+
+          with open(pbxproj, "w", encoding="utf-8") as f:
+              f.write(text)
+
+          print("Signing settings patched")
+          PY
+
+          grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE_SPECIFIER" ios/App/App.xcodeproj/project.pbxproj | head -100
 
       - name: Build iOS IPA
         script: |
