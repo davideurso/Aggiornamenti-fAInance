@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'it.fainanceapp.app.test',
-  appName: 'fAInance Test',
+  appId: 'it.fainanceapp.app',
+  appName: 'fAInance',
   webDir: 'dist',
   plugins: {
     FirebaseAuthentication: {
