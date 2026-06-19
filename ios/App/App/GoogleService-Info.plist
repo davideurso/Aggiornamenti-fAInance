@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>739607555867-6np9in0mlj7b7ro1e6lbhijha7k40bhv.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU</string>
+	<key>GCM_SENDER_ID</key>
+	<string>739607555867</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>it.fainanceapp.app</string>
+	<key>PROJECT_ID</key>
+	<string>fainance-a7794</string>
+	<key>STORAGE_BUCKET</key>
+	<string>fainance-a7794.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:739607555867:ios:16c4ae555c4a56cfcd6dbe</string>
+</dict>
+</plist>

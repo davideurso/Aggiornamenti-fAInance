@@ -1,0 +1,240 @@
+workflows:
+  ios-capacitor-workflow:
+    name: iOS Capacitor App Store Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    integrations:
+      app_store_connect: Codemagic fAInance
+
+    environment:
+      groups:
+        - appstore-connect
+
+      node: latest
+      xcode: latest
+      cocoapods: default
+
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: it.fainanceapp.app
+
+      vars:
+        BUNDLE_ID: "it.fainanceapp.app"
+        APPLE_TEAM_ID: "SSV4P8694F"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+        APP_VERSION: "1.5.2"
+        BUILD_NUMBER: "140"
+
+    scripts:
+      - name: Install dependencies
+        script: |
+          npm install
+
+      - name: Install Capacitor iOS platform
+        script: |
+          CAP_VERSION=$(node -p "const p=require('./package.json'); const v=(p.dependencies && p.dependencies['@capacitor/core']) || (p.devDependencies && p.devDependencies['@capacitor/core']) || 'latest'; console.log(v)")
+          npm install @capacitor/ios@$CAP_VERSION
+
+      - name: Add iOS platform if missing
+        script: |
+          if [ ! -d "ios" ]; then
+            npx cap add ios
+          fi
+
+      - name: Build web app
+        script: |
+          npm run build
+
+      - name: Sync Capacitor iOS
+        script: |
+          npx cap sync ios
+
+      - name: Install CocoaPods if Podfile exists
+        script: |
+          if [ -f "ios/App/Podfile" ]; then
+            cd ios/App
+            pod install
+            cd ../..
+          elif [ -f "ios/Podfile" ]; then
+            cd ios
+            pod install
+            cd ..
+          else
+            echo "Nessun Podfile trovato. Continuo senza pod install."
+          fi
+
+      - name: Set iOS version, build number, privacy permissions and encryption compliance
+        script: |
+          cd ios/App
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" App/Info.plist || true
+
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" App/Info.plist || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" App/Info.plist
+
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string fAInance needs access to your photo library so you can select receipt images and import documents into the app." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription fAInance needs access to your photo library so you can select receipt images and import documents into the app." App/Info.plist
+
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string fAInance needs permission to save exported files or generated images to your photo library when you choose to do so." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription fAInance needs permission to save exported files or generated images to your photo library when you choose to do so." App/Info.plist
+
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string fAInance needs access to the camera so you can scan receipts and attach images to your transactions." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription fAInance needs access to the camera so you can scan receipts and attach images to your transactions." App/Info.plist
+
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string fAInance needs access to the microphone so you can add expenses and income using your voice." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription fAInance needs access to the microphone so you can add expenses and income using your voice." App/Info.plist
+
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist
+
+          xcrun agvtool new-marketing-version "$APP_VERSION" || true
+          xcrun agvtool new-version -all "$BUILD_NUMBER" || true
+
+          cat App/Info.plist
+
+          cd ../..
+
+      - name: Fetch iOS signing files
+        script: |
+          keychain initialize
+
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
+          keychain add-certificates
+
+          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -n 1)
+
+          if [ -z "$PROFILE_PATH" ]; then
+            echo "Nessun provisioning profile trovato."
+            exit 1
+          fi
+
+          security cms -D -i "$PROFILE_PATH" > "$CM_BUILD_DIR/profile.plist"
+
+          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$CM_BUILD_DIR/profile.plist")
+          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$CM_BUILD_DIR/profile.plist")
+
+          echo "PROFILE_NAME=$PROFILE_NAME" >> "$CM_ENV"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$CM_ENV"
+
+          echo "Provisioning profile trovato:"
+          echo "PROFILE_NAME=$PROFILE_NAME"
+          echo "PROFILE_UUID=$PROFILE_UUID"
+
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+
+      - name: Patch App target signing only
+        script: |
+          python3 - <<'PY'
+          import os
+          import re
+
+          pbxproj = "ios/App/App.xcodeproj/project.pbxproj"
+          bundle_id = os.environ["BUNDLE_ID"]
+          team_id = os.environ["APPLE_TEAM_ID"]
+          profile_name = os.environ["PROFILE_NAME"]
+
+          with open(pbxproj, "r", encoding="utf-8") as f:
+              text = f.read()
+
+          text = re.sub(
+              r"PRODUCT_BUNDLE_IDENTIFIER = [^;]*;",
+              f"PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};",
+              text
+          )
+
+          def replace_or_add(block, key, value):
+              pattern = rf"{key} = [^;]*;"
+              line = f"                {key} = {value};"
+              if re.search(pattern, block):
+                  return re.sub(pattern, line.strip(), block)
+              return block.replace("buildSettings = {", "buildSettings = {\n" + line, 1)
+
+          blocks = re.findall(r"buildSettings = \{[\s\S]*?\n\s*\};", text)
+
+          for block in blocks:
+              if "PRODUCT_BUNDLE_IDENTIFIER" not in block:
+                  continue
+
+              new_block = block
+              new_block = replace_or_add(new_block, "DEVELOPMENT_TEAM", team_id)
+              new_block = replace_or_add(new_block, "CODE_SIGN_STYLE", "Manual")
+              new_block = replace_or_add(new_block, "CODE_SIGN_IDENTITY", '"Apple Distribution"')
+              new_block = replace_or_add(new_block, "PROVISIONING_PROFILE_SPECIFIER", f'"{profile_name}"')
+              new_block = replace_or_add(new_block, "PRODUCT_BUNDLE_IDENTIFIER", bundle_id)
+
+              text = text.replace(block, new_block)
+
+          with open(pbxproj, "w", encoding="utf-8") as f:
+              f.write(text)
+
+          print("App target signing patched")
+          PY
+
+          grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE_SPECIFIER" ios/App/App.xcodeproj/project.pbxproj | head -100
+
+      - name: Create export options
+        script: |
+          cat > "$CM_BUILD_DIR/export_options.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>${APPLE_TEAM_ID}</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Apple Distribution</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>${BUNDLE_ID}</key>
+              <string>${PROFILE_NAME}</string>
+            </dict>
+            <key>stripSwiftSymbols</key>
+            <true/>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          cat "$CM_BUILD_DIR/export_options.plist"
+
+      - name: Build iOS IPA
+        script: |
+          rm -rf "$CM_BUILD_DIR/build/ios"
+
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
+            archive
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
+            -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
+            -exportOptionsPlist "$CM_BUILD_DIR/export_options.plist"
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+
+    publishing:
+      app_store_connect:
+        auth: integration
+
+      email:
+        recipients:
+          - davideurso87@gmail.com
+        notify:
+          success: true
+          failure: true

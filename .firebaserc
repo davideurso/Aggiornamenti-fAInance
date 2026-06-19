@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "fainance-a7794"
+  },
+  "targets": {
+    "fainance-a7794": {
+      "hosting": {
+        "fainance-test": [
+          "test-fainanceapp-it"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
