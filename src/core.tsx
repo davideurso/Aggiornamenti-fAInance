@@ -69,7 +69,7 @@ export const LANGUAGES=[
 
 export const PLAN_IDS=["free","base","premium"];
 export const PLAN_LABELS={
-  it:{free:"Gratis",base:"Base",premium:"Completa"},
+  it:{free:"Gratis",base:"Base",premium:"Completo"},
   en:{free:"Gratis",base:"Plus",premium:"Premium"},
   es:{free:"Gratis",base:"Base",premium:"Completo"},
   fr:{free:"Gratuit",base:"Plus",premium:"Premium"},
@@ -80,7 +80,7 @@ export const PLAN_LABELS={
   ro:{free:"Gratuit",base:"Bază",premium:"Complet"},
   el:{free:"Δωρεάν",base:"Βασικό",premium:"Πλήρες"}
 };
-export const PLAN_PRICES={free:{monthly:0,yearly:0},base:{monthly:2.5,yearly:20},premium:{monthly:4,yearly:35}};
+export const PLAN_PRICES={free:{monthly:0,yearly:0},base:{monthly:2.5,yearly:20},premium:{monthly:3.5,yearly:35}};
 export const PLAN_LIMITS={
   free:{ads:true,dailySingleMovements:2,rewardedExtraMovements:2,dailyMultipleMovements:1,dailyReceiptScans:1,rewardedExtraReceiptScans:1,dailyVoiceEntries:1,rewardedExtraVoiceEntries:1,aiDailyReplies:4,rewardedExtraAiReplies:2,aiMonthlyReplies:4,aiMonthlyTips:2,recurringMovements:1,instalmentEnabled:true,dailyInstalments:2,rewardedExtraInstalments:0,instalmentOptions:[6,12],instalmentMonthsMin:6,instalmentMonthsMax:12,baseCategoriesOnly:true,categoryEdits:2,canEditAreas:false,canReorderCategories:false,basePaymentMethodsOnly:true,canCustomizePaymentMethods:false,historyLevel:"full",statsLevel:"base",budgetLevel:"full",widgets:1,goals:1,notes:1,bankNotes:1,documents:0,patrimonioLevel:"complete",patrimonioCopyMonthly:2,rewardedExtraPatrimonioCopy:2,alerts:1,shareProjects:1,shareDailyExpenses:2,rewardedExtraShareDailyExpenses:2,settingsLevel:"base"},
   base:{ads:false,dailySingleMovements:4,rewardedExtraMovements:2,dailyMultipleMovements:2,dailyReceiptScans:3,rewardedExtraReceiptScans:1,dailyVoiceEntries:3,rewardedExtraVoiceEntries:1,aiDailyReplies:10,rewardedExtraAiReplies:3,aiMonthlyReplies:10,aiMonthlyTips:4,recurringMovements:3,instalmentEnabled:true,dailyInstalments:4,rewardedExtraInstalments:0,instalmentOptions:[3,6,12,24],instalmentMonthsMin:3,instalmentMonthsMax:24,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"advanced",budgetLevel:"full",widgets:3,goals:2,notes:3,bankNotes:3,documents:1,patrimonioLevel:"complete",patrimonioCopyMonthly:5,rewardedExtraPatrimonioCopy:2,alerts:3,shareProjects:2,shareDailyExpenses:4,rewardedExtraShareDailyExpenses:2,settingsLevel:"advanced"},

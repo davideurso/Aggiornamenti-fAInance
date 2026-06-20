@@ -69,6 +69,9 @@ function readFainanceStoredLang(){
 const ADMOB_APP_ID_ANDROID="ca-app-pub-4502496181111632~4013173874";
 const ADMOB_REWARDED_AD_UNIT_ID_ANDROID="ca-app-pub-4502496181111632/2700092208";
 const ADMOB_BANNER_AD_UNIT_ID_ANDROID="ca-app-pub-4502496181111632/3175905788";
+const ADMOB_APP_ID_IOS="ca-app-pub-4502496181111632~7115058902";
+const ADMOB_REWARDED_AD_UNIT_ID_IOS="ca-app-pub-4502496181111632/5610405541";
+const ADMOB_BANNER_AD_UNIT_ID_IOS="ca-app-pub-4502496181111632/2522463380";
 
 // Evita il flash visibile in italiano quando è attiva una lingua diversa:
 // la UI resta nascosta solo per il frame necessario alla traduzione runtime.
@@ -1733,7 +1736,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(feature==="voiceEntry")return tr("Hai raggiunto il limite giornaliero per inserimento vocale nel piano {plan}.");
     if(feature==="notes")return tr("Hai raggiunto il numero massimo di appunti del piano {plan}.");
     if(feature==="bankNotes")return tr("Hai raggiunto il numero massimo di coordinate bancarie del piano {plan}.");
-    if(feature==="documents")return tr("I documenti non sono disponibili nel piano {plan}. Vai in Info per passare al piano Base o Completa.");
+    if(feature==="documents")return tr("I documenti non sono disponibili nel piano {plan}. Vai in Info per passare al piano Base o Completo.");
     if(feature==="recurringMovements")return tr("Hai raggiunto il numero massimo di movimenti ricorrenti del piano {plan}.");
     return tr("Hai raggiunto il limite per {feature} nel piano {plan}. Restano: {remaining}. Vai in Info per passare a un piano superiore.");
   }
@@ -1851,15 +1854,23 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     try{setTimeout(function(){setTab("settings");setSettingsPage("info");setMobileMenu(false);},80);}catch(e){}
   }
   var GOOGLE_PLAY_SUBSCRIPTION_IDS={base:{productId:"base",monthly:"base-monthly",yearly:"base-yearly"},premium:{productId:"complete",monthly:"complete-monthly",yearly:"complete-yearly"}};
+  var APPLE_SUBSCRIPTION_IDS={base:{monthly:"base_monthly",yearly:"base_yearly"},premium:{monthly:"complete_monthly",yearly:"complete_yearly"}};
   function billingPeriodLabel(period){return period==="yearly"?L("Annuale"):L("Mensile");}
   function nativePlugin(name){try{return window&&window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins[name];}catch(e){return null;}}
-  function isNativeAndroidApp(){try{return !!(window&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
+  function nativePlatform(){try{var c=window&&window.Capacitor;if(c&&c.getPlatform)return c.getPlatform();if(c&&c.isNativePlatform&&c.isNativePlatform())return "native";}catch(e){}return "web";}
+  function isNativeMobileApp(){try{return !!(window&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
+  function isNativeAndroidApp(){return isNativeMobileApp()&&nativePlatform()==="android";}
+  function isNativeIOSApp(){return isNativeMobileApp()&&nativePlatform()==="ios";}
+  function appStoreName(){return isNativeIOSApp()?"App Store":"store";}
+  function platformStoreBillingName(){return isNativeIOSApp()?"App Store":"store del dispositivo";}
+  function currentRewardedAdUnitId(){return isNativeIOSApp()?ADMOB_REWARDED_AD_UNIT_ID_IOS:ADMOB_REWARDED_AD_UNIT_ID_ANDROID;}
+  function currentBannerAdUnitId(){return isNativeIOSApp()?ADMOB_BANNER_AD_UNIT_ID_IOS:ADMOB_BANNER_AD_UNIT_ID_ANDROID;}
   var adConsentRequestedRef=useRef(false);
   var rewardedAdInProgressRef=useRef(false);
   var rewardedAdCompletedAtRef=useRef(0);
   function requestAdConsentIfNeeded(){
     var ads=nativePlugin("FainanceAds");
-    if(!isNativeAndroidApp()||!ads||!ads.requestConsent)return;
+    if(!isNativeMobileApp()||!ads||!ads.requestConsent)return;
     if(adConsentRequestedRef.current)return;
     adConsentRequestedRef.current=true;
     try{ads.requestConsent({}).catch(function(e){console.warn("AdMob consent error",e);});}catch(e){}
@@ -1872,37 +1883,67 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       return;
     }
     var billing=nativePlugin("FainanceBilling");
-    if(!isNativeAndroidApp()||!billing||!billing.purchase){
-      setToast({text:L("Gli acquisti reali sono disponibili solo dall’app Android installata tramite Google Play."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+    if(!isNativeMobileApp()||!billing||!billing.purchase){
+      setToast({text:L("Gli acquisti reali sono disponibili solo dall’app installata dallo store."),type:"warning",color:"#EF9F27",icon:"⚠️"});
       return;
     }
-    var cfg=GOOGLE_PLAY_SUBSCRIPTION_IDS[pid];
     var period=planBillingPeriod==="yearly"?"yearly":"monthly";
-    if(!cfg||!cfg[period]){
+    var productId="";
+    var basePlanId="";
+    if(isNativeIOSApp()){
+      var iosCfg=APPLE_SUBSCRIPTION_IDS[pid];
+      productId=iosCfg&&iosCfg[period]?iosCfg[period]:"";
+    }else{
+      var cfg=GOOGLE_PLAY_SUBSCRIPTION_IDS[pid];
+      productId=cfg?cfg.productId:"";
+      basePlanId=cfg&&cfg[period]?cfg[period]:"";
+    }
+    if(!productId){
       setToast({text:L("Configurazione acquisto non disponibile."),type:"warning",color:"#EF9F27",icon:"⚠️"});
       return;
     }
     var loadingKey=pid+":"+period;
     setPlanPurchaseLoading(loadingKey);
-    billing.purchase({productId:cfg.productId,basePlanId:cfg[period],plan:pid,billingPeriod:period})
+    billing.purchase({productId:productId,basePlanId:basePlanId,plan:pid,billingPeriod:period,platform:nativePlatform()})
       .then(function(res){
         if(res&&res.success){
-          setCurrentPlan(pid,true);
-          setPlanBillingPeriod(period);
-          setToast({text:L("Piano aggiornato")+": "+planLabel(pid,lang)+" · "+billingPeriodLabel(period),type:"success",color:"#1D9E75",icon:"✅"});
+          setCurrentPlan(res.plan||pid,true);
+          setPlanBillingPeriod(res.billingPeriod||period);
+          setToast({text:L("Piano aggiornato")+": "+planLabel(res.plan||pid,lang)+" · "+billingPeriodLabel(res.billingPeriod||period),type:"success",color:"#1D9E75",icon:"✅"});
           setTimeout(function(){try{saveWidgetSettingsToNative(false,enforceWidgetPlanPayload(widgetSettingsPayload()));}catch(e){}},50);
         }else if(res&&res.cancelled){
           setToast({text:L("Acquisto annullato. Il piano resta invariato."),type:"warning",color:"#EF9F27",icon:"⚠️"});
         }else if(res&&res.pending){
-          setToast({text:L("Acquisto in attesa di conferma da Google Play."),type:"warning",color:"#EF9F27",icon:"⏳"});
+          setToast({text:L("Acquisto in attesa di conferma dallo store."),type:"warning",color:"#EF9F27",icon:"⏳"});
         }else{
           setToast({text:L("Acquisto non completato. Il piano resta invariato."),type:"warning",color:"#EF9F27",icon:"⚠️"});
         }
       })
       .catch(function(err){
         var msg=err&&err.message?err.message:String(err||"");
-        setToast({text:L("Errore acquisto Google Play")+(msg?": "+msg:""),type:"error",color:"#E24B4A",icon:"❌"});
+        setToast({text:L("Errore acquisto")+(msg?": "+msg:""),type:"error",color:"#E24B4A",icon:"❌"});
       })
+      .finally(function(){setPlanPurchaseLoading("");});
+  }
+  function restorePurchases(){
+    var billing=nativePlugin("FainanceBilling");
+    if(!isNativeMobileApp()||!billing||!billing.restorePurchases){
+      setToast({text:L("Ripristino acquisti disponibile solo dall’app installata dallo store."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+      return;
+    }
+    setPlanPurchaseLoading("restore");
+    billing.restorePurchases({platform:nativePlatform()})
+      .then(function(res){
+        if(res&&res.success&&res.plan){
+          setCurrentPlan(res.plan,true);
+          if(res.billingPeriod)setPlanBillingPeriod(res.billingPeriod);
+          setToast({text:L("Acquisti ripristinati")+": "+planLabel(res.plan,lang),type:"success",color:"#1D9E75",icon:"✅"});
+          setTimeout(function(){try{saveWidgetSettingsToNative(false,enforceWidgetPlanPayload(widgetSettingsPayload()));}catch(e){}},50);
+        }else{
+          setToast({text:L("Nessun abbonamento attivo trovato."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+        }
+      })
+      .catch(function(err){var msg=err&&err.message?err.message:String(err||"");setToast({text:L("Errore ripristino acquisti")+(msg?": "+msg:""),type:"error",color:"#E24B4A",icon:"❌"});})
       .finally(function(){setPlanPurchaseLoading("");});
   }
   function showRewardedAdForExtraMovement(onReward){
@@ -1910,14 +1951,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(rewardedAdInProgressRef.current)return;
     if(nowMs-Number(rewardedAdCompletedAtRef.current||0)<2500)return;
     var ads=nativePlugin("FainanceAds");
-    if(!isNativeAndroidApp()||!ads||!ads.showRewarded){
-      setToast({text:L("Annuncio non disponibile in questa versione. Installa l’app da Google Play e riprova."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+    if(!isNativeMobileApp()||!ads||!ads.showRewarded){
+      setToast({text:L("Annuncio non disponibile in questa versione. Installa l’app dallo store e riprova."),type:"warning",color:"#EF9F27",icon:"⚠️"});
       return;
     }
     rewardedAdInProgressRef.current=true;
     requestAdConsentIfNeeded();
     setToast({text:L("Caricamento annuncio..."),type:"info",color:"#7F77DD",icon:"⏳"});
-    ads.showRewarded({adUnitId:ADMOB_REWARDED_AD_UNIT_ID_ANDROID})
+    ads.showRewarded({adUnitId:currentRewardedAdUnitId()})
       .then(function(res){
         if(res&&res.rewarded){rewardedAdCompletedAtRef.current=Date.now();onReward();}
         else setToast({text:L("Annuncio non completato. Operazione extra non sbloccata."),type:"warning",color:"#EF9F27",icon:"⚠️"});
@@ -2194,7 +2235,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
   function TopAdBox(){
     var visible=shouldShowTopAdBox();
-    var nativeBanner=isNativeAndroidApp();
+    var nativeBanner=isNativeMobileApp();
     var adBoxRef=useRef(null);
     var slotHeight=showAppSummaryHeader?68:74;
     useEffect(function(){
@@ -2215,7 +2256,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         }catch(e){}
         try{
           ads.showBanner({
-            adUnitId:ADMOB_BANNER_AD_UNIT_ID_ANDROID,
+            adUnitId:currentBannerAdUnitId(),
             topMarginCssPx:top,
             topMarginPx:top,
             topMargin:top,
@@ -3531,10 +3572,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
             <div style={{fontSize:12,color:subC,marginBottom:14}}>Versione installata: <strong>{APP_VERSION}</strong></div>
             {updateStatus==="playstore"&&<div style={{background:dark?"#1a2a1e":"#edfaf3",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #1D9E75",display:"flex",alignItems:"center",gap:10}}>
               <span style={{fontSize:20}}>✅</span>
-              <span style={{fontSize:13,color:"#1D9E75",fontWeight:500}}>{L("Si aprirà la pagina Google Play Store di fAInance per verificare eventuali aggiornamenti.")}</span>
+              <span style={{fontSize:13,color:"#1D9E75",fontWeight:500}}>{L("Si aprirà la pagina dello store di fAInance per verificare eventuali aggiornamenti.")}</span>
             </div>}
             <button onClick={checkForUpdates} disabled={updateStatus==="checking"} style={{width:"100%",background:dark?"#252535":"#f5f5f5",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"11px",fontSize:14,cursor:updateStatus==="checking"?"not-allowed":"pointer",fontWeight:500,opacity:updateStatus==="checking"?0.6:1}}>
-              {L("Apri Google Play Store")}
+              {L("Apri store")}
             </button>
           </div>
 
@@ -3589,14 +3630,15 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
                 </div>;
               })}
             </div>
-            <div style={{fontSize:11,color:subC,marginTop:10,lineHeight:1.45}}>{L("Gli acquisti Base e Completa vengono gestiti tramite Google Play Billing. Se l'acquisto viene annullato o non va a buon fine, il piano resta invariato.")}</div>
+            <div style={{fontSize:11,color:subC,marginTop:10,lineHeight:1.45}}>{L("Gli acquisti Base e Completo vengono gestiti tramite lo store del dispositivo. Se l'acquisto viene annullato o non va a buon fine, il piano resta invariato.")}</div>
+            <button onClick={restorePurchases} disabled={!!planPurchaseLoading} style={{marginTop:10,background:dark?"#252535":"#F3F4FF",color:dark?"#D6D1FF":"#5A52B8",border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),borderRadius:btnRadius,padding:"9px 12px",fontSize:12,fontWeight:900,cursor:planPurchaseLoading?"not-allowed":"pointer",opacity:planPurchaseLoading?0.7:1}}>{L(planPurchaseLoading==="restore"?"Ripristino in corso...":"Ripristina acquisti")}</button>
           </div>
 
           {/* Rating */}
           <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
             <button onClick={function(){window.open("https://play.google.com","_blank");}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"none",border:"none",cursor:"pointer",padding:0}}>
               <span style={{fontSize:24}}>⭐</span>
-              <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:textC}}>Vota su Play Store</div><div style={{fontSize:12,color:subC}}>Se ti piace l'app, lasciaci una recensione!</div></div>
+              <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:textC}}>Vota sullo store</div><div style={{fontSize:12,color:subC}}>Se ti piace l'app, lasciaci una recensione!</div></div>
               <span style={{marginLeft:"auto",fontSize:16,color:subC}}>›</span>
             </button>
           </div>

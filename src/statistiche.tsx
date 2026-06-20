@@ -54,7 +54,7 @@ export function StatsPanel(){
   var t=TRANSLATIONS[lang]||TRANSLATIONS.it;
   function L(v){return translateFainanceText(v,lang||"it");}
   var currentPlan=(_ctx&&_ctx.currentPlan)||"free";
-  var planNames={free:"Gratis",base:"Base",premium:"Completa"};
+  var planNames={free:"Gratis",base:"Base",premium:"Completo"};
   function planRankLocal(p){return p==="premium"?2:p==="base"?1:0;}
   function planNameLocal(p){return planNames[p]||"Gratis";}
   function canPlan(required){return planRankLocal(currentPlan)>=planRankLocal(required);}
