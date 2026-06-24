@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#f7f7f7" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>Tracker Spese</title>
+    <title>fAInance</title>
     <style>
       * { box-sizing: border-box; margin: 0; padding: 0; }
       body { font-family: system-ui, -apple-system, sans-serif; background: #f7f7f7; }
@@ -17,17 +17,36 @@
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
     </style>
+    <script>
+      (function(){
+        function esc(v){return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]||c;});}
+        function renderBootError(title, detail){
+          var root=document.getElementById('root');
+          if(!root) return;
+          root.innerHTML='<div style="min-height:100vh;background:#f7f7f7;color:#222;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:24px;display:flex;align-items:center;justify-content:center;"><div style="max-width:420px;background:white;border:1px solid #eee;border-radius:18px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);"><div style="font-size:18px;font-weight:800;margin-bottom:8px;color:#b00020;">'+esc(title)+'</div><div style="font-size:13px;line-height:1.45;color:#555;margin-bottom:12px;">Invia questo dettaglio tecnico.</div><pre style="white-space:pre-wrap;word-break:break-word;background:#fafafa;border:1px solid #eee;border-radius:12px;padding:12px;font-size:12px;color:#333;">'+esc(detail)+'</pre></div></div>';
+        }
+        window.__FAINANCE_BOOT_ERROR__=renderBootError;
+        window.addEventListener('error',function(event){
+          var detail='message: '+(event.message||'Script error')+'\nsource: '+(event.filename||'n/d')+'\nline: '+(event.lineno||'n/d')+'\ncolumn: '+(event.colno||'n/d');
+          if(event.error && event.error.stack) detail+='\nstack: '+event.error.stack;
+          renderBootError('Errore di avvio fAInance', detail);
+        }, true);
+        window.addEventListener('unhandledrejection',function(event){
+          var reason=event.reason;
+          var detail=(reason && reason.stack) ? reason.stack : String(reason);
+          renderBootError('Errore Promise fAInance', detail);
+        });
+        setTimeout(function(){
+          var root=document.getElementById('root');
+          if(root && !root.childNodes.length){
+            renderBootError('Avvio non completato','Il bundle JavaScript non ha montato React entro 7 secondi.');
+          }
+        },7000);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script id="fainance-boot-fallback">
-      setTimeout(function(){
-        var root=document.getElementById('root');
-        if(root && !root.childNodes.length){
-          root.innerHTML='<div style="min-height:100vh;background:#f7f7f7;color:#222;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:24px;display:flex;align-items:center;justify-content:center;"><div style="max-width:420px;background:white;border:1px solid #eee;border-radius:18px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);"><div style="font-size:18px;font-weight:800;margin-bottom:8px;color:#b00020;">Avvio non completato</div><div style="font-size:13px;line-height:1.45;color:#555;">Il bundle JavaScript non è partito. Controllare asset Vite/Capacitor nella build iOS.</div></div></div>';
-        }
-      },7000);
-    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

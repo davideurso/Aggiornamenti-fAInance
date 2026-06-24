@@ -8,12 +8,7 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('/src/traduzioni')) return 'traduzioni'
-          if (id.includes('/node_modules/firebase/')) return 'firebase'
-          if (id.includes('/node_modules/@capacitor/')) return 'capacitor'
-          if (id.includes('/node_modules/react') || id.includes('/node_modules/react-dom')) return 'react'
-        },
+        inlineDynamicImports: true,
       },
     },
   },
@@ -23,4 +18,3 @@ export default defineConfig({
     host: true,
   },
 })
-
