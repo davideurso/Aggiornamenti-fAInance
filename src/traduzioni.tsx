@@ -1715,6 +1715,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva promemoria",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Accedi con Apple",
     "🟢 Colore entrate": "🟢 Colore entrate",
     "🔔 Alert di spesa": "🔔 Alert di spesa",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -2336,6 +2337,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Sign in with Apple",
     "🟢 Colore entrate": "🟢 Color income",
     "🔔 Alert di spesa": "🔔 Alerts di expense",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -2957,6 +2959,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva recordatorio",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Acceder con Apple",
     "🟢 Colore entrate": "🟢 Color ingresos",
     "🔔 Alert di spesa": "🔔 Alertas di gasto",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -3578,6 +3581,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Se connecter avec Apple",
     "🟢 Colore entrate": "🟢 Color revenus",
     "🔔 Alert di spesa": "🔔 Alert di dépense",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -4199,6 +4203,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Mit Apple anmelden",
     "🟢 Colore entrate": "🟢 Color einnahmen",
     "🔔 Alert di spesa": "🔔 Alert di ausgabe",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -4820,6 +4825,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Entrar com Apple",
     "🟢 Colore entrate": "🟢 Color receitas",
     "🔔 Alert di spesa": "🔔 Alert di despesa",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -5441,6 +5447,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Zaloguj się przez Apple",
     "🟢 Colore entrate": "🟢 Color przychody",
     "🔔 Alert di spesa": "🔔 Alert di wydatek",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -6062,6 +6069,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Inloggen met Apple",
     "🟢 Colore entrate": "🟢 Color inkomsten",
     "🔔 Alert di spesa": "🔔 Alert di uitgave",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -6683,6 +6691,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Autentifică-te cu Apple",
     "🟢 Colore entrate": "🟢 Color venituri",
     "🔔 Alert di spesa": "🔔 Alert di cheltuială",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -7304,6 +7313,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Attiva promemoria": "Attiva reminder",
     "Account e accesso": "Account e accesso",
     "Accedi con Google": "Accedi con Google",
+    "Accedi con Apple": "Σύνδεση με Apple",
     "🟢 Colore entrate": "🟢 Color έσοδα",
     "🔔 Alert di spesa": "🔔 Alert di έξοδο",
     "Widget Obiettivo": "Widget Obiettivo",
@@ -32173,4 +32183,938 @@ function fainancePostProcessTranslation(value, lang){
   add('Si aprirà la pagina dello store di fAInance per verificare eventuali aggiornamenti.',{it:'Si aprirà la pagina dello store di fAInance per verificare eventuali aggiornamenti.',en:'The fAInance store page will open so you can check for updates.',es:'Se abrirá la página de fAInance en la tienda para comprobar si hay actualizaciones.',fr:'La page fAInance de la boutique s’ouvrira pour vérifier les mises à jour.',de:'Die Store-Seite von fAInance wird geöffnet, um nach Updates zu suchen.',pt:'Será aberta a página da fAInance na loja para verificar atualizações.',pl:'Otworzy się strona fAInance w sklepie, aby sprawdzić aktualizacje.',nl:'De storepagina van fAInance wordt geopend om updates te controleren.',ro:'Se va deschide pagina fAInance din magazin pentru a verifica actualizările.',el:'Θα ανοίξει η σελίδα του fAInance στο store για έλεγχο ενημερώσεων.'});
   add('Apri store',{it:'Apri store',en:'Open store',es:'Abrir tienda',fr:'Ouvrir la boutique',de:'Store öffnen',pt:'Abrir loja',pl:'Otwórz sklep',nl:'Store openen',ro:'Deschide magazinul',el:'Άνοιγμα store'});
   add('Vota sullo store',{it:'Vota sullo store',en:'Rate on the store',es:'Valorar en la tienda',fr:'Noter sur la boutique',de:'Im Store bewerten',pt:'Avaliar na loja',pl:'Oceń w sklepie',nl:'Beoordeel in de store',ro:'Evaluează în magazin',el:'Αξιολόγηση στο store'});
+})();
+
+// fAInance 1.6.0 — Debiti/Crediti, Spesa e scontrini Share in 10 lingue.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Debiti / Crediti':{en:'Debts / Credits',es:'Deudas / Créditos',fr:'Dettes / Créances',de:'Schulden / Forderungen',pt:'Dívidas / Créditos',pl:'Długi / Należności',nl:'Schulden / Tegoeden',ro:'Datorii / Creanțe',el:'Χρέη / Πιστώσεις'},
+    'Spesa':{en:'Shopping',es:'Compra',fr:'Courses',de:'Einkauf',pt:'Compras',pl:'Zakupy',nl:'Boodschappen',ro:'Cumpărături',el:'Αγορές'},
+    'Debito':{en:'Debt',es:'Deuda',fr:'Dette',de:'Schuld',pt:'Dívida',pl:'Dług',nl:'Schuld',ro:'Datorie',el:'Χρέος'},
+    'Credito':{en:'Credit',es:'Crédito',fr:'Créance',de:'Forderung',pt:'Crédito',pl:'Należność',nl:'Tegoed',ro:'Creanță',el:'Πίστωση'},
+    'Titolare':{en:'Holder',es:'Titular',fr:'Titulaire',de:'Inhaber',pt:'Titular',pl:'Posiadacz',nl:'Houder',ro:'Titular',el:'Κάτοχος'},
+    'Importo':{en:'Amount',es:'Importe',fr:'Montant',de:'Betrag',pt:'Valor',pl:'Kwota',nl:'Bedrag',ro:'Sumă',el:'Ποσό'},
+    'Commento':{en:'Comment',es:'Comentario',fr:'Commentaire',de:'Kommentar',pt:'Comentário',pl:'Komentarz',nl:'Opmerking',ro:'Comentariu',el:'Σχόλιο'},
+    'Transazione':{en:'Transaction',es:'Transacción',fr:'Transaction',de:'Transaktion',pt:'Transação',pl:'Transakcja',nl:'Transactie',ro:'Tranzacție',el:'Συναλλαγή'},
+    'Riduzione del Debito':{en:'Debt reduction',es:'Reducción de la deuda',fr:'Réduction de la dette',de:'Schuldenreduzierung',pt:'Redução da dívida',pl:'Zmniejszenie długu',nl:'Schuldvermindering',ro:'Reducerea datoriei',el:'Μείωση χρέους'},
+    'Aumento del Debito':{en:'Debt increase',es:'Aumento de la deuda',fr:'Augmentation de la dette',de:'Schuldenerhöhung',pt:'Aumento da dívida',pl:'Zwiększenie długu',nl:'Schuldverhoging',ro:'Creșterea datoriei',el:'Αύξηση χρέους'},
+    'Riduzione del Credito':{en:'Credit reduction',es:'Reducción del crédito',fr:'Réduction de la créance',de:'Forderungsreduzierung',pt:'Redução do crédito',pl:'Zmniejszenie należności',nl:'Tegoedvermindering',ro:'Reducerea creanței',el:'Μείωση πίστωσης'},
+    'Aumento del Credito':{en:'Credit increase',es:'Aumento del crédito',fr:'Augmentation de la créance',de:'Forderungserhöhung',pt:'Aumento do crédito',pl:'Zwiększenie należności',nl:'Tegoedverhoging',ro:'Creșterea creanței',el:'Αύξηση πίστωσης'},
+    'Saldo attuale':{en:'Current balance',es:'Saldo actual',fr:'Solde actuel',de:'Aktueller Saldo',pt:'Saldo atual',pl:'Aktualne saldo',nl:'Huidig saldo',ro:'Sold actual',el:'Τρέχον υπόλοιπο'},
+    'Elenco Debiti / Crediti':{en:'Debts / Credits list',es:'Lista de deudas / créditos',fr:'Liste dettes / créances',de:'Liste Schulden / Forderungen',pt:'Lista de dívidas / créditos',pl:'Lista długów / należności',nl:'Lijst schulden / tegoeden',ro:'Listă datorii / creanțe',el:'Λίστα χρεών / πιστώσεων'},
+    'Nessun Debito / Credito inserito':{en:'No debt / credit added',es:'Ninguna deuda / crédito añadido',fr:'Aucune dette / créance ajoutée',de:'Keine Schulden / Forderungen eingetragen',pt:'Nenhuma dívida / crédito adicionado',pl:'Brak długów / należności',nl:'Geen schuld / tegoed ingevoerd',ro:'Nicio datorie / creanță adăugată',el:'Δεν προστέθηκε χρέος / πίστωση'},
+    'Seleziona un Debito / Credito per gestire le transazioni.':{en:'Select a debt / credit to manage transactions.',es:'Selecciona una deuda / crédito para gestionar las transacciones.',fr:'Sélectionne une dette / créance pour gérer les transactions.',de:'Wähle eine Schuld / Forderung aus, um Transaktionen zu verwalten.',pt:'Seleciona uma dívida / crédito para gerir transações.',pl:'Wybierz dług / należność, aby zarządzać transakcjami.',nl:'Selecteer een schuld / tegoed om transacties te beheren.',ro:'Selectează o datorie / creanță pentru a gestiona tranzacțiile.',el:'Επίλεξε χρέος / πίστωση για διαχείριση συναλλαγών.'},
+    'Debito / Credito salvato':{en:'Debt / Credit saved',es:'Deuda / Crédito guardado',fr:'Dette / Créance enregistrée',de:'Schuld / Forderung gespeichert',pt:'Dívida / Crédito guardado',pl:'Dług / należność zapisane',nl:'Schuld / tegoed opgeslagen',ro:'Datorie / creanță salvată',el:'Το χρέος / η πίστωση αποθηκεύτηκε'},
+    'Debito / Credito eliminato':{en:'Debt / Credit deleted',es:'Deuda / Crédito eliminado',fr:'Dette / Créance supprimée',de:'Schuld / Forderung gelöscht',pt:'Dívida / Crédito eliminado',pl:'Dług / należność usunięte',nl:'Schuld / tegoed verwijderd',ro:'Datorie / creanță ștearsă',el:'Το χρέος / η πίστωση διαγράφηκε'},
+    'Transazione Debito / Credito salvata':{en:'Debt / Credit transaction saved',es:'Transacción de deuda / crédito guardada',fr:'Transaction dette / créance enregistrée',de:'Transaktion für Schuld / Forderung gespeichert',pt:'Transação de dívida / crédito guardada',pl:'Transakcja długu / należności zapisana',nl:'Transactie schuld / tegoed opgeslagen',ro:'Tranzacție datorie / creanță salvată',el:'Η συναλλαγή χρέους / πίστωσης αποθηκεύτηκε'},
+    'Debito / Credito riportato nel patrimonio':{en:'Debt / Credit added to assets',es:'Deuda / Crédito añadido al patrimonio',fr:'Dette / Créance reportée dans le patrimoine',de:'Schuld / Forderung ins Vermögen übernommen',pt:'Dívida / Crédito adicionado ao património',pl:'Dług / należność dodane do majątku',nl:'Schuld / tegoed toegevoegd aan vermogen',ro:'Datorie / creanță adăugată în patrimoniu',el:'Το χρέος / η πίστωση προστέθηκε στην περιουσία'},
+    'Debito / Credito riportato nei movimenti':{en:'Debt / Credit added to movements',es:'Deuda / Crédito añadido a los movimientos',fr:'Dette / Créance ajoutée aux mouvements',de:'Schuld / Forderung in Buchungen übernommen',pt:'Dívida / Crédito adicionado aos movimentos',pl:'Dług / należność dodane do ruchów',nl:'Schuld / tegoed toegevoegd aan mutaties',ro:'Datorie / creanță adăugată în mișcări',el:'Το χρέος / η πίστωση προστέθηκε στις κινήσεις'},
+    'Debiti / Crediti disponibili dal piano Base.':{en:'Debts / Credits available from the Base plan.',es:'Deudas / Créditos disponibles desde el plan Base.',fr:'Dettes / Créances disponibles à partir du forfait Base.',de:'Schulden / Forderungen ab dem Base-Plan verfügbar.',pt:'Dívidas / Créditos disponíveis a partir do plano Base.',pl:'Długi / Należności dostępne od planu Base.',nl:'Schulden / Tegoeden beschikbaar vanaf Base.',ro:'Datorii / Creanțe disponibile din planul Base.',el:'Χρέη / Πιστώσεις διαθέσιμα από το πρόγραμμα Base.'},
+    'Registra debiti e crediti, aggiorna il saldo con transazioni e riportali in patrimonio o nei movimenti.':{en:'Record debts and credits, update balances with transactions and add them to assets or movements.',es:'Registra deudas y créditos, actualiza el saldo con transacciones y llévalos al patrimonio o a los movimientos.',fr:'Enregistre dettes et créances, mets à jour le solde avec des transactions et reporte-les dans le patrimoine ou les mouvements.',de:'Erfasse Schulden und Forderungen, aktualisiere den Saldo mit Transaktionen und übertrage sie in Vermögen oder Buchungen.',pt:'Regista dívidas e créditos, atualiza o saldo com transações e adiciona-os ao património ou aos movimentos.',pl:'Rejestruj długi i należności, aktualizuj saldo transakcjami i dodawaj je do majątku lub ruchów.',nl:'Registreer schulden en tegoeden, werk saldi bij met transacties en voeg ze toe aan vermogen of mutaties.',ro:'Înregistrează datorii și creanțe, actualizează soldul cu tranzacții și adaugă-le în patrimoniu sau mișcări.',el:'Καταχώρισε χρέη και πιστώσεις, ενημέρωσε το υπόλοιπο με συναλλαγές και πρόσθεσέ τα στην περιουσία ή στις κινήσεις.'},
+    'Lista della spesa':{en:'Shopping list',es:'Lista de la compra',fr:'Liste de courses',de:'Einkaufsliste',pt:'Lista de compras',pl:'Lista zakupów',nl:'Boodschappenlijst',ro:'Listă de cumpărături',el:'Λίστα αγορών'},
+    'Fidelity card e prepagate':{en:'Loyalty and prepaid cards',es:'Tarjetas de fidelidad y prepago',fr:'Cartes de fidélité et prépayées',de:'Treue- und Prepaidkarten',pt:'Cartões fidelidade e pré-pagos',pl:'Karty lojalnościowe i przedpłacone',nl:'Klantenkaarten en prepaidkaarten',ro:'Carduri de fidelitate și preplătite',el:'Κάρτες πιστότητας και προπληρωμένες'},
+    'Fidelity card':{en:'Loyalty card',es:'Tarjeta de fidelidad',fr:'Carte de fidélité',de:'Treuekarte',pt:'Cartão fidelidade',pl:'Karta lojalnościowa',nl:'Klantenkaart',ro:'Card de fidelitate',el:'Κάρτα πιστότητας'},
+    'Prepagata':{en:'Prepaid',es:'Prepago',fr:'Prépayée',de:'Prepaid',pt:'Pré-pago',pl:'Przedpłacona',nl:'Prepaid',ro:'Preplătită',el:'Προπληρωμένη'},
+    'Nome carta':{en:'Card name',es:'Nombre de la tarjeta',fr:'Nom de la carte',de:'Kartenname',pt:'Nome do cartão',pl:'Nazwa karty',nl:'Kaartnaam',ro:'Numele cardului',el:'Όνομα κάρτας'},
+    'Codice numerico':{en:'Numeric code',es:'Código numérico',fr:'Code numérique',de:'Numerischer Code',pt:'Código numérico',pl:'Kod numeryczny',nl:'Numerieke code',ro:'Cod numeric',el:'Αριθμητικός κωδικός'},
+    'Carta salvata':{en:'Card saved',es:'Tarjeta guardada',fr:'Carte enregistrée',de:'Karte gespeichert',pt:'Cartão guardado',pl:'Karta zapisana',nl:'Kaart opgeslagen',ro:'Card salvat',el:'Η κάρτα αποθηκεύτηκε'},
+    'Carta eliminata':{en:'Card deleted',es:'Tarjeta eliminada',fr:'Carte supprimée',de:'Karte gelöscht',pt:'Cartão eliminado',pl:'Karta usunięta',nl:'Kaart verwijderd',ro:'Card șters',el:'Η κάρτα διαγράφηκε'},
+    'Nessuna carta inserita':{en:'No card added',es:'Ninguna tarjeta añadida',fr:'Aucune carte ajoutée',de:'Keine Karte hinzugefügt',pt:'Nenhum cartão adicionado',pl:'Nie dodano karty',nl:'Geen kaart toegevoegd',ro:'Niciun card adăugat',el:'Δεν προστέθηκε κάρτα'},
+    'Prodotto':{en:'Product',es:'Producto',fr:'Produit',de:'Produkt',pt:'Produto',pl:'Produkt',nl:'Product',ro:'Produs',el:'Προϊόν'},
+    'Prodotto aggiunto alla lista':{en:'Product added to the list',es:'Producto añadido a la lista',fr:'Produit ajouté à la liste',de:'Produkt zur Liste hinzugefügt',pt:'Produto adicionado à lista',pl:'Produkt dodany do listy',nl:'Product toegevoegd aan de lijst',ro:'Produs adăugat în listă',el:'Το προϊόν προστέθηκε στη λίστα'},
+    'Prodotto eliminato':{en:'Product deleted',es:'Producto eliminado',fr:'Produit supprimé',de:'Produkt gelöscht',pt:'Produto eliminado',pl:'Produkt usunięty',nl:'Product verwijderd',ro:'Produs șters',el:'Το προϊόν διαγράφηκε'},
+    'Prodotti acquistati rimossi':{en:'Purchased products removed',es:'Productos comprados eliminados',fr:'Produits achetés supprimés',de:'Gekaufte Produkte entfernt',pt:'Produtos comprados removidos',pl:'Kupione produkty usunięte',nl:'Gekochte producten verwijderd',ro:'Produse cumpărate eliminate',el:'Τα αγορασμένα προϊόντα αφαιρέθηκαν'},
+    'Lista della spesa vuota':{en:'Shopping list empty',es:'Lista de la compra vacía',fr:'Liste de courses vide',de:'Einkaufsliste leer',pt:'Lista de compras vazia',pl:'Lista zakupów pusta',nl:'Boodschappenlijst leeg',ro:'Lista de cumpărături este goală',el:'Η λίστα αγορών είναι άδεια'},
+    'Rimuovi acquistati':{en:'Remove purchased',es:'Eliminar comprados',fr:'Supprimer les achetés',de:'Gekaufte entfernen',pt:'Remover comprados',pl:'Usuń kupione',nl:'Gekochte verwijderen',ro:'Elimină cumpăratele',el:'Αφαίρεση αγορασμένων'},
+    'Alimenti':{en:'Food',es:'Alimentos',fr:'Alimentation',de:'Lebensmittel',pt:'Alimentos',pl:'Żywność',nl:'Voeding',ro:'Alimente',el:'Τρόφιμα'},
+    'Banco Frigo':{en:'Chilled counter',es:'Mostrador refrigerado',fr:'Rayon frais',de:'Kühltheke',pt:'Balcão refrigerado',pl:'Lada chłodnicza',nl:'Koelvak',ro:'Raion frigorific',el:'Ψυγείο'},
+    'Macelleria':{en:'Butcher',es:'Carnicería',fr:'Boucherie',de:'Metzgerei',pt:'Talho',pl:'Rzeźnik',nl:'Slagerij',ro:'Măcelărie',el:'Κρεοπωλείο'},
+    'Pescheria':{en:'Fishmonger',es:'Pescadería',fr:'Poissonnerie',de:'Fischtheke',pt:'Peixaria',pl:'Sklep rybny',nl:'Vishandel',ro:'Pescărie',el:'Ιχθυοπωλείο'},
+    'Salumi':{en:'Deli meats',es:'Embutidos',fr:'Charcuterie',de:'Wurstwaren',pt:'Charcutaria',pl:'Wędliny',nl:'Vleeswaren',ro:'Mezeluri',el:'Αλλαντικά'},
+    'Ortofrutta':{en:'Fruit and vegetables',es:'Fruta y verdura',fr:'Fruits et légumes',de:'Obst und Gemüse',pt:'Fruta e legumes',pl:'Owoce i warzywa',nl:'Groente en fruit',ro:'Fructe și legume',el:'Φρούτα και λαχανικά'},
+    'Igiene':{en:'Hygiene',es:'Higiene',fr:'Hygiène',de:'Hygiene',pt:'Higiene',pl:'Higiena',nl:'Hygiëne',ro:'Igienă',el:'Υγιεινή'},
+    'Altro':{en:'Other',es:'Otro',fr:'Autre',de:'Sonstiges',pt:'Outro',pl:'Inne',nl:'Overig',ro:'Altele',el:'Άλλο'},
+    'Leggi scontrino Share':{en:'Read Share receipt',es:'Leer recibo Share',fr:'Lire ticket Share',de:'Share-Beleg lesen',pt:'Ler recibo Share',pl:'Odczytaj paragon Share',nl:'Share-bon lezen',ro:'Citește bon Share',el:'Ανάγνωση απόδειξης Share'},
+    'Scontrino Share':{en:'Share receipt',es:'Recibo Share',fr:'Ticket Share',de:'Share-Beleg',pt:'Recibo Share',pl:'Paragon Share',nl:'Share-bon',ro:'Bon Share',el:'Απόδειξη Share'},
+    'Hai raggiunto il limite scontrini Share del tuo piano.':{en:'You reached your plan limit for Share receipts.',es:'Has alcanzado el límite de recibos Share de tu plan.',fr:'Tu as atteint la limite de tickets Share de ton forfait.',de:'Du hast das Limit deines Plans für Share-Belege erreicht.',pt:'Atingiste o limite de recibos Share do teu plano.',pl:'Osiągnięto limit paragonów Share w planie.',nl:'Je hebt de limiet voor Share-bonnen bereikt.',ro:'Ai atins limita de bonuri Share a planului.',el:'Έφτασες το όριο αποδείξεων Share του προγράμματός σου.'},
+    'Scontrino Share salvato nel progetto per 6 mesi':{en:'Share receipt saved in the project for 6 months',es:'Recibo Share guardado en el proyecto durante 6 meses',fr:'Ticket Share enregistré dans le projet pendant 6 mois',de:'Share-Beleg 6 Monate im Projekt gespeichert',pt:'Recibo Share guardado no projeto por 6 meses',pl:'Paragon Share zapisany w projekcie na 6 miesięcy',nl:'Share-bon 6 maanden in project opgeslagen',ro:'Bon Share salvat în proiect timp de 6 luni',el:'Η απόδειξη Share αποθηκεύτηκε στο έργο για 6 μήνες'},
+    "Scontrino Share letto. Nel piano attuale l'immagine non viene conservata nel progetto.":{en:'Share receipt read. In the current plan the image is not kept in the project.',es:'Recibo Share leído. En el plan actual la imagen no se conserva en el proyecto.',fr:'Ticket Share lu. Dans le forfait actuel, l’image n’est pas conservée dans le projet.',de:'Share-Beleg gelesen. Im aktuellen Plan wird das Bild nicht im Projekt gespeichert.',pt:'Recibo Share lido. No plano atual, a imagem não fica guardada no projeto.',pl:'Paragon Share odczytany. W obecnym planie obraz nie jest przechowywany w projekcie.',nl:'Share-bon gelezen. In het huidige abonnement wordt de afbeelding niet bewaard in het project.',ro:'Bon Share citit. În planul actual imaginea nu este păstrată în proiect.',el:'Η απόδειξη Share αναγνώστηκε. Στο τρέχον πρόγραμμα η εικόνα δεν αποθηκεύεται στο έργο.'},
+    'Gratis 1, Base 2, Completo illimitati. Conservazione 6 mesi solo Completo.':{en:'Free 1, Base 2, Premium unlimited. 6-month storage only on Premium.',es:'Gratis 1, Base 2, Premium ilimitados. Conservación 6 meses solo en Premium.',fr:'Gratuit 1, Base 2, Premium illimités. Conservation 6 mois uniquement Premium.',de:'Free 1, Base 2, Premium unbegrenzt. 6 Monate Speicherung nur Premium.',pt:'Grátis 1, Base 2, Premium ilimitados. Conservação 6 meses só no Premium.',pl:'Free 1, Base 2, Premium bez limitu. Przechowywanie 6 miesięcy tylko Premium.',nl:'Gratis 1, Base 2, Premium onbeperkt. 6 maanden opslag alleen Premium.',ro:'Gratis 1, Base 2, Premium nelimitat. Păstrare 6 luni doar Premium.',el:'Δωρεάν 1, Base 2, Premium απεριόριστα. Αποθήκευση 6 μηνών μόνο Premium.'},
+    'Share Scontrini':{en:'Share receipts',es:'Recibos Share',fr:'Tickets Share',de:'Share-Belege',pt:'Recibos Share',pl:'Paragony Share',nl:'Share-bonnen',ro:'Bonuri Share',el:'Αποδείξεις Share'},
+    'Carte Spesa':{en:'Shopping cards',es:'Tarjetas compra',fr:'Cartes courses',de:'Einkaufskarten',pt:'Cartões compras',pl:'Karty zakupowe',nl:'Boodschappenkaarten',ro:'Carduri cumpărături',el:'Κάρτες αγορών'},
+    'dal piano Base':{en:'from Base plan',es:'desde el plan Base',fr:'à partir du forfait Base',de:'ab Base-Plan',pt:'a partir do plano Base',pl:'od planu Base',nl:'vanaf Base',ro:'din planul Base',el:'από το πρόγραμμα Base'}
+  };
+  Object.keys(D).forEach(function(k){var v=Object.assign({it:k},D[k]);add(k,v);});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// Estensione 1.6.1: correzioni Debiti/Crediti e Spesa.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Tipo':{en:'Type',es:'Tipo',fr:'Type',de:'Typ',pt:'Tipo',pl:'Typ',nl:'Type',ro:'Tip',el:'Τύπος'},
+    'Titolare':{en:'Holder',es:'Titular',fr:'Titulaire',de:'Inhaber',pt:'Titular',pl:'Właściciel',nl:'Houder',ro:'Titular',el:'Κάτοχος'},
+    'Nome titolare':{en:'Holder name',es:'Nombre del titular',fr:'Nom du titulaire',de:'Name des Inhabers',pt:'Nome do titular',pl:'Nazwa właściciela',nl:'Naam houder',ro:'Numele titularului',el:'Όνομα κατόχου'},
+    'Importo iniziale':{en:'Initial amount',es:'Importe inicial',fr:'Montant initial',de:'Anfangsbetrag',pt:'Valor inicial',pl:'Kwota początkowa',nl:'Beginbedrag',ro:'Sumă inițială',el:'Αρχικό ποσό'},
+    'Data inizio':{en:'Start date',es:'Fecha de inicio',fr:'Date de début',de:'Startdatum',pt:'Data de início',pl:'Data rozpoczęcia',nl:'Startdatum',ro:'Data de început',el:'Ημερομηνία έναρξης'},
+    'Data stimata fine':{en:'Estimated end date',es:'Fecha estimada de fin',fr:'Date de fin estimée',de:'Geschätztes Enddatum',pt:'Data estimada de fim',pl:'Szacowana data zakończenia',nl:'Geschatte einddatum',ro:'Data estimată de final',el:'Εκτιμώμενη ημερομηνία λήξης'},
+    'Commento':{en:'Comment',es:'Comentario',fr:'Commentaire',de:'Kommentar',pt:'Comentário',pl:'Komentarz',nl:'Opmerking',ro:'Comentariu',el:'Σχόλιο'},
+    'Cerca nella rubrica':{en:'Search contacts',es:'Buscar en contactos',fr:'Rechercher dans les contacts',de:'In Kontakten suchen',pt:'Procurar nos contactos',pl:'Szukaj w kontaktach',nl:'Zoeken in contacten',ro:'Caută în contacte',el:'Αναζήτηση στις επαφές'},
+    'Rubrica non disponibile. Inserisci il titolare manualmente.':{en:'Contacts unavailable. Enter the holder manually.',es:'Contactos no disponibles. Introduce el titular manualmente.',fr:'Contacts indisponibles. Saisis le titulaire manuellement.',de:'Kontakte nicht verfügbar. Gib den Inhaber manuell ein.',pt:'Contactos indisponíveis. Insere o titular manualmente.',pl:'Kontakty niedostępne. Wpisz właściciela ręcznie.',nl:'Contacten niet beschikbaar. Voer de houder handmatig in.',ro:'Contactele nu sunt disponibile. Introdu titularul manual.',el:'Οι επαφές δεν είναι διαθέσιμες. Καταχώρισε τον κάτοχο χειροκίνητα.'},
+    'Impossibile leggere la rubrica. Inserisci il titolare manualmente.':{en:'Unable to read contacts. Enter the holder manually.',es:'No se pueden leer los contactos. Introduce el titular manualmente.',fr:'Impossible de lire les contacts. Saisis le titulaire manuellement.',de:'Kontakte können nicht gelesen werden. Gib den Inhaber manuell ein.',pt:'Não foi possível ler os contactos. Insere o titular manualmente.',pl:'Nie można odczytać kontaktów. Wpisz właściciela ręcznie.',nl:'Kan contacten niet lezen. Voer de houder handmatig in.',ro:'Nu se pot citi contactele. Introdu titularul manual.',el:'Δεν είναι δυνατή η ανάγνωση επαφών. Καταχώρισε τον κάτοχο χειροκίνητα.'},
+    'Scrivi il nome del contatto da usare':{en:'Enter the contact name to use',es:'Escribe el nombre del contacto que quieres usar',fr:'Écris le nom du contact à utiliser',de:'Gib den zu verwendenden Kontaktnamen ein',pt:'Escreve o nome do contacto a usar',pl:'Wpisz nazwę kontaktu do użycia',nl:'Voer de te gebruiken contactnaam in',ro:'Scrie numele contactului de folosit',el:'Γράψε το όνομα επαφής που θα χρησιμοποιηθεί'},
+    'Salva modifica':{en:'Save change',es:'Guardar cambio',fr:'Enregistrer modification',de:'Änderung speichern',pt:'Guardar alteração',pl:'Zapisz zmianę',nl:'Wijziging opslaan',ro:'Salvează modificarea',el:'Αποθήκευση αλλαγής'},
+    'Debito / Credito aggiornato':{en:'Debt / Credit updated',es:'Deuda / Crédito actualizado',fr:'Dette / Créance mise à jour',de:'Schuld / Forderung aktualisiert',pt:'Dívida / Crédito atualizado',pl:'Dług / należność zaktualizowane',nl:'Schuld / tegoed bijgewerkt',ro:'Datorie / creanță actualizată',el:'Το χρέος / η πίστωση ενημερώθηκε'},
+    'Modifica i dati nel form e salva.':{en:'Edit the data in the form and save.',es:'Modifica los datos del formulario y guarda.',fr:'Modifie les données dans le formulaire et enregistre.',de:'Bearbeite die Daten im Formular und speichere.',pt:'Altera os dados no formulário e guarda.',pl:'Edytuj dane w formularzu i zapisz.',nl:'Wijzig de gegevens in het formulier en sla op.',ro:'Modifică datele în formular și salvează.',el:'Τροποποίησε τα δεδομένα στη φόρμα και αποθήκευσε.'},
+    'Transazioni':{en:'Transactions',es:'Transacciones',fr:'Transactions',de:'Transaktionen',pt:'Transações',pl:'Transakcje',nl:'Transacties',ro:'Tranzacții',el:'Συναλλαγές'},
+    'Saldo attuale':{en:'Current balance',es:'Saldo actual',fr:'Solde actuel',de:'Aktueller Saldo',pt:'Saldo atual',pl:'Bieżące saldo',nl:'Huidig saldo',ro:'Sold actual',el:'Τρέχον υπόλοιπο'},
+    'Estinto':{en:'Settled',es:'Saldado',fr:'Soldé',de:'Beglichen',pt:'Liquidado',pl:'Spłacone',nl:'Afgesloten',ro:'Stins',el:'Εξοφλημένο'},
+    'Tipo transazione':{en:'Transaction type',es:'Tipo de transacción',fr:'Type de transaction',de:'Transaktionstyp',pt:'Tipo de transação',pl:'Typ transakcji',nl:'Transactietype',ro:'Tip tranzacție',el:'Τύπος συναλλαγής'},
+    'Data transazione':{en:'Transaction date',es:'Fecha de transacción',fr:'Date de transaction',de:'Transaktionsdatum',pt:'Data da transação',pl:'Data transakcji',nl:'Transactiedatum',ro:'Data tranzacției',el:'Ημερομηνία συναλλαγής'},
+    'Aggiungi transazione':{en:'Add transaction',es:'Añadir transacción',fr:'Ajouter transaction',de:'Transaktion hinzufügen',pt:'Adicionar transação',pl:'Dodaj transakcję',nl:'Transactie toevoegen',ro:'Adaugă tranzacție',el:'Προσθήκη συναλλαγής'},
+    'Seleziona un Debito / Credito per inserire transazioni.':{en:'Select a Debt / Credit to enter transactions.',es:'Selecciona una deuda / crédito para introducir transacciones.',fr:'Sélectionne une dette / créance pour saisir des transactions.',de:'Wähle eine Schuld / Forderung aus, um Transaktionen einzugeben.',pt:'Seleciona uma Dívida / Crédito para inserir transações.',pl:'Wybierz dług / należność, aby dodać transakcje.',nl:'Selecteer een schuld / tegoed om transacties in te voeren.',ro:'Selectează o datorie / creanță pentru a introduce tranzacții.',el:'Επίλεξε Χρέος / Πίστωση για να καταχωρίσεις συναλλαγές.'},
+    'Nessuna transazione inserita':{en:'No transaction entered',es:'Ninguna transacción introducida',fr:'Aucune transaction saisie',de:'Keine Transaktion eingegeben',pt:'Nenhuma transação inserida',pl:'Nie wprowadzono transakcji',nl:'Geen transactie ingevoerd',ro:'Nicio tranzacție introdusă',el:'Δεν έχει καταχωριστεί συναλλαγή'},
+    'Inizio':{en:'Start',es:'Inicio',fr:'Début',de:'Beginn',pt:'Início',pl:'Początek',nl:'Start',ro:'Început',el:'Έναρξη'},
+    'Fine stimata':{en:'Estimated end',es:'Fin estimado',fr:'Fin estimée',de:'Geschätztes Ende',pt:'Fim estimado',pl:'Szacowany koniec',nl:'Geschat einde',ro:'Final estimat',el:'Εκτιμώμενο τέλος'},
+    'Prodotti':{en:'Products',es:'Productos',fr:'Produits',de:'Produkte',pt:'Produtos',pl:'Produkty',nl:'Producten',ro:'Produse',el:'Προϊόντα'},
+    'Prodotto spostato in Prodotti':{en:'Product moved to Products',es:'Producto movido a Productos',fr:'Produit déplacé dans Produits',de:'Produkt zu Produkte verschoben',pt:'Produto movido para Produtos',pl:'Produkt przeniesiony do Produktów',nl:'Product verplaatst naar Producten',ro:'Produs mutat în Produse',el:'Το προϊόν μετακινήθηκε στα Προϊόντα'},
+    'Prodotto riportato nella lista':{en:'Product restored to the list',es:'Producto devuelto a la lista',fr:'Produit remis dans la liste',de:'Produkt wieder in die Liste übernommen',pt:'Produto reposto na lista',pl:'Produkt przywrócony na listę',nl:'Product teruggezet in de lijst',ro:'Produs readus în listă',el:'Το προϊόν επανήλθε στη λίστα'},
+    'Prodotti acquistati spostati in Prodotti':{en:'Purchased products moved to Products',es:'Productos comprados movidos a Productos',fr:'Produits achetés déplacés dans Produits',de:'Gekaufte Produkte zu Produkte verschoben',pt:'Produtos comprados movidos para Produtos',pl:'Kupione produkty przeniesione do Produktów',nl:'Gekochte producten verplaatst naar Producten',ro:'Produsele cumpărate au fost mutate în Produse',el:'Τα αγορασμένα προϊόντα μετακινήθηκαν στα Προϊόντα'},
+    'Sposta acquistati in Prodotti':{en:'Move purchased to Products',es:'Mover comprados a Productos',fr:'Déplacer achetés dans Produits',de:'Gekaufte zu Produkte verschieben',pt:'Mover comprados para Produtos',pl:'Przenieś kupione do Produktów',nl:'Verplaats gekochte naar Producten',ro:'Mută cumpăratele în Produse',el:'Μετακίνηση αγορασμένων στα Προϊόντα'},
+    'Tocca un prodotto per riportarlo nella lista della spesa.':{en:'Tap a product to restore it to the shopping list.',es:'Toca un producto para devolverlo a la lista de la compra.',fr:'Touche un produit pour le remettre dans la liste de courses.',de:'Tippe auf ein Produkt, um es wieder in die Einkaufsliste zu setzen.',pt:'Toca num produto para o repor na lista de compras.',pl:'Dotknij produktu, aby przywrócić go na listę zakupów.',nl:'Tik op een product om het terug te zetten in de boodschappenlijst.',ro:'Atinge un produs pentru a-l readuce în lista de cumpărături.',el:'Πάτησε ένα προϊόν για να το επαναφέρεις στη λίστα αγορών.'},
+    'Nessun prodotto salvato':{en:'No saved product',es:'Ningún producto guardado',fr:'Aucun produit enregistré',de:'Kein gespeichertes Produkt',pt:'Nenhum produto guardado',pl:'Brak zapisanych produktów',nl:'Geen opgeslagen product',ro:'Niciun produs salvat',el:'Δεν υπάρχει αποθηκευμένο προϊόν'},
+    'Area predefinita':{en:'Default area',es:'Área predeterminada',fr:'Zone par défaut',de:'Standardbereich',pt:'Área predefinida',pl:'Domyślny obszar',nl:'Standaardgebied',ro:'Zonă implicită',el:'Προεπιλεγμένη περιοχή'},
+    'Sposta su':{en:'Move up',es:'Mover arriba',fr:'Monter',de:'Nach oben',pt:'Mover para cima',pl:'Przenieś w górę',nl:'Omhoog',ro:'Mută sus',el:'Μετακίνηση πάνω'},
+    'Sposta giù':{en:'Move down',es:'Mover abajo',fr:'Descendre',de:'Nach unten',pt:'Mover para baixo',pl:'Przenieś w dół',nl:'Omlaag',ro:'Mută jos',el:'Μετακίνηση κάτω'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// Estensione fAInance 1.6.2 — sezioni Spesa, Debiti/Crediti e nuovi widget.
+(function(){
+  var M={
+    en:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Tap a product to add it to the list. You stay in Products so you can move more items.","Nuovo prodotto":"New product","Crea":"Create","Prodotto salvato in Prodotti":"Product saved in Products","Prodotto già presente nella lista della spesa":"Product already in the shopping list","Scansiona":"Scan","Codice carta letto correttamente":"Card code read successfully","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"I could not read the code automatically. Enter it manually.","Scanner non disponibile. Inserisci il codice manualmente.":"Scanner unavailable. Enter the code manually.","Chiudi Debito":"Close Debt","Chiudi Credito":"Close Credit","Chiudere questo Debito?":"Close this debt?","Chiudere questo Credito?":"Close this credit?","Debito chiuso":"Debt closed","Credito chiuso":"Credit closed","Widget attivo":"Widget active","Lista spesa":"Shopping list","Articoli da comprare":"Items to buy","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Dynamic widget: it shows items still to buy and lets you mark/remove items placed in the cart.","Numero articoli mostrati":"Number of displayed items","Colore principale":"Main color","Consenti aggiornamento del widget lista spesa.":"Allow shopping list widget updates.","Carta mostrata nel widget":"Card shown in the widget","Prima carta disponibile":"First available card","Consenti aggiornamento del widget fidelity card.":"Allow fidelity card widget updates.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Show in the widget the summary of open debts/credits, or also closed ones.","Elementi mostrati":"Displayed items","Solo aperti":"Open only","Aperti ed estinti":"Open and closed","Debiti / Crediti aperti":"Open debts / credits","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Shows the shopping list and lets you mark purchased items.","Mostra rapidamente una fidelity card o una prepagata.":"Quickly shows a fidelity card or prepaid card.","Mostra il saldo aperto di debiti e crediti.":"Shows the open balance of debts and credits."},
+    es:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Toca un producto para añadirlo a la lista. Permaneces en Productos para mover otros.","Nuovo prodotto":"Nuevo producto","Crea":"Crear","Prodotto salvato in Prodotti":"Producto guardado en Productos","Prodotto già presente nella lista della spesa":"Producto ya presente en la lista de la compra","Scansiona":"Escanear","Codice carta letto correttamente":"Código de tarjeta leído correctamente","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"No he podido leer el código automáticamente. Introdúcelo manualmente.","Scanner non disponibile. Inserisci il codice manualmente.":"Escáner no disponible. Introduce el código manualmente.","Chiudi Debito":"Cerrar deuda","Chiudi Credito":"Cerrar crédito","Chiudere questo Debito?":"¿Cerrar esta deuda?","Chiudere questo Credito?":"¿Cerrar este crédito?","Debito chiuso":"Deuda cerrada","Credito chiuso":"Crédito cerrado","Widget attivo":"Widget activo","Lista spesa":"Lista de la compra","Articoli da comprare":"Artículos por comprar","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Widget dinámico: muestra los artículos pendientes y permite marcar/eliminar los añadidos al carrito.","Numero articoli mostrati":"Número de artículos mostrados","Colore principale":"Color principal","Consenti aggiornamento del widget lista spesa.":"Permitir la actualización del widget de lista de la compra.","Carta mostrata nel widget":"Tarjeta mostrada en el widget","Prima carta disponibile":"Primera tarjeta disponible","Consenti aggiornamento del widget fidelity card.":"Permitir la actualización del widget de fidelity card.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Muestra en el widget el resumen de deudas/créditos abiertos o también cerrados.","Elementi mostrati":"Elementos mostrados","Solo aperti":"Solo abiertos","Aperti ed estinti":"Abiertos y cerrados","Debiti / Crediti aperti":"Deudas / créditos abiertos","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Muestra la lista de la compra y permite marcar los artículos comprados.","Mostra rapidamente una fidelity card o una prepagata.":"Muestra rápidamente una fidelity card o una prepago.","Mostra il saldo aperto di debiti e crediti.":"Muestra el saldo abierto de deudas y créditos."},
+    fr:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Touchez un produit pour l’ajouter à la liste. Vous restez dans Produits pour en déplacer d’autres.","Nuovo prodotto":"Nouveau produit","Crea":"Créer","Prodotto salvato in Prodotti":"Produit enregistré dans Produits","Prodotto già presente nella lista della spesa":"Produit déjà présent dans la liste de courses","Scansiona":"Scanner","Codice carta letto correttamente":"Code de carte lu correctement","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"Impossible de lire automatiquement le code. Saisissez-le manuellement.","Scanner non disponibile. Inserisci il codice manualmente.":"Scanner indisponible. Saisissez le code manuellement.","Chiudi Debito":"Clôturer la dette","Chiudi Credito":"Clôturer la créance","Chiudere questo Debito?":"Clôturer cette dette ?","Chiudere questo Credito?":"Clôturer cette créance ?","Debito chiuso":"Dette clôturée","Credito chiuso":"Créance clôturée","Widget attivo":"Widget actif","Lista spesa":"Liste de courses","Articoli da comprare":"Articles à acheter","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Widget dynamique : affiche les articles à acheter et permet de marquer/supprimer ceux mis dans le panier.","Numero articoli mostrati":"Nombre d’articles affichés","Colore principale":"Couleur principale","Consenti aggiornamento del widget lista spesa.":"Autoriser la mise à jour du widget liste de courses.","Carta mostrata nel widget":"Carte affichée dans le widget","Prima carta disponibile":"Première carte disponible","Consenti aggiornamento del widget fidelity card.":"Autoriser la mise à jour du widget carte de fidélité.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Affiche dans le widget le résumé des dettes/créances ouvertes ou aussi clôturées.","Elementi mostrati":"Éléments affichés","Solo aperti":"Ouverts uniquement","Aperti ed estinti":"Ouverts et clôturés","Debiti / Crediti aperti":"Dettes / créances ouvertes","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Affiche la liste de courses et permet de marquer les articles achetés.","Mostra rapidamente una fidelity card o una prepagata.":"Affiche rapidement une carte de fidélité ou prépayée.","Mostra il saldo aperto di debiti e crediti.":"Affiche le solde ouvert des dettes et créances."},
+    de:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Tippe auf ein Produkt, um es zur Liste hinzuzufügen. Du bleibst in Produkte, um weitere zu verschieben.","Nuovo prodotto":"Neues Produkt","Crea":"Erstellen","Prodotto salvato in Prodotti":"Produkt in Produkte gespeichert","Prodotto già presente nella lista della spesa":"Produkt bereits in der Einkaufsliste","Scansiona":"Scannen","Codice carta letto correttamente":"Kartencode erfolgreich gelesen","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"Der Code konnte nicht automatisch gelesen werden. Gib ihn manuell ein.","Scanner non disponibile. Inserisci il codice manualmente.":"Scanner nicht verfügbar. Gib den Code manuell ein.","Chiudi Debito":"Schuld schließen","Chiudi Credito":"Forderung schließen","Chiudere questo Debito?":"Diese Schuld schließen?","Chiudere questo Credito?":"Diese Forderung schließen?","Debito chiuso":"Schuld geschlossen","Credito chiuso":"Forderung geschlossen","Widget attivo":"Widget aktiv","Lista spesa":"Einkaufsliste","Articoli da comprare":"Zu kaufende Artikel","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Dynamisches Widget: zeigt noch zu kaufende Artikel und erlaubt das Markieren/Entfernen von Artikeln im Wagen.","Numero articoli mostrati":"Anzahl angezeigter Artikel","Colore principale":"Hauptfarbe","Consenti aggiornamento del widget lista spesa.":"Aktualisierung des Einkaufsliste-Widgets erlauben.","Carta mostrata nel widget":"Im Widget angezeigte Karte","Prima carta disponibile":"Erste verfügbare Karte","Consenti aggiornamento del widget fidelity card.":"Aktualisierung des Kundenkarten-Widgets erlauben.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Zeigt im Widget offene oder auch geschlossene Schulden/Forderungen.","Elementi mostrati":"Angezeigte Elemente","Solo aperti":"Nur offene","Aperti ed estinti":"Offene und geschlossene","Debiti / Crediti aperti":"Offene Schulden / Forderungen","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Zeigt die Einkaufsliste und erlaubt das Markieren gekaufter Artikel.","Mostra rapidamente una fidelity card o una prepagata.":"Zeigt schnell eine Kundenkarte oder Prepaidkarte.","Mostra il saldo aperto di debiti e crediti.":"Zeigt den offenen Saldo von Schulden und Forderungen."},
+    pt:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Toca num produto para o adicionar à lista. Ficas em Produtos para mover outros.","Nuovo prodotto":"Novo produto","Crea":"Criar","Prodotto salvato in Prodotti":"Produto guardado em Produtos","Prodotto già presente nella lista della spesa":"Produto já presente na lista de compras","Scansiona":"Digitalizar","Codice carta letto correttamente":"Código do cartão lido corretamente","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"Não consegui ler o código automaticamente. Introduz manualmente.","Scanner non disponibile. Inserisci il codice manualmente.":"Scanner indisponível. Introduz o código manualmente.","Chiudi Debito":"Fechar dívida","Chiudi Credito":"Fechar crédito","Chiudere questo Debito?":"Fechar esta dívida?","Chiudere questo Credito?":"Fechar este crédito?","Debito chiuso":"Dívida fechada","Credito chiuso":"Crédito fechado","Widget attivo":"Widget ativo","Lista spesa":"Lista de compras","Articoli da comprare":"Artigos a comprar","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Widget dinâmico: mostra artigos ainda por comprar e permite marcar/remover os colocados no carrinho.","Numero articoli mostrati":"Número de artigos mostrados","Colore principale":"Cor principal","Consenti aggiornamento del widget lista spesa.":"Permitir atualização do widget lista de compras.","Carta mostrata nel widget":"Cartão mostrado no widget","Prima carta disponibile":"Primeiro cartão disponível","Consenti aggiornamento del widget fidelity card.":"Permitir atualização do widget fidelity card.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Mostra no widget o resumo de dívidas/créditos abertos ou também fechados.","Elementi mostrati":"Elementos mostrados","Solo aperti":"Só abertos","Aperti ed estinti":"Abertos e fechados","Debiti / Crediti aperti":"Dívidas / créditos abertos","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Mostra a lista de compras e permite marcar artigos comprados.","Mostra rapidamente una fidelity card o una prepagata.":"Mostra rapidamente um cartão fidelidade ou pré-pago.","Mostra il saldo aperto di debiti e crediti.":"Mostra o saldo aberto de dívidas e créditos."},
+    pl:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Dotknij produktu, aby dodać go do listy. Zostajesz w Produktach, aby przenieść kolejne.","Nuovo prodotto":"Nowy produkt","Crea":"Utwórz","Prodotto salvato in Prodotti":"Produkt zapisany w Produktach","Prodotto già presente nella lista della spesa":"Produkt jest już na liście zakupów","Scansiona":"Skanuj","Codice carta letto correttamente":"Kod karty odczytany poprawnie","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"Nie udało się automatycznie odczytać kodu. Wpisz go ręcznie.","Scanner non disponibile. Inserisci il codice manualmente.":"Skaner niedostępny. Wpisz kod ręcznie.","Chiudi Debito":"Zamknij dług","Chiudi Credito":"Zamknij należność","Chiudere questo Debito?":"Zamknąć ten dług?","Chiudere questo Credito?":"Zamknąć tę należność?","Debito chiuso":"Dług zamknięty","Credito chiuso":"Należność zamknięta","Widget attivo":"Widget aktywny","Lista spesa":"Lista zakupów","Articoli da comprare":"Artykuły do kupienia","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Dynamiczny widget: pokazuje artykuły do kupienia i pozwala oznaczać/usuwać te w koszyku.","Numero articoli mostrati":"Liczba wyświetlanych artykułów","Colore principale":"Kolor główny","Consenti aggiornamento del widget lista spesa.":"Zezwól na aktualizację widgetu listy zakupów.","Carta mostrata nel widget":"Karta pokazana w widgecie","Prima carta disponibile":"Pierwsza dostępna karta","Consenti aggiornamento del widget fidelity card.":"Zezwól na aktualizację widgetu karty lojalnościowej.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Pokazuje w widgecie podsumowanie otwartych lub także zamkniętych długów/należności.","Elementi mostrati":"Wyświetlane elementy","Solo aperti":"Tylko otwarte","Aperti ed estinti":"Otwarte i zamknięte","Debiti / Crediti aperti":"Otwarte długi / należności","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Pokazuje listę zakupów i pozwala oznaczać kupione artykuły.","Mostra rapidamente una fidelity card o una prepagata.":"Szybko pokazuje kartę lojalnościową lub przedpłaconą.","Mostra il saldo aperto di debiti e crediti.":"Pokazuje otwarte saldo długów i należności."},
+    nl:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Tik op een product om het aan de lijst toe te voegen. Je blijft in Producten om er meer te verplaatsen.","Nuovo prodotto":"Nieuw product","Crea":"Maken","Prodotto salvato in Prodotti":"Product opgeslagen in Producten","Prodotto già presente nella lista della spesa":"Product staat al op de boodschappenlijst","Scansiona":"Scannen","Codice carta letto correttamente":"Kaartcode correct gelezen","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"Ik kon de code niet automatisch lezen. Voer hem handmatig in.","Scanner non disponibile. Inserisci il codice manualmente.":"Scanner niet beschikbaar. Voer de code handmatig in.","Chiudi Debito":"Schuld sluiten","Chiudi Credito":"Tegoed sluiten","Chiudere questo Debito?":"Deze schuld sluiten?","Chiudere questo Credito?":"Dit tegoed sluiten?","Debito chiuso":"Schuld gesloten","Credito chiuso":"Tegoed gesloten","Widget attivo":"Widget actief","Lista spesa":"Boodschappenlijst","Articoli da comprare":"Te kopen artikelen","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Dynamische widget: toont nog te kopen artikelen en laat items in het mandje markeren/verwijderen.","Numero articoli mostrati":"Aantal getoonde artikelen","Colore principale":"Hoofdkleur","Consenti aggiornamento del widget lista spesa.":"Updates van de boodschappenlijst-widget toestaan.","Carta mostrata nel widget":"Kaart getoond in de widget","Prima carta disponibile":"Eerste beschikbare kaart","Consenti aggiornamento del widget fidelity card.":"Updates van de klantenkaart-widget toestaan.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Toont in de widget het overzicht van open of ook gesloten schulden/tegoeden.","Elementi mostrati":"Getoonde items","Solo aperti":"Alleen open","Aperti ed estinti":"Open en gesloten","Debiti / Crediti aperti":"Open schulden / tegoeden","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Toont de boodschappenlijst en laat gekochte artikelen markeren.","Mostra rapidamente una fidelity card o una prepagata.":"Toont snel een klantenkaart of prepaidkaart.","Mostra il saldo aperto di debiti e crediti.":"Toont het open saldo van schulden en tegoeden."},
+    ro:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Atinge un produs pentru a-l adăuga în listă. Rămâi în Produse pentru a muta și altele.","Nuovo prodotto":"Produs nou","Crea":"Creează","Prodotto salvato in Prodotti":"Produs salvat în Produse","Prodotto già presente nella lista della spesa":"Produs deja prezent în lista de cumpărături","Scansiona":"Scanează","Codice carta letto correttamente":"Codul cardului a fost citit corect","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"Nu am reușit să citesc automat codul. Introdu-l manual.","Scanner non disponibile. Inserisci il codice manualmente.":"Scanner indisponibil. Introdu codul manual.","Chiudi Debito":"Închide datoria","Chiudi Credito":"Închide creanța","Chiudere questo Debito?":"Închizi această datorie?","Chiudere questo Credito?":"Închizi această creanță?","Debito chiuso":"Datorie închisă","Credito chiuso":"Creanță închisă","Widget attivo":"Widget activ","Lista spesa":"Listă de cumpărături","Articoli da comprare":"Articole de cumpărat","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Widget dinamic: afișează articolele de cumpărat și permite marcarea/eliminarea celor puse în coș.","Numero articoli mostrati":"Număr articole afișate","Colore principale":"Culoare principală","Consenti aggiornamento del widget lista spesa.":"Permite actualizarea widgetului listei de cumpărături.","Carta mostrata nel widget":"Card afișat în widget","Prima carta disponibile":"Primul card disponibil","Consenti aggiornamento del widget fidelity card.":"Permite actualizarea widgetului card fidelitate.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Afișează în widget sumarul datoriilor/creanțelor deschise sau și închise.","Elementi mostrati":"Elemente afișate","Solo aperti":"Doar deschise","Aperti ed estinti":"Deschise și închise","Debiti / Crediti aperti":"Datorii / creanțe deschise","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Afișează lista de cumpărături și permite marcarea articolelor cumpărate.","Mostra rapidamente una fidelity card o una prepagata.":"Afișează rapid un card de fidelitate sau prepaid.","Mostra il saldo aperto di debiti e crediti.":"Afișează soldul deschis al datoriilor și creanțelor."},
+    el:{"Tocca un prodotto per aggiungerlo alla lista. Resti in Prodotti per spostarne altri.":"Άγγιξε ένα προϊόν για να το προσθέσεις στη λίστα. Παραμένεις στα Προϊόντα για να μετακινήσεις κι άλλα.","Nuovo prodotto":"Νέο προϊόν","Crea":"Δημιουργία","Prodotto salvato in Prodotti":"Το προϊόν αποθηκεύτηκε στα Προϊόντα","Prodotto già presente nella lista della spesa":"Το προϊόν υπάρχει ήδη στη λίστα αγορών","Scansiona":"Σάρωση","Codice carta letto correttamente":"Ο κωδικός κάρτας διαβάστηκε σωστά","Non sono riuscito a leggere automaticamente il codice. Inseriscilo manualmente.":"Δεν μπόρεσα να διαβάσω αυτόματα τον κωδικό. Πληκτρολόγησέ τον χειροκίνητα.","Scanner non disponibile. Inserisci il codice manualmente.":"Ο σαρωτής δεν είναι διαθέσιμος. Πληκτρολόγησε τον κωδικό χειροκίνητα.","Chiudi Debito":"Κλείσιμο χρέους","Chiudi Credito":"Κλείσιμο πίστωσης","Chiudere questo Debito?":"Να κλείσει αυτό το χρέος;","Chiudere questo Credito?":"Να κλείσει αυτή η πίστωση;","Debito chiuso":"Το χρέος έκλεισε","Credito chiuso":"Η πίστωση έκλεισε","Widget attivo":"Widget ενεργό","Lista spesa":"Λίστα αγορών","Articoli da comprare":"Είδη προς αγορά","Widget dinamico: mostra gli articoli ancora da comprare e consente di segnare/eliminare quelli messi nel carrello.":"Δυναμικό widget: εμφανίζει είδη προς αγορά και επιτρέπει τη σήμανση/αφαίρεση όσων μπήκαν στο καλάθι.","Numero articoli mostrati":"Αριθμός εμφανιζόμενων ειδών","Colore principale":"Κύριο χρώμα","Consenti aggiornamento del widget lista spesa.":"Να επιτρέπεται η ενημέρωση του widget λίστας αγορών.","Carta mostrata nel widget":"Κάρτα που εμφανίζεται στο widget","Prima carta disponibile":"Πρώτη διαθέσιμη κάρτα","Consenti aggiornamento del widget fidelity card.":"Να επιτρέπεται η ενημέρωση του widget κάρτας πιστότητας.","Mostra nel widget il riepilogo dei debiti e crediti ancora aperti o anche quelli estinti.":"Εμφανίζει στο widget σύνοψη ανοιχτών ή και κλειστών χρεών/πιστώσεων.","Elementi mostrati":"Εμφανιζόμενα στοιχεία","Solo aperti":"Μόνο ανοιχτά","Aperti ed estinti":"Ανοιχτά και κλειστά","Debiti / Crediti aperti":"Ανοιχτά χρέη / πιστώσεις","Mostra la lista della spesa e permette di segnare gli articoli acquistati.":"Εμφανίζει τη λίστα αγορών και επιτρέπει τη σήμανση αγορασμένων ειδών.","Mostra rapidamente una fidelity card o una prepagata.":"Εμφανίζει γρήγορα μια κάρτα πιστότητας ή προπληρωμένη.","Mostra il saldo aperto di debiti e crediti.":"Εμφανίζει το ανοιχτό υπόλοιπο χρεών και πιστώσεων."}
+  };
+  Object.keys(M).forEach(function(code){if(FAINANCE_UI_TRANSLATIONS[code])Object.assign(FAINANCE_UI_TRANSLATIONS[code],M[code]);});
+})();
+
+// Estensione 1.6.3: correzioni lista spesa, prodotti e fidelity card.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Il prodotto aggiunto qui viene salvato anche in Prodotti.':{en:'The product added here is also saved in Products.',es:'El producto añadido aquí también se guarda en Productos.',fr:'Le produit ajouté ici est aussi enregistré dans Produits.',de:'Das hier hinzugefügte Produkt wird auch in Produkte gespeichert.',pt:'O produto adicionado aqui também é guardado em Produtos.',pl:'Produkt dodany tutaj jest też zapisywany w Produktach.',nl:'Het product dat je hier toevoegt, wordt ook opgeslagen in Producten.',ro:'Produsul adăugat aici este salvat și în Produse.',el:'Το προϊόν που προστίθεται εδώ αποθηκεύεται και στα Προϊόντα.'},
+    'Prodotto aggiornato':{en:'Product updated',es:'Producto actualizado',fr:'Produit mis à jour',de:'Produkt aktualisiert',pt:'Produto atualizado',pl:'Produkt zaktualizowany',nl:'Product bijgewerkt',ro:'Produs actualizat',el:'Το προϊόν ενημερώθηκε'},
+    'Prodotto eliminato':{en:'Product deleted',es:'Producto eliminado',fr:'Produit supprimé',de:'Produkt gelöscht',pt:'Produto eliminado',pl:'Produkt usunięty',nl:'Product verwijderd',ro:'Produs șters',el:'Το προϊόν διαγράφηκε'},
+    'Prodotto già presente in Prodotti':{en:'Product already saved in Products',es:'Producto ya guardado en Productos',fr:'Produit déjà enregistré dans Produits',de:'Produkt bereits in Produkte gespeichert',pt:'Produto já guardado em Produtos',pl:'Produkt jest już zapisany w Produktach',nl:'Product is al opgeslagen in Producten',ro:'Produs deja salvat în Produse',el:'Το προϊόν υπάρχει ήδη στα Προϊόντα'},
+    'Modifica il prodotto e salva.':{en:'Edit the product and save.',es:'Modifica el producto y guarda.',fr:'Modifie le produit et enregistre.',de:'Bearbeite das Produkt und speichere.',pt:'Altera o produto e guarda.',pl:'Edytuj produkt i zapisz.',nl:'Wijzig het product en sla op.',ro:'Modifică produsul și salvează.',el:'Τροποποίησε το προϊόν και αποθήκευσε.'},
+    'Eliminare questo prodotto?':{en:'Delete this product?',es:'¿Eliminar este producto?',fr:'Supprimer ce produit ?',de:'Dieses Produkt löschen?',pt:'Eliminar este produto?',pl:'Usunąć ten produkt?',nl:'Dit product verwijderen?',ro:'Ștergi acest produs?',el:'Να διαγραφεί αυτό το προϊόν;'},
+    'Già nella lista':{en:'Already in the list',es:'Ya en la lista',fr:'Déjà dans la liste',de:'Bereits in der Liste',pt:'Já na lista',pl:'Już na liście',nl:'Al in de lijst',ro:'Deja în listă',el:'Ήδη στη λίστα'},
+    'Scansiona la carta fisica oppure inserisci il codice numerico: l\'app lo mostra come codice a barre.':{en:'Scan the physical card or enter the numeric code: the app shows it as a barcode.',es:'Escanea la tarjeta física o introduce el código numérico: la app lo muestra como código de barras.',fr:'Scanne la carte physique ou saisis le code numérique : l’app l’affiche comme code-barres.',de:'Scanne die physische Karte oder gib den Zahlencode ein: Die App zeigt ihn als Barcode.',pt:'Digitaliza o cartão físico ou insere o código numérico: a app mostra-o como código de barras.',pl:'Zeskanuj fizyczną kartę albo wpisz kod numeryczny: aplikacja pokaże go jako kod kreskowy.',nl:'Scan de fysieke kaart of voer de numerieke code in: de app toont die als barcode.',ro:'Scanează cardul fizic sau introdu codul numeric: aplicația îl afișează ca cod de bare.',el:'Σάρωσε τη φυσική κάρτα ή πληκτρολόγησε τον αριθμητικό κωδικό: η εφαρμογή τον εμφανίζει ως barcode.'},
+    'Carta aggiornata':{en:'Card updated',es:'Tarjeta actualizada',fr:'Carte mise à jour',de:'Karte aktualisiert',pt:'Cartão atualizado',pl:'Karta zaktualizowana',nl:'Kaart bijgewerkt',ro:'Card actualizat',el:'Η κάρτα ενημερώθηκε'},
+    'Modifica la carta e salva.':{en:'Edit the card and save.',es:'Modifica la tarjeta y guarda.',fr:'Modifie la carte et enregistre.',de:'Bearbeite die Karte und speichere.',pt:'Altera o cartão e guarda.',pl:'Edytuj kartę i zapisz.',nl:'Wijzig de kaart en sla op.',ro:'Modifică cardul și salvează.',el:'Τροποποίησε την κάρτα και αποθήκευσε.'}
+  };
+  Object.keys(D).forEach(function(k){var v=Object.assign({it:k},D[k]);add(k,v);});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// Estensione 1.6.4: prodotti in colonna, ordinamento prodotti/aree, prompt migliorati e fidelity card migliorata.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Crea e organizza i prodotti. Tocca + per aggiungerli alla lista senza uscire da Prodotti.':{en:'Create and organize products. Tap + to add them to the list without leaving Products.',es:'Crea y organiza productos. Toca + para añadirlos a la lista sin salir de Productos.',fr:'Crée et organise les produits. Touche + pour les ajouter à la liste sans quitter Produits.',de:'Erstelle und organisiere Produkte. Tippe auf +, um sie zur Liste hinzuzufügen, ohne Produkte zu verlassen.',pt:'Cria e organiza produtos. Toca em + para os adicionar à lista sem sair de Produtos.',pl:'Twórz i porządkuj produkty. Dotknij +, aby dodać je do listy bez opuszczania Produktów.',nl:'Maak en orden producten. Tik op + om ze aan de lijst toe te voegen zonder Producten te verlaten.',ro:'Creează și organizează produse. Atinge + pentru a le adăuga în listă fără să ieși din Produse.',el:'Δημιούργησε και οργάνωσε προϊόντα. Πάτησε + για να τα προσθέσεις στη λίστα χωρίς να φύγεις από τα Προϊόντα.'},
+    'Nome prodotto':{en:'Product name',es:'Nombre del producto',fr:'Nom du produit',de:'Produktname',pt:'Nome do produto',pl:'Nazwa produktu',nl:'Productnaam',ro:'Nume produs',el:'Όνομα προϊόντος'},
+    'Aree prodotti':{en:'Product areas',es:'Áreas de productos',fr:'Zones des produits',de:'Produktbereiche',pt:'Áreas de produtos',pl:'Obszary produktów',nl:'Productgebieden',ro:'Zone produse',el:'Περιοχές προϊόντων'},
+    'Ordina aree e articoli':{en:'Sort areas and items',es:'Ordena áreas y artículos',fr:'Trie les zones et les articles',de:'Bereiche und Artikel sortieren',pt:'Ordena áreas e artigos',pl:'Sortuj obszary i artykuły',nl:'Sorteer gebieden en artikelen',ro:'Ordonează zonele și articolele',el:'Ταξινόμηση περιοχών και ειδών'},
+    'Aggiungi alla lista':{en:'Add to list',es:'Añadir a la lista',fr:'Ajouter à la liste',de:'Zur Liste hinzufügen',pt:'Adicionar à lista',pl:'Dodaj do listy',nl:'Toevoegen aan lijst',ro:'Adaugă în listă',el:'Προσθήκη στη λίστα'},
+    'Mostra questa carta alla cassa':{en:'Show this card at checkout',es:'Muestra esta tarjeta en caja',fr:'Montre cette carte en caisse',de:'Diese Karte an der Kasse zeigen',pt:'Mostra este cartão na caixa',pl:'Pokaż tę kartę przy kasie',nl:'Toon deze kaart bij de kassa',ro:'Arată acest card la casă',el:'Δείξε αυτή την κάρτα στο ταμείο'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// Estensione 1.6.5: lista spesa multipla, prodotti catalogo completo e fidelity card migliorata.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Lista principale':{en:'Main list',es:'Lista principal',fr:'Liste principale',de:'Hauptliste',pt:'Lista principal',pl:'Lista główna',nl:'Hoofdlijst',ro:'Lista principală',el:'Κύρια λίστα'},
+    'Puoi creare più liste, aggiungere prodotti nuovi e segnare quelli già messi nel carrello.':{en:'You can create multiple lists, add new products and mark the ones already placed in the cart.',es:'Puedes crear varias listas, añadir nuevos productos y marcar los que ya pusiste en el carrito.',fr:'Tu peux créer plusieurs listes, ajouter de nouveaux produits et marquer ceux déjà mis dans le panier.',de:'Du kannst mehrere Listen erstellen, neue Produkte hinzufügen und die bereits im Wagen liegenden markieren.',pt:'Podes criar várias listas, adicionar novos produtos e marcar os que já puseste no carrinho.',pl:'Możesz tworzyć wiele list, dodawać nowe produkty i oznaczać te już w koszyku.',nl:'Je kunt meerdere lijsten maken, nieuwe producten toevoegen en markeren wat al in de winkelwagen ligt.',ro:'Poți crea mai multe liste, adăuga produse noi și marca pe cele puse deja în coș.',el:'Μπορείς να δημιουργείς πολλές λίστες, να προσθέτεις νέα προϊόντα και να σημειώνεις όσα μπήκαν ήδη στο καλάθι.'},
+    'Titolo nuova lista':{en:'New list title',es:'Título de la nueva lista',fr:'Titre de la nouvelle liste',de:'Titel der neuen Liste',pt:'Título da nova lista',pl:'Tytuł nowej listy',nl:'Titel nieuwe lijst',ro:'Titlul listei noi',el:'Τίτλος νέας λίστας'},
+    'Nuova lista':{en:'New list',es:'Nueva lista',fr:'Nouvelle liste',de:'Neue Liste',pt:'Nova lista',pl:'Nowa lista',nl:'Nieuwe lijst',ro:'Listă nouă',el:'Νέα λίστα'},
+    'Inserisci il titolo della lista.':{en:'Enter the list title.',es:'Introduce el título de la lista.',fr:'Saisis le titre de la liste.',de:'Gib den Titel der Liste ein.',pt:'Insere o título da lista.',pl:'Wpisz tytuł listy.',nl:'Voer de titel van de lijst in.',ro:'Introdu titlul listei.',el:'Πληκτρολόγησε τον τίτλο της λίστας.'},
+    'Eliminare questa lista della spesa?':{en:'Delete this shopping list?',es:'¿Eliminar esta lista de la compra?',fr:'Supprimer cette liste de courses ?',de:'Diese Einkaufsliste löschen?',pt:'Eliminar esta lista de compras?',pl:'Usunąć tę listę zakupów?',nl:'Deze boodschappenlijst verwijderen?',ro:'Ștergi această listă de cumpărături?',el:'Να διαγραφεί αυτή η λίστα αγορών;'},
+    'Colore prodotti acquistati':{en:'Purchased products color',es:'Color de productos comprados',fr:'Couleur des produits achetés',de:'Farbe gekaufter Produkte',pt:'Cor dos produtos comprados',pl:'Kolor kupionych produktów',nl:'Kleur gekochte producten',ro:'Culoarea produselor cumpărate',el:'Χρώμα αγορασμένων προϊόντων'},
+    'Aggiungi alla lista':{en:'Add to list',es:'Añadir a la lista',fr:'Ajouter à la liste',de:'Zur Liste hinzufügen',pt:'Adicionar à lista',pl:'Dodaj do listy',nl:'Toevoegen aan lijst',ro:'Adaugă în listă',el:'Προσθήκη στη λίστα'},
+    'Tocca il nome del prodotto per aggiungerlo alla lista. Resti in Prodotti per aggiungerne altri.':{en:'Tap the product name to add it to the list. You stay in Products to add more.',es:'Toca el nombre del producto para añadirlo a la lista. Permaneces en Productos para añadir otros.',fr:'Touche le nom du produit pour l’ajouter à la liste. Tu restes dans Produits pour en ajouter d’autres.',de:'Tippe auf den Produktnamen, um ihn zur Liste hinzuzufügen. Du bleibst in Produkte, um weitere hinzuzufügen.',pt:'Toca no nome do produto para o adicionar à lista. Ficas em Produtos para adicionar outros.',pl:'Dotknij nazwy produktu, aby dodać go do listy. Zostajesz w Produktach, aby dodać kolejne.',nl:'Tik op de productnaam om het aan de lijst toe te voegen. Je blijft in Producten om er meer toe te voegen.',ro:'Atinge numele produsului pentru a-l adăuga în listă. Rămâi în Produse pentru a adăuga și altele.',el:'Πάτησε το όνομα προϊόντος για να το προσθέσεις στη λίστα. Μένεις στα Προϊόντα για να προσθέσεις κι άλλα.'},
+    'Icona':{en:'Icon',es:'Icono',fr:'Icône',de:'Symbol',pt:'Ícone',pl:'Ikona',nl:'Pictogram',ro:'Pictogramă',el:'Εικονίδιο'},
+    'Quantità predefinita':{en:'Default quantity',es:'Cantidad predeterminada',fr:'Quantité par défaut',de:'Standardmenge',pt:'Quantidade predefinida',pl:'Domyślna ilość',nl:'Standaardhoeveelheid',ro:'Cantitate implicită',el:'Προεπιλεγμένη ποσότητα'},
+    'Ordinamento prodotti':{en:'Product sorting',es:'Orden de productos',fr:'Tri des produits',de:'Produktsortierung',pt:'Ordenação de produtos',pl:'Sortowanie produktów',nl:'Productsortering',ro:'Sortare produse',el:'Ταξινόμηση προϊόντων'},
+    'Alfabetico':{en:'Alphabetical',es:'Alfabético',fr:'Alphabétique',de:'Alphabetisch',pt:'Alfabético',pl:'Alfabetycznie',nl:'Alfabetisch',ro:'Alfabetic',el:'Αλφαβητικά'},
+    'Per Area':{en:'By area',es:'Por área',fr:'Par zone',de:'Nach Bereich',pt:'Por área',pl:'Według obszaru',nl:'Op gebied',ro:'După zonă',el:'Ανά περιοχή'},
+    'Personalizzato':{en:'Custom',es:'Personalizado',fr:'Personnalisé',de:'Benutzerdefiniert',pt:'Personalizado',pl:'Niestandardowo',nl:'Aangepast',ro:'Personalizat',el:'Προσαρμοσμένη'},
+    'Per utilizzo':{en:'By usage',es:'Por uso',fr:'Par utilisation',de:'Nach Nutzung',pt:'Por utilização',pl:'Według użycia',nl:'Op gebruik',ro:'După utilizare',el:'Ανά χρήση'},
+    'Acquistati':{en:'Purchased',es:'Comprados',fr:'Achetés',de:'Gekauft',pt:'Comprados',pl:'Kupione',nl:'Gekocht',ro:'Cumpărate',el:'Αγορασμένα'},
+    'Codice inserito manualmente':{en:'Code entered manually',es:'Código introducido manualmente',fr:'Code saisi manuellement',de:'Code manuell eingegeben',pt:'Código inserido manualmente',pl:'Kod wpisany ręcznie',nl:'Code handmatig ingevoerd',ro:'Cod introdus manual',el:'Ο κωδικός εισήχθη χειροκίνητα'},
+    'Non sono riuscito a leggere automaticamente il codice. Si apre l’inserimento manuale.':{en:'I could not read the code automatically. Manual entry will open.',es:'No he podido leer el código automáticamente. Se abrirá la introducción manual.',fr:'Impossible de lire automatiquement le code. La saisie manuelle va s’ouvrir.',de:'Der Code konnte nicht automatisch gelesen werden. Die manuelle Eingabe wird geöffnet.',pt:'Não consegui ler o código automaticamente. A introdução manual será aberta.',pl:'Nie udało się automatycznie odczytać kodu. Otworzy się ręczne wprowadzanie.',nl:'Ik kon de code niet automatisch lezen. Handmatige invoer wordt geopend.',ro:'Nu am reușit să citesc automat codul. Se va deschide introducerea manuală.',el:'Δεν μπόρεσα να διαβάσω αυτόματα τον κωδικό. Θα ανοίξει η χειροκίνητη εισαγωγή.'},
+    'Tipo codice':{en:'Code type',es:'Tipo de código',fr:'Type de code',de:'Codetyp',pt:'Tipo de código',pl:'Typ kodu',nl:'Codetype',ro:'Tip cod',el:'Τύπος κωδικού'},
+    'Barcode':{en:'Barcode',es:'Código de barras',fr:'Code-barres',de:'Barcode',pt:'Código de barras',pl:'Kod kreskowy',nl:'Barcode',ro:'Cod de bare',el:'Barcode'},
+    'QR':{en:'QR',es:'QR',fr:'QR',de:'QR',pt:'QR',pl:'QR',nl:'QR',ro:'QR',el:'QR'},
+    'Scansiona la carta fisica oppure inserisci il codice numerico: l’app lo mostra come codice a barre o QR.':{en:'Scan the physical card or enter the numeric code: the app shows it as a barcode or QR.',es:'Escanea la tarjeta física o introduce el código numérico: la app lo muestra como código de barras o QR.',fr:'Scanne la carte physique ou saisis le code numérique : l’app l’affiche comme code-barres ou QR.',de:'Scanne die physische Karte oder gib den Zahlencode ein: Die App zeigt ihn als Barcode oder QR.',pt:'Digitaliza o cartão físico ou insere o código numérico: a app mostra-o como código de barras ou QR.',pl:'Zeskanuj fizyczną kartę albo wpisz kod numeryczny: aplikacja pokaże go jako kod kreskowy lub QR.',nl:'Scan de fysieke kaart of voer de numerieke code in: de app toont die als barcode of QR.',ro:'Scanează cardul fizic sau introdu codul numeric: aplicația îl afișează ca cod de bare sau QR.',el:'Σάρωσε τη φυσική κάρτα ή πληκτρολόγησε τον αριθμητικό κωδικό: η εφαρμογή τον εμφανίζει ως barcode ή QR.'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// Estensione 1.6.6: correzioni UI Prodotti, Liste spesa e Fidelity.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Titolo lista':{en:'List title',es:'Título de la lista',fr:'Titre de la liste',de:'Listentitel',pt:'Título da lista',pl:'Tytuł listy',nl:'Lijsttitel',ro:'Titlul listei',el:'Τίτλος λίστας'},
+    'Crea Prodotto':{en:'Create product',es:'Crear producto',fr:'Créer un produit',de:'Produkt erstellen',pt:'Criar produto',pl:'Utwórz produkt',nl:'Product maken',ro:'Creează produs',el:'Δημιουργία προϊόντος'},
+    'Quantità':{en:'Quantity',es:'Cantidad',fr:'Quantité',de:'Menge',pt:'Quantidade',pl:'Ilość',nl:'Hoeveelheid',ro:'Cantitate',el:'Ποσότητα'},
+    'Unità':{en:'Unit',es:'Unidad',fr:'Unité',de:'Einheit',pt:'Unidade',pl:'Jednostka',nl:'Eenheid',ro:'Unitate',el:'Μονάδα'},
+    'unità':{en:'units',es:'unidades',fr:'unités',de:'Einheiten',pt:'unidades',pl:'sztuki',nl:'stuks',ro:'unități',el:'μονάδες'},
+    'grammi':{en:'grams',es:'gramos',fr:'grammes',de:'Gramm',pt:'gramas',pl:'gramy',nl:'gram',ro:'grame',el:'γραμμάρια'},
+    'millilitri':{en:'milliliters',es:'mililitros',fr:'millilitres',de:'Milliliter',pt:'mililitros',pl:'mililitry',nl:'milliliter',ro:'mililitri',el:'χιλιοστόλιτρα'},
+    'altro':{en:'other',es:'otro',fr:'autre',de:'andere',pt:'outro',pl:'inne',nl:'anders',ro:'altul',el:'άλλο'},
+    'Colore acquistati':{en:'Purchased color',es:'Color comprados',fr:'Couleur achetés',de:'Farbe gekauft',pt:'Cor comprados',pl:'Kolor kupionych',nl:'Kleur gekocht',ro:'Culoare cumpărate',el:'Χρώμα αγορασμένων'},
+    'Codice a barre':{en:'Barcode',es:'Código de barras',fr:'Code-barres',de:'Barcode',pt:'Código de barras',pl:'Kod kreskowy',nl:'Barcode',ro:'Cod de bare',el:'Γραμμωτός κωδικός'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance 1.6.7 - shopping/fidelity UX corrections.
+(function(){
+  var C=['en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(code,key,val){if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=val;if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=val;}}
+  function row(key,en,es,fr,de,pt,pl,nl,ro,el){var v={en:en,es:es,fr:fr,de:de,pt:pt,pl:pl,nl:nl,ro:ro,el:el};C.forEach(function(code){put(code,key,v[code]);});}
+  row('Nuova Carta','New card','Nueva tarjeta','Nouvelle carte','Neue Karte','Novo cartão','Nowa karta','Nieuwe kaart','Card nou','Nea karta');
+  row('Scansiona carta','Scan card','Escanear tarjeta','Scanner la carte','Karte scannen','Digitalizar cartão','Skanuj kartę','Kaart scannen','Scanează cardul','Sarosi kartas');
+  row('Compila manualmente','Fill in manually','Completar manualmente','Remplir manuellement','Manuell ausfüllen','Preencher manualmente','Wypełnij ręcznie','Handmatig invullen','Completează manual','Symplirose cheirokinita');
+  row('Crea una carta solo quando ti serve: puoi scansionarla, caricare una foto o compilare i dati manualmente.','Create a card only when you need it: you can scan it, upload a photo or fill in the details manually.','Crea una tarjeta solo cuando la necesites: puedes escanearla, subir una foto o completar los datos manualmente.','Créez une carte seulement quand vous en avez besoin : vous pouvez la scanner, charger une photo ou remplir les données manuellement.','Erstelle eine Karte nur bei Bedarf: Du kannst sie scannen, ein Foto hochladen oder die Daten manuell eingeben.','Cria um cartão apenas quando precisares: podes digitalizá-lo, carregar uma foto ou preencher os dados manualmente.','Utwórz kartę tylko wtedy, gdy jej potrzebujesz: możesz ją zeskanować, przesłać zdjęcie albo wpisać dane ręcznie.','Maak alleen een kaart aan wanneer je die nodig hebt: je kunt scannen, een foto uploaden of de gegevens handmatig invullen.','Creează un card doar când ai nevoie: îl poți scana, poți încărca o fotografie sau poți completa datele manual.','Dimiourgise karta mono otan ti xreiazesai: mporeis na ti saroseis, na anevasis fotografia i na sympliroseis ta stoixeia cheirokinita.');
+  row('Tocca il nome del prodotto per aggiungerlo alla lista. Resti in Prodotti per aggiungerne altri.','Tap the product name to add it to the list. You stay in Products to add more.','Toca el nombre del producto para añadirlo a la lista. Permaneces en Productos para añadir otros.','Touchez le nom du produit pour l’ajouter à la liste. Vous restez dans Produits pour en ajouter d’autres.','Tippe auf den Produktnamen, um ihn zur Liste hinzuzufügen. Du bleibst in Produkte, um weitere hinzuzufügen.','Toca no nome do produto para o adicionar à lista. Ficas em Produtos para adicionar outros.','Dotknij nazwy produktu, aby dodać go do listy. Zostajesz w Produktach, aby dodać kolejne.','Tik op de productnaam om het aan de lijst toe te voegen. Je blijft in Producten om er meer toe te voegen.','Atinge numele produsului pentru a-l adăuga în listă. Rămâi în Produse pentru a adăuga altele.','Pata to onoma tou proiontos gia na prostethei sti lista. Meneis sta Proionta gia na prostheseis ki alla.');
+})();
+
+// fAInance 1.6.8 - shopping/fidelity final UX corrections.
+(function(){
+  var C=['en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(code,key,val){if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=val;if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=val;}}
+  function row(key,en,es,fr,de,pt,pl,nl,ro,el){var v={en:en,es:es,fr:fr,de:de,pt:pt,pl:pl,nl:nl,ro:ro,el:el};C.forEach(function(code){put(code,key,v[code]);});}
+  row('Rimuovi prodotti acquistati','Remove purchased products','Eliminar productos comprados','Supprimer les produits achetés','Gekaufte Produkte entfernen','Remover produtos comprados','Usuń kupione produkty','Gekochte producten verwijderen','Elimină produsele cumpărate','Αφαίρεση αγορασμένων προϊόντων');
+  row('In lista','In list','En lista','Dans la liste','In Liste','Na lista','Na liście','In lijst','În listă','Στη λίστα');
+  row('Carta scansionata','Scanned card','Tarjeta escaneada','Carte scannée','Gescannte Karte','Cartão digitalizado','Zeskanowana karta','Gescande kaart','Card scanat','Σαρωμένη κάρτα');
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+// fAInance 1.6.31 - Debiti, Spesa e widget: traduzioni complete aggiuntive.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Barra inferiore':{en:'Bottom bar',es:'Barra inferior',fr:'Barre inférieure',de:'Untere Leiste',pt:'Barra inferior',pl:'Dolny pasek',nl:'Onderste balk',ro:'Bară inferioară',el:'Κάτω μπάρα'},
+    'Debiti / Crediti':{en:'Debts / Credits',es:'Deudas / Créditos',fr:'Dettes / Crédits',de:'Schulden / Guthaben',pt:'Dívidas / Créditos',pl:'Długi / Należności',nl:'Schulden / Tegoeden',ro:'Datorii / Creanțe',el:'Χρέη / Πιστώσεις'},
+    'Debiti':{en:'Debts',es:'Deudas',fr:'Dettes',de:'Schulden',pt:'Dívidas',pl:'Długi',nl:'Schulden',ro:'Datorii',el:'Χρέη'},
+    'Crediti':{en:'Credits',es:'Créditos',fr:'Crédits',de:'Guthaben',pt:'Créditos',pl:'Należności',nl:'Tegoeden',ro:'Creanțe',el:'Πιστώσεις'},
+    'Saldo':{en:'Balance',es:'Saldo',fr:'Solde',de:'Saldo',pt:'Saldo',pl:'Saldo',nl:'Saldo',ro:'Sold',el:'Υπόλοιπο'},
+    'Lista spesa':{en:'Shopping list',es:'Lista de la compra',fr:'Liste de courses',de:'Einkaufsliste',pt:'Lista de compras',pl:'Lista zakupów',nl:'Boodschappenlijst',ro:'Listă de cumpărături',el:'Λίστα αγορών'},
+    'Fidelity card':{en:'Fidelity card',es:'Tarjeta de fidelidad',fr:'Carte de fidélité',de:'Kundenkarte',pt:'Cartão de fidelidade',pl:'Karta lojalnościowa',nl:'Klantenkaart',ro:'Card de fidelitate',el:'Κάρτα πιστότητας'},
+    'Grandezza testo':{en:'Text size',es:'Tamaño del texto',fr:'Taille du texte',de:'Textgröße',pt:'Tamanho do texto',pl:'Rozmiar tekstu',nl:'Tekstgrootte',ro:'Dimensiune text',el:'Μέγεθος κειμένου'},
+    'Colore icona':{en:'Icon color',es:'Color del icono',fr:'Couleur de l’icône',de:'Symbolfarbe',pt:'Cor do ícone',pl:'Kolor ikony',nl:'Pictogramkleur',ro:'Culoare pictogramă',el:'Χρώμα εικονιδίου'},
+    'Colore titolo':{en:'Title color',es:'Color del título',fr:'Couleur du titre',de:'Titelfarbe',pt:'Cor do título',pl:'Kolor tytułu',nl:'Titelkleur',ro:'Culoare titlu',el:'Χρώμα τίτλου'},
+    'Colore testo':{en:'Text color',es:'Color del texto',fr:'Couleur du texte',de:'Textfarbe',pt:'Cor do texto',pl:'Kolor tekstu',nl:'Tekstkleur',ro:'Culoare text',el:'Χρώμα κειμένου'},
+    'Trasparenza sfondo widget':{en:'Widget background transparency',es:'Transparencia del fondo del widget',fr:'Transparence du fond du widget',de:'Widget-Hintergrundtransparenz',pt:'Transparência do fundo do widget',pl:'Przezroczystość tła widżetu',nl:'Transparantie widgetachtergrond',ro:'Transparența fundalului widgetului',el:'Διαφάνεια φόντου widget'},
+    'Aggiornamento automatico':{en:'Automatic update',es:'Actualización automática',fr:'Mise à jour automatique',de:'Automatische Aktualisierung',pt:'Atualização automática',pl:'Automatyczna aktualizacja',nl:'Automatisch bijwerken',ro:'Actualizare automată',el:'Αυτόματη ενημέρωση'},
+    'Salva e aggiorna widget':{en:'Save and update widget',es:'Guardar y actualizar widget',fr:'Enregistrer et mettre à jour le widget',de:'Widget speichern und aktualisieren',pt:'Guardar e atualizar widget',pl:'Zapisz i zaktualizuj widżet',nl:'Widget opslaan en bijwerken',ro:'Salvează și actualizează widgetul',el:'Αποθήκευση και ενημέρωση widget'},
+    'Tocca un articolo quando è nel carrello':{en:'Tap an item when it is in the cart',es:'Toca un artículo cuando esté en el carrito',fr:'Touchez un article quand il est dans le panier',de:'Tippe auf einen Artikel, wenn er im Wagen liegt',pt:'Toca num artigo quando estiver no carrinho',pl:'Dotknij produktu, gdy jest w koszyku',nl:'Tik op een artikel wanneer het in de winkelwagen ligt',ro:'Atinge un articol când este în coș',el:'Πάτησε ένα προϊόν όταν είναι στο καλάθι'},
+    'Nessuna entrata o uscita ricorrente':{en:'No recurring income or expenses',es:'Sin ingresos o gastos recurrentes',fr:'Aucun revenu ou dépense récurrent',de:'Keine wiederkehrenden Einnahmen oder Ausgaben',pt:'Sem receitas ou despesas recorrentes',pl:'Brak cyklicznych przychodów lub wydatków',nl:'Geen terugkerende inkomsten of uitgaven',ro:'Fără venituri sau cheltuieli recurente',el:'Δεν υπάρχουν επαναλαμβανγόμενα έσοδα ή έξοδα',},    'Rimuovi prodotti acquistati':{en:'Remove purchased products',es:'Eliminar productos comprados',fr:'Supprimer les produits achetés',de:'Gekaufte Produkte entfernen',pt:'Remover produtos comprados',pl:'Usuń kupione produkty',nl:'Gekochte producten verwijderen',ro:'Elimină produsele cumpărate',el:'Αφαίρεση αγορασμένων προϊόντων'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance 1.6.32 - widget/debiti/spesa/export translations.
+(function(){
+  var C=['en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(code,key,val){if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=val;if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=val;}}
+  function row(key,en,es,fr,de,pt,pl,nl,ro,el){var v={en:en,es:es,fr:fr,de:de,pt:pt,pl:pl,nl:nl,ro:ro,el:el};C.forEach(function(code){put(code,key,v[code]);});}
+  row('Configura widget Nota / IBAN','Configure Note / IBAN widget','Configurar widget Nota / IBAN','Configurer le widget Note / IBAN','Widget Notiz / IBAN konfigurieren','Configurar widget Nota / IBAN','Skonfiguruj widżet Notatka / IBAN','Widget Notitie / IBAN configureren','Configurează widgetul Notă / IBAN','Ρύθμιση widget Σημείωση / IBAN');
+  row('Configura widget Obiettivo','Configure Goal widget','Configurar widget Objetivo','Configurer le widget Objectif','Widget Ziel konfigurieren','Configurar widget Objetivo','Skonfiguruj widżet Cel','Widget Doel configureren','Configurează widgetul Obiectiv','Ρύθμιση widget Στόχος');
+  row('Configura widget Share','Configure Share widget','Configurar widget Share','Configurer le widget Share','Widget Share konfigurieren','Configurar widget Share','Skonfiguruj widżet Share','Widget Share configureren','Configurează widgetul Share','Ρύθμιση widget Share');
+  row('Configura widget Lista spesa','Configure Shopping list widget','Configurar widget Lista de la compra','Configurer le widget Liste de courses','Widget Einkaufsliste konfigurieren','Configurar widget Lista de compras','Skonfiguruj widżet Lista zakupów','Widget Boodschappenlijst configureren','Configurează widgetul Listă de cumpărături','Ρύθμιση widget Λίστα αγορών');
+  row('Configura widget Fidelity card','Configure Fidelity card widget','Configurar widget Tarjeta fidelidad','Configurer le widget Carte fidélité','Widget Kundenkarte konfigurieren','Configurar widget Cartão fidelidade','Skonfiguruj widżet Karta lojalnościowa','Widget Klantenkaart configureren','Configurează widgetul Card fidelitate','Ρύθμιση widget Κάρτα πελάτη');
+  row('Configura widget Debiti / Crediti','Configure Debts / Credits widget','Configurar widget Deudas / Créditos','Configurer le widget Dettes / Crédits','Widget Schulden / Guthaben konfigurieren','Configurar widget Dívidas / Créditos','Skonfiguruj widżet Długi / Należności','Widget Schulden / Tegoeden configureren','Configurează widgetul Datorii / Credite','Ρύθμιση widget Χρέη / Πιστώσεις');
+  row('Scegli la lista da mostrare in questo widget. L’impostazione vale solo per questo widget.','Choose the list to show in this widget. This setting applies only to this widget.','Elige la lista que se mostrará en este widget. Este ajuste se aplica solo a este widget.','Choisissez la liste à afficher dans ce widget. Ce réglage s’applique uniquement à ce widget.','Wähle die Liste, die in diesem Widget angezeigt werden soll. Diese Einstellung gilt nur für dieses Widget.','Escolhe a lista a mostrar neste widget. Esta definição aplica-se apenas a este widget.','Wybierz listę do pokazania w tym widżecie. To ustawienie dotyczy tylko tego widżetu.','Kies de lijst die in deze widget wordt getoond. Deze instelling geldt alleen voor deze widget.','Alege lista de afișat în acest widget. Setarea se aplică doar acestui widget.','Επιλέξτε τη λίστα που θα εμφανίζεται σε αυτό το widget. Η ρύθμιση ισχύει μόνο για αυτό το widget.');
+  row('Scegli la carta da mostrare in questo widget. L’impostazione vale solo per questo widget.','Choose the card to show in this widget. This setting applies only to this widget.','Elige la tarjeta que se mostrará en este widget. Este ajuste se aplica solo a este widget.','Choisissez la carte à afficher dans ce widget. Ce réglage s’applique uniquement à ce widget.','Wähle die Karte, die in diesem Widget angezeigt werden soll. Diese Einstellung gilt nur für dieses Widget.','Escolhe o cartão a mostrar neste widget. Esta definição aplica-se apenas a este widget.','Wybierz kartę do pokazania w tym widżecie. To ustawienie dotyczy tylko tego widżetu.','Kies de kaart die in deze widget wordt getoond. Deze instelling geldt alleen voor deze widget.','Alege cardul de afișat în acest widget. Setarea se aplică doar acestui widget.','Επιλέξτε την κάρτα που θα εμφανίζεται σε αυτό το widget. Η ρύθμιση ισχύει μόνο για αυτό το widget.');
+  row('Seleziona uno o più debiti/crediti da mostrare. L’impostazione vale solo per questo widget.','Select one or more debts/credits to show. This setting applies only to this widget.','Selecciona una o más deudas/créditos que se mostrarán. Este ajuste se aplica solo a este widget.','Sélectionnez une ou plusieurs dettes/crédits à afficher. Ce réglage s’applique uniquement à ce widget.','Wähle eine oder mehrere Schulden/Guthaben aus. Diese Einstellung gilt nur für dieses Widget.','Seleciona uma ou mais dívidas/créditos a mostrar. Esta definição aplica-se apenas a este widget.','Wybierz jeden lub więcej długów/należności do pokazania. To ustawienie dotyczy tylko tego widżetu.','Selecteer een of meer schulden/tegoeden om te tonen. Deze instelling geldt alleen voor deze widget.','Selectează una sau mai multe datorii/credite de afișat. Setarea se aplică doar acestui widget.','Επιλέξτε ένα ή περισσότερα χρέη/πιστώσεις για εμφάνιση. Η ρύθμιση ισχύει μόνο για αυτό το widget.');
+  row('SALVA WIDGET','SAVE WIDGET','GUARDAR WIDGET','ENREGISTRER LE WIDGET','WIDGET SPEICHERN','GUARDAR WIDGET','ZAPISZ WIDŻET','WIDGET OPSLAAN','SALVEAZĂ WIDGETUL','ΑΠΟΘΗΚΕΥΣΗ WIDGET');
+  row('Nessun elemento disponibile','No item available','Ningún elemento disponible','Aucun élément disponible','Kein Element verfügbar','Nenhum elemento disponível','Brak dostępnych elementów','Geen item beschikbaar','Niciun element disponibil','Δεν υπάρχει διαθέσιμο στοιχείο');
+  row('Nessuna lista disponibile','No list available','Ninguna lista disponible','Aucune liste disponible','Keine Liste verfügbar','Nenhuma lista disponível','Brak dostępnych list','Geen lijst beschikbaar','Nicio listă disponibilă','Δεν υπάρχει διαθέσιμη λίστα');
+  row('Nessuna carta disponibile','No card available','Ninguna tarjeta disponible','Aucune carte disponible','Keine Karte verfügbar','Nenhum cartão disponível','Brak dostępnych kart','Geen kaart beschikbaar','Niciun card disponibil','Δεν υπάρχει διαθέσιμη κάρτα');
+  row('Nessun Debito / Credito disponibile','No debt / credit available','Ninguna deuda / crédito disponible','Aucune dette / crédit disponible','Keine Schuld / kein Guthaben verfügbar','Nenhuma dívida / crédito disponível','Brak długów / należności','Geen schuld / tegoed beschikbaar','Nicio datorie / credit disponibil','Δεν υπάρχει διαθέσιμο χρέος / πίστωση');
+  row('Widget disponibile dal piano','Widget available from plan','Widget disponible desde el plan','Widget disponible à partir du forfait','Widget verfügbar ab Tarif','Widget disponível a partir do plano','Widżet dostępny od planu','Widget beschikbaar vanaf abonnement','Widget disponibil din planul','Widget διαθέσιμο από το πρόγραμμα');
+  row('Disponibile dal piano','Available from plan','Disponible desde el plan','Disponible à partir du forfait','Verfügbar ab Tarif','Disponível a partir do plano','Dostępne od planu','Beschikbaar vanaf abonnement','Disponibil din planul','Διαθέσιμο από το πρόγραμμα');
+  row('Apri Info in fAInance per cambiare piano.','Open Info in fAInance to change plan.','Abre Info en fAInance para cambiar de plan.','Ouvrez Info dans fAInance pour changer de forfait.','Öffne Info in fAInance, um den Tarif zu ändern.','Abre Info no fAInance para mudar de plano.','Otwórz Info w fAInance, aby zmienić plan.','Open Info in fAInance om van abonnement te wisselen.','Deschide Info în fAInance pentru a schimba planul.','Ανοίξτε τις Πληροφορίες στο fAInance για αλλαγή προγράμματος.');
+  row('Aggiungi Debito o Credito','Add Debt or Credit','Añadir deuda o crédito','Ajouter une dette ou un crédit','Schuld oder Guthaben hinzufügen','Adicionar dívida ou crédito','Dodaj dług lub należność','Schuld of tegoed toevoegen','Adaugă datorie sau credit','Προσθήκη χρέους ή πίστωσης');
+  row('Totale Debiti','Total debts','Total deudas','Total dettes','Schulden gesamt','Total de dívidas','Suma długów','Totaal schulden','Total datorii','Σύνολο χρεών');
+  row('Totale Crediti','Total credits','Total créditos','Total crédits','Guthaben gesamt','Total de créditos','Suma należności','Totaal tegoeden','Total credite','Σύνολο πιστώσεων');
+  row('carte fidelity','fidelity cards','tarjetas fidelidad','cartes fidélité','Kundenkarten','cartões fidelidade','karty lojalnościowe','klantenkaarten','carduri fidelitate','κάρτες πελάτη');
+  row('prodotti spesa','shopping products','productos de compra','produits de courses','Einkaufsprodukte','produtos de compras','produkty zakupowe','boodschappenproducten','produse cumpărături','προϊόντα αγορών');
+  row('aree spesa','shopping areas','áreas de compra','zones de courses','Einkaufsbereiche','áreas de compras','obszary zakupów','boodschappengebieden','zone cumpărături','περιοχές αγορών');
+  row('liste spesa','shopping lists','listas de la compra','listes de courses','Einkaufslisten','listas de compras','listy zakupów','boodschappenlijsten','liste de cumpărături','λίστες αγορών');
+  row('Spesa','Shopping','Compra','Courses','Einkaufen','Compras','Zakupy','Boodschappen','Cumpărături','Αγορές');
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+(function(){
+  var C=['en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(code,key,val){if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=val;if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=val;}}
+  function row(key,en,es,fr,de,pt,pl,nl,ro,el){var v={en:en,es:es,fr:fr,de:de,pt:pt,pl:pl,nl:nl,ro:ro,el:el};C.forEach(function(code){put(code,key,v[code]);});}
+  row('JSON Debiti / Crediti','JSON Debts / Credits','JSON Deudas / Créditos','JSON Dettes / Crédits','JSON Schulden / Guthaben','JSON Dívidas / Créditos','JSON Długi / Należności','JSON Schulden / Tegoeden','JSON Datorii / Credite','JSON Χρέη / Πιστώσεις');
+  row('JSON Spesa','JSON Shopping','JSON Compra','JSON Courses','JSON Einkaufen','JSON Compras','JSON Zakupy','JSON Boodschappen','JSON Cumpărături','JSON Αγορές');
+  row('File JSON Debiti / Crediti pronto','Debts / Credits JSON file ready','Archivo JSON Deudas / Créditos listo','Fichier JSON Dettes / Crédits prêt','JSON-Datei Schulden / Guthaben bereit','Ficheiro JSON Dívidas / Créditos pronto','Plik JSON Długi / Należności gotowy','JSON-bestand Schulden / Tegoeden klaar','Fișier JSON Datorii / Credite pregătit','Το αρχείο JSON Χρέη / Πιστώσεις είναι έτοιμο');
+  row('File JSON Spesa pronto','Shopping JSON file ready','Archivo JSON Compra listo','Fichier JSON Courses prêt','JSON-Datei Einkaufen bereit','Ficheiro JSON Compras pronto','Plik JSON Zakupy gotowy','JSON-bestand Boodschappen klaar','Fișier JSON Cumpărături pregătit','Το αρχείο JSON Αγορές είναι έτοιμο');
+  row('elementi spesa','shopping items','elementos de compra','éléments de courses','Einkaufselemente','itens de compras','elementy zakupów','boodschappenitems','elemente cumpărături','στοιχεία αγορών');
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance 1.6.33 - traduzioni complete widget/spesa/debiti/export
+(function(){
+  var D = {
+  "Scegli la lista, aggiungi prodotti e spunta quelli già messi nel carrello.": {
+    "it": "Scegli la lista, aggiungi prodotti e spunta quelli già messi nel carrello.",
+    "en": "Choose a list, add products and tick the items already in your cart.",
+    "es": "Elige la lista, añade productos y marca los que ya están en el carrito.",
+    "fr": "Choisissez la liste, ajoutez des produits et cochez ceux déjà dans le panier.",
+    "de": "Wähle die Liste, füge Produkte hinzu und markiere die Artikel im Einkaufswagen.",
+    "pt": "Escolhe a lista, adiciona produtos e marca os que já estão no carrinho.",
+    "pl": "Wybierz listę, dodaj produkty i zaznacz te, które są już w koszyku.",
+    "nl": "Kies de lijst, voeg producten toe en vink de artikelen aan die al in je winkelwagen liggen.",
+    "ro": "Alege lista, adaugă produse și bifează articolele deja puse în coș.",
+    "el": "Επιλέξτε λίστα, προσθέστε προϊόντα και σημειώστε όσα είναι ήδη στο καλάθι."
+  },
+  "Tocca il prodotto per aggiungerlo alla lista.": {
+    "it": "Tocca il prodotto per aggiungerlo alla lista.",
+    "en": "Tap the product to add it to the list.",
+    "es": "Toca el producto para añadirlo a la lista.",
+    "fr": "Touchez le produit pour l’ajouter à la liste.",
+    "de": "Tippe auf das Produkt, um es zur Liste hinzuzufügen.",
+    "pt": "Toca no produto para o adicionar à lista.",
+    "pl": "Dotknij produktu, aby dodać go do listy.",
+    "nl": "Tik op het product om het aan de lijst toe te voegen.",
+    "ro": "Atinge produsul pentru a-l adăuga în listă.",
+    "el": "Πατήστε το προϊόν για να το προσθέσετε στη λίστα."
+  },
+  "Visibilità, collegamento a patrimonio e movimenti": {
+    "it": "Visibilità, collegamento a patrimonio e movimenti",
+    "en": "Visibility, connection to assets and transactions",
+    "es": "Visibilidad, conexión con patrimonio y movimientos",
+    "fr": "Visibilité, lien avec patrimoine et mouvements",
+    "de": "Sichtbarkeit, Verknüpfung mit Vermögen und Bewegungen",
+    "pt": "Visibilidade, ligação a património e movimentos",
+    "pl": "Widoczność, połączenie z majątkiem i ruchami",
+    "nl": "Zichtbaarheid, koppeling met vermogen en bewegingen",
+    "ro": "Vizibilitate, legătură cu patrimoniu și mișcări",
+    "el": "Ορατότητα, σύνδεση με περιουσία και κινήσεις"
+  },
+  "Aree lista spesa, fidelity card e prepagate": {
+    "it": "Aree lista spesa, fidelity card e prepagate",
+    "en": "Shopping list areas, loyalty cards and prepaid cards",
+    "es": "Áreas de la lista de la compra, tarjetas fidelidad y prepago",
+    "fr": "Rayons de la liste de courses, cartes fidélité et prépayées",
+    "de": "Einkaufslistenbereiche, Kundenkarten und Prepaid-Karten",
+    "pt": "Áreas da lista de compras, cartões fidelidade e pré-pagos",
+    "pl": "Obszary listy zakupów, karty lojalnościowe i przedpłacone",
+    "nl": "Boodschappenlijstgebieden, klantenkaarten en prepaidkaarten",
+    "ro": "Zone listă cumpărături, carduri fidelitate și preplătite",
+    "el": "Περιοχές λίστας αγορών, κάρτες πελάτη και προπληρωμένες"
+  },
+  "Carte fidelity e prepagate": {
+    "it": "Carte fidelity e prepagate",
+    "en": "Loyalty and prepaid cards",
+    "es": "Tarjetas fidelidad y prepago",
+    "fr": "Cartes fidélité et prépayées",
+    "de": "Kunden- und Prepaid-Karten",
+    "pt": "Cartões fidelidade e pré-pagos",
+    "pl": "Karty lojalnościowe i przedpłacone",
+    "nl": "Klanten- en prepaidkaarten",
+    "ro": "Carduri fidelitate și preplătite",
+    "el": "Κάρτες πελάτη και προπληρωμένες"
+  },
+  "Riporta nel patrimonio": {
+    "it": "Riporta nel patrimonio",
+    "en": "Include in assets",
+    "es": "Incluir en patrimonio",
+    "fr": "Inclure dans le patrimoine",
+    "de": "In Vermögen aufnehmen",
+    "pt": "Incluir no património",
+    "pl": "Uwzględnij w majątku",
+    "nl": "Opnemen in vermogen",
+    "ro": "Include în patrimoniu",
+    "el": "Συμπερίληψη στην περιουσία"
+  },
+  "Consente di creare una voce Patrimonio collegata al Saldo del debito o credito.": {
+    "it": "Consente di creare una voce Patrimonio collegata al Saldo del debito o credito.",
+    "en": "Allows creating an asset item linked to the debt or credit balance.",
+    "es": "Permite crear una partida de patrimonio vinculada al saldo de la deuda o crédito.",
+    "fr": "Permet de créer un élément de patrimoine lié au solde de la dette ou du crédit.",
+    "de": "Ermöglicht einen Vermögenseintrag, der mit dem Saldo der Schuld oder des Guthabens verknüpft ist.",
+    "pt": "Permite criar um item de património ligado ao saldo da dívida ou crédito.",
+    "pl": "Pozwala utworzyć pozycję majątku połączoną z saldem długu lub należności.",
+    "nl": "Maakt een vermogensitem aan dat gekoppeld is aan het saldo van de schuld of het tegoed.",
+    "ro": "Permite crearea unui element de patrimoniu legat de soldul datoriei sau creditului.",
+    "el": "Επιτρέπει τη δημιουργία στοιχείου περιουσίας συνδεδεμένου με το υπόλοιπο χρέους ή πίστωσης."
+  },
+  "Consente di creare una voce patrimonio collegata al saldo del debito o credito.": {
+    "it": "Consente di creare una voce patrimonio collegata al saldo del debito o credito.",
+    "en": "Allows creating an asset item linked to the debt or credit balance.",
+    "es": "Permite crear una partida de patrimonio vinculada al saldo de la deuda o crédito.",
+    "fr": "Permet de créer un élément de patrimoine lié au solde de la dette ou du crédit.",
+    "de": "Ermöglicht einen Vermögenseintrag, der mit dem Saldo der Schuld oder des Guthabens verknüpft ist.",
+    "pt": "Permite criar um item de património ligado ao saldo da dívida ou crédito.",
+    "pl": "Pozwala utworzyć pozycję majątku połączoną z saldem długu lub należności.",
+    "nl": "Maakt een vermogensitem aan dat gekoppeld is aan het saldo van de schuld of het tegoed.",
+    "ro": "Permite crearea unui element de patrimoniu legat de soldul datoriei sau creditului.",
+    "el": "Επιτρέπει τη δημιουργία στοιχείου περιουσίας συνδεδεμένου με το υπόλοιπο χρέους ή πίστωσης."
+  },
+  "Riporta nei movimenti": {
+    "it": "Riporta nei movimenti",
+    "en": "Include in transactions",
+    "es": "Incluir en movimientos",
+    "fr": "Inclure dans les mouvements",
+    "de": "In Bewegungen aufnehmen",
+    "pt": "Incluir nos movimentos",
+    "pl": "Uwzględnij w ruchach",
+    "nl": "Opnemen in bewegingen",
+    "ro": "Include în mișcări",
+    "el": "Συμπερίληψη στις κινήσεις"
+  },
+  "Consente di creare entrate o uscite partendo dal Saldo del debito o credito.": {
+    "it": "Consente di creare entrate o uscite partendo dal Saldo del debito o credito.",
+    "en": "Allows creating income or expenses from the debt or credit balance.",
+    "es": "Permite crear ingresos o gastos a partir del saldo de la deuda o crédito.",
+    "fr": "Permet de créer des entrées ou sorties à partir du solde de la dette ou du crédit.",
+    "de": "Ermöglicht Einnahmen oder Ausgaben aus dem Saldo der Schuld oder des Guthabens.",
+    "pt": "Permite criar entradas ou saídas a partir do saldo da dívida ou crédito.",
+    "pl": "Pozwala tworzyć przychody lub wydatki z salda długu lub należności.",
+    "nl": "Maakt inkomsten of uitgaven aan op basis van het saldo van de schuld of het tegoed.",
+    "ro": "Permite crearea de venituri sau cheltuieli pornind de la soldul datoriei sau creditului.",
+    "el": "Επιτρέπει τη δημιουργία εσόδων ή εξόδων από το υπόλοιπο χρέους ή πίστωσης."
+  },
+  "Consente di creare entrate o uscite partendo dal saldo del debito o credito.": {
+    "it": "Consente di creare entrate o uscite partendo dal saldo del debito o credito.",
+    "en": "Allows creating income or expenses from the debt or credit balance.",
+    "es": "Permite crear ingresos o gastos a partir del saldo de la deuda o crédito.",
+    "fr": "Permet de créer des entrées ou sorties à partir du solde de la dette ou du crédit.",
+    "de": "Ermöglicht Einnahmen oder Ausgaben aus dem Saldo der Schuld oder des Guthabens.",
+    "pt": "Permite criar entradas ou saídas a partir do saldo da dívida ou crédito.",
+    "pl": "Pozwala tworzyć przychody lub wydatki z salda długu lub należności.",
+    "nl": "Maakt inkomsten of uitgaven aan op basis van het saldo van de schuld of het tegoed.",
+    "ro": "Permite crearea de venituri sau cheltuieli pornind de la soldul datoriei sau creditului.",
+    "el": "Επιτρέπει τη δημιουργία εσόδων ή εξόδων από το υπόλοιπο χρέους ή πίστωσης."
+  },
+  "Gestisci le aree dei prodotti e scegli icona e area predefinita.": {
+    "it": "Gestisci le aree dei prodotti e scegli icona e area predefinita.",
+    "en": "Manage product areas and choose the icon and default area.",
+    "es": "Gestiona las áreas de productos y elige icono y área predeterminada.",
+    "fr": "Gérez les rayons des produits et choisissez l’icône et le rayon par défaut.",
+    "de": "Verwalte Produktbereiche und wähle Symbol und Standardbereich.",
+    "pt": "Gere as áreas dos produtos e escolhe ícone e área predefinida.",
+    "pl": "Zarządzaj obszarami produktów oraz wybierz ikonę i obszar domyślny.",
+    "nl": "Beheer productgebieden en kies het pictogram en standaardgebied.",
+    "ro": "Gestionează zonele produselor și alege pictograma și zona implicită.",
+    "el": "Διαχειριστείτε τις περιοχές προϊόντων και επιλέξτε εικονίδιο και προεπιλεγμένη περιοχή."
+  },
+  "Colore usato nella lista quando un prodotto è già nel carrello.": {
+    "it": "Colore usato nella lista quando un prodotto è già nel carrello.",
+    "en": "Color used in the list when a product is already in the cart.",
+    "es": "Color usado en la lista cuando un producto ya está en el carrito.",
+    "fr": "Couleur utilisée dans la liste lorsqu’un produit est déjà dans le panier.",
+    "de": "Farbe in der Liste, wenn ein Produkt bereits im Wagen ist.",
+    "pt": "Cor usada na lista quando um produto já está no carrinho.",
+    "pl": "Kolor używany na liście, gdy produkt jest już w koszyku.",
+    "nl": "Kleur in de lijst wanneer een product al in de winkelwagen staat.",
+    "ro": "Culoare folosită în listă când un produs este deja în coș.",
+    "el": "Χρώμα στη λίστα όταν ένα προϊόν είναι ήδη στο καλάθι."
+  },
+  "Top summary, number of icons and section order": {
+    "it": "Riepilogo alto, numero icone e ordine delle sezioni",
+    "en": "Top summary, number of icons and section order",
+    "es": "Resumen superior, número de iconos y orden de secciones",
+    "fr": "Résumé supérieur, nombre d’icônes et ordre des sections",
+    "de": "Obere Zusammenfassung, Anzahl der Symbole und Abschnittsreihenfolge",
+    "pt": "Resumo superior, número de ícones e ordem das secções",
+    "pl": "Górne podsumowanie, liczba ikon i kolejność sekcji",
+    "nl": "Bovenste samenvatting, aantal pictogrammen en volgorde van secties",
+    "ro": "Rezumat superior, număr de pictograme și ordinea secțiunilor",
+    "el": "Επάνω σύνοψη, αριθμός εικονιδίων και σειρά ενοτήτων"
+  },
+  "Riepilogo alto, numero icone e ordine delle sezioni": {
+    "it": "Riepilogo alto, numero icone e ordine delle sezioni",
+    "en": "Top summary, number of icons and section order",
+    "es": "Resumen superior, número de iconos y orden de secciones",
+    "fr": "Résumé supérieur, nombre d’icônes et ordre des sections",
+    "de": "Obere Zusammenfassung, Anzahl der Symbole und Abschnittsreihenfolge",
+    "pt": "Resumo superior, número de ícones e ordem das secções",
+    "pl": "Górne podsumowanie, liczba ikon i kolejność sekcji",
+    "nl": "Bovenste samenvatting, aantal pictogrammen en volgorde van secties",
+    "ro": "Rezumat superior, număr de pictograme și ordinea secțiunilor",
+    "el": "Επάνω σύνοψη, αριθμός εικονιδίων και σειρά ενοτήτων"
+  },
+  "Configurazione widget Android": {
+    "it": "Configurazione widget Android",
+    "en": "Android widget configuration",
+    "es": "Configuración de widgets Android",
+    "fr": "Configuration des widgets Android",
+    "de": "Android-Widget-Konfiguration",
+    "pt": "Configuração dos widgets Android",
+    "pl": "Konfiguracja widżetów Android",
+    "nl": "Android-widgetconfiguratie",
+    "ro": "Configurare widgeturi Android",
+    "el": "Ρύθμιση widget Android"
+  },
+  "Widget ingresso rapido": {
+    "it": "Widget ingresso rapido",
+    "en": "Quick entry widget",
+    "es": "Widget de entrada rápida",
+    "fr": "Widget de saisie rapide",
+    "de": "Schnelleingabe-Widget",
+    "pt": "Widget de entrada rápida",
+    "pl": "Widżet szybkiego wpisu",
+    "nl": "Widget snelle invoer",
+    "ro": "Widget introducere rapidă",
+    "el": "Widget γρήγορης εισαγωγής"
+  },
+  "Incluso nel piano gratuito. Logo fAInance, pulsanti Entrata/Uscita e layout 1x4 in una sola riga": {
+    "it": "Incluso nel piano gratuito. Logo fAInance, pulsanti Entrata/Uscita e layout 1x4 in una sola riga",
+    "en": "Included in the free plan. fAInance logo, income/expense buttons and 1x4 layout in one row",
+    "es": "Incluido en el plan gratuito. Logo fAInance, botones Entrada/Salida y diseño 1x4 en una sola fila",
+    "fr": "Inclus dans le plan gratuit. Logo fAInance, boutons Entrée/Sortie et disposition 1x4 sur une seule ligne",
+    "de": "Im Gratis-Plan enthalten. fAInance-Logo, Einnahmen/Ausgaben-Schaltflächen und 1x4-Layout in einer Zeile",
+    "pt": "Incluído no plano gratuito. Logo fAInance, botões Entrada/Saída e layout 1x4 numa só linha",
+    "pl": "Dostępne w planie darmowym. Logo fAInance, przyciski Przychód/Wydatek i układ 1x4 w jednym wierszu",
+    "nl": "Inbegrepen in het gratis plan. fAInance-logo, knoppen Inkomsten/Uitgaven en 1x4-indeling op één rij",
+    "ro": "Inclus în planul gratuit. Logo fAInance, butoane Venit/Cheltuială și aspect 1x4 pe un singur rând",
+    "el": "Περιλαμβάνεται στο δωρεάν πλάνο. Λογότυπο fAInance, κουμπιά Έσοδα/Έξοδα και διάταξη 1x4 σε μία γραμμή"
+  },
+  "Lista spesa": {
+    "it": "Lista spesa",
+    "en": "Shopping list",
+    "es": "Lista de la compra",
+    "fr": "Liste de courses",
+    "de": "Einkaufsliste",
+    "pt": "Lista de compras",
+    "pl": "Lista zakupów",
+    "nl": "Boodschappenlijst",
+    "ro": "Listă de cumpărături",
+    "el": "Λίστα αγορών"
+  },
+  "Visualizza la lista della spesa e permette di segnare gli articoli acquistati.": {
+    "it": "Visualizza la lista della spesa e permette di segnare gli articoli acquistati.",
+    "en": "Shows the shopping list and lets you mark purchased items.",
+    "es": "Muestra la lista de la compra y permite marcar los artículos comprados.",
+    "fr": "Affiche la liste de courses et permet de marquer les articles achetés.",
+    "de": "Zeigt die Einkaufsliste und lässt gekaufte Artikel markieren.",
+    "pt": "Mostra a lista de compras e permite marcar os artigos comprados.",
+    "pl": "Pokazuje listę zakupów i pozwala oznaczać kupione produkty.",
+    "nl": "Toont de boodschappenlijst en laat gekochte artikelen markeren.",
+    "ro": "Afișează lista de cumpărături și permite marcarea articolelor cumpărate.",
+    "el": "Εμφανίζει τη λίστα αγορών και επιτρέπει τη σήμανση των αγορασμένων ειδών."
+  },
+  "Mostra la lista della spesa e permette di segnare gli articoli acquistati.": {
+    "it": "Mostra la lista della spesa e permette di segnare gli articoli acquistati.",
+    "en": "Shows the shopping list and lets you mark purchased items.",
+    "es": "Muestra la lista de la compra y permite marcar los artículos comprados.",
+    "fr": "Affiche la liste de courses et permet de marquer les articles achetés.",
+    "de": "Zeigt die Einkaufsliste und lässt gekaufte Artikel markieren.",
+    "pt": "Mostra a lista de compras e permite marcar os artigos comprados.",
+    "pl": "Pokazuje listę zakupów i pozwala oznaczać kupione produkty.",
+    "nl": "Toont de boodschappenlijst en laat gekochte artikelen markeren.",
+    "ro": "Afișează lista de cumpărături și permite marcarea articolelor cumpărate.",
+    "el": "Εμφανίζει τη λίστα αγορών και επιτρέπει τη σήμανση των αγορασμένων ειδών."
+  },
+  "Fidelity card": {
+    "it": "Fidelity card",
+    "en": "Loyalty card",
+    "es": "Tarjeta fidelidad",
+    "fr": "Carte fidélité",
+    "de": "Kundenkarte",
+    "pt": "Cartão fidelidade",
+    "pl": "Karta lojalnościowa",
+    "nl": "Klantenkaart",
+    "ro": "Card fidelitate",
+    "el": "Κάρτα πελάτη"
+  },
+  "Visualizza rapidamente una fidelity card o una prepagata.": {
+    "it": "Visualizza rapidamente una fidelity card o una prepagata.",
+    "en": "Quickly shows a loyalty or prepaid card.",
+    "es": "Muestra rápidamente una tarjeta fidelidad o prepago.",
+    "fr": "Affiche rapidement une carte fidélité ou prépayée.",
+    "de": "Zeigt schnell eine Kunden- oder Prepaid-Karte.",
+    "pt": "Mostra rapidamente um cartão fidelidade ou pré-pago.",
+    "pl": "Szybko pokazuje kartę lojalnościową lub przedpłaconą.",
+    "nl": "Toont snel een klantenkaart of prepaidkaart.",
+    "ro": "Afișează rapid un card fidelitate sau preplătit.",
+    "el": "Εμφανίζει γρήγορα μια κάρτα πελάτη ή προπληρωμένη."
+  },
+  "Debiti / Crediti": {
+    "it": "Debiti / Crediti",
+    "en": "Debts / Credits",
+    "es": "Deudas / Créditos",
+    "fr": "Dettes / Crédits",
+    "de": "Schulden / Guthaben",
+    "pt": "Dívidas / Créditos",
+    "pl": "Długi / Należności",
+    "nl": "Schulden / Tegoeden",
+    "ro": "Datorii / Credite",
+    "el": "Χρέη / Πιστώσεις"
+  },
+  "Mostra il saldo aperto di debiti e crediti.": {
+    "it": "Mostra il saldo aperto di debiti e crediti.",
+    "en": "Shows the open balance of debts and credits.",
+    "es": "Muestra el saldo abierto de deudas y créditos.",
+    "fr": "Affiche le solde ouvert des dettes et crédits.",
+    "de": "Zeigt den offenen Saldo von Schulden und Guthaben.",
+    "pt": "Mostra o saldo em aberto de dívidas e créditos.",
+    "pl": "Pokazuje otwarte saldo długów i należności.",
+    "nl": "Toont het open saldo van schulden en tegoeden.",
+    "ro": "Afișează soldul deschis al datoriilor și creditelor.",
+    "el": "Εμφανίζει το ανοικτό υπόλοιπο χρεών και πιστώσεων."
+  },
+  "Icon color": {
+    "it": "Colore icona",
+    "en": "Icon color",
+    "es": "Color del icono",
+    "fr": "Couleur de l’icône",
+    "de": "Symbolfarbe",
+    "pt": "Cor do ícone",
+    "pl": "Kolor ikony",
+    "nl": "Pictogramkleur",
+    "ro": "Culoare pictogramă",
+    "el": "Χρώμα εικονιδίου"
+  },
+  "Title color": {
+    "it": "Colore titolo",
+    "en": "Title color",
+    "es": "Color del título",
+    "fr": "Couleur du titre",
+    "de": "Titelfarbe",
+    "pt": "Cor do título",
+    "pl": "Kolor tytułu",
+    "nl": "Titelkleur",
+    "ro": "Culoare titlu",
+    "el": "Χρώμα τίτλου"
+  },
+  "Text color": {
+    "it": "Colore testo",
+    "en": "Text color",
+    "es": "Color del texto",
+    "fr": "Couleur du texte",
+    "de": "Textfarbe",
+    "pt": "Cor do texto",
+    "pl": "Kolor tekstu",
+    "nl": "Tekstkleur",
+    "ro": "Culoare text",
+    "el": "Χρώμα κειμένου"
+  },
+  "Project shown in the widget": {
+    "it": "Progetto mostrato nel widget",
+    "en": "Project shown in the widget",
+    "es": "Proyecto mostrado en el widget",
+    "fr": "Projet affiché dans le widget",
+    "de": "Im Widget angezeigtes Projekt",
+    "pt": "Projeto mostrado no widget",
+    "pl": "Projekt pokazany w widżecie",
+    "nl": "Project getoond in de widget",
+    "ro": "Proiect afișat în widget",
+    "el": "Έργο που εμφανίζεται στο widget"
+  },
+  "Save and update widget": {
+    "it": "Salva e aggiorna widget",
+    "en": "Save and update widget",
+    "es": "Guardar y actualizar widget",
+    "fr": "Enregistrer et mettre à jour le widget",
+    "de": "Widget speichern und aktualisieren",
+    "pt": "Guardar e atualizar widget",
+    "pl": "Zapisz i zaktualizuj widżet",
+    "nl": "Widget opslaan en bijwerken",
+    "ro": "Salvează și actualizează widgetul",
+    "el": "Αποθήκευση και ενημέρωση widget"
+  },
+  "Il contenuto preciso si sceglie quando aggiungi il widget alla Home; qui modifichi solo aspetto, colori, trasparenza e aggiornamento.": {
+    "it": "Il contenuto preciso si sceglie quando aggiungi il widget alla Home; qui modifichi solo aspetto, colori, trasparenza e aggiornamento.",
+    "en": "You choose the exact content when adding the widget to the Home screen; here you only edit appearance, colors, transparency and updates.",
+    "es": "El contenido exacto se elige al añadir el widget a la pantalla de inicio; aquí solo modificas aspecto, colores, transparencia y actualización.",
+    "fr": "Le contenu exact se choisit lors de l’ajout du widget à l’écran d’accueil ; ici vous modifiez seulement l’aspect, les couleurs, la transparence et l’actualisation.",
+    "de": "Den genauen Inhalt wählst du beim Hinzufügen des Widgets zum Startbildschirm; hier änderst du nur Aussehen, Farben, Transparenz und Aktualisierung.",
+    "pt": "O conteúdo exato é escolhido ao adicionar o widget ao ecrã inicial; aqui alteras apenas aspeto, cores, transparência e atualização.",
+    "pl": "Dokładną treść wybierasz podczas dodawania widżetu do ekranu głównego; tutaj zmieniasz tylko wygląd, kolory, przezroczystość i odświeżanie.",
+    "nl": "De exacte inhoud kies je wanneer je de widget aan het startscherm toevoegt; hier wijzig je alleen uiterlijk, kleuren, transparantie en updates.",
+    "ro": "Conținutul exact se alege când adaugi widgetul pe ecranul principal; aici modifici doar aspectul, culorile, transparența și actualizarea.",
+    "el": "Το ακριβές περιεχόμενο επιλέγεται όταν προσθέτετε το widget στην αρχική οθόνη· εδώ αλλάζετε μόνο εμφάνιση, χρώματα, διαφάνεια και ενημέρωση."
+  },
+  "La carta precisa si sceglie quando aggiungi il widget alla Home; qui modifichi solo aspetto, colori, trasparenza e aggiornamento.": {
+    "it": "La carta precisa si sceglie quando aggiungi il widget alla Home; qui modifichi solo aspetto, colori, trasparenza e aggiornamento.",
+    "en": "You choose the exact card when adding the widget to the Home screen; here you only edit appearance, colors, transparency and updates.",
+    "es": "La tarjeta exacta se elige al añadir el widget a la pantalla de inicio; aquí solo modificas aspecto, colores, transparencia y actualización.",
+    "fr": "La carte exacte se choisit lors de l’ajout du widget à l’écran d’accueil ; ici vous modifiez seulement l’aspect, les couleurs, la transparence et l’actualisation.",
+    "de": "Die genaue Karte wählst du beim Hinzufügen des Widgets zum Startbildschirm; hier änderst du nur Aussehen, Farben, Transparenz und Aktualisierung.",
+    "pt": "O cartão exato é escolhido ao adicionar o widget ao ecrã inicial; aqui alteras apenas aspeto, cores, transparência e atualização.",
+    "pl": "Dokładną kartę wybierasz podczas dodawania widżetu do ekranu głównego; tutaj zmieniasz tylko wygląd, kolory, przezroczystość i odświeżanie.",
+    "nl": "De exacte kaart kies je wanneer je de widget aan het startscherm toevoegt; hier wijzig je alleen uiterlijk, kleuren, transparantie en updates.",
+    "ro": "Cardul exact se alege când adaugi widgetul pe ecranul principal; aici modifici doar aspectul, culorile, transparența și actualizarea.",
+    "el": "Η ακριβής κάρτα επιλέγεται όταν προσθέτετε το widget στην αρχική οθόνη· εδώ αλλάζετε μόνο εμφάνιση, χρώματα, διαφάνεια και ενημέρωση."
+  },
+  "I debiti e crediti precisi si scelgono quando aggiungi il widget alla Home; qui modifichi solo aspetto, colori, trasparenza e aggiornamento.": {
+    "it": "I debiti e crediti precisi si scelgono quando aggiungi il widget alla Home; qui modifichi solo aspetto, colori, trasparenza e aggiornamento.",
+    "en": "You choose the exact debts and credits when adding the widget to the Home screen; here you only edit appearance, colors, transparency and updates.",
+    "es": "Las deudas y créditos exactos se eligen al añadir el widget a la pantalla de inicio; aquí solo modificas aspecto, colores, transparencia y actualización.",
+    "fr": "Les dettes et crédits exacts se choisissent lors de l’ajout du widget à l’écran d’accueil ; ici vous modifiez seulement l’aspect, les couleurs, la transparence et l’actualisation.",
+    "de": "Die genauen Schulden und Guthaben wählst du beim Hinzufügen des Widgets zum Startbildschirm; hier änderst du nur Aussehen, Farben, Transparenz und Aktualisierung.",
+    "pt": "As dívidas e créditos exatos são escolhidos ao adicionar o widget ao ecrã inicial; aqui alteras apenas aspeto, cores, transparência e atualização.",
+    "pl": "Dokładne długi i należności wybierasz podczas dodawania widżetu do ekranu głównego; tutaj zmieniasz tylko wygląd, kolory, przezroczystość i odświeżanie.",
+    "nl": "De exacte schulden en tegoeden kies je wanneer je de widget aan het startscherm toevoegt; hier wijzig je alleen uiterlijk, kleuren, transparantie en updates.",
+    "ro": "Datoriile și creditele exacte se aleg când adaugi widgetul pe ecranul principal; aici modifici doar aspectul, culorile, transparența și actualizarea.",
+    "el": "Τα ακριβή χρέη και πιστώσεις επιλέγονται όταν προσθέτετε το widget στην αρχική οθόνη· εδώ αλλάζετε μόνο εμφάνιση, χρώματα, διαφάνεια και ενημέρωση."
+  },
+  "Grandezza testo": {
+    "it": "Grandezza testo",
+    "en": "Text size",
+    "es": "Tamaño del texto",
+    "fr": "Taille du texte",
+    "de": "Textgröße",
+    "pt": "Tamanho do texto",
+    "pl": "Rozmiar tekstu",
+    "nl": "Tekstgrootte",
+    "ro": "Dimensiune text",
+    "el": "Μέγεθος κειμένου"
+  },
+  "Dimensione del contenuto mostrato nel widget.": {
+    "it": "Dimensione del contenuto mostrato nel widget.",
+    "en": "Size of the content shown in the widget.",
+    "es": "Tamaño del contenido mostrado en el widget.",
+    "fr": "Taille du contenu affiché dans le widget.",
+    "de": "Größe des im Widget angezeigten Inhalts.",
+    "pt": "Tamanho do conteúdo mostrado no widget.",
+    "pl": "Rozmiar treści pokazywanej w widżecie.",
+    "nl": "Grootte van de inhoud die in de widget wordt getoond.",
+    "ro": "Dimensiunea conținutului afișat în widget.",
+    "el": "Μέγεθος του περιεχομένου που εμφανίζεται στο widget."
+  },
+  "Trasparenza sfondo widget": {
+    "it": "Trasparenza sfondo widget",
+    "en": "Widget background transparency",
+    "es": "Transparencia del fondo del widget",
+    "fr": "Transparence du fond du widget",
+    "de": "Widget-Hintergrundtransparenz",
+    "pt": "Transparência do fundo do widget",
+    "pl": "Przezroczystość tła widżetu",
+    "nl": "Transparantie van widgetachtergrond",
+    "ro": "Transparență fundal widget",
+    "el": "Διαφάνεια φόντου widget"
+  },
+  "100% = completamente trasparente. 0% = sfondo pieno.": {
+    "it": "100% = completamente trasparente. 0% = sfondo pieno.",
+    "en": "100% = fully transparent. 0% = solid background.",
+    "es": "100% = totalmente transparente. 0% = fondo sólido.",
+    "fr": "100 % = totalement transparent. 0 % = fond plein.",
+    "de": "100 % = vollständig transparent. 0 % = voller Hintergrund.",
+    "pt": "100% = totalmente transparente. 0% = fundo sólido.",
+    "pl": "100% = całkowicie przezroczyste. 0% = pełne tło.",
+    "nl": "100% = volledig transparant. 0% = volle achtergrond.",
+    "ro": "100% = complet transparent. 0% = fundal plin.",
+    "el": "100% = πλήρως διαφανές. 0% = πλήρες φόντο."
+  },
+  "Aggiornamento automatico": {
+    "it": "Aggiornamento automatico",
+    "en": "Automatic update",
+    "es": "Actualización automática",
+    "fr": "Mise à jour automatique",
+    "de": "Automatische Aktualisierung",
+    "pt": "Atualização automática",
+    "pl": "Automatyczna aktualizacja",
+    "nl": "Automatische update",
+    "ro": "Actualizare automată",
+    "el": "Αυτόματη ενημέρωση"
+  },
+  "Aggiorna i widget già installati quando cambi contenuti o impostazioni.": {
+    "it": "Aggiorna i widget già installati quando cambi contenuti o impostazioni.",
+    "en": "Updates already installed widgets when you change content or settings.",
+    "es": "Actualiza los widgets ya instalados cuando cambias contenidos o ajustes.",
+    "fr": "Met à jour les widgets déjà installés lorsque vous changez du contenu ou des paramètres.",
+    "de": "Aktualisiert bereits installierte Widgets, wenn du Inhalte oder Einstellungen änderst.",
+    "pt": "Atualiza os widgets já instalados quando alteras conteúdos ou definições.",
+    "pl": "Aktualizuje już zainstalowane widżety po zmianie treści lub ustawień.",
+    "nl": "Werkt al geïnstalleerde widgets bij wanneer je inhoud of instellingen wijzigt.",
+    "ro": "Actualizează widgeturile deja instalate când schimbi conținutul sau setările.",
+    "el": "Ενημερώνει τα ήδη εγκατεστημένα widget όταν αλλάζετε περιεχόμενο ή ρυθμίσεις."
+  },
+  "Colore icona": {
+    "it": "Colore icona",
+    "en": "Icon color",
+    "es": "Color del icono",
+    "fr": "Couleur de l’icône",
+    "de": "Symbolfarbe",
+    "pt": "Cor do ícone",
+    "pl": "Kolor ikony",
+    "nl": "Pictogramkleur",
+    "ro": "Culoare pictogramă",
+    "el": "Χρώμα εικονιδίου"
+  },
+  "Colore titolo": {
+    "it": "Colore titolo",
+    "en": "Title color",
+    "es": "Color del título",
+    "fr": "Couleur du titre",
+    "de": "Titelfarbe",
+    "pt": "Cor do título",
+    "pl": "Kolor tytułu",
+    "nl": "Titelkleur",
+    "ro": "Culoare titlu",
+    "el": "Χρώμα τίτλου"
+  },
+  "Colore testo": {
+    "it": "Colore testo",
+    "en": "Text color",
+    "es": "Color del texto",
+    "fr": "Couleur du texte",
+    "de": "Textfarbe",
+    "pt": "Cor do texto",
+    "pl": "Kolor tekstu",
+    "nl": "Tekstkleur",
+    "ro": "Culoare text",
+    "el": "Χρώμα κειμένου"
+  },
+  "Progetto mostrato nel widget": {
+    "it": "Progetto mostrato nel widget",
+    "en": "Project shown in the widget",
+    "es": "Proyecto mostrado en el widget",
+    "fr": "Projet affiché dans le widget",
+    "de": "Im Widget angezeigtes Projekt",
+    "pt": "Projeto mostrado no widget",
+    "pl": "Projekt pokazany w widżecie",
+    "nl": "Project getoond in de widget",
+    "ro": "Proiect afișat în widget",
+    "el": "Έργο που εμφανίζεται στο widget"
+  },
+  "Salva e aggiorna widget": {
+    "it": "Salva e aggiorna widget",
+    "en": "Save and update widget",
+    "es": "Guardar y actualizar widget",
+    "fr": "Enregistrer et mettre à jour le widget",
+    "de": "Widget speichern und aktualisieren",
+    "pt": "Guardar e atualizar widget",
+    "pl": "Zapisz i zaktualizuj widżet",
+    "nl": "Widget opslaan en bijwerken",
+    "ro": "Salvează și actualizează widgetul",
+    "el": "Αποθήκευση και ενημέρωση widget"
+  }
+};
+  function put(lang,key,value){
+    try{ if(typeof TRANSLATIONS!=="undefined"){TRANSLATIONS[lang]=TRANSLATIONS[lang]||{};TRANSLATIONS[lang][key]=value;} }catch(e){}
+    try{ if(typeof FAINANCE_UI_TRANSLATIONS!=="undefined"){FAINANCE_UI_TRANSLATIONS[lang]=FAINANCE_UI_TRANSLATIONS[lang]||{};FAINANCE_UI_TRANSLATIONS[lang][key]=value;} }catch(e){}
+    try{ if(typeof FAINANCE_I18N_PHRASES!=="undefined"){FAINANCE_I18N_PHRASES[lang]=FAINANCE_I18N_PHRASES[lang]||{};FAINANCE_I18N_PHRASES[lang][key]=value;} }catch(e){}
+  }
+  Object.keys(D).forEach(function(key){
+    var row=D[key]||{};
+    ["it","en","es","fr","de","pt","pl","nl","ro","el"].forEach(function(lang){
+      put(lang,key,row[lang]||key);
+    });
+  });
+})();
+
+
+// fAInance 1.6.35 - messaggio blocco eliminazione voce usata in budget/movimenti.
+(function(){
+  var K="Non puoi eliminare questa voce perché esistono già elementi associati. Archiviala invece di eliminarla.";
+  var R={
+    it:"Non puoi eliminare questa voce perché esistono già elementi associati. Archiviala invece di eliminarla.",
+    en:"You cannot delete this item because existing entries are already associated with it. Archive it instead of deleting it.",
+    es:"No puedes eliminar esta voz porque ya hay elementos asociados. Archívala en lugar de eliminarla.",
+    fr:"Vous ne pouvez pas supprimer cet élément car des éléments existants y sont déjà associés. Archivez-le au lieu de le supprimer.",
+    de:"Du kannst diesen Eintrag nicht löschen, weil bereits Elemente damit verknüpft sind. Archiviere ihn statt ihn zu löschen.",
+    pt:"Não podes eliminar este item porque já existem elementos associados. Arquiva-o em vez de o eliminar.",
+    pl:"Nie możesz usunąć tej pozycji, ponieważ istnieją już powiązane elementy. Zarchiwizuj ją zamiast usuwać.",
+    nl:"Je kunt dit item niet verwijderen omdat er al gekoppelde items bestaan. Archiveer het in plaats van het te verwijderen.",
+    ro:"Nu poți șterge acest element deoarece există deja elemente asociate. Arhivează-l în loc să îl ștergi.",
+    el:"Δεν μπορείτε να διαγράψετε αυτό το στοιχείο επειδή υπάρχουν ήδη συνδεδεμένες εγγραφές. Αρχειοθετήστε το αντί να το διαγράψετε."
+  };
+  Object.keys(R).forEach(function(lang){
+    try{TRANSLATIONS[lang]=TRANSLATIONS[lang]||{};TRANSLATIONS[lang][K]=R[lang];}catch(e){}
+    try{FAINANCE_UI_TRANSLATIONS[lang]=FAINANCE_UI_TRANSLATIONS[lang]||{};FAINANCE_UI_TRANSLATIONS[lang][K]=R[lang];}catch(e){}
+    try{FAINANCE_I18N_PHRASES[lang]=FAINANCE_I18N_PHRASES[lang]||{};FAINANCE_I18N_PHRASES[lang][K]=R[lang];}catch(e){}
+  });
+})();
+
+(function(){
+  var EXTRA_1637={"Spunta i prodotti già messi nel carrello.": {"it": "Spunta i prodotti già messi nel carrello.", "en": "Tick the products already in your cart.", "es": "Marca los productos ya puestos en el carrito.", "fr": "Cochez les produits déjà mis dans le panier.", "de": "Markiere die Produkte, die bereits im Einkaufswagen sind.", "pt": "Marca os produtos já colocados no carrinho.", "pl": "Zaznacz produkty już włożone do koszyka.", "nl": "Vink de producten aan die al in je winkelwagen liggen.", "ro": "Bifează produsele deja puse în coș.", "el": "Σημειώστε τα προϊόντα που είναι ήδη στο καλάθι."}, "Se vuoi creare un’altra lista, vai nelle impostazioni": {"it": "Se vuoi creare un’altra lista, vai nelle impostazioni", "en": "To create another list, go to settings", "es": "Si quieres crear otra lista, ve a los ajustes", "fr": "Pour créer une autre liste, allez dans les paramètres", "de": "Wenn du eine weitere Liste erstellen möchtest, gehe zu den Einstellungen", "pt": "Se quiseres criar outra lista, vai às definições", "pl": "Aby utworzyć inną listę, przejdź do ustawień", "nl": "Ga naar instellingen om een andere lijst te maken", "ro": "Pentru a crea o altă listă, mergi la setări", "el": "Για να δημιουργήσετε άλλη λίστα, μεταβείτε στις ρυθμίσεις"}, "Liste della spesa": {"it": "Liste della spesa", "en": "Shopping lists", "es": "Listas de la compra", "fr": "Listes de courses", "de": "Einkaufslisten", "pt": "Listas de compras", "pl": "Listy zakupów", "nl": "Boodschappenlijsten", "ro": "Liste de cumpărături", "el": "Λίστες αγορών"}, "Crea, modifica o elimina le liste disponibili nella sezione Spesa.": {"it": "Crea, modifica o elimina le liste disponibili nella sezione Spesa.", "en": "Create, edit or delete the lists available in the Shopping section.", "es": "Crea, modifica o elimina las listas disponibles en la sección Compra.", "fr": "Créez, modifiez ou supprimez les listes disponibles dans la section Courses.", "de": "Erstelle, bearbeite oder lösche die Listen im Bereich Einkaufen.", "pt": "Cria, edita ou elimina as listas disponíveis na secção Compras.", "pl": "Twórz, edytuj lub usuwaj listy dostępne w sekcji Zakupy.", "nl": "Maak, bewerk of verwijder de lijsten in de sectie Boodschappen.", "ro": "Creează, modifică sau șterge listele disponibile în secțiunea Cumpărături.", "el": "Δημιουργήστε, επεξεργαστείτε ή διαγράψτε τις λίστες στην ενότητα Αγορές."}, "Confermi la cancellazione?": {"it": "Confermi la cancellazione?", "en": "Confirm deletion?", "es": "¿Confirmas la eliminación?", "fr": "Confirmer la suppression ?", "de": "Löschung bestätigen?", "pt": "Confirmas a eliminação?", "pl": "Potwierdzasz usunięcie?", "nl": "Verwijderen bevestigen?", "ro": "Confirmi ștergerea?", "el": "Επιβεβαιώνετε τη διαγραφή;"}, "Cancellazione completata": {"it": "Cancellazione completata", "en": "Deletion completed", "es": "Eliminación completada", "fr": "Suppression terminée", "de": "Löschung abgeschlossen", "pt": "Eliminação concluída", "pl": "Usuwanie zakończone", "nl": "Verwijderen voltooid", "ro": "Ștergere finalizată", "el": "Η διαγραφή ολοκληρώθηκε"}, "Confermi la modifica?": {"it": "Confermi la modifica?", "en": "Confirm the change?", "es": "¿Confirmas la modificación?", "fr": "Confirmer la modification ?", "de": "Änderung bestätigen?", "pt": "Confirmas a alteração?", "pl": "Potwierdzasz zmianę?", "nl": "Wijziging bevestigen?", "ro": "Confirmi modificarea?", "el": "Επιβεβαιώνετε την αλλαγή;"}, "Transazione modificata": {"it": "Transazione modificata", "en": "Transaction updated", "es": "Transacción modificada", "fr": "Transaction modifiée", "de": "Transaktion geändert", "pt": "Transação modificada", "pl": "Transakcja zmieniona", "nl": "Transactie gewijzigd", "ro": "Tranzacție modificată", "el": "Η συναλλαγή τροποποιήθηκε"}, "Lista della spesa creata": {"it": "Lista della spesa creata", "en": "Shopping list created", "es": "Lista de la compra creada", "fr": "Liste de courses créée", "de": "Einkaufsliste erstellt", "pt": "Lista de compras criada", "pl": "Lista zakupów utworzona", "nl": "Boodschappenlijst aangemaakt", "ro": "Lista de cumpărături a fost creată", "el": "Η λίστα αγορών δημιουργήθηκε"}, "Lista della spesa aggiornata": {"it": "Lista della spesa aggiornata", "en": "Shopping list updated", "es": "Lista de la compra actualizada", "fr": "Liste de courses mise à jour", "de": "Einkaufsliste aktualisiert", "pt": "Lista de compras atualizada", "pl": "Lista zakupów zaktualizowana", "nl": "Boodschappenlijst bijgewerkt", "ro": "Lista de cumpărături a fost actualizată", "el": "Η λίστα αγορών ενημερώθηκε"}, "Lista selezionata": {"it": "Lista selezionata", "en": "Selected list", "es": "Lista seleccionada", "fr": "Liste sélectionnée", "de": "Ausgewählte Liste", "pt": "Lista selecionada", "pl": "Wybrana lista", "nl": "Geselecteerde lijst", "ro": "Listă selectată", "el": "Επιλεγμένη λίστα"}, "La lista principale non può essere eliminata se è l’unica lista.": {"it": "La lista principale non può essere eliminata se è l’unica lista.", "en": "The main list cannot be deleted if it is the only list.", "es": "La lista principal no se puede eliminar si es la única lista.", "fr": "La liste principale ne peut pas être supprimée si c’est la seule liste.", "de": "Die Hauptliste kann nicht gelöscht werden, wenn sie die einzige Liste ist.", "pt": "A lista principal não pode ser eliminada se for a única lista.", "pl": "Głównej listy nie można usunąć, jeśli jest jedyną listą.", "nl": "De hoofdlijst kan niet worden verwijderd als dit de enige lijst is.", "ro": "Lista principală nu poate fi ștearsă dacă este singura listă.", "el": "Η κύρια λίστα δεν μπορεί να διαγραφεί αν είναι η μόνη λίστα."}};
+  Object.keys(EXTRA_1637).forEach(function(k){
+    var row=EXTRA_1637[k];
+    Object.keys(row).forEach(function(lang){
+      try{TRANSLATIONS[lang]=TRANSLATIONS[lang]||{};TRANSLATIONS[lang][k]=row[lang];}catch(e){}
+      try{FAINANCE_UI_TRANSLATIONS[lang]=FAINANCE_UI_TRANSLATIONS[lang]||{};FAINANCE_UI_TRANSLATIONS[lang][k]=row[lang];}catch(e){}
+      try{FAINANCE_I18N_PHRASES[lang]=FAINANCE_I18N_PHRASES[lang]||{};FAINANCE_I18N_PHRASES[lang][k]=row[lang];}catch(e){}
+    });
+  });
+})();
+
+// fAInance 1.6.38 - traduzioni export/widget/spesa
+(function(){
+  var root = (typeof window !== 'undefined') ? window : globalThis;
+  var packs = {
+    it:{"Icon Color":"Colore icona","Title Color":"Colore titolo","Text Color":"Colore testo","Background Transparency":"Trasparenza sfondo","Save and Update widget":"Salva e aggiorna widget","Save and update widget":"Salva e aggiorna widget","SAVE AND UPDATE WIDGET":"SALVA E AGGIORNA WIDGET","Show percentage":"Mostra percentuale","Show amounts":"Mostra importi","Bar color":"Colore barra","Percentage color":"Colore percentuale","Area":"Area","Aree":"Aree","Aree spesa":"Aree spesa","JSON Patrimonio":"JSON Patrimonio","JSON Budget":"JSON Budget","File JSON Patrimonio pronto":"File JSON Patrimonio pronto","File JSON Budget pronto":"File JSON Budget pronto"},
+    en:{"Icon Color":"Icon color","Title Color":"Title color","Text Color":"Text color","Background Transparency":"Background transparency","Save and Update widget":"Save and update widget","Save and update widget":"Save and update widget","SAVE AND UPDATE WIDGET":"SAVE AND UPDATE WIDGET","Show percentage":"Show percentage","Show amounts":"Show amounts","Bar color":"Bar color","Percentage color":"Percentage color","Area":"Area","Aree":"Areas","Aree spesa":"Shopping areas","JSON Patrimonio":"Assets JSON","JSON Budget":"Budget JSON","File JSON Patrimonio pronto":"Assets JSON file ready","File JSON Budget pronto":"Budget JSON file ready"},
+    es:{"Icon Color":"Color del icono","Title Color":"Color del título","Text Color":"Color del texto","Background Transparency":"Transparencia del fondo","Save and Update widget":"Guardar y actualizar widget","Save and update widget":"Guardar y actualizar widget","SAVE AND UPDATE WIDGET":"GUARDAR Y ACTUALIZAR WIDGET","Show percentage":"Mostrar porcentaje","Show amounts":"Mostrar importes","Bar color":"Color de la barra","Percentage color":"Color del porcentaje","Area":"Área","Aree":"Áreas","Aree spesa":"Áreas de compra","JSON Patrimonio":"JSON Patrimonio","JSON Budget":"JSON Presupuesto","File JSON Patrimonio pronto":"Archivo JSON de patrimonio listo","File JSON Budget pronto":"Archivo JSON de presupuesto listo"},
+    fr:{"Icon Color":"Couleur de l’icône","Title Color":"Couleur du titre","Text Color":"Couleur du texte","Background Transparency":"Transparence du fond","Save and Update widget":"Enregistrer et mettre à jour le widget","Save and update widget":"Enregistrer et mettre à jour le widget","SAVE AND UPDATE WIDGET":"ENREGISTRER ET METTRE À JOUR LE WIDGET","Show percentage":"Afficher le pourcentage","Show amounts":"Afficher les montants","Bar color":"Couleur de la barre","Percentage color":"Couleur du pourcentage","Area":"Zone","Aree":"Zones","Aree spesa":"Zones de courses","JSON Patrimonio":"JSON Patrimoine","JSON Budget":"JSON Budget","File JSON Patrimonio pronto":"Fichier JSON du patrimoine prêt","File JSON Budget pronto":"Fichier JSON du budget prêt"},
+    de:{"Icon Color":"Symbolfarbe","Title Color":"Titelfarbe","Text Color":"Textfarbe","Background Transparency":"Hintergrundtransparenz","Save and Update widget":"Widget speichern und aktualisieren","Save and update widget":"Widget speichern und aktualisieren","SAVE AND UPDATE WIDGET":"WIDGET SPEICHERN UND AKTUALISIEREN","Show percentage":"Prozentsatz anzeigen","Show amounts":"Beträge anzeigen","Bar color":"Balkenfarbe","Percentage color":"Prozentfarbe","Area":"Bereich","Aree":"Bereiche","Aree spesa":"Einkaufsbereiche","JSON Patrimonio":"Vermögen JSON","JSON Budget":"Budget JSON","File JSON Patrimonio pronto":"Vermögen-JSON-Datei bereit","File JSON Budget pronto":"Budget-JSON-Datei bereit"},
+    pt:{"Icon Color":"Cor do ícone","Title Color":"Cor do título","Text Color":"Cor do texto","Background Transparency":"Transparência do fundo","Save and Update widget":"Guardar e atualizar widget","Save and update widget":"Guardar e atualizar widget","SAVE AND UPDATE WIDGET":"GUARDAR E ATUALIZAR WIDGET","Show percentage":"Mostrar percentagem","Show amounts":"Mostrar valores","Bar color":"Cor da barra","Percentage color":"Cor da percentagem","Area":"Área","Aree":"Áreas","Aree spesa":"Áreas de compras","JSON Patrimonio":"JSON Património","JSON Budget":"JSON Orçamento","File JSON Patrimonio pronto":"Ficheiro JSON do património pronto","File JSON Budget pronto":"Ficheiro JSON do orçamento pronto"},
+    pl:{"Icon Color":"Kolor ikony","Title Color":"Kolor tytułu","Text Color":"Kolor tekstu","Background Transparency":"Przezroczystość tła","Save and Update widget":"Zapisz i zaktualizuj widżet","Save and update widget":"Zapisz i zaktualizuj widżet","SAVE AND UPDATE WIDGET":"ZAPISZ I ZAKTUALIZUJ WIDŻET","Show percentage":"Pokaż procent","Show amounts":"Pokaż kwoty","Bar color":"Kolor paska","Percentage color":"Kolor procentu","Area":"Obszar","Aree":"Obszary","Aree spesa":"Obszary zakupów","JSON Patrimonio":"JSON majątku","JSON Budget":"JSON budżetu","File JSON Patrimonio pronto":"Plik JSON majątku gotowy","File JSON Budget pronto":"Plik JSON budżetu gotowy"},
+    nl:{"Icon Color":"Pictogramkleur","Title Color":"Titelkleur","Text Color":"Tekstkleur","Background Transparency":"Achtergrondtransparantie","Save and Update widget":"Widget opslaan en bijwerken","Save and update widget":"Widget opslaan en bijwerken","SAVE AND UPDATE WIDGET":"WIDGET OPSLAAN EN BIJWERKEN","Show percentage":"Percentage tonen","Show amounts":"Bedragen tonen","Bar color":"Balkkleur","Percentage color":"Percentagekleur","Area":"Gebied","Aree":"Gebieden","Aree spesa":"Boodschappengebieden","JSON Patrimonio":"JSON vermogen","JSON Budget":"JSON budget","File JSON Patrimonio pronto":"JSON-bestand vermogen klaar","File JSON Budget pronto":"JSON-bestand budget klaar"},
+    ro:{"Icon Color":"Culoarea pictogramei","Title Color":"Culoarea titlului","Text Color":"Culoarea textului","Background Transparency":"Transparența fundalului","Save and Update widget":"Salvează și actualizează widgetul","Save and update widget":"Salvează și actualizează widgetul","SAVE AND UPDATE WIDGET":"SALVEAZĂ ȘI ACTUALIZEAZĂ WIDGETUL","Show percentage":"Afișează procentul","Show amounts":"Afișează sumele","Bar color":"Culoarea barei","Percentage color":"Culoarea procentului","Area":"Zonă","Aree":"Zone","Aree spesa":"Zone de cumpărături","JSON Patrimonio":"JSON Patrimoniu","JSON Budget":"JSON Buget","File JSON Patrimonio pronto":"Fișierul JSON pentru patrimoniu este gata","File JSON Budget pronto":"Fișierul JSON pentru buget este gata"},
+    el:{"Icon Color":"Χρώμα εικονιδίου","Title Color":"Χρώμα τίτλου","Text Color":"Χρώμα κειμένου","Background Transparency":"Διαφάνεια φόντου","Save and Update widget":"Αποθήκευση και ενημέρωση widget","Save and update widget":"Αποθήκευση και ενημέρωση widget","SAVE AND UPDATE WIDGET":"ΑΠΟΘΗΚΕΥΣΗ ΚΑΙ ΕΝΗΜΕΡΩΣΗ WIDGET","Show percentage":"Εμφάνιση ποσοστού","Show amounts":"Εμφάνιση ποσών","Bar color":"Χρώμα μπάρας","Percentage color":"Χρώμα ποσοστού","Area":"Περιοχή","Aree":"Περιοχές","Aree spesa":"Περιοχές αγορών","JSON Patrimonio":"JSON περιουσίας","JSON Budget":"JSON προϋπολογισμού","File JSON Patrimonio pronto":"Το αρχείο JSON περιουσίας είναι έτοιμο","File JSON Budget pronto":"Το αρχείο JSON προϋπολογισμού είναι έτοιμο"}
+  };
+  function put(code,obj){
+    try{root.TRANSLATIONS=root.TRANSLATIONS||{};root.TRANSLATIONS[code]=Object.assign({},root.TRANSLATIONS[code]||{},obj);}catch(e){}
+    try{root.FAINANCE_UI_TRANSLATIONS=root.FAINANCE_UI_TRANSLATIONS||{};root.FAINANCE_UI_TRANSLATIONS[code]=Object.assign({},root.FAINANCE_UI_TRANSLATIONS[code]||{},obj);}catch(e){}
+    try{root.FAINANCE_I18N_PHRASES=root.FAINANCE_I18N_PHRASES||{};root.FAINANCE_I18N_PHRASES[code]=Object.assign({},root.FAINANCE_I18N_PHRASES[code]||{},obj);}catch(e){}
+  }
+  Object.keys(packs).forEach(function(code){put(code,packs[code]);});
+})();
+
+// fAInance 1.6.39 - traduzioni widget runtime stabili e alias esatti
+(function(){
+  var packs={
+    it:{"Icon Color":"Colore icona","Icon color":"Colore icona","Title Color":"Colore titolo","Title color":"Colore titolo","Text Color":"Colore testo","Text color":"Colore testo","Background Transparency":"Trasparenza sfondo widget","Background transparency":"Trasparenza sfondo widget","Save and Update widget":"Salva e aggiorna widget","Save and update widget":"Salva e aggiorna widget","SAVE AND UPDATE WIDGET":"SALVA E AGGIORNA WIDGET","Show percentage":"Mostra percentuale","Show amounts":"Mostra importi","Bar color":"Colore barra","Percentage color":"Colore percentuale"},
+    en:{"Icon Color":"Icon color","Icon color":"Icon color","Title Color":"Title color","Title color":"Title color","Text Color":"Text color","Text color":"Text color","Background Transparency":"Widget background transparency","Background transparency":"Widget background transparency","Save and Update widget":"Save and update widget","Save and update widget":"Save and update widget","SAVE AND UPDATE WIDGET":"SAVE AND UPDATE WIDGET","Show percentage":"Show percentage","Show amounts":"Show amounts","Bar color":"Bar color","Percentage color":"Percentage color"},
+    es:{"Icon Color":"Color del icono","Icon color":"Color del icono","Title Color":"Color del título","Title color":"Color del título","Text Color":"Color del texto","Text color":"Color del texto","Background Transparency":"Transparencia del fondo del widget","Background transparency":"Transparencia del fondo del widget","Save and Update widget":"Guardar y actualizar widget","Save and update widget":"Guardar y actualizar widget","SAVE AND UPDATE WIDGET":"GUARDAR Y ACTUALIZAR WIDGET","Show percentage":"Mostrar porcentaje","Show amounts":"Mostrar importes","Bar color":"Color de la barra","Percentage color":"Color del porcentaje"},
+    fr:{"Icon Color":"Couleur de l’icône","Icon color":"Couleur de l’icône","Title Color":"Couleur du titre","Title color":"Couleur du titre","Text Color":"Couleur du texte","Text color":"Couleur du texte","Background Transparency":"Transparence du fond du widget","Background transparency":"Transparence du fond du widget","Save and Update widget":"Enregistrer et mettre à jour le widget","Save and update widget":"Enregistrer et mettre à jour le widget","SAVE AND UPDATE WIDGET":"ENREGISTRER ET METTRE À JOUR LE WIDGET","Show percentage":"Afficher le pourcentage","Show amounts":"Afficher les montants","Bar color":"Couleur de la barre","Percentage color":"Couleur du pourcentage"},
+    de:{"Icon Color":"Symbolfarbe","Icon color":"Symbolfarbe","Title Color":"Titelfarbe","Title color":"Titelfarbe","Text Color":"Textfarbe","Text color":"Textfarbe","Background Transparency":"Widget-Hintergrundtransparenz","Background transparency":"Widget-Hintergrundtransparenz","Save and Update widget":"Widget speichern und aktualisieren","Save and update widget":"Widget speichern und aktualisieren","SAVE AND UPDATE WIDGET":"WIDGET SPEICHERN UND AKTUALISIEREN","Show percentage":"Prozentsatz anzeigen","Show amounts":"Beträge anzeigen","Bar color":"Balkenfarbe","Percentage color":"Prozentfarbe"},
+    pt:{"Icon Color":"Cor do ícone","Icon color":"Cor do ícone","Title Color":"Cor do título","Title color":"Cor do título","Text Color":"Cor do texto","Text color":"Cor do texto","Background Transparency":"Transparência do fundo do widget","Background transparency":"Transparência do fundo do widget","Save and Update widget":"Guardar e atualizar widget","Save and update widget":"Guardar e atualizar widget","SAVE AND UPDATE WIDGET":"GUARDAR E ATUALIZAR WIDGET","Show percentage":"Mostrar percentagem","Show amounts":"Mostrar valores","Bar color":"Cor da barra","Percentage color":"Cor da percentagem"},
+    pl:{"Icon Color":"Kolor ikony","Icon color":"Kolor ikony","Title Color":"Kolor tytułu","Title color":"Kolor tytułu","Text Color":"Kolor tekstu","Text color":"Kolor tekstu","Background Transparency":"Przezroczystość tła widżetu","Background transparency":"Przezroczystość tła widżetu","Save and Update widget":"Zapisz i zaktualizuj widżet","Save and update widget":"Zapisz i zaktualizuj widżet","SAVE AND UPDATE WIDGET":"ZAPISZ I ZAKTUALIZUJ WIDŻET","Show percentage":"Pokaż procent","Show amounts":"Pokaż kwoty","Bar color":"Kolor paska","Percentage color":"Kolor procentu"},
+    nl:{"Icon Color":"Pictogramkleur","Icon color":"Pictogramkleur","Title Color":"Titelkleur","Title color":"Titelkleur","Text Color":"Tekstkleur","Text color":"Tekstkleur","Background Transparency":"Transparantie van widgetachtergrond","Background transparency":"Transparantie van widgetachtergrond","Save and Update widget":"Widget opslaan en bijwerken","Save and update widget":"Widget opslaan en bijwerken","SAVE AND UPDATE WIDGET":"WIDGET OPSLAAN EN BIJWERKEN","Show percentage":"Percentage tonen","Show amounts":"Bedragen tonen","Bar color":"Balkkleur","Percentage color":"Percentagekleur"},
+    ro:{"Icon Color":"Culoarea pictogramei","Icon color":"Culoarea pictogramei","Title Color":"Culoarea titlului","Title color":"Culoarea titlului","Text Color":"Culoarea textului","Text color":"Culoarea textului","Background Transparency":"Transparență fundal widget","Background transparency":"Transparență fundal widget","Save and Update widget":"Salvează și actualizează widgetul","Save and update widget":"Salvează și actualizează widgetul","SAVE AND UPDATE WIDGET":"SALVEAZĂ ȘI ACTUALIZEAZĂ WIDGETUL","Show percentage":"Afișează procentul","Show amounts":"Afișează sumele","Bar color":"Culoarea barei","Percentage color":"Culoarea procentului"},
+    el:{"Icon Color":"Χρώμα εικονιδίου","Icon color":"Χρώμα εικονιδίου","Title Color":"Χρώμα τίτλου","Title color":"Χρώμα τίτλου","Text Color":"Χρώμα κειμένου","Text color":"Χρώμα κειμένου","Background Transparency":"Διαφάνεια φόντου widget","Background transparency":"Διαφάνεια φόντου widget","Save and Update widget":"Αποθήκευση και ενημέρωση widget","Save and update widget":"Αποθήκευση και ενημέρωση widget","SAVE AND UPDATE WIDGET":"ΑΠΟΘΗΚΕΥΣΗ ΚΑΙ ΕΝΗΜΕΡΩΣΗ WIDGET","Show percentage":"Εμφάνιση ποσοστού","Show amounts":"Εμφάνιση ποσών","Bar color":"Χρώμα γραμμής","Percentage color":"Χρώμα ποσοστού"}
+  };
+  function put(code,key,value){
+    try{TRANSLATIONS[code]=TRANSLATIONS[code]||{};TRANSLATIONS[code][key]=value;}catch(e){}
+    try{FAINANCE_UI_TRANSLATIONS[code]=FAINANCE_UI_TRANSLATIONS[code]||{};FAINANCE_UI_TRANSLATIONS[code][key]=value;}catch(e){}
+    try{FAINANCE_I18N_PHRASES[code]=FAINANCE_I18N_PHRASES[code]||{};FAINANCE_I18N_PHRASES[code][key]=value;}catch(e){}
+  }
+  Object.keys(packs).forEach(function(code){Object.keys(packs[code]).forEach(function(key){put(code,key,packs[code][key]);});});
 })();
