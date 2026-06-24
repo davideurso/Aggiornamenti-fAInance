@@ -1217,6 +1217,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!userId){setFirestoreReady(true);return;}
     firestoreHydratedRef.current=false;
     setFirestoreReady(false);
+    var firestoreLoadTimer=setTimeout(function(){
+      // iOS/TestFlight safety: Firestore can remain pending after native Apple login.
+      // Do not block the app forever on "Caricamento dati account...".
+      if(!firestoreHydratedRef.current){
+        console.warn("Firestore load timeout: releasing UI without cloud sync");
+        setFirestoreReady(true);
+      }
+    },8000);
     // Reset immediato dei dati sensibili quando cambia account: evita che il nuovo account erediti
     // in memoria alert, movimenti, chat o appunti del profilo usato prima mentre Firestore sta caricando.
     setExpenses([]);setIncomes([]);setRecurring([]);setGoals(DEFAULT_GOALS);setAlerts([]);setBudgetPlan(DEFAULT_BUDGET_PLAN);
@@ -1249,7 +1257,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
         setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
-        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,user.uid);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
+        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
         setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);
         setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);
         if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
@@ -1278,9 +1286,18 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setPatrimonioAreas(chooseCloudLocalArray(null,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS,false));setPatrimonioEntries(chooseCloudLocalArray(null,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES,false));setPatrimonioValues(chooseCloudLocalObject(null,patrimonioValues,{}));setPatrimonioHistory(chooseCloudLocalObject(null,patrimonioHistory,{}));setPatrimonioNotes(chooseCloudLocalObject(null,patrimonioNotes,{}));
         setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShoppingAreas(DEFAULT_SHOPPING_AREAS);setShareReceiptUploads([]);setShowShareInHistory(true);setCustomNotifs([]);setNotifPrefs({remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free",false);setPlanUsage({});setShownAlertIds([]);
       }
+      clearTimeout(firestoreLoadTimer);
       firestoreHydratedRef.current=true;
       setFirestoreReady(true);
-    }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
+    }).catch(function(err){
+      clearTimeout(firestoreLoadTimer);
+      console.error("Firestore load error",(err&&err.code)||"unknown");
+      // Do not mark cloud as hydrated after a failed load: this avoids overwriting cloud data
+      // with an empty local state when auth/rules/network fail on iOS.
+      firestoreHydratedRef.current=false;
+      setFirestoreReady(true);
+    });
+    return function(){clearTimeout(firestoreLoadTimer);};
   },[userId]);
 
   async function saveToFirestore(){
