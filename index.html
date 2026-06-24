@@ -17,26 +17,17 @@
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
     </style>
-    <script>
-      window.__FAINANCE_INDEX_LOADED_AT__ = Date.now();
-      setTimeout(function(){
-        try {
-          var html = document.documentElement;
-          var status = html.getAttribute('data-fainance-boot-status') || '';
-          var root = document.getElementById('root');
-          var hasContent = root && root.textContent && root.textContent.trim().length > 0;
-          if (!hasContent && status !== 'react-render-called') {
-            if (root) {
-              root.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%);font-family:system-ui,-apple-system,sans-serif;padding:24px;text-align:center;color:#333;"><div style="max-width:420px;background:#fff;border-radius:22px;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,.12);"><div style="font-size:22px;font-weight:800;margin-bottom:8px;">fAInance</div><div style="font-size:15px;font-weight:700;margin-bottom:8px;color:#E24B4A;">Avvio non completato</div><div style="font-size:13px;line-height:1.45;color:#666;">Il codice JavaScript non ha completato l’avvio. Screenshot da inviare a Davide.</div><div style="margin-top:12px;font-size:11px;line-height:1.35;color:#999;word-break:break-word;text-align:left;">index.html caricato; stato boot: '+(status || 'nessuno')+'</div></div></div>';
-            }
-            document.body.style.opacity = '1';
-          }
-        } catch(e) {}
-      }, 7000);
-    </script>
   </head>
   <body>
     <div id="root"></div>
+    <script id="fainance-boot-fallback">
+      setTimeout(function(){
+        var root=document.getElementById('root');
+        if(root && !root.childNodes.length){
+          root.innerHTML='<div style="min-height:100vh;background:#f7f7f7;color:#222;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:24px;display:flex;align-items:center;justify-content:center;"><div style="max-width:420px;background:white;border:1px solid #eee;border-radius:18px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);"><div style="font-size:18px;font-weight:800;margin-bottom:8px;color:#b00020;">Avvio non completato</div><div style="font-size:13px;line-height:1.45;color:#555;">Il bundle JavaScript non è partito. Controllare asset Vite/Capacitor nella build iOS.</div></div></div>';
+        }
+      },7000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -16,13 +16,34 @@ import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, q
 export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, query, where, limit, getDocs, addDoc };
 
 // ── FIREBASE CONFIG ───────────────────────────────────────────────────────────
+// Firebase web config.
+// Codemagic builds from GitHub and does not read Davide's local .env file.
+// If the VITE_* variables are missing, these safe public Firebase values keep the JS app from crashing at startup on iOS/TestFlight.
+const FIREBASE_FALLBACK_CONFIG = {
+  apiKey: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU",
+  authDomain: "fainance-a7794.firebaseapp.com",
+  projectId: "fainance-a7794",
+  storageBucket: "fainance-a7794.firebasestorage.app",
+  messagingSenderId: "739607555867",
+  appId: "1:739607555867:ios:16c4ae555c4a56cfcd6dbe"
+};
+
+function envOrFallback(key:string,fallback:string){
+  try{
+    var value=(import.meta as any).env&&((import.meta as any).env[key]);
+    return value||fallback;
+  }catch(e){
+    return fallback;
+  }
+}
+
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: envOrFallback("VITE_FIREBASE_API_KEY",FIREBASE_FALLBACK_CONFIG.apiKey),
+  authDomain: envOrFallback("VITE_FIREBASE_AUTH_DOMAIN",FIREBASE_FALLBACK_CONFIG.authDomain),
+  projectId: envOrFallback("VITE_FIREBASE_PROJECT_ID",FIREBASE_FALLBACK_CONFIG.projectId),
+  storageBucket: envOrFallback("VITE_FIREBASE_STORAGE_BUCKET",FIREBASE_FALLBACK_CONFIG.storageBucket),
+  messagingSenderId: envOrFallback("VITE_FIREBASE_MESSAGING_SENDER_ID",FIREBASE_FALLBACK_CONFIG.messagingSenderId),
+  appId: envOrFallback("VITE_FIREBASE_APP_ID",FIREBASE_FALLBACK_CONFIG.appId)
 };
 export const firebaseApp = initializeApp(firebaseConfig);
 export const fbAuth = getAuth(firebaseApp);
