@@ -1,4 +1,3 @@
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 declare global {
@@ -23,11 +22,7 @@ async function boot() {
     const AppWithLogin = mod.default
     const rootEl = document.getElementById('root')
     if (!rootEl) throw new Error('Elemento root non trovato')
-    createRoot(rootEl).render(
-      <StrictMode>
-        <AppWithLogin />
-      </StrictMode>
-    )
+    createRoot(rootEl).render(<AppWithLogin />)
   } catch (error) {
     showBootError(error)
   }

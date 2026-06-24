@@ -54,6 +54,49 @@ function FAI_TRANSLATE(value:any){
 function L(value:any){return FAI_TRANSLATE(value);}
 function PL(value:any){return FAI_TRANSLATE(value);}
 function numOr(v:any,f:any){var n=Number(v);return Number.isFinite(n)?n:f;}
+function isNativeIOSRuntime(){
+  try{
+    if(typeof window==="undefined")return false;
+    var w:any=window as any;
+    var cap=w.Capacitor;
+    var native=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform());
+    var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
+    var ua=typeof navigator!=="undefined"?String(navigator.userAgent||""):"";
+    return !!(native&&(platform==="ios"||/iPad|iPhone|iPod/i.test(ua)));
+  }catch(e){return false;}
+}
+async function deriveBankKey(uid:any){
+  try{
+    if(typeof crypto==="undefined"||!crypto.subtle)return null;
+    var enc=new TextEncoder();
+    var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+String(uid||"user")),"PBKDF2",false,["deriveKey"]);
+    return await crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+  }catch(e){return null;}
+}
+async function encryptBankCoords(data:any,uid:any){
+  try{
+    var key:any=await deriveBankKey(uid);
+    if(!key)return null;
+    var iv=crypto.getRandomValues(new Uint8Array(12));
+    var enc=new TextEncoder();
+    var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data||[])));
+    var combined=new Uint8Array(iv.byteLength+ct.byteLength);
+    combined.set(iv,0);combined.set(new Uint8Array(ct),12);
+    var out="";for(var i=0;i<combined.length;i++)out+=String.fromCharCode(combined[i]);
+    return btoa(out);
+  }catch(e){return null;}
+}
+async function decryptBankCoords(b64:any,uid:any){
+  try{
+    if(!b64||typeof b64!=="string")return null;
+    var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});
+    var iv=raw.slice(0,12);var ct=raw.slice(12);
+    var key:any=await deriveBankKey(uid);
+    if(!key)return null;
+    var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);
+    return JSON.parse(new TextDecoder().decode(pt));
+  }catch(e){return null;}
+}
 function readFainanceStoredLang(){
   try{
     var raw=localStorage.getItem("pref_lang_v2");
@@ -761,9 +804,6 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
 }
 
 function AppWithLogin(){
-  async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),{name:"PBKDF2"},false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
-  async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
-  async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
 
@@ -895,7 +935,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   currentUser=currentUser||{id:fbUser&&fbUser.uid?fbUser.uid:"",email:fbUser&&fbUser.email?fbUser.email:"",name:fbUser&&fbUser.displayName?fbUser.displayName:"Utente"};
   var userId=currentUser.id;
   function userKey(key){return userId?"user_"+userId+"_"+key:"no_user_"+key;}
-  function restoreLocalJson(key,value){try{if(value!==undefined)localStorage.setItem(userKey(key),JSON.stringify(value));}catch(e){}}
 
   function ensureArrayValue(value,fallback){return Array.isArray(value)?value:(Array.isArray(fallback)?fallback:[]);}
   function ensureObjectValue(value,fallback){return value&&typeof value==="object"&&!Array.isArray(value)?value:(fallback||{});}
@@ -1172,7 +1211,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
         setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
-        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
+        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,user.uid);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
         setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);
         setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);
         if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
@@ -1631,6 +1670,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return function(){try{delete (window as any).fainanceTranslateUi;}catch(e){}};
   },[lang]);
   useEffect(function(){
+    // 1.6.13 iOS: su WKWebView la riscrittura manuale dei text node può causare
+    // NotFoundError durante la riconciliazione React. Su iOS usiamo solo L()/PL().
+    if(isNativeIOSRuntime())return function(){};
     // 1.6.61: traduzione runtime esatta sui nodi nuovi, senza osservare le modifiche di testo/attributi che crea essa stessa.
     // Mantiene le traduzioni legacy senza innescare sfarfallii continui.
     if(typeof document==="undefined")return;
