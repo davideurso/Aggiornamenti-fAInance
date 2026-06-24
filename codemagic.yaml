@@ -24,8 +24,8 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.8"
-        BUILD_NUMBER: "152"
+        APP_VERSION: "1.6.9"
+        BUILD_NUMBER: "153"
 
     scripts:
       - name: Install dependencies
