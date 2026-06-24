@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, Component } from 'react';
+import { registerPlugin } from '@capacitor/core';
 import { AppCtx, useApp, fbAuth, fbDb, googleProvider, doc, setDoc, getDoc, getDocs, addDoc,
   deleteDoc, collection, query, where, limit, onSnapshot,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
@@ -122,6 +123,7 @@ const ADMOB_BANNER_AD_UNIT_ID_ANDROID="ca-app-pub-4502496181111632/3175905788";
 const ADMOB_APP_ID_IOS="ca-app-pub-4502496181111632~7115058902";
 const ADMOB_REWARDED_AD_UNIT_ID_IOS="ca-app-pub-4502496181111632/5610405541";
 const ADMOB_BANNER_AD_UNIT_ID_IOS="ca-app-pub-4502496181111632/2522463380";
+const FAINANCE_NATIVE_PLUGIN_CACHE:any={};
 
 // Evita il flash visibile in italiano quando è attiva una lingua diversa:
 // la UI resta nascosta solo per il frame necessario alla traduzione runtime.
@@ -2155,7 +2157,17 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var GOOGLE_PLAY_SUBSCRIPTION_IDS={base:{productId:"base",monthly:"base-monthly",yearly:"base-yearly"},premium:{productId:"complete",monthly:"complete-monthly",yearly:"complete-yearly"}};
   var APPLE_SUBSCRIPTION_IDS={base:{monthly:"base_monthly",yearly:"base_yearly"},premium:{monthly:"complete_monthly",yearly:"complete_yearly"}};
   function billingPeriodLabel(period){return period==="yearly"?L("Annuale"):L("Mensile");}
-  function nativePlugin(name){try{return window&&window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins[name];}catch(e){return null;}}
+  function nativePlugin(name){
+    try{
+      var w:any=window as any;
+      var cap=w&&w.Capacitor;
+      if(cap&&cap.Plugins&&cap.Plugins[name])return cap.Plugins[name];
+    }catch(e){}
+    try{
+      if(!FAINANCE_NATIVE_PLUGIN_CACHE[name])FAINANCE_NATIVE_PLUGIN_CACHE[name]=registerPlugin(name);
+      return FAINANCE_NATIVE_PLUGIN_CACHE[name];
+    }catch(e){return null;}
+  }
   function nativePlatform(){try{var c=window&&window.Capacitor;if(c&&c.getPlatform)return c.getPlatform();if(c&&c.isNativePlatform&&c.isNativePlatform())return "native";}catch(e){}return "web";}
   function isNativeMobileApp(){try{return !!(window&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
   function isNativeAndroidApp(){return isNativeMobileApp()&&nativePlatform()==="android";}
@@ -2183,7 +2195,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
     var billing=nativePlugin("FainanceBilling");
     if(!isNativeMobileApp()||!billing||!billing.purchase){
-      setToast({text:L("Gli acquisti reali sono disponibili solo dall’app installata dallo store."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+      setToast({text:L(isNativeIOSApp()?"Modulo acquisti Apple non disponibile in questa build. Installa la build TestFlight più recente e riprova.":"Gli acquisti reali sono disponibili solo dall’app installata dallo store."),type:"warning",color:"#EF9F27",icon:"⚠️"});
       return;
     }
     var period=planBillingPeriod==="yearly"?"yearly":"monthly";
