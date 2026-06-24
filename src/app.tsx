@@ -58,11 +58,17 @@ function isNativeIOSRuntime(){
   try{
     if(typeof window==="undefined")return false;
     var w:any=window as any;
+    var loc=window.location;
+    var protocol=loc&&loc.protocol?String(loc.protocol):"";
+    var href=loc&&loc.href?String(loc.href):"";
     var cap=w.Capacitor;
-    var native=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform());
     var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
+    var native=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform());
     var ua=typeof navigator!=="undefined"?String(navigator.userAgent||""):"";
-    return !!(native&&(platform==="ios"||/iPad|iPhone|iPod/i.test(ua)));
+    // iOS Capacitor usa capacitor://localhost. In alcune build window.Capacitor
+    // non è disponibile abbastanza presto, quindi il protocollo è il segnale più affidabile.
+    if(protocol==="capacitor:"||/^capacitor:\/\//i.test(href))return true;
+    return !!((native&&platform==="ios")||(native&&/iPad|iPhone|iPod/i.test(ua)));
   }catch(e){return false;}
 }
 async function deriveBankKey(uid:any){
@@ -1672,7 +1678,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   useEffect(function(){
     // 1.6.13 iOS: su WKWebView la riscrittura manuale dei text node puÃ² causare
     // NotFoundError durante la riconciliazione React. Su iOS usiamo solo L()/PL().
-    if(isNativeIOSRuntime())return function(){};
+    if(isNativeIOSRuntime()||(typeof window!=="undefined"&&(window as any).__FAINANCE_DISABLE_DOM_TRANSLATION__))return function(){};
     // 1.6.61: traduzione runtime esatta sui nodi nuovi, senza osservare le modifiche di testo/attributi che crea essa stessa.
     // Mantiene le traduzioni legacy senza innescare sfarfallii continui.
     if(typeof document==="undefined")return;
