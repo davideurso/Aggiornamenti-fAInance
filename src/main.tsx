@@ -1,10 +1,10 @@
+import React from 'react'
 import { createRoot } from 'react-dom/client'
 
 declare global {
   interface Window {
-    __FAINANCE_BOOT_ERROR__?: (title: string, detail: string) => void
     __FAINANCE_DISABLE_DOM_TRANSLATION__?: boolean
-    __FAINANCE_DOM_GUARD_INSTALLED__?: boolean
+    __FAINANCE_APP_MOUNT_STARTED__?: boolean
   }
 }
 
@@ -15,84 +15,114 @@ function isIOSCapacitorRuntime() {
     const ua = String(navigator.userAgent || '')
     const cap = (window as any).Capacitor
     const platform = cap && cap.getPlatform ? String(cap.getPlatform() || '') : ''
-    return protocol === 'capacitor:' || /^capacitor:\/\//i.test(href) || platform === 'ios' || /iPad|iPhone|iPod/i.test(ua)
+    const native = !!(cap && cap.isNativePlatform && cap.isNativePlatform())
+    return protocol === 'capacitor:' || /^capacitor:\/\//i.test(href) || platform === 'ios' || (native && /iPad|iPhone|iPod/i.test(ua))
   } catch (_) {
     return false
   }
 }
 
-function installIOSDomGuard() {
-  if (!isIOSCapacitorRuntime()) return
-  window.__FAINANCE_DISABLE_DOM_TRANSLATION__ = true
-  if (window.__FAINANCE_DOM_GUARD_INSTALLED__) return
-  window.__FAINANCE_DOM_GUARD_INSTALLED__ = true
-
-  try {
-    const proto = Node && Node.prototype
-    if (!proto) return
-
-    const originalRemoveChild = proto.removeChild
-    const originalInsertBefore = proto.insertBefore
-    const originalReplaceChild = proto.replaceChild
-
-    proto.removeChild = function<T extends Node>(child: T): T {
-      try {
-        if (child && child.parentNode !== this) return child
-        return originalRemoveChild.call(this, child) as T
-      } catch (error: any) {
-        if (error && error.name === 'NotFoundError') return child
-        throw error
-      }
-    }
-
-    proto.insertBefore = function<T extends Node>(newChild: T, refChild: Node | null): T {
-      try {
-        if (refChild && refChild.parentNode !== this) return this.appendChild(newChild) as T
-        return originalInsertBefore.call(this, newChild, refChild) as T
-      } catch (error: any) {
-        if (error && error.name === 'NotFoundError') return this.appendChild(newChild) as T
-        throw error
-      }
-    }
-
-    proto.replaceChild = function<T extends Node>(newChild: Node, oldChild: T): T {
-      try {
-        if (oldChild && oldChild.parentNode !== this) {
-          this.appendChild(newChild)
-          return oldChild
-        }
-        return originalReplaceChild.call(this, newChild, oldChild) as T
-      } catch (error: any) {
-        if (error && error.name === 'NotFoundError') {
-          this.appendChild(newChild)
-          return oldChild
-        }
-        throw error
-      }
-    }
-  } catch (_) {}
+function prepareRuntime() {
+  if (isIOSCapacitorRuntime()) {
+    window.__FAINANCE_DISABLE_DOM_TRANSLATION__ = true
+  }
 }
 
-function showBootError(error: unknown) {
-  const detail = error instanceof Error ? `${error.name}: ${error.message}\n${error.stack || ''}` : String(error)
-  if (window.__FAINANCE_BOOT_ERROR__) {
-    window.__FAINANCE_BOOT_ERROR__('Errore di avvio fAInance', detail)
-    return
+function stringifyError(error: unknown) {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}\n${error.stack || ''}`
   }
+  try {
+    return JSON.stringify(error, null, 2)
+  } catch (_) {
+    return String(error)
+  }
+}
+
+function renderStartupError(title: string, error: unknown) {
   const root = document.getElementById('root')
-  if (root) root.textContent = detail
+  if (!root) return
+  const detail = stringifyError(error)
+  root.innerHTML = `
+    <div style="min-height:100vh;background:#f7f7f7;color:#222;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;padding:24px;display:flex;align-items:center;justify-content:center;">
+      <div style="max-width:420px;background:white;border:1px solid #eee;border-radius:18px;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);">
+        <div style="font-size:18px;font-weight:800;margin-bottom:8px;color:#b00020;">${escapeHtml(title)}</div>
+        <div style="font-size:13px;line-height:1.45;color:#555;margin-bottom:12px;">Invia questo dettaglio tecnico.</div>
+        <pre style="white-space:pre-wrap;word-break:break-word;background:#fafafa;border:1px solid #eee;border-radius:12px;padding:12px;font-size:12px;color:#333;max-height:55vh;overflow:auto;">${escapeHtml(detail)}</pre>
+      </div>
+    </div>
+  `
+}
+
+function escapeHtml(value: string) {
+  return String(value || '').replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c] || c))
+}
+
+class BootErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: unknown | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error }
+  }
+
+  componentDidCatch(error: unknown) {
+    try { console.error('fAInance React boot error', error) } catch (_) {}
+  }
+
+  render() {
+    if (this.state.error) {
+      return React.createElement('div', {
+        style: {
+          minHeight: '100vh',
+          background: '#f7f7f7',
+          color: '#222',
+          fontFamily: '-apple-system,BlinkMacSystemFont,system-ui,sans-serif',
+          padding: 24,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+      }, React.createElement('div', {
+        style: {
+          maxWidth: 420,
+          background: '#fff',
+          border: '1px solid #eee',
+          borderRadius: 18,
+          padding: 20,
+          boxShadow: '0 8px 28px rgba(0,0,0,.08)',
+        },
+      },
+        React.createElement('div', { style: { fontSize: 18, fontWeight: 800, marginBottom: 8, color: '#b00020' } }, 'Errore React fAInance'),
+        React.createElement('div', { style: { fontSize: 13, lineHeight: 1.45, color: '#555', marginBottom: 12 } }, 'Invia questo dettaglio tecnico.'),
+        React.createElement('pre', { style: { whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#fafafa', border: '1px solid #eee', borderRadius: 12, padding: 12, fontSize: 12, color: '#333', maxHeight: '55vh', overflow: 'auto' } }, stringifyError(this.state.error))
+      ))
+    }
+    return this.props.children
+  }
 }
 
 async function boot() {
+  prepareRuntime()
   try {
-    installIOSDomGuard()
     const mod = await import('./app')
     const AppWithLogin = mod.default
     const rootEl = document.getElementById('root')
     if (!rootEl) throw new Error('Elemento root non trovato')
-    createRoot(rootEl).render(<AppWithLogin />)
+    window.__FAINANCE_APP_MOUNT_STARTED__ = true
+    createRoot(rootEl).render(
+      React.createElement(BootErrorBoundary, null, React.createElement(AppWithLogin))
+    )
   } catch (error) {
-    showBootError(error)
+    renderStartupError('Errore avvio fAInance', error)
   }
 }
 
