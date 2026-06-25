@@ -21,11 +21,12 @@ workflows:
 
       vars:
         BUNDLE_ID: "it.fainanceapp.app"
+        WIDGET_BUNDLE_ID: "it.fainanceapp.app.widgets"
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.34"
-        BUILD_NUMBER: "178"
+        APP_VERSION: "1.6.35"
+        BUILD_NUMBER: "179"
         VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -106,50 +107,84 @@ workflows:
             --type IOS_APP_STORE \
             --create
 
+          app-store-connect fetch-signing-files "$WIDGET_BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --create
+
           keychain add-certificates
 
-          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -n 1)
+          python3 - <<'PY'
+          import glob
+          import os
+          import plistlib
+          import subprocess
+          import sys
 
-          if [ -z "$PROFILE_PATH" ]; then
-            echo "Nessun provisioning profile trovato."
-            exit 1
-          fi
+          team_id = os.environ.get("APPLE_TEAM_ID", "")
+          targets = {
+              os.environ["BUNDLE_ID"]: "APP",
+              os.environ["WIDGET_BUNDLE_ID"]: "WIDGET",
+          }
+          found = {}
 
-          security cms -D -i "$PROFILE_PATH" > "$CM_BUILD_DIR/profile.plist"
+          for path in glob.glob(os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles/*.mobileprovision")):
+              try:
+                  raw = subprocess.check_output(["security", "cms", "-D", "-i", path])
+                  profile = plistlib.loads(raw)
+              except Exception:
+                  continue
 
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$CM_BUILD_DIR/profile.plist")
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$CM_BUILD_DIR/profile.plist")
+              entitlements = profile.get("Entitlements", {}) or {}
+              application_identifier = str(entitlements.get("application-identifier", ""))
+              bundle = application_identifier
+              if team_id and bundle.startswith(team_id + "."):
+                  bundle = bundle[len(team_id) + 1:]
 
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$CM_ENV"
-          echo "PROFILE_UUID=$PROFILE_UUID" >> "$CM_ENV"
+              if bundle in targets:
+                  key = targets[bundle]
+                  found[key] = {
+                      "bundle": bundle,
+                      "name": profile.get("Name", ""),
+                      "uuid": profile.get("UUID", ""),
+                      "path": path,
+                  }
 
-          echo "Provisioning profile trovato:"
-          echo "PROFILE_NAME=$PROFILE_NAME"
-          echo "PROFILE_UUID=$PROFILE_UUID"
+          missing = [label for label in ("APP", "WIDGET") if label not in found]
+          if missing:
+              print("Provisioning profile mancanti per:", ", ".join(missing))
+              print("Profili trovati:")
+              for v in found.values():
+                  print(v)
+              sys.exit(1)
+
+          with open(os.environ["CM_ENV"], "a", encoding="utf-8") as f:
+              for key, value in found.items():
+                  f.write(f"{key}_PROFILE_NAME={value['name']}\n")
+                  f.write(f"{key}_PROFILE_UUID={value['uuid']}\n")
+
+          print("Provisioning profile App:", found["APP"])
+          print("Provisioning profile Widget:", found["WIDGET"])
+          PY
 
       - name: Set up code signing
         script: |
           xcode-project use-profiles
 
-      - name: Patch App target signing only
+      - name: Patch App and Widget target signing
         script: |
           python3 - <<'PY'
           import os
           import re
 
           pbxproj = "ios/App/App.xcodeproj/project.pbxproj"
-          bundle_id = os.environ["BUNDLE_ID"]
           team_id = os.environ["APPLE_TEAM_ID"]
-          profile_name = os.environ["PROFILE_NAME"]
+          app_bundle_id = os.environ["BUNDLE_ID"]
+          widget_bundle_id = os.environ["WIDGET_BUNDLE_ID"]
+          app_profile = os.environ["APP_PROFILE_NAME"]
+          widget_profile = os.environ["WIDGET_PROFILE_NAME"]
 
           with open(pbxproj, "r", encoding="utf-8") as f:
               text = f.read()
-
-          text = re.sub(
-              r"PRODUCT_BUNDLE_IDENTIFIER = [^;]*;",
-              f"PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};",
-              text
-          )
 
           def replace_or_add(block, key, value):
               pattern = rf"{key} = [^;]*;"
@@ -158,28 +193,40 @@ workflows:
                   return re.sub(pattern, line.strip(), block)
               return block.replace("buildSettings = {", "buildSettings = {\n" + line, 1)
 
-          blocks = re.findall(r"buildSettings = \{[\s\S]*?\n\s*\};", text)
+          pattern = r"buildSettings = \{[\s\S]*?\n\s*\};"
+          blocks = list(re.finditer(pattern, text))
+          replacements = []
 
-          for block in blocks:
+          for match in blocks:
+              block = match.group(0)
               if "PRODUCT_BUNDLE_IDENTIFIER" not in block:
                   continue
+
+              if widget_bundle_id in block or "FainanceWidgets/Info.plist" in block:
+                  bundle_id = widget_bundle_id
+                  profile = widget_profile
+              else:
+                  bundle_id = app_bundle_id
+                  profile = app_profile
 
               new_block = block
               new_block = replace_or_add(new_block, "DEVELOPMENT_TEAM", team_id)
               new_block = replace_or_add(new_block, "CODE_SIGN_STYLE", "Manual")
               new_block = replace_or_add(new_block, "CODE_SIGN_IDENTITY", '"Apple Distribution"')
-              new_block = replace_or_add(new_block, "PROVISIONING_PROFILE_SPECIFIER", f'"{profile_name}"')
+              new_block = replace_or_add(new_block, "PROVISIONING_PROFILE_SPECIFIER", f'"{profile}"')
               new_block = replace_or_add(new_block, "PRODUCT_BUNDLE_IDENTIFIER", bundle_id)
+              replacements.append((match.start(), match.end(), new_block))
 
-              text = text.replace(block, new_block)
+          for start, end, replacement in reversed(replacements):
+              text = text[:start] + replacement + text[end:]
 
           with open(pbxproj, "w", encoding="utf-8") as f:
               f.write(text)
 
-          print("App target signing patched")
+          print("App and Widget target signing patched")
           PY
 
-          grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE_SPECIFIER" ios/App/App.xcodeproj/project.pbxproj | head -100
+          grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE_SPECIFIER" ios/App/App.xcodeproj/project.pbxproj | head -140
 
       - name: Create export options
         script: |
@@ -199,7 +246,9 @@ workflows:
             <key>provisioningProfiles</key>
             <dict>
               <key>${BUNDLE_ID}</key>
-              <string>${PROFILE_NAME}</string>
+              <string>${APP_PROFILE_NAME}</string>
+              <key>${WIDGET_BUNDLE_ID}</key>
+              <string>${WIDGET_PROFILE_NAME}</string>
             </dict>
             <key>stripSwiftSymbols</key>
             <true/>

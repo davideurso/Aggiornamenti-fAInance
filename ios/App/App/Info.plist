@@ -66,6 +66,16 @@
 				<string>com.googleusercontent.apps.739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>it.fainanceapp.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>fainance</string>
+			</array>
+		</dict>
 	</array>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
 	<false/>

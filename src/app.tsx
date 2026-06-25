@@ -6,7 +6,6 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback, useMemo, createContext, Component } from 'react';
-import { registerPlugin } from '@capacitor/core';
 import { AppCtx, useApp, fbAuth, fbDb, googleProvider, doc, setDoc, getDoc, getDocs, addDoc,
   deleteDoc, collection, query, where, limit, onSnapshot,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut,
@@ -55,55 +54,6 @@ function FAI_TRANSLATE(value:any){
 function L(value:any){return FAI_TRANSLATE(value);}
 function PL(value:any){return FAI_TRANSLATE(value);}
 function numOr(v:any,f:any){var n=Number(v);return Number.isFinite(n)?n:f;}
-function isNativeIOSRuntime(){
-  try{
-    if(typeof window==="undefined")return false;
-    var w:any=window as any;
-    var loc=window.location;
-    var protocol=loc&&loc.protocol?String(loc.protocol):"";
-    var href=loc&&loc.href?String(loc.href):"";
-    var cap=w.Capacitor;
-    var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
-    var native=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform());
-    var ua=typeof navigator!=="undefined"?String(navigator.userAgent||""):"";
-    // iOS Capacitor usa capacitor://localhost. In alcune build window.Capacitor
-    // non è disponibile abbastanza presto, quindi il protocollo è il segnale più affidabile.
-    if(protocol==="capacitor:"||/^capacitor:\/\//i.test(href))return true;
-    return !!((native&&platform==="ios")||(native&&/iPad|iPhone|iPod/i.test(ua)));
-  }catch(e){return false;}
-}
-async function deriveBankKey(uid:any){
-  try{
-    if(typeof crypto==="undefined"||!crypto.subtle)return null;
-    var enc=new TextEncoder();
-    var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+String(uid||"user")),"PBKDF2",false,["deriveKey"]);
-    return await crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
-  }catch(e){return null;}
-}
-async function encryptBankCoords(data:any,uid:any){
-  try{
-    var key:any=await deriveBankKey(uid);
-    if(!key)return null;
-    var iv=crypto.getRandomValues(new Uint8Array(12));
-    var enc=new TextEncoder();
-    var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data||[])));
-    var combined=new Uint8Array(iv.byteLength+ct.byteLength);
-    combined.set(iv,0);combined.set(new Uint8Array(ct),12);
-    var out="";for(var i=0;i<combined.length;i++)out+=String.fromCharCode(combined[i]);
-    return btoa(out);
-  }catch(e){return null;}
-}
-async function decryptBankCoords(b64:any,uid:any){
-  try{
-    if(!b64||typeof b64!=="string")return null;
-    var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});
-    var iv=raw.slice(0,12);var ct=raw.slice(12);
-    var key:any=await deriveBankKey(uid);
-    if(!key)return null;
-    var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);
-    return JSON.parse(new TextDecoder().decode(pt));
-  }catch(e){return null;}
-}
 function readFainanceStoredLang(){
   try{
     var raw=localStorage.getItem("pref_lang_v2");
@@ -125,7 +75,6 @@ const ADMOB_BANNER_AD_UNIT_ID_ANDROID="ca-app-pub-4502496181111632/3175905788";
 const ADMOB_APP_ID_IOS="ca-app-pub-4502496181111632~7115058902";
 const ADMOB_REWARDED_AD_UNIT_ID_IOS="ca-app-pub-4502496181111632/5610405541";
 const ADMOB_BANNER_AD_UNIT_ID_IOS="ca-app-pub-4502496181111632/2522463380";
-const FAINANCE_NATIVE_PLUGIN_CACHE:any={};
 
 // Evita il flash visibile in italiano quando è attiva una lingua diversa:
 // la UI resta nascosta solo per il frame necessario alla traduzione runtime.
@@ -160,6 +109,19 @@ function LoginScreen({onLogin}){
   }
 
   var inp={width:"100%",borderRadius:10,border:"1px solid #e0e0e0",padding:"12px 14px",fontSize:15,background:"#fff",color:"#333",boxSizing:"border-box",outline:"none"};
+
+  function showAppleLoginButton(){
+    try{
+      var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
+      var platform=cap&&cap.getPlatform?String(cap.getPlatform()).toLowerCase():"";
+      if(platform==="android")return false;
+    }catch(e){}
+    try{
+      var ua=(typeof navigator!=="undefined"&&navigator.userAgent)?String(navigator.userAgent).toLowerCase():"";
+      if(ua.indexOf("android")>=0)return false;
+    }catch(e){}
+    return true;
+  }
 
   function doLogin(){
     setError("");setLoading(true);
@@ -242,83 +204,77 @@ function LoginScreen({onLogin}){
   }
 
   async function doApple(){
-    setError("");
-    setLoading(true);
-
-    function timeoutPromise(promise, ms, label){
-      return Promise.race([
-        promise,
-        new Promise(function(_,reject){
-          setTimeout(function(){reject(new Error(label||"Operazione scaduta."));},ms);
-        })
-      ]);
-    }
-
-    function normalizeNativeUser(nativeUser, fallbackCredential){
-      var email=String((nativeUser&&nativeUser.email)||"").toLowerCase();
-      var name=String((nativeUser&&nativeUser.displayName)||"").trim();
-      var uid=String((nativeUser&&nativeUser.uid)||"").trim();
-      if(!uid && fallbackCredential && fallbackCredential.idToken){
-        try{
-          var payload=JSON.parse(atob(String(fallbackCredential.idToken).split(".")[1]||""));
-          uid=payload.sub?String(payload.sub):"";
-          if(!email && payload.email)email=String(payload.email).toLowerCase();
-        }catch(parseErr){}
-      }
-      if(!uid)throw new Error("Apple login completato, ma non e' stato restituito un utente valido.");
-      return {id:uid,email:email,name:name||"Utente"};
-    }
-
+    setError(""); setLoading(true);
     try {
-      var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+      var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       if(isNative){
         const mod = await import("@capacitor-firebase/authentication");
         const FirebaseAuthentication = mod.FirebaseAuthentication;
         if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithApple){
           throw new Error("Sign in with Apple non disponibile nel plugin di autenticazione installato.");
         }
-
-        // iOS: use the native Firebase Auth layer directly.
-        // The previous flow completed the Apple sheet and then waited for the Web Firebase
-        // credential conversion. On TestFlight this can remain pending and leave the UI stuck.
-        const nativeResult = await timeoutPromise(
-          FirebaseAuthentication.signInWithApple({skipNativeAuth:false}),
-          45000,
-          "Apple login completato, ma Firebase nativo non ha risposto entro 45 secondi."
-        );
-        const nativeUser = nativeResult && nativeResult.user ? nativeResult.user : null;
-        const nativeCredential = nativeResult && nativeResult.credential ? nativeResult.credential : null;
-        const normalizedUser = normalizeNativeUser(nativeUser,nativeCredential);
-
-        setLoading(false);
+        const result = await FirebaseAuthentication.signInWithApple({
+          scopes:["email","name"],
+          customParameters:[{key:"locale",value:loginLang()}]
+        });
+        const nativeUser=(result&&result.user)||{};
+        if(nativeUser&&nativeUser.uid){
+          try{
+            var appleNameNative=(nativeUser.displayName||nativeUser.name||"").trim();
+            var appleEmailNative=(nativeUser.email||"").toLowerCase();
+            var refNative=doc(fbDb,"users",nativeUser.uid);
+            var snapNative=await getDoc(refNative);
+            if(!snapNative.exists()){
+              await setDoc(refNative,{name:appleNameNative||"Utente",email:appleEmailNative,provider:"apple",createdAt:new Date().toISOString()});
+            }
+          }catch(saveNativeErr){}
+          onLogin({id:nativeUser.uid, email:nativeUser.email||"", name:nativeUser.displayName||nativeUser.name||"Utente"});
+          return;
+        }
+        const credData=(result&&result.credential)||{};
+        const idToken=credData.idToken||credData.id_token||credData.identityToken||credData.identity_token||"";
+        const accessToken=credData.accessToken||credData.access_token||"";
+        const rawNonce=credData.rawNonce||credData.raw_nonce||credData.nonce||"";
+        if(!idToken) throw new Error("Apple login non ha restituito né utente Firebase né identity token utilizzabile. Verifica provider Apple in Firebase Authentication.");
+        const provider = new OAuthProvider("apple.com");
+        const credential = provider.credential(rawNonce?{idToken:idToken,rawNonce:rawNonce,accessToken:accessToken||undefined}:{idToken:idToken,accessToken:accessToken||undefined});
+        const cred = await signInWithCredential(fbAuth, credential);
         try{
-          if(normalizedUser.id){
-            setDoc(doc(fbDb,"users",normalizedUser.id),{name:normalizedUser.name,email:normalizedUser.email,provider:"apple",updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          var appleName=(cred.user.displayName||"").trim();
+          if(cred.user.uid){
+            var ref=doc(fbDb,"users",cred.user.uid);
+            var snap=await getDoc(ref);
+            if(!snap.exists()){
+              await setDoc(ref,{name:appleName||"Utente",email:(cred.user.email||"").toLowerCase(),provider:"apple",createdAt:new Date().toISOString()});
+            }
           }
-        }catch(profileErr){}
-        onLogin(normalizedUser);
+        }catch(saveErr){}
+        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
         return;
       }
-
       const provider = new OAuthProvider("apple.com");
       provider.addScope("email");
       provider.addScope("name");
-      const cred = await timeoutPromise(signInWithPopup(fbAuth, provider),45000,"Apple login web scaduto.");
+      provider.setCustomParameters({locale:loginLang()});
+      const cred = await signInWithPopup(fbAuth, provider);
       try{
         if(cred.user&&cred.user.uid){
-          setDoc(doc(fbDb,"users",cred.user.uid),{name:cred.user.displayName||"Utente",email:String(cred.user.email||"").toLowerCase(),provider:"apple",updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          var refWeb=doc(fbDb,"users",cred.user.uid);
+          var snapWeb=await getDoc(refWeb);
+          if(!snapWeb.exists()){
+            await setDoc(refWeb,{name:cred.user.displayName||"Utente",email:(cred.user.email||"").toLowerCase(),provider:"apple",createdAt:new Date().toISOString()});
+          }
         }
       }catch(saveWebErr){}
-      setLoading(false);
       onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
     } catch(err){
-      console.error("Apple login error",(err&&err.code)||"unknown",err);
+      console.error("Apple login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
-      if(code==="auth/operation-not-allowed"||msg.toLowerCase().indexOf("provider")>=0&&msg.toLowerCase().indexOf("apple")>=0&&msg.toLowerCase().indexOf("firebase")>=0){
-        setError(L("Errore Apple: il provider Apple non è abilitato in Firebase Authentication. Abilitalo in Firebase Console > Authentication > Sign-in method > Apple e riprova."));
+      if(code==="auth/operation-not-allowed"||msg.toLowerCase().indexOf("apple")>=0&&msg.toLowerCase().indexOf("provider")>=0&&msg.toLowerCase().indexOf("enable")>=0){
+        setError(L("Errore Apple: il provider Apple non è abilitato in Firebase Authentication."));
       }else if(code==="auth/account-exists-with-different-credential"){
-        setError(L("Esiste gia' un account con questa email. Accedi con il metodo usato in precedenza."));
+        setError(L("Esiste già un account con questa email. Accedi con il metodo usato in precedenza."));
       }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
         setError(L("Accesso Apple annullato."));
       }else{
@@ -381,14 +337,14 @@ function LoginScreen({onLogin}){
             {loading?"...":(mode==="login"?L("Accedi"):L("Crea account"))}
           </button>
           <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{flex:1,height:1,background:"#eee"}}/><span style={{fontSize:12,color:"#aaa"}}>{L("oppure")}</span><div style={{flex:1,height:1,background:"#eee"}}/></div>
-          <button onClick={doApple} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#000",color:"#fff",border:"1.5px solid #000",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{display:"block",flexShrink:0}}><path fill="currentColor" d="M16.36 1.43c0 1.16-.46 2.27-1.2 3.1-.78.89-2.05 1.57-3.19 1.48-.15-1.12.42-2.3 1.13-3.03.79-.84 2.18-1.48 3.26-1.55zM20.79 17.42c-.53 1.22-.79 1.76-1.47 2.84-.95 1.45-2.29 3.27-3.96 3.29-1.48.02-1.86-.96-3.87-.95-2.01.01-2.43.98-3.91.96-1.67-.02-2.94-1.66-3.89-3.12-2.66-4.08-2.94-8.87-1.3-11.41 1.17-1.8 3.01-2.85 4.75-2.85 1.77 0 2.89.97 4.36.97 1.42 0 2.29-.97 4.34-.97 1.55 0 3.19.84 4.35 2.3-3.82 2.1-3.2 7.55.6 8.94z"/></svg>
-            {L("Accedi con Apple")}
-          </button>
           <button onClick={doGoogle} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#fff",color:"#333",border:"1.5px solid #e0e0e0",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer"}}>
             <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M47.5 24.6c0-1.6-.1-3.1-.4-4.6H24v8.7h13.1c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.4-10.6 7.4-17.3z"/><path fill="#34A853" d="M24 48c6.5 0 12-2.2 16-5.9l-7.9-6c-2.2 1.5-5 2.3-8.1 2.3-6.2 0-11.5-4.2-13.4-9.9H2.5v6.2C6.5 42.6 14.7 48 24 48z"/><path fill="#FBBC05" d="M10.6 28.5c-.5-1.5-.8-3-.8-4.5s.3-3 .8-4.5v-6.2H2.5C.9 16.8 0 20.3 0 24s.9 7.2 2.5 10.7l8.1-6.2z"/><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.2 30.5 0 24 0 14.7 0 6.5 5.4 2.5 13.3l8.1 6.2C12.5 13.7 17.8 9.5 24 9.5z"/></svg>
             {L("Accedi con Google")}
           </button>
+          {showAppleLoginButton()&&<button onClick={doApple} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#000",color:"#fff",border:"1.5px solid #000",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" style={{display:"block",flexShrink:0}}><path fill="currentColor" d="M16.365 1.43c0 1.14-.423 2.145-1.27 3.014-.91.93-1.91 1.466-3.013 1.384-.13-1.091.383-2.255 1.168-3.058.862-.888 2.23-1.526 3.115-1.34zM20.5 17.34c-.55 1.27-.813 1.837-1.52 2.963-.987 1.526-2.38 3.43-4.104 3.443-1.535.014-1.93-.997-4.014-.986-2.085.01-2.52 1.004-4.055.99-1.724-.015-3.04-1.733-4.027-3.26-2.757-4.265-3.047-9.268-1.344-11.927 1.21-1.89 3.12-2.997 4.916-2.997 1.83 0 2.98 1.004 4.49 1.004 1.464 0 2.354-1.006 4.465-1.006 1.596 0 3.287.87 4.493 2.373-3.95 2.166-3.31 7.804.7 9.403z"/></svg>
+            {L("Accedi con Apple")}
+          </button>}
         </div>
       </div>
       <div style={{textAlign:"center",marginTop:14,fontSize:11,color:"#aaa"}}>© 2026 fAInance</div>
@@ -838,110 +794,35 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
 }
 
 function AppWithLogin(){
-  async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),"PBKDF2",false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
+  async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
   async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
   async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
 
   useEffect(function(){
-    var active=true;
-    var authFallbackTimer=setTimeout(function(){
-      // iOS/TestFlight safety: Firebase Auth can remain pending during WebView
-      // persistence restore. Do not block the whole app forever on "Caricamento...".
-      if(active){
-        setFbUser(function(prev){return prev===undefined?null:prev;});
-      }
-    },5000);
-
-    function applyMinimalUser(user){
-      var normalizedEmail=String((user&&user.email)||"").toLowerCase();
-      setUserData(function(prev){
-        return {
-          ...(prev||{}),
-          id:user.uid,
-          email:normalizedEmail,
-          name:(user.displayName||((prev&&prev.name)||"Utente")),
-          phonePrefix:(prev&&prev.phonePrefix)||"+39",
-          phone:(prev&&prev.phone)||"",
-          birthDate:(prev&&prev.birthDate)||"",
-          gender:(prev&&prev.gender)||"",
-          nationality:(prev&&prev.nationality)||"",
-          country:(prev&&prev.country)||"",
-          province:(prev&&prev.province)||"",
-          city:(prev&&prev.city)||"",
-          address:(prev&&prev.address)||"",
-          jobType:(prev&&prev.jobType)||"",
-          appUseReason:(prev&&prev.appUseReason)||""
-        };
-      });
-      setFbUser(user);
-    }
-
-    function loadProfileInBackground(user){
-      getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
-        if(!active)return;
-        var profile=snap.exists()?snap.data():{};
-        var displayName=profile.name||user.displayName||"Utente";
-        var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
-        setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-        setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
-      }).catch(function(){
-        if(!active)return;
-        var normalizedEmail=String(user.email||"").toLowerCase();
-        setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-        setUserData(function(prev){
-          return {
-            ...(prev||{}),
-            id:user.uid,
-            email:normalizedEmail,
-            name:user.displayName||((prev&&prev.name)||"Utente"),
-            phonePrefix:(prev&&prev.phonePrefix)||"+39",
-            phone:(prev&&prev.phone)||"",
-            nationality:(prev&&prev.nationality)||"",
-            country:(prev&&prev.country)||"",
-            province:(prev&&prev.province)||"",
-            city:(prev&&prev.city)||"",
-            address:(prev&&prev.address)||"",
-            jobType:(prev&&prev.jobType)||"",
-            appUseReason:(prev&&prev.appUseReason)||""
-          };
+    var unsub=onAuthStateChanged(fbAuth,function(user){
+      if(user){
+        // Load user profile from Firestore
+        getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
+          var profile=snap.exists()?snap.data():{};
+          var displayName=profile.name||user.displayName||"Utente";
+          var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
+          setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+          setFbUser(user);
+        }).catch(function(){
+          var normalizedEmail=String(user.email||"").toLowerCase();
+          setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+          setFbUser(user);
         });
-      });
-    }
-
-    var unsub=function(){};
-    try{
-      unsub=onAuthStateChanged(fbAuth,function(user){
-        if(!active)return;
-        clearTimeout(authFallbackTimer);
-        if(user){
-          // Important: never wait for Firestore before leaving the loading screen.
-          applyMinimalUser(user);
-          loadProfileInBackground(user);
-        } else {
-          setFbUser(null);
-          setUserData(null);
-        }
-      },function(err){
-        if(!active)return;
-        clearTimeout(authFallbackTimer);
-        console.error("Firebase auth state error",err);
+      } else {
         setFbUser(null);
         setUserData(null);
-      });
-    }catch(err){
-      clearTimeout(authFallbackTimer);
-      console.error("Firebase auth listener setup error",err);
-      setFbUser(null);
-      setUserData(null);
-    }
-
-    return function(){
-      active=false;
-      clearTimeout(authFallbackTimer);
-      try{if(typeof unsub==="function")unsub();}catch(e){}
-    };
+      }
+    });
+    return unsub;
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
@@ -964,15 +845,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){
-    if(u&&u.id){
-      var syntheticUser={uid:u.id,email:u.email||"",displayName:u.name||"Utente"};
-      setUserData(u);
-      setFbUser(syntheticUser);
-    }else{
-      setUserData(u);
-    }
-  }}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1233,14 +1106,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!userId){setFirestoreReady(true);return;}
     firestoreHydratedRef.current=false;
     setFirestoreReady(false);
-    var firestoreLoadTimer=setTimeout(function(){
-      // iOS/TestFlight safety: Firestore can remain pending after native Apple login.
-      // Do not block the app forever on "Caricamento dati account...".
-      if(!firestoreHydratedRef.current){
-        console.warn("Firestore load timeout: releasing UI without cloud sync");
-        setFirestoreReady(true);
-      }
-    },8000);
     // Reset immediato dei dati sensibili quando cambia account: evita che il nuovo account erediti
     // in memoria alert, movimenti, chat o appunti del profilo usato prima mentre Firestore sta caricando.
     setExpenses([]);setIncomes([]);setRecurring([]);setGoals(DEFAULT_GOALS);setAlerts([]);setBudgetPlan(DEFAULT_BUDGET_PLAN);
@@ -1273,7 +1138,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
         setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
-        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
+        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,user.uid);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
         setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);
         setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);
         if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
@@ -1302,18 +1167,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setPatrimonioAreas(chooseCloudLocalArray(null,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS,false));setPatrimonioEntries(chooseCloudLocalArray(null,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES,false));setPatrimonioValues(chooseCloudLocalObject(null,patrimonioValues,{}));setPatrimonioHistory(chooseCloudLocalObject(null,patrimonioHistory,{}));setPatrimonioNotes(chooseCloudLocalObject(null,patrimonioNotes,{}));
         setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShoppingAreas(DEFAULT_SHOPPING_AREAS);setShareReceiptUploads([]);setShowShareInHistory(true);setCustomNotifs([]);setNotifPrefs({remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free",false);setPlanUsage({});setShownAlertIds([]);
       }
-      clearTimeout(firestoreLoadTimer);
       firestoreHydratedRef.current=true;
       setFirestoreReady(true);
-    }).catch(function(err){
-      clearTimeout(firestoreLoadTimer);
-      console.error("Firestore load error",(err&&err.code)||"unknown");
-      // Do not mark cloud as hydrated after a failed load: this avoids overwriting cloud data
-      // with an empty local state when auth/rules/network fail on iOS.
-      firestoreHydratedRef.current=false;
-      setFirestoreReady(true);
-    });
-    return function(){clearTimeout(firestoreLoadTimer);};
+    }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
   },[userId]);
 
   async function saveToFirestore(){
@@ -1551,6 +1407,39 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       openPlanInfo();
       return;
     }
+    if(url.indexOf("quick-add")>=0||url.indexOf("open-quick-add")>=0){
+      setTab("spese");
+      setSpeseSubTab("add");
+      setAddType("expense");
+      setAddSubTab("single");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
+    }
+    if(url.indexOf("shopping-list")>=0||url.indexOf("open-shopping-list")>=0||url.indexOf("fidelity")>=0){
+      setTab("shopping");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
+    }
+    if(url.indexOf("note")>=0||url.indexOf("open-note")>=0){
+      setTab("appunti");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
+    }
+    if(url.indexOf("goal")>=0||url.indexOf("open-goal")>=0){
+      setTab("goals");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
+    }
+    if(url.indexOf("debt")>=0||url.indexOf("debiti")>=0||url.indexOf("credit")>=0){
+      setTab("debtCredits");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
+    }
     if(url.indexOf("open-receipt-camera")>=0||url.indexOf("receipt-camera")>=0){
       try{localStorage.setItem("fainance_receipt_auto_camera_once","1");}catch(e){}
       setTab("spese");
@@ -1744,7 +1633,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     // 1.6.61: traduzione runtime esatta sui nodi nuovi, senza osservare le modifiche di testo/attributi che crea essa stessa.
     // Mantiene le traduzioni legacy senza innescare sfarfallii continui.
     if(typeof document==="undefined")return;
-    if(isNativeIOSRuntime()||(typeof window!=="undefined"&&(window as any).__FAINANCE_DISABLE_DOM_TRANSLATION__))return function(){};
     var root=document.getElementById("root");
     if(!root)return;
     var map=runtimeTranslationMap||{};
@@ -2242,17 +2130,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var GOOGLE_PLAY_SUBSCRIPTION_IDS={base:{productId:"base",monthly:"base-monthly",yearly:"base-yearly"},premium:{productId:"complete",monthly:"complete-monthly",yearly:"complete-yearly"}};
   var APPLE_SUBSCRIPTION_IDS={base:{monthly:"base_monthly",yearly:"base_yearly"},premium:{monthly:"complete_monthly",yearly:"complete_yearly"}};
   function billingPeriodLabel(period){return period==="yearly"?L("Annuale"):L("Mensile");}
-  function nativePlugin(name){
-    try{
-      var w:any=window as any;
-      var cap=w&&w.Capacitor;
-      if(cap&&cap.Plugins&&cap.Plugins[name])return cap.Plugins[name];
-    }catch(e){}
-    try{
-      if(!FAINANCE_NATIVE_PLUGIN_CACHE[name])FAINANCE_NATIVE_PLUGIN_CACHE[name]=registerPlugin(name);
-      return FAINANCE_NATIVE_PLUGIN_CACHE[name];
-    }catch(e){return null;}
-  }
+  function nativePlugin(name){try{return window&&window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins[name];}catch(e){return null;}}
   function nativePlatform(){try{var c=window&&window.Capacitor;if(c&&c.getPlatform)return c.getPlatform();if(c&&c.isNativePlatform&&c.isNativePlatform())return "native";}catch(e){}return "web";}
   function isNativeMobileApp(){try{return !!(window&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
   function isNativeAndroidApp(){return isNativeMobileApp()&&nativePlatform()==="android";}
@@ -2280,7 +2158,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
     var billing=nativePlugin("FainanceBilling");
     if(!isNativeMobileApp()||!billing||!billing.purchase){
-      setToast({text:L(isNativeIOSApp()?"Modulo acquisti Apple non disponibile in questa build. Installa la build TestFlight più recente e riprova.":"Gli acquisti reali sono disponibili solo dall’app installata dallo store."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+      setToast({text:L("Gli acquisti reali sono disponibili solo dall’app installata dallo store."),type:"warning",color:"#EF9F27",icon:"⚠️"});
       return;
     }
     var period=planBillingPeriod==="yearly"?"yearly":"monthly";
@@ -3034,7 +2912,97 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       var shoppingListString=JSON.stringify(payload.shoppingListWidget||{});
       var fidelityString=JSON.stringify(payload.fidelityWidget||{});
       var debtCreditsString=JSON.stringify(payload.debtCreditsWidget||{});
-      var afterNativeUpdate=function(){if(showMessage)setToast("Widget aggiornato");};
+      function saveIosWidgetPayload(){
+        try{
+          if(!isNativeIOSApp())return;
+          var iosBridge=window&&window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.FainanceWidgetBridge;
+          if(!iosBridge||!iosBridge.saveAll)return;
+          function cleanHex(v,f){var s=String(v||"").trim();return /^#?[0-9a-fA-F]{6}$/.test(s)?(s.charAt(0)==="#"?s:"#"+s):f;}
+          function asArray(v){return Array.isArray(v)?v:[];}
+          function n(v,f){var x=Number(v);return Number.isFinite(x)?x:f;}
+          var quick=payload.quickAdd||{};
+          var shopping=payload.shoppingListWidget||{};
+          var shoppingItems=asArray(shopping.items);
+          var openShoppingItems=shoppingItems.filter(function(x){return x&&!x.bought;});
+          var boughtShoppingItems=shoppingItems.filter(function(x){return x&&x.bought;});
+          var fidelity=payload.fidelityWidget||{};
+          var fidelityCards=asArray(fidelity.cards);
+          var selectedCard=fidelity.selectedCard||fidelityCards.find(function(c){return String(c.id)===String(fidelity.selectedCardId);})||fidelityCards[0]||null;
+          var cardCodeType=String((selectedCard&&(selectedCard.codeType||selectedCard.type))||"barcode").toLowerCase();
+          var note=payload.noteWidget||{};
+          var goal=payload.goalWidget||{};
+          var share=payload.shareWidget||{};
+          var debt=payload.debtCreditsWidget||{};
+          var debtItems=asArray(debt.items).filter(function(x){return x&&!x.closed;});
+          var debtsTotal=debtItems.filter(function(x){return String(x.kind||x.type||"debt")==="debt";}).reduce(function(sum,x){return sum+n(x.balance||x.amount,0);},0);
+          var creditsTotal=debtItems.filter(function(x){return String(x.kind||x.type||"")==="credit";}).reduce(function(sum,x){return sum+n(x.balance||x.amount,0);},0);
+          var shareParticipants=[];
+          try{
+            var selectedShareProjectId=String(share.projectId||"");
+            var selectedShareProject=asArray(shareProjects).find(function(p){return String(p.id)===selectedShareProjectId;})||null;
+            shareParticipants=asArray(selectedShareProject&&selectedShareProject.participants).map(function(p){return String(p.name||p.label||p.email||"").trim();}).filter(Boolean);
+          }catch(participantsErr){}
+          var iosPayload={
+            updatedAt:new Date().toISOString(),
+            locale:lang==="it"?"it-IT":String(lang||"it"),
+            currencySymbol:sym||"€",
+            colors:{
+              primaryHex:cleanHex((payload.quickAdd&&payload.quickAdd.bgColor)||payload.bgColor||widgetBgColor,"#315CFF"),
+              secondaryHex:cleanHex((payload.shareWidget&&payload.shareWidget.accentColor)||widgetShareAccentColor||confirmButtonColor,"#8C4DFF"),
+              incomeHex:cleanHex((payload.quickAdd&&payload.quickAdd.incomeColor)||payload.incomeColor||incomeColor,"#18A957"),
+              expenseHex:cleanHex((payload.quickAdd&&payload.quickAdd.expenseColor)||payload.expenseColor||expenseColor,"#E44B4B"),
+              textHex:cleanHex((payload.noteWidget&&payload.noteWidget.titleColor)||widget2TitleColor,"#FFFFFF"),
+              cardHex:cleanHex((payload.quickAdd&&payload.quickAdd.bgColor)||payload.bgColor||widgetBgColor,"#12172A")
+            },
+            quickAdd:{
+              sampleExpenseLabel:String(quick.expenseLabel||payload.expenseLabel||"+ Spesa"),
+              sampleIncomeLabel:String(quick.incomeLabel||payload.incomeLabel||"+ Entrata")
+            },
+            fidelity:{
+              title:String(fidelity.title||L("Fidelity card")),
+              cardName:String((selectedCard&&(selectedCard.name||selectedCard.title))||L("Carta")),
+              barcode:cardCodeType.indexOf("qr")>=0?"":String((selectedCard&&(selectedCard.code||selectedCard.barcode))||""),
+              qrCode:cardCodeType.indexOf("qr")>=0?String((selectedCard&&(selectedCard.code||selectedCard.qrCode))||""):"",
+              backgroundHex:cleanHex((selectedCard&&selectedCard.color)||fidelity.accentColor||widgetFidelityAccentColor,"#2F5BFF")
+            },
+            shopping:{
+              title:String(shopping.title||L("Lista spesa")),
+              listName:String(shopping.selectedListTitle||shopping.title||L("Lista spesa")),
+              remainingCount:openShoppingItems.length,
+              completedCount:boughtShoppingItems.length,
+              items:openShoppingItems.slice(0,8).map(function(x){return String(x.name||x.title||L("Prodotto"));})
+            },
+            note:{
+              title:note.type==="bank"?L("Coordinate"):L("Nota"),
+              noteTitle:String(note.title||L("Nota")),
+              body:String(note.body||"").slice(0,n(note.maxChars,500))
+            },
+            goal:{
+              title:L("Obiettivo"),
+              goalName:String(goal.title||L("Obiettivo")),
+              currentAmount:n(goal.saved,0),
+              targetAmount:n(goal.target,0),
+              currencySymbol:String(goal.currency||sym||"€")
+            },
+            share:{
+              title:"Share",
+              projectName:String(share.projectName||L("Progetto Share")),
+              myBalance:n(share.netAmount,0),
+              currencySymbol:String(share.currency||sym||"€"),
+              participants:shareParticipants
+            },
+            debts:{
+              title:L("Debiti / Crediti"),
+              debtsTotal:Math.round(debtsTotal*100)/100,
+              creditsTotal:Math.round(creditsTotal*100)/100,
+              currencySymbol:String(debt.currency||sym||"€"),
+              items:debtItems.slice(0,6).map(function(x){return{name:String(x.holder||x.name||L("Nome")),amount:n(x.balance||x.amount,0),type:String(x.kind||x.type||"debt")==="credit"?"credit":"debt"};})
+            }
+          };
+          iosBridge.saveAll({payload:iosPayload}).catch(function(e){try{console.warn("Errore aggiornamento widget iOS",e);}catch(ignore){}});
+        }catch(e){}
+      }
+      var afterNativeUpdate=function(){saveIosWidgetPayload();if(showMessage)setToast("Widget aggiornato");};
       var fallbackSave=function(){
         var afterSave=function(){
           if(bridge&&bridge.updateAllWidgets){
