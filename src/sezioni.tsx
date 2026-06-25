@@ -981,6 +981,52 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     try{href=String((window.location&&window.location.href)||"");}catch(e){}
     var isCapacitorUrl=/^capacitor:\/\//i.test(href);
     var isNative=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform())||isCapacitorUrl||platform==="ios"||platform==="android";
+    if(isNative&&!isIOS){
+      function runAndroidNativeSpeech(nativeSpeech:any){
+        if(!nativeSpeech){setVoiceError("Su Android la WebView non gestisce il riconoscimento vocale in modo affidabile. Serve il plugin nativo SpeechRecognition. Installa @capacitor-community/speech-recognition e poi esegui npx cap sync android.");setVoiceListening(false);return;}
+        setVoiceListening(true);
+        function ensureAndroidNativeSpeechPermission(){
+          var checked=Promise.resolve(nativeSpeech.checkPermissions?nativeSpeech.checkPermissions():{});
+          return checked.then(function(res:any){
+            var state=normalizePermState(res);
+            if(state==="granted"||state==="authorized")return res;
+            if(nativeSpeech.requestPermissions)return nativeSpeech.requestPermissions();
+            if(nativeSpeech.requestPermission)return nativeSpeech.requestPermission();
+            return res;
+          }).then(function(res2:any){
+            var state2=normalizePermState(res2);
+            if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
+              throw new Error("Permesso microfono non concesso. Apri Impostazioni Android > App > fAInance > Autorizzazioni > Microfono > Consenti.");
+            }
+            return res2;
+          });
+        }
+        var runNative=function(retry:any){return ensureAndroidNativeSpeechPermission()
+          .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
+          .then(function(av:any){if(av&&av.available===false)throw new Error("Riconoscimento vocale non disponibile sul dispositivo.");return nativeSpeech.start({language:language,maxResults:3,prompt:"Parla ora",partialResults:false,popup:false});})
+          .then(function(res:any){
+            var matches=res&&res.matches?res.matches:[];
+            var txt2=matches&&matches[0]?matches[0]:bestNativeSpeechText(res);
+            if(!txt2)throw new Error("Nessun testo riconosciuto");
+            setVoiceText(txt2);
+            setVoiceParsed(parseVoiceCommand(txt2));
+          })
+          .catch(function(err:any){
+            var msg=err&&err.message?err.message:String(err||"");
+            var low=msg.toLowerCase();
+            if(retry&&(low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("nessun")>=0)){return new Promise(function(resolve){setTimeout(resolve,450);}).then(function(){return runNative(false);});}
+            if(low.indexOf("missing permission")>=0||low.indexOf("permission")>=0||low.indexOf("permesso")>=0){setVoiceError("Permesso microfono mancante o non letto correttamente. Controlla che il microfono sia consentito nelle impostazioni Android dell'app, poi chiudi e riapri fAInance.");return;}
+            setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);
+          })
+          .finally(function(){setVoiceListening(false);});};
+        runNative(true);
+      }
+      var androidNativeSpeech=null;
+      try{androidNativeSpeech=cap&&cap.Plugins&&cap.Plugins.SpeechRecognition?cap.Plugins.SpeechRecognition:null;}catch(e){}
+      if(androidNativeSpeech){runAndroidNativeSpeech(androidNativeSpeech);return;}
+      loadNativeSpeechPlugin(cap).then(function(nativeSpeech:any){runAndroidNativeSpeech(nativeSpeech);}).catch(function(){setVoiceListening(false);setVoiceError(nativeSpeechUnavailableMessage(false));});
+      return;
+    }
     if(isNative){
       clearVoiceNativeSession();
       var seq=Number((voiceNativeSessionRef.current&&voiceNativeSessionRef.current.seq)||0)+1;
