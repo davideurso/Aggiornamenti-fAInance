@@ -23,7 +23,7 @@
 		FAI00000000000000000104 /* FainanceAdsPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000204 /* FainanceAdsPlugin.m */; };
 		FAI00000000000000000105 /* FainanceSpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000205 /* FainanceSpeechPlugin.swift */; };
 		FAI00000000000000000106 /* FainanceSpeechPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000206 /* FainanceSpeechPlugin.m */; };
-		FAI00000000000000000105 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = FAI00000000000000000402 /* GoogleMobileAds */; };
+		FAI00000000000000000403 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = FAI00000000000000000402 /* GoogleMobileAds */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,7 +54,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
-				FAI00000000000000000105 /* GoogleMobileAds in Frameworks */,
+				FAI00000000000000000403 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
