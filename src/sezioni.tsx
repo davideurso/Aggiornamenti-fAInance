@@ -838,6 +838,22 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     if(res&&typeof res.text==="string")return res.text;
     return "";
   }
+  function requestIOSMicrophoneLikeReceiptCamera(){
+    if(!isVoiceIOSPlatform())return Promise.resolve(true);
+    try{
+      var nav:any=navigator;
+      if(nav&&nav.mediaDevices&&nav.mediaDevices.getUserMedia){
+        return nav.mediaDevices.getUserMedia({audio:true,video:false}).then(function(stream:any){
+          try{if(stream&&stream.getTracks)stream.getTracks().forEach(function(track:any){try{track.stop();}catch(e){}});}catch(e){}
+          return true;
+        }).catch(function(err:any){
+          var msg=err&&err.message?err.message:String(err||"");
+          throw new Error("Permesso microfono non concesso. Apri Impostazioni > fAInance > Microfono e consenti l’accesso. Dettaglio: "+msg);
+        });
+      }
+    }catch(e){return Promise.reject(e);}
+    return Promise.resolve(true);
+  }
   function clearVoiceNativeSession(){
     var s=voiceNativeSessionRef.current||{};
     try{if(s.timer)clearTimeout(s.timer);}catch(e){}
@@ -974,19 +990,20 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
         session.plugin=nativeSpeech;
         voiceNativeSessionRef.current=session;
         function ensureNativeSpeechPermission(){
-          var checked=Promise.resolve(nativeSpeech.checkPermissions?nativeSpeech.checkPermissions():{});
+          var checkFn=(isIOS&&(nativeSpeech.speechCheckPermissions||nativeSpeech.checkMicrophonePermission))||nativeSpeech.checkPermissions||nativeSpeech.speechCheckPermissions;
+          var requestFn=(isIOS&&(nativeSpeech.speechRequestPermissions||nativeSpeech.requestMicrophonePermission))||nativeSpeech.requestPermissions||nativeSpeech.requestPermission||nativeSpeech.speechRequestPermissions;
+          var checked=Promise.resolve(checkFn?checkFn.call(nativeSpeech):{});
           return checked.then(function(res:any){
             var state=normalizePermState(res);
             if(state==="granted"||state==="authorized")return res;
-            if(nativeSpeech.requestPermissions)return nativeSpeech.requestPermissions();
-            if(nativeSpeech.requestPermission)return nativeSpeech.requestPermission();
+            if(requestFn)return requestFn.call(nativeSpeech);
             return res;
           }).then(function(res2:any){
             var state2=normalizePermState(res2);
             if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
               throw new Error(isIOS?"Permesso microfono o riconoscimento vocale non concesso. Apri Impostazioni > fAInance > Microfono/Riconoscimento vocale e consenti l’accesso.":"Permesso microfono non concesso. Apri le impostazioni dell’app e consenti il microfono.");
             }
-            return res2;
+            return requestIOSMicrophoneLikeReceiptCamera().then(function(){return res2;});
           });
         }
         function updateLatestFromResult(res:any){
