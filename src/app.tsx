@@ -315,8 +315,8 @@ function LoginScreen({onLogin}){
       console.error("Apple login error",(err&&err.code)||"unknown",err);
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
-      if(code==="auth/operation-not-allowed"){
-        setError(L("Errore Apple: abilita il provider Apple in Firebase Authentication e riprova."));
+      if(code==="auth/operation-not-allowed"||msg.toLowerCase().indexOf("provider")>=0&&msg.toLowerCase().indexOf("apple")>=0&&msg.toLowerCase().indexOf("firebase")>=0){
+        setError(L("Errore Apple: il provider Apple non è abilitato in Firebase Authentication. Abilitalo in Firebase Console > Authentication > Sign-in method > Apple e riprova."));
       }else if(code==="auth/account-exists-with-different-credential"){
         setError(L("Esiste gia' un account con questa email. Accedi con il metodo usato in precedenza."));
       }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
@@ -382,7 +382,7 @@ function LoginScreen({onLogin}){
           </button>
           <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{flex:1,height:1,background:"#eee"}}/><span style={{fontSize:12,color:"#aaa"}}>{L("oppure")}</span><div style={{flex:1,height:1,background:"#eee"}}/></div>
           <button onClick={doApple} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#000",color:"#fff",border:"1.5px solid #000",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>
-            <span style={{fontSize:18,lineHeight:1}}></span>
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" style={{display:"block",flexShrink:0}}><path fill="currentColor" d="M16.36 1.43c0 1.16-.46 2.27-1.2 3.1-.78.89-2.05 1.57-3.19 1.48-.15-1.12.42-2.3 1.13-3.03.79-.84 2.18-1.48 3.26-1.55zM20.79 17.42c-.53 1.22-.79 1.76-1.47 2.84-.95 1.45-2.29 3.27-3.96 3.29-1.48.02-1.86-.96-3.87-.95-2.01.01-2.43.98-3.91.96-1.67-.02-2.94-1.66-3.89-3.12-2.66-4.08-2.94-8.87-1.3-11.41 1.17-1.8 3.01-2.85 4.75-2.85 1.77 0 2.89.97 4.36.97 1.42 0 2.29-.97 4.34-.97 1.55 0 3.19.84 4.35 2.3-3.82 2.1-3.2 7.55.6 8.94z"/></svg>
             {L("Accedi con Apple")}
           </button>
           <button onClick={doGoogle} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#fff",color:"#333",border:"1.5px solid #e0e0e0",borderRadius:12,padding:"12px",fontSize:14,fontWeight:500,cursor:"pointer"}}>
