@@ -261,6 +261,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				A1000000000000000000000B /* FainanceWidgets */,
 			);
 		};
 /* End PBXProject section */
