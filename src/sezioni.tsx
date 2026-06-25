@@ -779,7 +779,7 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
   function changeVoiceMethod(id){var m=(methods||[]).find(function(x){return String(x.id)===String(id);});if(m)updateVoiceParsed({methodId:m.id,methodName:m.name});}
   function changeVoiceIncomeType(id){var it=(incomeTypes||[]).find(function(x){return String(x.id)===String(id);});if(it)updateVoiceParsed({incomeType:it.id,incomeTypeName:it.name});}
   function analyzeVoiceText(){setVoiceError("");var parsed=parseVoiceCommand(voiceText);setVoiceParsed(parsed);}
-  var voiceNativeSessionRef:any=useRef({seq:0,plugin:null,partialSub:null,timer:null,latestText:"",active:false});
+  var voiceNativeSessionRef:any=useRef({seq:0,plugin:null,partialSub:null,listeningSub:null,timer:null,latestText:"",active:false,finalizing:false});
   var voiceWebRecognitionRef:any=useRef(null);
 
   function nativeSpeechUnavailableMessage(isIOS){
@@ -820,7 +820,8 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     var s=voiceNativeSessionRef.current||{};
     try{if(s.timer)clearTimeout(s.timer);}catch(e){}
     try{if(s.partialSub&&s.partialSub.remove)s.partialSub.remove();}catch(e){}
-    voiceNativeSessionRef.current={seq:Number(s.seq||0),plugin:null,partialSub:null,timer:null,latestText:"",active:false};
+    try{if(s.listeningSub&&s.listeningSub.remove)s.listeningSub.remove();}catch(e){}
+    voiceNativeSessionRef.current={seq:Number(s.seq||0),plugin:null,partialSub:null,listeningSub:null,timer:null,latestText:"",active:false,finalizing:false};
   }
   function applyRecognizedVoiceText(txt:any,emptyMessage:any){
     var clean=String(txt||"").trim();
@@ -834,20 +835,32 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     if(emptyMessage)setVoiceError(emptyMessage);
     return false;
   }
+  function finishNativeVoiceSession(seq:any,manual?:any,extraText?:any,emptyMessage?:any){
+    var s=voiceNativeSessionRef.current||{};
+    if(seq!=null&&s.seq!==seq)return;
+    if(s.finalizing)return;
+    s.finalizing=true;
+    voiceNativeSessionRef.current=s;
+    var latest=String(extraText||s.latestText||voiceText||"").trim();
+    try{if(s.timer)clearTimeout(s.timer);}catch(e){}
+    applyRecognizedVoiceText(latest,emptyMessage||(manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":""));
+    clearVoiceNativeSession();
+    setVoiceListening(false);
+  }
   function stopVoiceListening(manual?:any){
     var s=voiceNativeSessionRef.current||{};
     if(s.plugin&&s.plugin.stop){
+      var seq=s.seq;
       var latest=String(s.latestText||voiceText||"").trim();
       try{if(s.timer)clearTimeout(s.timer);}catch(e){}
       Promise.resolve(s.plugin.stop())
         .then(function(res:any){
           var txt=bestNativeSpeechText(res)||latest;
-          applyRecognizedVoiceText(txt,manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":"");
+          finishNativeVoiceSession(seq,manual,txt,manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":"");
         })
         .catch(function(){
-          applyRecognizedVoiceText(latest,manual?"Ascolto interrotto. Se non compare testo, scrivi il comando nel campo testo e premi Analizza.":"");
-        })
-        .finally(function(){clearVoiceNativeSession();setVoiceListening(false);});
+          finishNativeVoiceSession(seq,manual,latest,manual?"Ascolto interrotto. Se non compare testo, scrivi il comando nel campo testo e premi Analizza.":"");
+        });
       return;
     }
     try{if(voiceWebRecognitionRef.current&&voiceWebRecognitionRef.current.stop)voiceWebRecognitionRef.current.stop();}catch(e){}
@@ -934,11 +947,21 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
           var txt=bestNativeSpeechText(res);
           if(txt){
             var s2=voiceNativeSessionRef.current||{};
+            if(s2.seq!==seq||!s2.active)return txt;
             s2.latestText=txt;
             voiceNativeSessionRef.current=s2;
             setVoiceText(txt);
           }
           return txt;
+        }
+        function failNativeSpeech(err:any){
+          var msg=err&&err.message?err.message:String(err||"");
+          var low=msg.toLowerCase();
+          if(low.indexOf("permission")>=0||low.indexOf("permesso")>=0||low.indexOf("not authorized")>=0||low.indexOf("denied")>=0){setVoiceError(msg);}
+          else if(low.indexOf("cancel")>=0){/* stop manuale */}
+          else setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);
+          clearVoiceNativeSession();
+          setVoiceListening(false);
         }
         ensureNativeSpeechPermission()
           .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
@@ -948,32 +971,37 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
               try{
                 Promise.resolve(nativeSpeech.addListener("partialResults",function(data:any){updateLatestFromResult(data);})).then(function(sub:any){
                   var s3=voiceNativeSessionRef.current||{};
-                  if(s3.seq===seq){s3.partialSub=sub;voiceNativeSessionRef.current=s3;}else{try{if(sub&&sub.remove)sub.remove();}catch(e){}}
+                  if(s3.seq===seq&&s3.active){s3.partialSub=sub;voiceNativeSessionRef.current=s3;}else{try{if(sub&&sub.remove)sub.remove();}catch(e){}}
+                });
+              }catch(e){}
+              try{
+                Promise.resolve(nativeSpeech.addListener("listeningState",function(data:any){
+                  var status=String((data&&data.status)||"").toLowerCase();
+                  if(status==="stopped"){
+                    var cur=voiceNativeSessionRef.current||{};
+                    if(cur.active&&cur.seq===seq)finishNativeVoiceSession(seq,false,cur.latestText,"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
+                  }
+                })).then(function(sub:any){
+                  var s4=voiceNativeSessionRef.current||{};
+                  if(s4.seq===seq&&s4.active){s4.listeningSub=sub;voiceNativeSessionRef.current=s4;}else{try{if(sub&&sub.remove)sub.remove();}catch(e){}}
                 });
               }catch(e){}
             }
-            var s4=voiceNativeSessionRef.current||{};
-            s4.timer=setTimeout(function(){
+            var s5=voiceNativeSessionRef.current||{};
+            s5.timer=setTimeout(function(){
               var cur=voiceNativeSessionRef.current||{};
               if(cur.active&&cur.seq===seq)stopVoiceListening(false);
-            },8500);
-            voiceNativeSessionRef.current=s4;
+            },isIOS?9000:12000);
+            voiceNativeSessionRef.current=s5;
             return nativeSpeech.start({language:language,maxResults:5,prompt:voiceUiText(lang).speak||"Parla ora",partialResults:true,popup:false});
           })
           .then(function(res:any){
             var cur=voiceNativeSessionRef.current||{};
             if(!cur.active||cur.seq!==seq)return;
-            var txt=updateLatestFromResult(res)||cur.latestText;
-            applyRecognizedVoiceText(txt,"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
+            updateLatestFromResult(res);
+            /* Con partialResults=true il plugin può rispondere subito senza risultato finale: la sessione resta attiva e viene finalizzata da stop(), timer o listeningState. */
           })
-          .catch(function(err:any){
-            var msg=err&&err.message?err.message:String(err||"");
-            var low=msg.toLowerCase();
-            if(low.indexOf("permission")>=0||low.indexOf("permesso")>=0||low.indexOf("not authorized")>=0||low.indexOf("denied")>=0){setVoiceError(msg);}
-            else if(low.indexOf("cancel")>=0){/* stop manuale */}
-            else setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);
-          })
-          .finally(function(){clearVoiceNativeSession();setVoiceListening(false);});
+          .catch(failNativeSpeech);
       }).catch(function(){setVoiceListening(false);setVoiceError(nativeSpeechUnavailableMessage(isIOS));clearVoiceNativeSession();});
       return;
     }
