@@ -781,6 +781,42 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
   function analyzeVoiceText(){setVoiceError("");var parsed=parseVoiceCommand(voiceText);setVoiceParsed(parsed);}
   function openVoiceModal(autoStart){setVoiceModal(true);setVoiceText("");setVoiceParsed(null);setVoiceError("");setVoiceListening(false);if(autoStart!==false){setTimeout(function(){startVoiceListening();},250);}}
   function closeVoiceModal(){setVoiceModal(false);setVoiceListening(false);setVoiceText("");setVoiceParsed(null);setVoiceError("");}
+  function saveVoiceEntry(){
+    var p=voiceParsed;
+    var V2=voiceUiText(lang);
+    if(!p){setVoiceError(V2.invalid||"Comando non valido.");return;}
+    if(voiceSaving)return;
+    try{
+      if(setVoiceSaving)setVoiceSaving(true);
+      var amount=Math.abs(parseMoney(p.amount));
+      if(!amount||amount<=0){setVoiceError(V2.invalid||"Importo non valido.");return;}
+      var date=p.date||todayStr();
+      var base:any={
+        id:Date.now(),
+        amount:amount,
+        date:date,
+        desc:p.desc||((p.type==="income")?(p.incomeTypeName||"Entrata"):(p.catName||"Spesa")),
+        rateizzato:!!p.rateizzato,
+        rate:Math.max(1,parseInt(String(p.rate||1),10)||1),
+        createdAt:new Date().toISOString()
+      };
+      var ok=false;
+      if(p.type==="income"){
+        var incomeType=p.incomeType||p.typeId||defaultIncomeType||((incomeTypes&&incomeTypes[0]&&incomeTypes[0].id)||"salario");
+        ok=addIncomes([{...base,typeId:incomeType}],"voice")!==false;
+      }else{
+        var catId=p.catId||defaultExpenseCat||((cats&&cats[0]&&cats[0].id)||1);
+        var methodId=p.methodId||defaultExpenseMethod||((methods&&methods[0]&&methods[0].id)||1);
+        ok=addExpenses([{...base,catId:Number(catId),methodId:Number(methodId)}],"voice")!==false;
+      }
+      if(!ok){return;}
+    }catch(err:any){
+      var msg=err&&err.message?err.message:String(err||"Errore sconosciuto");
+      setVoiceError("Errore durante il salvataggio del comando vocale: "+msg);
+    }finally{
+      if(setVoiceSaving)setTimeout(function(){setVoiceSaving(false);},250);
+    }
+  }
   function startVoiceListening(){
   setVoiceError("");setVoiceParsed(null);
   var win:any=window;
@@ -887,7 +923,7 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
             <div style={{gridColumn:"1/-1",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,alignItems:"end"}}><label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800}}><input type="checkbox" checked={!!parsed.rateizzato} onChange={function(e){updateVoiceParsed({rateizzato:e.target.checked});}}/> {V.inst}</label><input type="number" min="1" max="60" disabled={!parsed.rateizzato} value={parsed.rate||1} onChange={function(e){updateVoiceParsed({rate:e.target.value});}} style={{...sinp,opacity:parsed.rateizzato?1:0.45}}/></div>
           </div>
         </div>}
-        <div style={{display:"flex",gap:10}}><Btn onClick={closeVoiceModal} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:12}}>{V.cancel}</Btn><Btn onClick={saveVoiceEntry} disabled={!parsed} bg={parsed?"#1D9E75":"#999"} style={{flex:1,padding:12,fontWeight:900}}>{V.save}</Btn></div>
+        <div style={{display:"flex",gap:10}}><Btn onClick={closeVoiceModal} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:12}}>{V.cancel}</Btn><Btn onClick={saveVoiceEntry} disabled={!parsed||voiceSaving} bg={(parsed&&!voiceSaving)?"#1D9E75":"#999"} style={{flex:1,padding:12,fontWeight:900}}>{voiceSaving?"...":V.save}</Btn></div>
       </div>
     </div>
   </div>;
