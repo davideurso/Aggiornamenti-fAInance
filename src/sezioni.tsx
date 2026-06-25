@@ -880,15 +880,23 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
       s.manualStop=!!manual;
       voiceNativeSessionRef.current=s;
       if(s.isIOS){
-        Promise.resolve(s.plugin.stop()).catch(function(){});
         var waitTimer=setTimeout(function(){
           var cur=voiceNativeSessionRef.current||{};
           if(cur.active&&cur.seq===seq){
             finishNativeVoiceSession(seq,manual,cur.latestText||latest,manual?"Nessun testo riconosciuto. Riprova parlando chiaramente, oppure scrivi il comando nel campo testo e premi Analizza.":"");
           }
-        },3500);
+        },14000);
         var s2=voiceNativeSessionRef.current||{};
         if(s2.seq===seq&&s2.active){s2.stopWaitTimer=waitTimer;voiceNativeSessionRef.current=s2;}
+        Promise.resolve(s.plugin.stop())
+          .then(function(res:any){
+            var txt=bestNativeSpeechText(res)||latest;
+            finishNativeVoiceSession(seq,manual,txt,manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":"");
+          })
+          .catch(function(){
+            var cur=voiceNativeSessionRef.current||{};
+            finishNativeVoiceSession(seq,manual,cur.latestText||latest,manual?"Ascolto interrotto. Se non compare testo, scrivi il comando nel campo testo e premi Analizza.":"");
+          });
         return;
       }
       Promise.resolve(s.plugin.stop())
@@ -1046,7 +1054,7 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
               if(cur.active&&cur.seq===seq)stopVoiceListening(false);
             },isIOS?9000:12000);
             voiceNativeSessionRef.current=s5;
-            return nativeSpeech.start({language:language,maxResults:5,prompt:voiceUiText(lang).speak||"Parla ora",partialResults:!isIOS,popup:false});
+            return nativeSpeech.start({language:language,maxResults:5,prompt:voiceUiText(lang).speak||"Parla ora",partialResults:!isIOS,popup:false,timeoutMs:isIOS?15000:12000});
           })
           .then(function(res:any){
             var cur=voiceNativeSessionRef.current||{};

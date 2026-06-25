@@ -21,6 +21,8 @@
 		FAI00000000000000000102 /* FainanceBillingPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000202 /* FainanceBillingPlugin.m */; };
 		FAI00000000000000000103 /* FainanceAdsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000203 /* FainanceAdsPlugin.swift */; };
 		FAI00000000000000000104 /* FainanceAdsPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000204 /* FainanceAdsPlugin.m */; };
+		FAI00000000000000000105 /* FainanceSpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000205 /* FainanceSpeechPlugin.swift */; };
+		FAI00000000000000000106 /* FainanceSpeechPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000206 /* FainanceSpeechPlugin.m */; };
 		FAI00000000000000000105 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = FAI00000000000000000402 /* GoogleMobileAds */; };
 /* End PBXBuildFile section */
 
@@ -42,6 +44,8 @@
 		FAI00000000000000000202 /* FainanceBillingPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FainanceBillingPlugin.m; sourceTree = "<group>"; };
 		FAI00000000000000000203 /* FainanceAdsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceAdsPlugin.swift; sourceTree = "<group>"; };
 		FAI00000000000000000204 /* FainanceAdsPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FainanceAdsPlugin.m; sourceTree = "<group>"; };
+		FAI00000000000000000205 /* FainanceSpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceSpeechPlugin.swift; sourceTree = "<group>"; };
+		FAI00000000000000000206 /* FainanceSpeechPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FainanceSpeechPlugin.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +89,8 @@
 				FAI00000000000000000202 /* FainanceBillingPlugin.m */,
 				FAI00000000000000000203 /* FainanceAdsPlugin.swift */,
 				FAI00000000000000000204 /* FainanceAdsPlugin.m */,
+				FAI00000000000000000205 /* FainanceSpeechPlugin.swift */,
+				FAI00000000000000000206 /* FainanceSpeechPlugin.m */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -189,6 +195,8 @@
 				FAI00000000000000000102 /* FainanceBillingPlugin.m in Sources */,
 				FAI00000000000000000103 /* FainanceAdsPlugin.swift in Sources */,
 				FAI00000000000000000104 /* FainanceAdsPlugin.m in Sources */,
+				FAI00000000000000000105 /* FainanceSpeechPlugin.swift in Sources */,
+				FAI00000000000000000106 /* FainanceSpeechPlugin.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
