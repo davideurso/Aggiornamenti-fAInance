@@ -779,8 +779,84 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
   function changeVoiceMethod(id){var m=(methods||[]).find(function(x){return String(x.id)===String(id);});if(m)updateVoiceParsed({methodId:m.id,methodName:m.name});}
   function changeVoiceIncomeType(id){var it=(incomeTypes||[]).find(function(x){return String(x.id)===String(id);});if(it)updateVoiceParsed({incomeType:it.id,incomeTypeName:it.name});}
   function analyzeVoiceText(){setVoiceError("");var parsed=parseVoiceCommand(voiceText);setVoiceParsed(parsed);}
-  function openVoiceModal(autoStart){setVoiceModal(true);setVoiceText("");setVoiceParsed(null);setVoiceError("");setVoiceListening(false);if(autoStart!==false){setTimeout(function(){startVoiceListening();},250);}}
-  function closeVoiceModal(){setVoiceModal(false);setVoiceListening(false);setVoiceText("");setVoiceParsed(null);setVoiceError("");}
+  var voiceNativeSessionRef:any=useRef({seq:0,plugin:null,partialSub:null,timer:null,latestText:"",active:false});
+  var voiceWebRecognitionRef:any=useRef(null);
+
+  function nativeSpeechUnavailableMessage(isIOS){
+    if(isIOS)return "Riconoscimento vocale non disponibile in questa build iOS. Puoi comunque scrivere il comando nel campo testo e premere Analizza.";
+    return "Riconoscimento vocale nativo non disponibile in questa build. Installa la build più recente e riprova, oppure scrivi il comando nel campo testo.";
+  }
+  function loadNativeSpeechPlugin(cap:any){
+    return import("@capacitor-community/speech-recognition")
+      .then(function(mod:any){return mod&&mod.SpeechRecognition?mod.SpeechRecognition:null;})
+      .catch(function(){try{return cap&&cap.Plugins&&cap.Plugins.SpeechRecognition?cap.Plugins.SpeechRecognition:null;}catch(e){return null;}});
+  }
+  function isVoiceIOSPlatform(){
+    try{
+      var win:any=window;
+      var cap=win&&win.Capacitor;
+      var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
+      if(platform==="ios")return true;
+      var href=String((window.location&&window.location.href)||"");
+      var ua=String(navigator.userAgent||"");
+      return /^capacitor:\/\//i.test(href)&&/iPad|iPhone|iPod/i.test(ua);
+    }catch(e){return false;}
+  }
+  function normalizePermState(res:any){
+    var v=res&&(res.speechRecognition||res.microphone||res.permission||res.state||res.status);
+    return String(v||"").toLowerCase();
+  }
+  function bestNativeSpeechText(res:any){
+    var matches=res&&res.matches?res.matches:(res&&res.results?res.results:[]);
+    if(Array.isArray(matches)&&matches.length){
+      if(typeof matches[0]==="string")return matches[0];
+      if(matches[0]&&matches[0].transcript)return matches[0].transcript;
+    }
+    if(res&&typeof res.value==="string")return res.value;
+    if(res&&typeof res.text==="string")return res.text;
+    return "";
+  }
+  function clearVoiceNativeSession(){
+    var s=voiceNativeSessionRef.current||{};
+    try{if(s.timer)clearTimeout(s.timer);}catch(e){}
+    try{if(s.partialSub&&s.partialSub.remove)s.partialSub.remove();}catch(e){}
+    voiceNativeSessionRef.current={seq:Number(s.seq||0),plugin:null,partialSub:null,timer:null,latestText:"",active:false};
+  }
+  function applyRecognizedVoiceText(txt:any,emptyMessage:any){
+    var clean=String(txt||"").trim();
+    if(clean){
+      setVoiceText(clean);
+      var parsed=parseVoiceCommand(clean);
+      setVoiceParsed(parsed);
+      setVoiceError("");
+      return true;
+    }
+    if(emptyMessage)setVoiceError(emptyMessage);
+    return false;
+  }
+  function stopVoiceListening(manual?:any){
+    var s=voiceNativeSessionRef.current||{};
+    if(s.plugin&&s.plugin.stop){
+      var latest=String(s.latestText||voiceText||"").trim();
+      try{if(s.timer)clearTimeout(s.timer);}catch(e){}
+      Promise.resolve(s.plugin.stop())
+        .then(function(res:any){
+          var txt=bestNativeSpeechText(res)||latest;
+          applyRecognizedVoiceText(txt,manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":"");
+        })
+        .catch(function(){
+          applyRecognizedVoiceText(latest,manual?"Ascolto interrotto. Se non compare testo, scrivi il comando nel campo testo e premi Analizza.":"");
+        })
+        .finally(function(){clearVoiceNativeSession();setVoiceListening(false);});
+      return;
+    }
+    try{if(voiceWebRecognitionRef.current&&voiceWebRecognitionRef.current.stop)voiceWebRecognitionRef.current.stop();}catch(e){}
+    voiceWebRecognitionRef.current=null;
+    clearVoiceNativeSession();
+    setVoiceListening(false);
+  }
+  function openVoiceModal(autoStart){setVoiceModal(true);setVoiceText("");setVoiceParsed(null);setVoiceError("");setVoiceListening(false);}
+  function closeVoiceModal(){try{stopVoiceListening(false);}catch(e){}setVoiceModal(false);setVoiceListening(false);setVoiceText("");setVoiceParsed(null);setVoiceError("");}
   function saveVoiceEntry(){
     var p=voiceParsed;
     var V2=voiceUiText(lang);
@@ -818,82 +894,103 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     }
   }
   function startVoiceListening(){
-  setVoiceError("");setVoiceParsed(null);
-  var win:any=window;
-  var language=VOICE_LANGS[lang]||"en-US";
-  var cap=win.Capacitor;
-  var platform="";
-  try{platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";}catch(e){}
-  var isNative=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform());
-  var isIOS=platform==="ios"||(/^capacitor:\/\//i.test(String((window.location&&window.location.href)||""))&&/iPad|iPhone|iPod/i.test(String(navigator.userAgent||"")));
-  function nativeSpeechUnavailableMessage(){
-    if(isIOS)return "Riconoscimento vocale non disponibile in questa build iOS. Puoi comunque scrivere il comando nel campo testo e premere Analizza.";
-    return "Riconoscimento vocale nativo non disponibile in questa build. Installa la build più recente e riprova, oppure scrivi il comando nel campo testo.";
-  }
-  function loadNativeSpeechPlugin(){
-    return import("@capacitor-community/speech-recognition")
-      .then(function(mod:any){return mod&&mod.SpeechRecognition?mod.SpeechRecognition:null;})
-      .catch(function(){
-        try{return cap&&cap.Plugins&&cap.Plugins.SpeechRecognition?cap.Plugins.SpeechRecognition:null;}catch(e){return null;}
-      });
-  }
-  function normalizePermState(res:any){
-    var v=res&&(res.speechRecognition||res.microphone||res.permission||res.state||res.status);
-    return String(v||"").toLowerCase();
-  }
-  function bestNativeSpeechText(res:any){
-    var matches=res&&res.matches?res.matches:(res&&res.results?res.results:[]);
-    if(Array.isArray(matches)&&matches.length){
-      if(typeof matches[0]==="string")return matches[0];
-      if(matches[0]&&matches[0].transcript)return matches[0].transcript;
-    }
-    if(res&&typeof res.value==="string")return res.value;
-    if(res&&typeof res.text==="string")return res.text;
-    return "";
-  }
-  if(isNative){
-    setVoiceListening(true);
-    loadNativeSpeechPlugin().then(function(nativeSpeech:any){
-      if(!nativeSpeech){setVoiceError(nativeSpeechUnavailableMessage());setVoiceListening(false);return;}
-      function ensureNativeSpeechPermission(){
-        var checked=Promise.resolve(nativeSpeech.checkPermissions?nativeSpeech.checkPermissions():{});
-        return checked.then(function(res:any){
-          var state=normalizePermState(res);
-          if(state==="granted"||state==="authorized")return res;
-          if(nativeSpeech.requestPermissions)return nativeSpeech.requestPermissions();
-          if(nativeSpeech.requestPermission)return nativeSpeech.requestPermission();
-          return res;
-        }).then(function(res2:any){
-          var state2=normalizePermState(res2);
-          if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
-            throw new Error(isIOS?"Permesso microfono o riconoscimento vocale non concesso. Apri Impostazioni > fAInance > Microfono/Riconoscimento vocale e consenti l’accesso.":"Permesso microfono non concesso. Apri le impostazioni dell’app e consenti il microfono.");
+    if(voiceListening){stopVoiceListening(true);return;}
+    setVoiceError("");setVoiceParsed(null);
+    var win:any=window;
+    var language=VOICE_LANGS[lang]||"en-US";
+    var cap=win.Capacitor;
+    var platform="";
+    try{platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";}catch(e){}
+    var isNative=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform());
+    var isIOS=isVoiceIOSPlatform();
+    if(isNative){
+      clearVoiceNativeSession();
+      var seq=Number((voiceNativeSessionRef.current&&voiceNativeSessionRef.current.seq)||0)+1;
+      voiceNativeSessionRef.current={seq:seq,plugin:null,partialSub:null,timer:null,latestText:"",active:true};
+      setVoiceListening(true);
+      loadNativeSpeechPlugin(cap).then(function(nativeSpeech:any){
+        var session=voiceNativeSessionRef.current||{};
+        if(!session.active||session.seq!==seq)return;
+        if(!nativeSpeech){setVoiceError(nativeSpeechUnavailableMessage(isIOS));setVoiceListening(false);clearVoiceNativeSession();return;}
+        session.plugin=nativeSpeech;
+        voiceNativeSessionRef.current=session;
+        function ensureNativeSpeechPermission(){
+          var checked=Promise.resolve(nativeSpeech.checkPermissions?nativeSpeech.checkPermissions():{});
+          return checked.then(function(res:any){
+            var state=normalizePermState(res);
+            if(state==="granted"||state==="authorized")return res;
+            if(nativeSpeech.requestPermissions)return nativeSpeech.requestPermissions();
+            if(nativeSpeech.requestPermission)return nativeSpeech.requestPermission();
+            return res;
+          }).then(function(res2:any){
+            var state2=normalizePermState(res2);
+            if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
+              throw new Error(isIOS?"Permesso microfono o riconoscimento vocale non concesso. Apri Impostazioni > fAInance > Microfono/Riconoscimento vocale e consenti l’accesso.":"Permesso microfono non concesso. Apri le impostazioni dell’app e consenti il microfono.");
+            }
+            return res2;
+          });
+        }
+        function updateLatestFromResult(res:any){
+          var txt=bestNativeSpeechText(res);
+          if(txt){
+            var s2=voiceNativeSessionRef.current||{};
+            s2.latestText=txt;
+            voiceNativeSessionRef.current=s2;
+            setVoiceText(txt);
           }
-          return res2;
-        });
-      }
-      var runNative=function(retry:any){return ensureNativeSpeechPermission()
-        .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
-        .then(function(av:any){if(av&&av.available===false)throw new Error("Riconoscimento vocale non disponibile sul dispositivo.");return nativeSpeech.start({language:language,maxResults:3,prompt:voiceUiText(lang).speak||"Parla ora",partialResults:false,popup:false});})
-        .then(function(res:any){var txt2=bestNativeSpeechText(res);if(!txt2)throw new Error("Nessun testo riconosciuto");setVoiceText(txt2);setVoiceParsed(parseVoiceCommand(txt2));})
-        .catch(function(err:any){var msg=err&&err.message?err.message:String(err||"");var low=msg.toLowerCase();if(retry&&(low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("nessun")>=0||low.indexOf("no match")>=0)){return new Promise(function(resolve){setTimeout(resolve,450);}).then(function(){return runNative(false);});}if(low.indexOf("permission")>=0||low.indexOf("permesso")>=0||low.indexOf("not authorized")>=0||low.indexOf("denied")>=0){setVoiceError(msg);return;}setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);})
-        .finally(function(){setVoiceListening(false);});};
-      runNative(true);
-    }).catch(function(err:any){setVoiceListening(false);setVoiceError(nativeSpeechUnavailableMessage());});
-    return;
+          return txt;
+        }
+        ensureNativeSpeechPermission()
+          .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
+          .then(function(av:any){
+            if(av&&av.available===false)throw new Error("Riconoscimento vocale non disponibile sul dispositivo.");
+            if(nativeSpeech.addListener){
+              try{
+                Promise.resolve(nativeSpeech.addListener("partialResults",function(data:any){updateLatestFromResult(data);})).then(function(sub:any){
+                  var s3=voiceNativeSessionRef.current||{};
+                  if(s3.seq===seq){s3.partialSub=sub;voiceNativeSessionRef.current=s3;}else{try{if(sub&&sub.remove)sub.remove();}catch(e){}}
+                });
+              }catch(e){}
+            }
+            var s4=voiceNativeSessionRef.current||{};
+            s4.timer=setTimeout(function(){
+              var cur=voiceNativeSessionRef.current||{};
+              if(cur.active&&cur.seq===seq)stopVoiceListening(false);
+            },8500);
+            voiceNativeSessionRef.current=s4;
+            return nativeSpeech.start({language:language,maxResults:5,prompt:voiceUiText(lang).speak||"Parla ora",partialResults:true,popup:false});
+          })
+          .then(function(res:any){
+            var cur=voiceNativeSessionRef.current||{};
+            if(!cur.active||cur.seq!==seq)return;
+            var txt=updateLatestFromResult(res)||cur.latestText;
+            applyRecognizedVoiceText(txt,"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
+          })
+          .catch(function(err:any){
+            var msg=err&&err.message?err.message:String(err||"");
+            var low=msg.toLowerCase();
+            if(low.indexOf("permission")>=0||low.indexOf("permesso")>=0||low.indexOf("not authorized")>=0||low.indexOf("denied")>=0){setVoiceError(msg);}
+            else if(low.indexOf("cancel")>=0){/* stop manuale */}
+            else setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);
+          })
+          .finally(function(){clearVoiceNativeSession();setVoiceListening(false);});
+      }).catch(function(){setVoiceListening(false);setVoiceError(nativeSpeechUnavailableMessage(isIOS));clearVoiceNativeSession();});
+      return;
+    }
+    var SpeechRecognition=win.SpeechRecognition||win.webkitSpeechRecognition;
+    if(!SpeechRecognition){setVoiceError("Riconoscimento vocale non disponibile su questo dispositivo. Puoi scrivere il comando nel campo testo e premere Analizza.");return;}
+    try{
+      var rec=new SpeechRecognition();
+      voiceWebRecognitionRef.current=rec;
+      rec.lang=language;
+      rec.interimResults=false;rec.maxAlternatives=1;rec.continuous=false;
+      setVoiceListening(true);
+      rec.onresult=function(ev:any){var txt2="";for(var ri=0;ri<ev.results.length;ri++){if(ev.results[ri]&&ev.results[ri][0]&&ev.results[ri][0].transcript){txt2+=(txt2?" ":"")+ev.results[ri][0].transcript;}}if(txt2){setVoiceText(txt2);if(ev.results[ev.results.length-1].isFinal){setVoiceParsed(parseVoiceCommand(txt2));}}};
+      rec.onerror=function(ev:any){var errCode=ev&&ev.error?ev.error:"non disponibile";var errMsg=errCode==="not-allowed"?"Permesso microfono negato dal browser. Puoi scrivere il comando nel campo testo e premere Analizza.":"Errore riconoscimento vocale: "+errCode;setVoiceError(errMsg);setVoiceListening(false);voiceWebRecognitionRef.current=null;};
+      rec.onend=function(){setVoiceListening(false);voiceWebRecognitionRef.current=null;};
+      rec.start();
+    }catch(err){setVoiceListening(false);voiceWebRecognitionRef.current=null;setVoiceError("Impossibile avviare il microfono. Verifica i permessi audio oppure scrivi il comando nel campo testo.");}
   }
-  var SpeechRecognition=win.SpeechRecognition||win.webkitSpeechRecognition;
-  if(!SpeechRecognition){setVoiceError("Riconoscimento vocale non disponibile su questo dispositivo. Puoi scrivere il comando nel campo testo e premere Analizza.");return;}
-  try{
-    var rec=new SpeechRecognition();
-    rec.lang=language;
-    rec.interimResults=false;rec.maxAlternatives=1;rec.continuous=false;
-    setVoiceListening(true);
-    rec.onresult=function(ev:any){var txt2="";for(var ri=0;ri<ev.results.length;ri++){if(ev.results[ri]&&ev.results[ri][0]&&ev.results[ri][0].transcript){txt2+=(txt2?" ":"")+ev.results[ri][0].transcript;}}if(txt2){setVoiceText(txt2);if(ev.results[ev.results.length-1].isFinal){setVoiceParsed(parseVoiceCommand(txt2));}}};
-    rec.onerror=function(ev:any){var errCode=ev&&ev.error?ev.error:"non disponibile";var errMsg=errCode==="not-allowed"?"Permesso microfono negato dal browser. Puoi scrivere il comando nel campo testo e premere Analizza.":"Errore riconoscimento vocale: "+errCode;setVoiceError(errMsg);setVoiceListening(false);};
-    rec.onend=function(){setVoiceListening(false);};
-    rec.start();
-  }catch(err){setVoiceListening(false);setVoiceError("Impossibile avviare il microfono. Verifica i permessi audio oppure scrivi il comando nel campo testo.");}
-}
   var parsed=voiceParsed;
   var V=voiceUiText(lang);
   var voiceAutoStartedRef=useRef(false);
@@ -901,13 +998,13 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     if(voiceAutoStartedRef.current)return;
     voiceAutoStartedRef.current=true;
     var t1=setTimeout(function(){startVoiceListening();},350);
-    return function(){clearTimeout(t1);};
+    return function(){clearTimeout(t1);try{stopVoiceListening(false);}catch(e){}};
   },[]);
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:520,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)closeVoiceModal();}}>
     <div style={{background:cardBg,borderRadius:20,border:"1px solid "+borderC,width:"100%",maxWidth:430,maxHeight:"92vh",boxShadow:"0 10px 40px rgba(0,0,0,0.28)",overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div style={{background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",padding:"18px 20px",display:"flex",alignItems:"center",gap:12}}><div style={{fontSize:30}}>🎙️</div><div style={{flex:1}}><div style={{fontSize:17,fontWeight:900}}>{V.title}</div><div style={{fontSize:12,opacity:0.85}}>{V.sub}</div></div><button onClick={closeVoiceModal} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:9,color:"#fff",fontSize:18,cursor:"pointer",padding:"4px 10px"}}>×</button></div>
       <div style={{padding:18,display:"flex",flexDirection:"column",gap:12,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-        <button onClick={startVoiceListening} disabled={voiceListening} style={{background:voiceListening?"#EF9F27":"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 14px",fontSize:15,fontWeight:800,cursor:"pointer"}}>{voiceListening?V.listening:V.retry}</button>
+        {(!voiceListening||isVoiceIOSPlatform())?<button onClick={function(){voiceListening?stopVoiceListening(true):startVoiceListening();}} style={{background:voiceListening?"#EF9F27":"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 14px",fontSize:15,fontWeight:800,cursor:"pointer"}}>{voiceListening?"⏹️ Ferma ascolto":V.retry}</button>:<div style={{background:dark?"#252535":"#F4F2FF",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"13px 14px",fontSize:15,fontWeight:800,textAlign:"center"}}>🎙️ {V.listening||"Sto ascoltando..."}</div>}
         <div style={{fontSize:12,color:subC,lineHeight:1.45}}>{V.hint}</div>
         <div style={{fontSize:12,color:subC,lineHeight:1.45}}>{V.examples}</div>
         <textarea value={voiceText} onChange={function(e){setVoiceText(e.target.value);setVoiceParsed(null);setVoiceError("");}} placeholder={V.placeholder} style={{minHeight:74,borderRadius:12,border:"1px solid "+borderC,padding:"10px 12px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:textC,resize:"vertical"}}/>
