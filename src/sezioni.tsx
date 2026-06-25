@@ -789,14 +789,14 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
   function loadNativeSpeechPlugin(cap:any){
     try{
       var href=String((window.location&&window.location.href)||"");
-      var ua=String(navigator.userAgent||"");
       var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
-      var isIOSNative=platform==="ios"||(/^capacitor:\/\//i.test(href)&&/iPad|iPhone|iPod/i.test(ua));
+      var isIOSNative=platform==="ios"||/^capacitor:\/\//i.test(href);
       if(isIOSNative){
         return import("@capacitor/core")
           .then(function(core:any){
             try{if(cap&&cap.Plugins&&cap.Plugins.FainanceSpeech)return cap.Plugins.FainanceSpeech;}catch(e){}
-            return core&&core.registerPlugin?core.registerPlugin("FainanceSpeech"):null;
+            var registered=core&&core.registerPlugin?core.registerPlugin("FainanceSpeech"):null;
+            return registered;
           })
           .catch(function(){try{return cap&&cap.Plugins&&cap.Plugins.FainanceSpeech?cap.Plugins.FainanceSpeech:null;}catch(e){return null;}});
       }
@@ -976,8 +976,11 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     var cap=win.Capacitor;
     var platform="";
     try{platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";}catch(e){}
-    var isNative=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform());
     var isIOS=isVoiceIOSPlatform();
+    var href="";
+    try{href=String((window.location&&window.location.href)||"");}catch(e){}
+    var isCapacitorUrl=/^capacitor:\/\//i.test(href);
+    var isNative=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform())||isCapacitorUrl||platform==="ios"||platform==="android";
     if(isNative){
       clearVoiceNativeSession();
       var seq=Number((voiceNativeSessionRef.current&&voiceNativeSessionRef.current.seq)||0)+1;
@@ -986,12 +989,21 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
       loadNativeSpeechPlugin(cap).then(function(nativeSpeech:any){
         var session=voiceNativeSessionRef.current||{};
         if(!session.active||session.seq!==seq)return;
-        if(!nativeSpeech){setVoiceError(nativeSpeechUnavailableMessage(isIOS));setVoiceListening(false);clearVoiceNativeSession();return;}
+        if(!nativeSpeech){setVoiceError(isIOS?"Plugin vocale iOS non trovato: il ponte Capacitor FainanceSpeech non è stato caricato. Invia questa schermata a Davide.":nativeSpeechUnavailableMessage(isIOS));setVoiceListening(false);clearVoiceNativeSession();return;}
         session.plugin=nativeSpeech;
         voiceNativeSessionRef.current=session;
         function ensureNativeSpeechPermission(){
           var checkFn=(isIOS&&(nativeSpeech.speechCheckPermissions||nativeSpeech.checkMicrophonePermission))||nativeSpeech.checkPermissions||nativeSpeech.speechCheckPermissions;
           var requestFn=(isIOS&&(nativeSpeech.speechRequestPermissions||nativeSpeech.requestMicrophonePermission))||nativeSpeech.requestPermissions||nativeSpeech.requestPermission||nativeSpeech.speechRequestPermissions;
+          if(isIOS&&requestFn){
+            return Promise.resolve(requestFn.call(nativeSpeech)).then(function(res:any){
+              var state=normalizePermState(res);
+              if(state&&state!=="granted"&&state!=="authorized"&&state!=="prompt"&&state!=="undefined"){
+                throw new Error("Permesso microfono o riconoscimento vocale non concesso. Apri Impostazioni > fAInance > Microfono/Riconoscimento vocale e consenti l’accesso.");
+              }
+              return requestIOSMicrophoneLikeReceiptCamera().catch(function(){return true;}).then(function(){return res;});
+            });
+          }
           var checked=Promise.resolve(checkFn?checkFn.call(nativeSpeech):{});
           return checked.then(function(res:any){
             var state=normalizePermState(res);
