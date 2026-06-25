@@ -27,13 +27,13 @@ public class FainanceSpeechPlugin: CAPPlugin {
         call.resolve(["listening": sessionActive])
     }
 
-    @objc func checkPermissions(_ call: CAPPluginCall) {
+    @objc public override func checkPermissions(_ call: CAPPluginCall) {
         let speech = Self.speechStatusString(SFSpeechRecognizer.authorizationStatus())
         let mic = Self.microphoneStatusString(AVAudioSession.sharedInstance().recordPermission)
         call.resolve(["speechRecognition": speech, "microphone": mic])
     }
 
-    @objc func requestPermissions(_ call: CAPPluginCall) {
+    @objc public override func requestPermissions(_ call: CAPPluginCall) {
         SFSpeechRecognizer.requestAuthorization { speechStatus in
             AVAudioSession.sharedInstance().requestRecordPermission { _ in
                 DispatchQueue.main.async {
