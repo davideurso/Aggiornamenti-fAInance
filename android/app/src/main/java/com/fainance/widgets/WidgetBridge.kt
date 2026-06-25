@@ -23,6 +23,9 @@ class WidgetBridge : Plugin() {
             WidgetUtils.save(context, "widget_note_settings", call.getString("note") ?: "{}")
             WidgetUtils.save(context, "widget_goal_settings", call.getString("goal") ?: "{}")
             WidgetUtils.save(context, "widget_share_settings", call.getString("share") ?: "{}")
+            WidgetUtils.save(context, "widget_shopping_list_settings", call.getString("shoppingList") ?: "{}")
+            WidgetUtils.save(context, "widget_fidelity_settings", call.getString("fidelity") ?: "{}")
+            WidgetUtils.save(context, "widget_debt_credits_settings", call.getString("debtCredits") ?: "{}")
             saveAvailabilityPayload(call)
             updateWidgets(context)
             val ret = JSObject()
@@ -90,6 +93,8 @@ class WidgetBridge : Plugin() {
         WidgetUtils.save(context, "widget_available_types", arrayString(call, "availableTypes"))
         WidgetUtils.save(context, "widget_enabled_types", arrayString(call, "enabledTypes"))
         WidgetUtils.save(context, "widget_disabled_types", arrayString(call, "disabledTypes"))
+        WidgetUtils.save(context, "widget_order", arrayString(call, "widgetOrder"))
+        WidgetUtils.save(context, "widget_display_order", arrayString(call, "widgetOrder"))
         WidgetUtils.save(context, "widget_plan_availability", objectString(call, "planAvailability"))
     }
 
@@ -118,5 +123,14 @@ class WidgetBridge : Plugin() {
             GoalWidgetProvider.update(context, manager, it)
         }
         ShareWidgetProvider.updateAllWidgets(context)
+        manager.getAppWidgetIds(ComponentName(context, ShoppingListWidgetProvider::class.java)).forEach {
+            ShoppingListWidgetProvider.update(context, manager, it)
+        }
+        manager.getAppWidgetIds(ComponentName(context, FidelityWidgetProvider::class.java)).forEach {
+            FidelityWidgetProvider.update(context, manager, it)
+        }
+        manager.getAppWidgetIds(ComponentName(context, DebtCreditsWidgetProvider::class.java)).forEach {
+            DebtCreditsWidgetProvider.update(context, manager, it)
+        }
     }
 }

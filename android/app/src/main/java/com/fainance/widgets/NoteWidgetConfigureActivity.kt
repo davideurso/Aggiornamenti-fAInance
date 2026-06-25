@@ -35,7 +35,7 @@ class NoteWidgetConfigureActivity : Activity() {
 
         val global = WidgetUtils.json(this, "widget_note_settings")
         val existing = WidgetUtils.instanceJson(this, "note_widget", appWidgetId)
-        fillItems(global.optJSONArray("noteItems"), noteItems, "Nota")
+        fillItems(global.optJSONArray("noteItems"), noteItems, WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Nota"))
         fillItems(global.optJSONArray("bankItems"), bankItems, "Coordinata bancaria")
         if (noteItems.isEmpty()) noteItems.add(Item("default_note", "Nessuna nota disponibile", "Crea prima una nota nell'app."))
         if (bankItems.isEmpty()) bankItems.add(Item("default_bank", "Nessuna coordinata disponibile", "Crea prima una coordinata bancaria nell'app."))
@@ -51,20 +51,20 @@ class NoteWidgetConfigureActivity : Activity() {
             setBackgroundColor(Color.rgb(16, 17, 26))
         }
         scroll.addView(root)
-        root.addView(title("Configura widget Nota / IBAN"))
-        root.addView(info("Scegli solo il contenuto da mostrare in questo widget. Trasparenza, limite caratteri e stile restano nelle impostazioni Widget dell'app e valgono per tutti i widget Nota / IBAN."))
+        root.addView(title(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Configura widget Nota / IBAN")))
+        root.addView(info(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Scegli solo il contenuto da mostrare in questo widget. Trasparenza, limite caratteri e stile restano nelle impostazioni Widget dell'app e valgono per tutti i widget Nota / IBAN.")))
 
-        root.addView(label("Tipo di contenuto"))
+        root.addView(label(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Tipo di contenuto")))
         typeRoot = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         root.addView(typeRoot, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
-        root.addView(label("Contenuto da mostrare"))
+        root.addView(label(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Contenuto da mostrare")))
         listRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(listRoot)
         renderTypeButtons()
         renderItemCards()
 
         val save = Button(this).apply {
-            text = "SALVA WIDGET"
+            text = WidgetUtils.tr(this@NoteWidgetConfigureActivity, "SALVA WIDGET")
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.rgb(25, 27, 35))
@@ -78,7 +78,7 @@ class NoteWidgetConfigureActivity : Activity() {
 
     private fun renderTypeButtons() {
         typeRoot.removeAllViews()
-        listOf("note" to "Nota", "bank" to "Coordinata").forEach { pair ->
+        listOf("note" to WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Nota"), "bank" to WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Coordinata")).forEach { pair ->
             val active = type == pair.first
             val button = TextView(this).apply {
                 text = pair.second

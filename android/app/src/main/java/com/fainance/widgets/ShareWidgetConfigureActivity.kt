@@ -44,7 +44,7 @@ class ShareWidgetConfigureActivity : Activity() {
         val existing = WidgetUtils.instanceJson(this, "share_widget", appWidgetId)
         fillProjects(global.optJSONArray("projectItems"), global)
         if (projectItems.isEmpty()) {
-            projectItems.add(ProjectItem("default_share", "Nessun progetto disponibile", 0.0, 0.0, 0.0, "Crea prima un progetto Share nell'app.", global.optString("currency", "€")))
+            projectItems.add(ProjectItem("default_share", WidgetUtils.tr(this, "Nessun progetto disponibile"), 0.0, 0.0, 0.0, WidgetUtils.tr(this, "Crea prima un progetto Share nell'app."), global.optString("currency", "€")))
         }
 
         val selectedId = existing.optString("projectId", global.optString("projectId", ""))
@@ -57,15 +57,15 @@ class ShareWidgetConfigureActivity : Activity() {
             setBackgroundColor(Color.rgb(16, 17, 26))
         }
         scroll.addView(root)
-        root.addView(title("Configura widget Share"))
-        root.addView(info("Scegli il progetto da mostrare in questo widget. Colori, trasparenza e stile restano nelle impostazioni Widget dell'app."))
-        root.addView(label("Progetto da mostrare"))
+        root.addView(title(WidgetUtils.tr(this, "Configura widget Share")))
+        root.addView(info(WidgetUtils.tr(this, "Scegli il progetto da mostrare in questo widget. Colori, trasparenza e stile restano nelle impostazioni Widget dell'app.")))
+        root.addView(label(WidgetUtils.tr(this, "Progetto da mostrare")))
         listRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(listRoot)
         renderProjectCards()
 
         val save = Button(this).apply {
-            text = "SALVA WIDGET"
+            text = WidgetUtils.tr(this@ShareWidgetConfigureActivity, "SALVA WIDGET")
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.rgb(25, 27, 35))
@@ -132,7 +132,7 @@ class ShareWidgetConfigureActivity : Activity() {
                 setTextColor(Color.WHITE)
             })
             titleBox.addView(TextView(this).apply {
-                text = "Saldo: ${money(item.net, item.currency)} · Ti devono: ${money(item.owed, item.currency)} · Devi: ${money(item.owe, item.currency)}"
+                text = WidgetUtils.tr(this@ShareWidgetConfigureActivity, "Saldo") + ": ${money(item.net, item.currency)} · " + WidgetUtils.tr(this@ShareWidgetConfigureActivity, "Ti devono") + ": ${money(item.owed, item.currency)} · " + WidgetUtils.tr(this@ShareWidgetConfigureActivity, "Devi") + ": ${money(item.owe, item.currency)}"
                 textSize = 12f
                 setTextColor(Color.rgb(190, 196, 215))
             })
@@ -165,10 +165,12 @@ class ShareWidgetConfigureActivity : Activity() {
             put("projectName", item.title)
         }
         WidgetUtils.saveInstance(this, "share_widget", appWidgetId, value.toString())
-        val manager = AppWidgetManager.getInstance(this)
-        ShareWidgetProvider().onUpdate(this, manager, intArrayOf(appWidgetId))
         val result = Intent().putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         setResult(RESULT_OK, result)
+        try {
+            val manager = AppWidgetManager.getInstance(this)
+            ShareWidgetProvider().onUpdate(this, manager, intArrayOf(appWidgetId))
+        } catch (_: Exception) {}
         finish()
     }
 
@@ -215,6 +217,8 @@ class ShareWidgetConfigureActivity : Activity() {
         root.addView(open, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(54)))
         setContentView(root)
     }
+
+    private fun goHomeAndFinish() { finish() }
 
     private fun title(text: String) = TextView(this).apply {
         this.text = text

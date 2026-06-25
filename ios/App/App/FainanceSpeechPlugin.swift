@@ -27,22 +27,30 @@ public class FainanceSpeechPlugin: CAPPlugin {
         call.resolve(["listening": sessionActive])
     }
 
-    @objc public override func checkPermissions(_ call: CAPPluginCall) {
+    @objc func speechCheckPermissions(_ call: CAPPluginCall) {
         let speech = Self.speechStatusString(SFSpeechRecognizer.authorizationStatus())
-        let mic = Self.microphoneStatusString(AVAudioSession.sharedInstance().recordPermission)
+        let mic = Self.microphoneStatusString(AVCaptureDevice.authorizationStatus(for: .audio))
         call.resolve(["speechRecognition": speech, "microphone": mic])
     }
 
-    @objc public override func requestPermissions(_ call: CAPPluginCall) {
+    @objc func speechRequestPermissions(_ call: CAPPluginCall) {
         SFSpeechRecognizer.requestAuthorization { speechStatus in
-            AVAudioSession.sharedInstance().requestRecordPermission { _ in
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                self.requestMicrophoneAccess { micGranted in
                     let speech = Self.speechStatusString(speechStatus)
-                    let mic = Self.microphoneStatusString(AVAudioSession.sharedInstance().recordPermission)
+                    let mic = micGranted ? "granted" : Self.microphoneStatusString(AVCaptureDevice.authorizationStatus(for: .audio))
                     call.resolve(["speechRecognition": speech, "microphone": mic])
                 }
             }
         }
+    }
+
+    @objc func checkMicrophonePermission(_ call: CAPPluginCall) {
+        speechCheckPermissions(call)
+    }
+
+    @objc func requestMicrophonePermission(_ call: CAPPluginCall) {
+        speechRequestPermissions(call)
     }
 
     @objc func start(_ call: CAPPluginCall) {
@@ -214,19 +222,11 @@ public class FainanceSpeechPlugin: CAPPlugin {
 
     private func requestNativePermissions(_ completion: @escaping (Bool, String?) -> Void) {
         let currentSpeech = SFSpeechRecognizer.authorizationStatus()
-        let currentMic = AVAudioSession.sharedInstance().recordPermission
 
         func requestMicIfNeeded(_ speechStatus: SFSpeechRecognizerAuthorizationStatus) {
             let speechOk = speechStatus == .authorized
-            if currentMic == .granted {
-                completion(speechOk, speechOk ? nil : "Permesso riconoscimento vocale non concesso.")
-            } else {
-                AVAudioSession.sharedInstance().requestRecordPermission { _ in
-                    DispatchQueue.main.async {
-                        let micOk = AVAudioSession.sharedInstance().recordPermission == .granted
-                        completion(speechOk && micOk, (speechOk && micOk) ? nil : "Permessi microfono o riconoscimento vocale non concessi.")
-                    }
-                }
+            self.requestMicrophoneAccess { micGranted in
+                completion(speechOk && micGranted, (speechOk && micGranted) ? nil : "Permessi microfono o riconoscimento vocale non concessi.")
             }
         }
 
@@ -236,6 +236,22 @@ public class FainanceSpeechPlugin: CAPPlugin {
             }
         } else {
             requestMicIfNeeded(currentSpeech)
+        }
+    }
+
+    private func requestMicrophoneAccess(_ completion: @escaping (Bool) -> Void) {
+        let status = AVCaptureDevice.authorizationStatus(for: .audio)
+        switch status {
+        case .authorized:
+            completion(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                DispatchQueue.main.async { completion(granted) }
+            }
+        case .denied, .restricted:
+            completion(false)
+        @unknown default:
+            completion(false)
         }
     }
 
@@ -275,11 +291,11 @@ public class FainanceSpeechPlugin: CAPPlugin {
         }
     }
 
-    private static func microphoneStatusString(_ status: AVAudioSession.RecordPermission) -> String {
+    private static func microphoneStatusString(_ status: AVAuthorizationStatus) -> String {
         switch status {
-        case .granted: return "granted"
-        case .denied: return "denied"
-        case .undetermined: return "prompt"
+        case .authorized: return "granted"
+        case .denied, .restricted: return "denied"
+        case .notDetermined: return "prompt"
         @unknown default: return "prompt"
         }
     }

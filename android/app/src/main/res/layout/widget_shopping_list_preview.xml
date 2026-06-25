@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="12dp" android:background="#1E1E30">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="🧺 Lista spesa" android:textColor="#FFFFFFFF" android:textStyle="bold" android:textSize="16sp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Tocca un articolo quando è nel carrello" android:textColor="#CCFFFFFF" android:textSize="11sp" android:layout_marginBottom="8dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="☐ Latte" android:textColor="#FFFFFFFF" android:textStyle="bold" android:textSize="13sp" android:padding="7dp" android:background="#2A2A3A" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="☐ Pane" android:textColor="#FFFFFFFF" android:textStyle="bold" android:textSize="13sp" android:padding="7dp" android:layout_marginTop="5dp" android:background="#2A2A3A" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="✓ Pomodori" android:textColor="#FF1D9E75" android:textStyle="bold" android:textSize="13sp" android:padding="7dp" android:layout_marginTop="5dp" android:background="#EAF7EE" />
+</LinearLayout>

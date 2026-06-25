@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#0F9F76">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widgetTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Fidelity card"
+            android:textColor="#FFFFFFFF"
+            android:textStyle="bold"
+            android:textSize="13sp"
+            android:maxLines="1" />
+        <TextView
+            android:id="@+id/settingsButton"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:gravity="center"
+            android:text="⚙"
+            android:textColor="#FFFFFFFF"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/cardName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Carta"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:textSize="19sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:layout_marginTop="3dp" />
+
+    <TextView
+        android:id="@+id/cardCode"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:text=""
+        android:visibility="gone" />
+
+    <ImageView
+        android:id="@+id/barcodeImage"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:background="#FFFFFFFF"
+        android:padding="6dp"
+        android:scaleType="fitCenter"
+        android:adjustViewBounds="true" />
+
+    <TextView
+        android:id="@+id/barcodeText"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:text=""
+        android:visibility="gone" />
+</LinearLayout>

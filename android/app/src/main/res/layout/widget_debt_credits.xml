@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="#1E1E30">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:id="@+id/widgetTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Debiti / Crediti"
+            android:textColor="#FFFFFFFF"
+            android:textStyle="bold"
+            android:textSize="15sp"
+            android:maxLines="1" />
+        <TextView
+            android:id="@+id/settingsButton"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:gravity="center"
+            android:text="⚙"
+            android:textColor="#FFFFFFFF"
+            android:textStyle="bold"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widgetSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Saldo 0 €"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:textSize="19sp"
+        android:maxLines="1"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="8dp" />
+
+    <TextView android:id="@+id/line1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFE9E7FF" android:textStyle="bold" android:textSize="12sp" android:maxLines="1" android:padding="7dp" android:background="#30FFFFFF" />
+    <TextView android:id="@+id/line2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+    <TextView android:id="@+id/line3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+    <TextView android:id="@+id/line4" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+    <TextView android:id="@+id/line5" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+</LinearLayout>

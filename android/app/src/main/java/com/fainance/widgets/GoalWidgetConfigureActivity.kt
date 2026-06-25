@@ -46,15 +46,15 @@ class GoalWidgetConfigureActivity : Activity() {
             setBackgroundColor(Color.rgb(16, 17, 26))
         }
         scroll.addView(root)
-        root.addView(title("Configura widget Obiettivo"))
-        root.addView(info("Scegli solo l'obiettivo da mostrare in questo widget. Trasparenza, percentuale, importi e colore fallback restano nelle impostazioni Widget dell'app e valgono per tutti i widget Obiettivo."))
+        root.addView(title(WidgetUtils.tr(this@GoalWidgetConfigureActivity, "Configura widget Obiettivo")))
+        root.addView(info(WidgetUtils.tr(this@GoalWidgetConfigureActivity, "Scegli solo l'obiettivo da mostrare in questo widget. Trasparenza, percentuale, importi e colore fallback restano nelle impostazioni Widget dell'app e valgono per tutti i widget Obiettivo.")))
         root.addView(label("Obiettivo da mostrare"))
         listRoot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(listRoot)
         renderGoalCards()
 
         val save = Button(this).apply {
-            text = "SALVA WIDGET"
+            text = WidgetUtils.tr(this@GoalWidgetConfigureActivity, "SALVA WIDGET")
             textSize = 15f
             setTypeface(null, Typeface.BOLD)
             setTextColor(Color.rgb(25, 27, 35))
