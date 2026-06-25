@@ -1027,16 +1027,11 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
                     var cur=voiceNativeSessionRef.current||{};
                     if(cur.active&&cur.seq===seq){
                       if(cur.isIOS){
+                        /* iOS: listeningState:stopped = recorder stopped, NOT trascrizione pronta.
+                           Il testo finale arriva da stop().then() o da start().then().
+                           Non chiamare finishNativeVoiceSession qui — solo marcare il flag. */
                         cur.stopRequested=true;
                         voiceNativeSessionRef.current=cur;
-                        if(!cur.stopWaitTimer){
-                          var waitTimer=setTimeout(function(){
-                            var latestCur=voiceNativeSessionRef.current||{};
-                            if(latestCur.active&&latestCur.seq===seq)finishNativeVoiceSession(seq,false,latestCur.latestText,"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
-                          },3500);
-                          cur.stopWaitTimer=waitTimer;
-                          voiceNativeSessionRef.current=cur;
-                        }
                       }else{
                         finishNativeVoiceSession(seq,false,cur.latestText,"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
                       }
@@ -1059,6 +1054,9 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
           .then(function(res:any){
             var cur=voiceNativeSessionRef.current||{};
             if(!cur.active||cur.seq!==seq)return;
+            /* iOS: start() risolve solo quando finishRecognition chiama startCall.resolve().
+               Se stop() ha già risolto e finalizing=true, non sovrascrivere. */
+            if(cur.finalizing)return;
             var finalText=updateLatestFromResult(res)||cur.latestText||voiceText||"";
             if(cur.isIOS){
               finishNativeVoiceSession(seq,cur.manualStop,finalText,cur.manualStop?"Nessun testo riconosciuto. Riprova parlando chiaramente, oppure scrivi il comando nel campo testo e premi Analizza.":"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
