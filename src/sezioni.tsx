@@ -787,6 +787,20 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     return "Riconoscimento vocale nativo non disponibile in questa build. Installa la build più recente e riprova, oppure scrivi il comando nel campo testo.";
   }
   function loadNativeSpeechPlugin(cap:any){
+    try{
+      var href=String((window.location&&window.location.href)||"");
+      var ua=String(navigator.userAgent||"");
+      var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
+      var isIOSNative=platform==="ios"||(/^capacitor:\/\//i.test(href)&&/iPad|iPhone|iPod/i.test(ua));
+      if(isIOSNative){
+        return import("@capacitor/core")
+          .then(function(core:any){
+            try{if(cap&&cap.Plugins&&cap.Plugins.FainanceSpeech)return cap.Plugins.FainanceSpeech;}catch(e){}
+            return core&&core.registerPlugin?core.registerPlugin("FainanceSpeech"):null;
+          })
+          .catch(function(){try{return cap&&cap.Plugins&&cap.Plugins.FainanceSpeech?cap.Plugins.FainanceSpeech:null;}catch(e){return null;}});
+      }
+    }catch(e){}
     return import("@capacitor-community/speech-recognition")
       .then(function(mod:any){return mod&&mod.SpeechRecognition?mod.SpeechRecognition:null;})
       .catch(function(){try{return cap&&cap.Plugins&&cap.Plugins.SpeechRecognition?cap.Plugins.SpeechRecognition:null;}catch(e){return null;}});
@@ -803,8 +817,15 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
     }catch(e){return false;}
   }
   function normalizePermState(res:any){
-    var v=res&&(res.speechRecognition||res.microphone||res.permission||res.state||res.status);
-    return String(v||"").toLowerCase();
+    var values=[];
+    try{if(res&&res.speechRecognition!=null)values.push(String(res.speechRecognition||"").toLowerCase());}catch(e){}
+    try{if(res&&res.microphone!=null)values.push(String(res.microphone||"").toLowerCase());}catch(e){}
+    try{if(res&&(res.permission||res.state||res.status))values.push(String(res.permission||res.state||res.status||"").toLowerCase());}catch(e){}
+    values=values.filter(function(v){return !!v&&v!=="undefined"&&v!=="null";});
+    if(values.some(function(v){return v==="denied"||v==="restricted";}))return "denied";
+    if(values.some(function(v){return v==="prompt"||v==="prompt-with-rationale"||v==="notdetermined"||v==="not_determined"||v==="undetermined";}))return "prompt";
+    if(values.length&&values.every(function(v){return v==="granted"||v==="authorized";}))return "granted";
+    return String((res&&(res.speechRecognition||res.microphone||res.permission||res.state||res.status))||"").toLowerCase();
   }
   function bestNativeSpeechText(res:any){
     var matches=res&&res.matches?res.matches:(res&&res.results?res.results:[]);
@@ -812,6 +833,7 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
       if(typeof matches[0]==="string")return matches[0];
       if(matches[0]&&matches[0].transcript)return matches[0].transcript;
     }
+    if(res&&typeof res.transcript==="string")return res.transcript;
     if(res&&typeof res.value==="string")return res.value;
     if(res&&typeof res.text==="string")return res.text;
     return "";
