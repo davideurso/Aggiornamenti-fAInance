@@ -873,7 +873,14 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){
+    setUserData(u);
+    if(u&&u.id){
+      // Il login può completarsi prima che onAuthStateChanged aggiorni fbUser.
+      // Senza questo set, la schermata resta sul bottone con "..." anche se Firebase ha accettato il login.
+      setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
+    }
+  }}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
