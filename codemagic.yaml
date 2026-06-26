@@ -25,7 +25,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.40"
+        APP_VERSION: "1.6.39"
         VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -75,20 +75,13 @@ workflows:
         script: |
           cd ios/App
 
-          RAW_IOS_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-${BUILD_NUMBER:-1}}"
-          case "$RAW_IOS_BUILD_NUMBER" in
-            *[!0-9]*|"") RAW_IOS_BUILD_NUMBER="1" ;;
+          IOS_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-${BUILD_NUMBER:-1}}"
+          case "$IOS_BUILD_NUMBER" in
+            *[!0-9]*|"") IOS_BUILD_NUMBER="1" ;;
           esac
 
-          if [ "$RAW_IOS_BUILD_NUMBER" -gt 99999 ]; then
-            IOS_BUILD_NUMBER=$((1000 + RAW_IOS_BUILD_NUMBER % 9000))
-          else
-            IOS_BUILD_NUMBER="$RAW_IOS_BUILD_NUMBER"
-          fi
-
           echo "Using iOS marketing version: $APP_VERSION"
-          echo "Codemagic raw build number: $RAW_IOS_BUILD_NUMBER"
-          echo "Using normalized iOS build number: $IOS_BUILD_NUMBER"
+          echo "Using iOS build number: $IOS_BUILD_NUMBER"
 
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" App/Info.plist || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" App/Info.plist || true

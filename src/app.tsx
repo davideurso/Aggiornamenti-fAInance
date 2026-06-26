@@ -123,6 +123,19 @@ function LoginScreen({onLogin}){
     return true;
   }
 
+  function isNativeApp(){
+    try{
+      var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
+      if(!cap)return false;
+      if(cap.isNativePlatform&&cap.isNativePlatform())return true;
+      if(cap.getPlatform){
+        var platform=String(cap.getPlatform()||"").toLowerCase();
+        if(platform==="ios"||platform==="android")return true;
+      }
+    }catch(e){}
+    return false;
+  }
+
   function doLogin(){
     setError("");setLoading(true);
     signInWithEmailAndPassword(fbAuth,email,password)
@@ -159,7 +172,7 @@ function LoginScreen({onLogin}){
   async function doGoogle(){
     setError(""); setLoading(true);
     try {
-      var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      var isNative = isNativeApp();
       if(isNative){
         const mod = await import("@capacitor-firebase/authentication");
         const FirebaseAuthentication = mod.FirebaseAuthentication;
@@ -206,7 +219,7 @@ function LoginScreen({onLogin}){
   async function doApple(){
     setError(""); setLoading(true);
     try {
-      var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      var isNative = isNativeApp();
       if(isNative){
         const mod = await import("@capacitor-firebase/authentication");
         const FirebaseAuthentication = mod.FirebaseAuthentication;
@@ -797,7 +810,7 @@ function AppWithLogin(){
   async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
   async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
   async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
-  var [fbUser,setFbUser]=useState(null); // null=not logged in; never block startup on Firebase Auth
+  var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
 
   useEffect(function(){
@@ -853,6 +866,11 @@ function AppWithLogin(){
     };
   },[]);
 
+  if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+    <FAInanceLogo size={72}/>
+    <div style={{fontSize:13,color:"#888"}}>Caricamento...</div>
+  </div>;
+
   async function forceLogout(){
     try{
       if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
@@ -868,7 +886,12 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);if(u&&u.id)setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});}}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){
+    setUserData(u);
+    if(u&&u.id){
+      setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
+    }
+  }}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
