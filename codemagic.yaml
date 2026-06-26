@@ -25,13 +25,13 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.44"
-        VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
+        APP_VERSION: "1.6.45"
+        VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
         VITE_FIREBASE_STORAGE_BUCKET: "fainance-a7794.firebasestorage.app"
         VITE_FIREBASE_MESSAGING_SENDER_ID: "739607555867"
-        VITE_FIREBASE_APP_ID: "1:739607555867:android:16aa0add0a289fb3cd6dbe"
+        VITE_FIREBASE_APP_ID: "1:739607555867:ios:16c4ae555c4a56cfcd6dbe"
 
     scripts:
       - name: Install dependencies
