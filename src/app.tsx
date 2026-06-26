@@ -108,20 +108,6 @@ function LoginScreen({onLogin}){
     return {url:origin,handleCodeInApp:false};
   }
 
-  function getCapacitorPlatform(){
-    try{
-      var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
-      if(cap&&cap.getPlatform)return String(cap.getPlatform()).toLowerCase();
-      if(cap&&cap.isNativePlatform&&cap.isNativePlatform())return "native";
-    }catch(e){}
-    return "web";
-  }
-
-  function isNativeApp(){
-    var p=getCapacitorPlatform();
-    return p==="ios"||p==="android"||p==="native";
-  }
-
   var inp={width:"100%",borderRadius:10,border:"1px solid #e0e0e0",padding:"12px 14px",fontSize:15,background:"#fff",color:"#333",boxSizing:"border-box",outline:"none"};
 
   function showAppleLoginButton(){
@@ -141,7 +127,7 @@ function LoginScreen({onLogin}){
     setError("");setLoading(true);
     signInWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
-        onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"}, cred.user);
+        onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"});
       })
       .catch(function(err){
         setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+err.message);
@@ -161,7 +147,7 @@ function LoginScreen({onLogin}){
         // Save name to Firestore
         return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
           .then(function(){
-            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()}, cred.user);
+            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
           });
       })
       .catch(function(err){
@@ -173,7 +159,7 @@ function LoginScreen({onLogin}){
   async function doGoogle(){
     setError(""); setLoading(true);
     try {
-      var isNative = isNativeApp();
+      var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       if(isNative){
         const mod = await import("@capacitor-firebase/authentication");
         const FirebaseAuthentication = mod.FirebaseAuthentication;
@@ -198,12 +184,12 @@ function LoginScreen({onLogin}){
         if(!idToken&&!accessToken) throw new Error("Google login non ha restituito token utilizzabili.");
         const credential = GoogleAuthProvider.credential(idToken||null, accessToken||null);
         const cred = await signInWithCredential(fbAuth, credential);
-        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"}, cred.user);
+        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
         return;
       }
       googleProvider.setCustomParameters({prompt:"select_account"});
       const cred = await signInWithPopup(fbAuth, googleProvider);
-      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"}, cred.user);
+      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
     } catch(err){
       console.error("Google login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
@@ -220,7 +206,7 @@ function LoginScreen({onLogin}){
   async function doApple(){
     setError(""); setLoading(true);
     try {
-      var isNative = isNativeApp();
+      var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       if(isNative){
         const mod = await import("@capacitor-firebase/authentication");
         const FirebaseAuthentication = mod.FirebaseAuthentication;
@@ -231,8 +217,20 @@ function LoginScreen({onLogin}){
           scopes:["email","name"],
           customParameters:[{key:"locale",value:loginLang()}]
         });
-        // Non usare direttamente l'utente nativo: l'app usa Firebase Web SDK/Firestore,
-        // quindi dobbiamo completare sempre anche il login web con signInWithCredential.
+        const nativeUser=(result&&result.user)||{};
+        if(nativeUser&&nativeUser.uid){
+          try{
+            var appleNameNative=(nativeUser.displayName||nativeUser.name||"").trim();
+            var appleEmailNative=(nativeUser.email||"").toLowerCase();
+            var refNative=doc(fbDb,"users",nativeUser.uid);
+            var snapNative=await getDoc(refNative);
+            if(!snapNative.exists()){
+              await setDoc(refNative,{name:appleNameNative||"Utente",email:appleEmailNative,provider:"apple",createdAt:new Date().toISOString()});
+            }
+          }catch(saveNativeErr){}
+          onLogin({id:nativeUser.uid, email:nativeUser.email||"", name:nativeUser.displayName||nativeUser.name||"Utente"});
+          return;
+        }
         const credData=(result&&result.credential)||{};
         const idToken=credData.idToken||credData.id_token||credData.identityToken||credData.identity_token||"";
         const accessToken=credData.accessToken||credData.access_token||"";
@@ -251,7 +249,7 @@ function LoginScreen({onLogin}){
             }
           }
         }catch(saveErr){}
-        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"}, cred.user);
+        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
         return;
       }
       const provider = new OAuthProvider("apple.com");
@@ -268,7 +266,7 @@ function LoginScreen({onLogin}){
           }
         }
       }catch(saveWebErr){}
-      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"}, cred.user);
+      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
     } catch(err){
       console.error("Apple login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
@@ -875,16 +873,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u,userObj){
-    setUserData(u);
-    var realUser=userObj||null;
-    try{if(!realUser&&fbAuth&&fbAuth.currentUser)realUser=fbAuth.currentUser;}catch(e){}
-    if(realUser){
-      setFbUser(realUser);
-    }else if(u&&u.id){
-      setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
-    }
-  }}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
