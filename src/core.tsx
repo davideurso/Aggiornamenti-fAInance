@@ -18,14 +18,14 @@ export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, q
 // ── FIREBASE CONFIG ───────────────────────────────────────────────────────────
 // Firebase web config.
 // Codemagic builds from GitHub and does not read Davide's local .env file.
-// Use the production Firebase Web/Auth-compatible key from google-services.json, not the iOS plist key, because the JS Firebase SDK runs inside the Capacitor WebView.
+// Use the production Firebase Web/Auth-compatible config, because the JS Firebase SDK runs inside the Capacitor WebView.
 const FIREBASE_FALLBACK_CONFIG = {
-  apiKey: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To",
+  apiKey: "AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno",
   authDomain: "fainance-a7794.firebaseapp.com",
   projectId: "fainance-a7794",
   storageBucket: "fainance-a7794.firebasestorage.app",
   messagingSenderId: "739607555867",
-  appId: "1:739607555867:android:16aa0add0a289fb3cd6dbe"
+  appId: "1:739607555867:web:ae797cd0a578e476cd6dbe"
 };
 
 function envOrFallback(key:string,fallback:string){
