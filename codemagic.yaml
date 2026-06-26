@@ -25,7 +25,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.41"
+        APP_VERSION: "1.6.42"
         VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -56,6 +56,28 @@ workflows:
       - name: Sync Capacitor iOS
         script: |
           npx cap sync ios
+
+      - name: Ensure Firebase Auth iOS config
+        script: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          p = Path("ios/App/App/capacitor.config.json")
+          if not p.exists():
+              raise SystemExit("capacitor.config.json non trovato dopo cap sync")
+
+          data = json.loads(p.read_text(encoding="utf-8"))
+          plugins = data.setdefault("plugins", {})
+          firebase_auth = plugins.setdefault("FirebaseAuthentication", {})
+          firebase_auth["authDomain"] = "fainance-a7794.firebaseapp.com"
+          firebase_auth["skipNativeAuth"] = True
+          firebase_auth["providers"] = ["google.com", "apple.com"]
+
+          p.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          print("FirebaseAuthentication config for iOS:")
+          print(json.dumps(firebase_auth, indent=2))
+          PY
 
       - name: Install CocoaPods if Podfile exists
         script: |
@@ -307,5 +329,5 @@ workflows:
         recipients:
           - davideurso87@gmail.com
         notify:
-          success: true
+          success: false
           failure: true
