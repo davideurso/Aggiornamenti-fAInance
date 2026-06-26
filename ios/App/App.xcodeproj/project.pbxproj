@@ -514,7 +514,7 @@
 				CURRENT_PROJECT_VERSION = 148;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FainanceWidgets/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -538,7 +538,7 @@
 				CURRENT_PROJECT_VERSION = 148;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FainanceWidgets/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
