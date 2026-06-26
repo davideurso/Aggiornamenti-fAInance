@@ -25,8 +25,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.37"
-        BUILD_NUMBER: "181"
+        APP_VERSION: "1.6.38"
         VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -72,13 +71,26 @@ workflows:
             echo "Nessun Podfile trovato. Continuo senza pod install."
           fi
 
-      - name: Set iOS version, build number, privacy permissions and encryption compliance
+      - name: Set iOS version, automatic build number, privacy permissions and encryption compliance
         script: |
+          set -e
           cd ios/App
 
+          # Build number sempre univoco e crescente: evita l'errore App Store Connect
+          # "The bundle version must be higher than the previously uploaded version".
+          IOS_BUILD_NUMBER="$(date -u +%s)"
+          echo "Generated unique iOS build number: $IOS_BUILD_NUMBER"
+          echo "IOS_BUILD_NUMBER=$IOS_BUILD_NUMBER" >> "$CM_ENV"
+
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" App/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" App/Info.plist || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" App/Info.plist || true
+
+          if [ -f "FainanceWidgets/Info.plist" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" FainanceWidgets/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" FainanceWidgets/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $WIDGET_BUNDLE_ID" FainanceWidgets/Info.plist || true
+          fi
 
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" App/Info.plist || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" App/Info.plist
 
@@ -93,9 +105,21 @@ workflows:
           /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist
 
           xcrun agvtool new-marketing-version "$APP_VERSION" || true
-          xcrun agvtool new-version -all "$BUILD_NUMBER" || true
+          xcrun agvtool new-version -all "$IOS_BUILD_NUMBER" || true
 
-          cat App/Info.plist
+          perl -0pi -e "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = $IOS_BUILD_NUMBER;/g" App.xcodeproj/project.pbxproj
+
+          echo "App version:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" App/Info.plist
+          echo "App build:"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" App/Info.plist
+
+          if [ -f "FainanceWidgets/Info.plist" ]; then
+            echo "Widget version:"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" FainanceWidgets/Info.plist
+            echo "Widget build:"
+            /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" FainanceWidgets/Info.plist
+          fi
 
           cd ../..
 
