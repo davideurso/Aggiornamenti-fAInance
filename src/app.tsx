@@ -797,38 +797,61 @@ function AppWithLogin(){
   async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
   async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
   async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
-  var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
+  var [fbUser,setFbUser]=useState(null); // null=not logged in; never block startup on Firebase Auth
   var [userData,setUserData]=useState(null);
 
   useEffect(function(){
+    var cancelled=false;
+
+    function applyUserImmediately(user){
+      var normalizedEmail=String((user&&user.email)||"").toLowerCase();
+      setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+      setFbUser(user);
+    }
+
+    // iOS safety: non lasciare mai la splash su "Caricamento..." se Firebase Auth resta appeso.
+    var startupTimer=setTimeout(function(){
+      if(cancelled)return;
+      var current=null;
+      try{current=fbAuth.currentUser;}catch(e){}
+      if(current){
+        applyUserImmediately(current);
+      }else{
+        setFbUser(null);
+        setUserData(null);
+      }
+    },4500);
+
     var unsub=onAuthStateChanged(fbAuth,function(user){
+      if(cancelled)return;
+      clearTimeout(startupTimer);
+
       if(user){
-        // Load user profile from Firestore
+        // Entra subito nell'app: il profilo Firestore viene caricato dopo, senza bloccare la splash.
+        applyUserImmediately(user);
+
         getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
+          if(cancelled)return;
           var profile=snap.exists()?snap.data():{};
           var displayName=profile.name||user.displayName||"Utente";
           var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
           setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
-          setFbUser(user);
         }).catch(function(){
-          var normalizedEmail=String(user.email||"").toLowerCase();
-          setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
-          setFbUser(user);
+          setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:String(user.email||"").toLowerCase(),updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
         });
       } else {
         setFbUser(null);
         setUserData(null);
       }
     });
-    return unsub;
-  },[]);
 
-  if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
-    <FAInanceLogo size={72}/>
-    <div style={{fontSize:13,color:"#888"}}>Caricamento...</div>
-  </div>;
+    return function(){
+      cancelled=true;
+      clearTimeout(startupTimer);
+      try{unsub&&unsub();}catch(e){}
+    };
+  },[]);
 
   async function forceLogout(){
     try{
@@ -845,7 +868,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);if(u&&u.id)setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1171,6 +1194,19 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       setFirestoreReady(true);
     }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
   },[userId]);
+
+  // iOS safety: se Firestore resta appeso, non lasciare l'app bloccata su "Caricamento dati account...".
+  useEffect(function(){
+    if(!userId||firestoreReady)return;
+    var t=setTimeout(function(){
+      if(!firestoreHydratedRef.current){
+        console.warn("Firestore load timeout: app unlocked with local/default data");
+        firestoreHydratedRef.current=true;
+        setFirestoreReady(true);
+      }
+    },8000);
+    return function(){clearTimeout(t);};
+  },[userId,firestoreReady]);
 
   async function saveToFirestore(){
     if(!userId||!firestoreHydratedRef.current)return;

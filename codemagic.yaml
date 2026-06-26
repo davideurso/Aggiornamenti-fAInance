@@ -25,7 +25,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.38"
+        APP_VERSION: "1.6.40"
         VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -71,16 +71,24 @@ workflows:
             echo "Nessun Podfile trovato. Continuo senza pod install."
           fi
 
-      - name: Set iOS version, automatic build number, privacy permissions and encryption compliance
+      - name: Set iOS version, build number, privacy permissions and encryption compliance
         script: |
-          set -e
           cd ios/App
 
-          # Build number sempre univoco e crescente: evita l'errore App Store Connect
-          # "The bundle version must be higher than the previously uploaded version".
-          IOS_BUILD_NUMBER="$(date -u +%s)"
-          echo "Generated unique iOS build number: $IOS_BUILD_NUMBER"
-          echo "IOS_BUILD_NUMBER=$IOS_BUILD_NUMBER" >> "$CM_ENV"
+          RAW_IOS_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-${BUILD_NUMBER:-1}}"
+          case "$RAW_IOS_BUILD_NUMBER" in
+            *[!0-9]*|"") RAW_IOS_BUILD_NUMBER="1" ;;
+          esac
+
+          if [ "$RAW_IOS_BUILD_NUMBER" -gt 99999 ]; then
+            IOS_BUILD_NUMBER=$((1000 + RAW_IOS_BUILD_NUMBER % 9000))
+          else
+            IOS_BUILD_NUMBER="$RAW_IOS_BUILD_NUMBER"
+          fi
+
+          echo "Using iOS marketing version: $APP_VERSION"
+          echo "Codemagic raw build number: $RAW_IOS_BUILD_NUMBER"
+          echo "Using normalized iOS build number: $IOS_BUILD_NUMBER"
 
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" App/Info.plist || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" App/Info.plist || true
@@ -91,6 +99,9 @@ workflows:
             /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" FainanceWidgets/Info.plist || true
             /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $WIDGET_BUNDLE_ID" FainanceWidgets/Info.plist || true
           fi
+
+          perl -0pi -e "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = $APP_VERSION;/g" App.xcodeproj/project.pbxproj || true
+          perl -0pi -e "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = $IOS_BUILD_NUMBER;/g" App.xcodeproj/project.pbxproj || true
 
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" App/Info.plist || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" App/Info.plist
 
@@ -107,19 +118,7 @@ workflows:
           xcrun agvtool new-marketing-version "$APP_VERSION" || true
           xcrun agvtool new-version -all "$IOS_BUILD_NUMBER" || true
 
-          perl -0pi -e "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = $IOS_BUILD_NUMBER;/g" App.xcodeproj/project.pbxproj
-
-          echo "App version:"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" App/Info.plist
-          echo "App build:"
-          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" App/Info.plist
-
-          if [ -f "FainanceWidgets/Info.plist" ]; then
-            echo "Widget version:"
-            /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" FainanceWidgets/Info.plist
-            echo "Widget build:"
-            /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" FainanceWidgets/Info.plist
-          fi
+          cat App/Info.plist
 
           cd ../..
 
