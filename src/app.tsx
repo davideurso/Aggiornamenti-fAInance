@@ -124,7 +124,6 @@ function LoginScreen({onLogin}){
   }
 
   function startAuthWatchdog(){
-    try{if(typeof window!=="undefined"&&window.sessionStorage)window.sessionStorage.removeItem("fainance_auth_reload_pending");}catch(e){}
     var attempts=0;
     var timer=setInterval(function(){
       attempts++;
@@ -132,18 +131,8 @@ function LoginScreen({onLogin}){
         clearInterval(timer);
         return;
       }
-      if(attempts>=16){
+      if(attempts>=60){
         clearInterval(timer);
-        try{
-          if(typeof window!=="undefined"&&window.sessionStorage){
-            var alreadyReloaded=window.sessionStorage.getItem("fainance_auth_reload_pending");
-            if(alreadyReloaded!=="1"){
-              window.sessionStorage.setItem("fainance_auth_reload_pending","1");
-              window.location.reload();
-              return;
-            }
-          }
-        }catch(e){}
         setLoading(false);
         setError(L("Accesso completato, ma l'app non ha aggiornato la sessione. Chiudi e riapri fAInance."));
       }
@@ -882,12 +871,12 @@ function AppWithLogin(){
   async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
+  var recentLoginRef=useRef(false);
 
   useEffect(function(){
     var cancelled=false;
 
     function applyUserImmediately(user){
-      try{if(typeof window!=="undefined"&&window.sessionStorage)window.sessionStorage.removeItem("fainance_auth_reload_pending");}catch(e){}
       var normalizedEmail=String((user&&user.email)||"").toLowerCase();
       setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
       setFbUser(user);
@@ -900,7 +889,7 @@ function AppWithLogin(){
       try{current=fbAuth.currentUser;}catch(e){}
       if(current){
         applyUserImmediately(current);
-      }else{
+      }else if(!recentLoginRef.current){
         setFbUser(null);
         setUserData(null);
       }
@@ -925,6 +914,9 @@ function AppWithLogin(){
           setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:String(user.email||"").toLowerCase(),updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
         });
       } else {
+        // Dopo un login riuscito, iOS/Firebase può emettere temporaneamente user=null.
+        // Non deve riportare l'utente alla schermata di login mentre l'app sta entrando.
+        if(recentLoginRef.current)return;
         setFbUser(null);
         setUserData(null);
       }
@@ -942,6 +934,19 @@ function AppWithLogin(){
     <div style={{fontSize:13,color:"#888"}}>Caricamento...</div>
   </div>;
 
+  function applyLoginUser(u){
+    if(!u||!u.id)return;
+    recentLoginRef.current=true;
+    try{
+      if(typeof window!=="undefined"&&window.sessionStorage){
+        window.sessionStorage.setItem("fainance_recent_login_user",JSON.stringify({id:u.id,email:u.email||"",name:u.name||"Utente",ts:Date.now()}));
+      }
+    }catch(e){}
+    setUserData(u);
+    setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
+    setTimeout(function(){recentLoginRef.current=false;},20000);
+  }
+
   async function forceLogout(){
     try{
       if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
@@ -952,19 +957,14 @@ function AppWithLogin(){
       }
       await signOut(fbAuth).catch(function(){});
     }finally{
+      recentLoginRef.current=false;
+      try{if(typeof window!=="undefined"&&window.sessionStorage)window.sessionStorage.removeItem("fainance_recent_login_user");}catch(e){}
       setFbUser(null);
       setUserData(null);
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){
-    setUserData(u);
-    if(u&&u.id){
-      // Il login può completarsi prima che onAuthStateChanged aggiorni fbUser.
-      // Senza questo set, la schermata resta sul bottone con "..." anche se Firebase ha accettato il login.
-      setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
-    }
-  }}/>;
+  if(!fbUser)return <LoginScreen onLogin={applyLoginUser}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
