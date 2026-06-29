@@ -110,6 +110,51 @@ function LoginScreen({onLogin}){
 
   var inp={width:"100%",borderRadius:10,border:"1px solid #e0e0e0",padding:"12px 14px",fontSize:15,background:"#fff",color:"#333",boxSizing:"border-box",outline:"none"};
 
+  function buildLoginPayloadFromUser(user,fallbackName){
+    return {id:user.uid,email:String(user.email||email||"").toLowerCase(),name:user.displayName||fallbackName||name||"Utente"};
+  }
+
+  function armAuthResumeTimeout(){
+    var cancelled=false;
+    var timer=setTimeout(function(){
+      if(cancelled)return;
+      try{
+        var current=fbAuth.currentUser;
+        if(current&&current.uid){
+          cancelled=true;
+          onLogin(buildLoginPayloadFromUser(current,"Utente"));
+          setLoading(false);
+          return;
+        }
+      }catch(e){}
+      try{
+        if(typeof window!=="undefined"&&window.sessionStorage){
+          window.sessionStorage.setItem("fainance_auth_resume_after_reload",String(Date.now()));
+        }
+      }catch(e){}
+      try{
+        if(typeof window!=="undefined"&&window.location&&window.location.reload){
+          window.location.reload();
+          return;
+        }
+      }catch(e){}
+      setLoading(false);
+      setError(L("Accesso completato. Riapri fAInance per entrare."));
+    },7000);
+    return function(){cancelled=true;try{clearTimeout(timer);}catch(e){}};
+  }
+
+  useEffect(function(){
+    var closed=false;
+    var unsub=onAuthStateChanged(fbAuth,function(user){
+      if(closed||!user||!user.uid)return;
+      onLogin(buildLoginPayloadFromUser(user,"Utente"));
+      setLoading(false);
+    });
+    return function(){closed=true;try{unsub&&unsub();}catch(e){}};
+  },[email,name,onLogin]);
+
+
   function showAppleLoginButton(){
     try{
       var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
@@ -124,30 +169,37 @@ function LoginScreen({onLogin}){
   }
 
   function doLogin(){
+    try{cancelAuthResume();}catch(e){}
     setError("");setLoading(true);
+    var cancelAuthResume=armAuthResumeTimeout();
     signInWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
+        try{cancelAuthResume();}catch(e){}
         onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"});
       })
       .catch(function(err){
+        try{cancelAuthResume();}catch(e){}
         setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+err.message);
         setLoading(false);
       });
   }
 
   function doRegister(){
+    try{cancelAuthResume();}catch(e){}
     setError("");
     if(!name.trim()){setError(L("Inserisci il tuo nome."));return;}
     if(!email.includes("@")){setError(L("Email non valida."));return;}
     if(password.length<6){setError(L("Password: minimo 6 caratteri."));return;}
     if(password!==confirmPwd){setError(L("Le password non coincidono."));return;}
     setLoading(true);
+    var cancelAuthResume=armAuthResumeTimeout();
     createUserWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
         var normalizedEmail=String(cred.user.email||email||"").toLowerCase();
         var displayName=name.trim()||cred.user.displayName||"Utente";
 
         // Entra subito nell'app. Firestore non deve mai bloccare login/registrazione.
+        try{cancelAuthResume();}catch(e){}
         onLogin({id:cred.user.uid,email:normalizedEmail,name:displayName});
         setLoading(false);
 
@@ -160,13 +212,16 @@ function LoginScreen({onLogin}){
         }catch(e){}
       })
       .catch(function(err){
+        try{cancelAuthResume();}catch(e){}
         setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
         setLoading(false);
       });
   }
 
   async function doGoogle(){
+    try{cancelAuthResume();}catch(e){}
     setError(""); setLoading(true);
+    var cancelAuthResume=armAuthResumeTimeout();
     try {
       var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       if(isNative){
@@ -193,19 +248,23 @@ function LoginScreen({onLogin}){
         if(!idToken&&!accessToken) throw new Error("Google login non ha restituito token utilizzabili.");
         const credential = GoogleAuthProvider.credential(idToken||null, accessToken||null);
         const cred = await signInWithCredential(fbAuth, credential);
+        try{cancelAuthResume();}catch(e){}
         onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
         return;
       }
       googleProvider.setCustomParameters({prompt:"select_account"});
       const cred = await signInWithPopup(fbAuth, googleProvider);
+      try{cancelAuthResume();}catch(e){}
       onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
     } catch(err){
       console.error("Google login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
       if(msg.toLowerCase().indexOf("no credentials")>=0){
+        try{cancelAuthResume();}catch(e){}
         setError(L("Errore Google: nessuna credenziale Google disponibile sul dispositivo. Riprova dopo aver selezionato un account Google nel popup."));
       }else{
+        try{cancelAuthResume();}catch(e){}
         setError(L("Errore Google: ")+code+" - "+msg);
       }
       setLoading(false);
@@ -213,7 +272,9 @@ function LoginScreen({onLogin}){
   }
 
   async function doApple(){
+    try{cancelAuthResume();}catch(e){}
     setError(""); setLoading(true);
+    var cancelAuthResume=armAuthResumeTimeout();
     try {
       var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       if(isNative){
@@ -237,6 +298,7 @@ function LoginScreen({onLogin}){
               await setDoc(refNative,{name:appleNameNative||"Utente",email:appleEmailNative,provider:"apple",createdAt:new Date().toISOString()});
             }
           }catch(saveNativeErr){}
+          try{cancelAuthResume();}catch(e){}
           onLogin({id:nativeUser.uid, email:nativeUser.email||"", name:nativeUser.displayName||nativeUser.name||"Utente"});
           return;
         }
@@ -258,6 +320,7 @@ function LoginScreen({onLogin}){
             }
           }
         }catch(saveErr){}
+        try{cancelAuthResume();}catch(e){}
         onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
         return;
       }
@@ -275,18 +338,23 @@ function LoginScreen({onLogin}){
           }
         }
       }catch(saveWebErr){}
+      try{cancelAuthResume();}catch(e){}
       onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
     } catch(err){
       console.error("Apple login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
       if(code==="auth/operation-not-allowed"||msg.toLowerCase().indexOf("apple")>=0&&msg.toLowerCase().indexOf("provider")>=0&&msg.toLowerCase().indexOf("enable")>=0){
+        try{cancelAuthResume();}catch(e){}
         setError(L("Errore Apple: il provider Apple non è abilitato in Firebase Authentication."));
       }else if(code==="auth/account-exists-with-different-credential"){
+        try{cancelAuthResume();}catch(e){}
         setError(L("Esiste già un account con questa email. Accedi con il metodo usato in precedenza."));
       }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
+        try{cancelAuthResume();}catch(e){}
         setError(L("Accesso Apple annullato."));
       }else{
+        try{cancelAuthResume();}catch(e){}
         setError(L("Errore Apple: ")+code+" - "+msg);
       }
       setLoading(false);
@@ -812,6 +880,13 @@ function AppWithLogin(){
 
   useEffect(function(){
     var cancelled=false;
+    var resumeAfterReload=false;
+    try{
+      if(typeof window!=="undefined"&&window.sessionStorage){
+        var marker=window.sessionStorage.getItem("fainance_auth_resume_after_reload");
+        resumeAfterReload=!!marker && Date.now()-Number(marker)<30000;
+      }
+    }catch(e){}
 
     function applyUserImmediately(user){
       try{if(typeof window!=="undefined"&&window.sessionStorage)window.sessionStorage.removeItem("fainance_auth_no_reload_marker");}catch(e){}
@@ -831,7 +906,7 @@ function AppWithLogin(){
         setFbUser(null);
         setUserData(null);
       }
-    },4500);
+    },resumeAfterReload?20000:4500);
 
     var unsub=onAuthStateChanged(fbAuth,function(user){
       if(cancelled)return;
