@@ -801,28 +801,57 @@ function AppWithLogin(){
   var [userData,setUserData]=useState(null);
 
   useEffect(function(){
+    var cancelled=false;
+
+    function enterImmediately(user){
+      var normalizedEmail=String(user.email||"").toLowerCase();
+      setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+      setFbUser(user);
+    }
+
+    var startupTimer=setTimeout(function(){
+      if(cancelled)return;
+      var current=null;
+      try{current=fbAuth.currentUser;}catch(e){}
+      if(current){
+        enterImmediately(current);
+      }else{
+        setFbUser(null);
+        setUserData(null);
+      }
+    },5000);
+
     var unsub=onAuthStateChanged(fbAuth,function(user){
+      if(cancelled)return;
+      clearTimeout(startupTimer);
+
       if(user){
-        // Load user profile from Firestore
+        // Entra subito: Firestore non deve bloccare la schermata Caricamento.
+        enterImmediately(user);
+
+        // Profilo Firestore in background.
         getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
+          if(cancelled)return;
           var profile=snap.exists()?snap.data():{};
           var displayName=profile.name||user.displayName||"Utente";
           var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
           setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
-          setFbUser(user);
         }).catch(function(){
           var normalizedEmail=String(user.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
-          setFbUser(user);
         });
       } else {
         setFbUser(null);
         setUserData(null);
       }
     });
-    return unsub;
+
+    return function(){
+      cancelled=true;
+      clearTimeout(startupTimer);
+      try{unsub&&unsub();}catch(e){}
+    };
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
