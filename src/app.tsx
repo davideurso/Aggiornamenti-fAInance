@@ -144,11 +144,20 @@ function LoginScreen({onLogin}){
     setLoading(true);
     createUserWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
-        // Save name to Firestore
-        return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
-          .then(function(){
-            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
-          });
+        var normalizedEmail=String(cred.user.email||email||"").toLowerCase();
+        var displayName=name.trim()||cred.user.displayName||"Utente";
+
+        // Entra subito nell'app. Firestore non deve mai bloccare login/registrazione.
+        onLogin({id:cred.user.uid,email:normalizedEmail,name:displayName});
+        setLoading(false);
+
+        // Scritture profilo in background: eventuali errori non bloccano l'accesso.
+        try{
+          setDoc(doc(fbDb,"users",cred.user.uid),{name:displayName,email:normalizedEmail,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+        }catch(e){}
+        try{
+          setDoc(doc(fbDb,"userData",cred.user.uid),{name:displayName,email:normalizedEmail,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+        }catch(e){}
       })
       .catch(function(err){
         setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
@@ -799,6 +808,7 @@ function AppWithLogin(){
   async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
+  var lastManualLoginAtRef=useRef(0);
 
   useEffect(function(){
     var cancelled=false;
@@ -842,6 +852,13 @@ function AppWithLogin(){
           setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:String(user.email||"").toLowerCase(),updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
         });
       } else {
+        // Dopo un login appena completato, Firebase iOS può emettere un null transitorio.
+        // Non deve riportare subito l'utente alla pagina login.
+        try{
+          if(lastManualLoginAtRef.current && Date.now()-lastManualLoginAtRef.current<15000){
+            return;
+          }
+        }catch(e){}
         setFbUser(null);
         setUserData(null);
       }
@@ -875,6 +892,7 @@ function AppWithLogin(){
   }
 
   if(!fbUser)return <LoginScreen onLogin={function(u){
+    lastManualLoginAtRef.current=Date.now();
     setUserData(u);
     if(u&&u.id){
       // Il login può completarsi prima che onAuthStateChanged aggiorni fbUser.
