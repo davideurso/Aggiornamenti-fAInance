@@ -144,11 +144,8 @@ function LoginScreen({onLogin}){
     setLoading(true);
     createUserWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
-        // Save name to Firestore
-        return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
-          .then(function(){
-            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
-          });
+        onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
+        setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
       })
       .catch(function(err){
         setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
@@ -1131,7 +1128,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [shareInviteLoading,setShareInviteLoading]=useState(false);
 
   // ── FIRESTORE SYNC ──────────────────────────────────────────────────────────
-  var [firestoreReady,setFirestoreReady]=useState(false);
+  var [firestoreReady,setFirestoreReady]=useState(true);
   var [isOffline,setIsOffline]=useState(!navigator.onLine);
   useEffect(function(){function goOnline(){setIsOffline(false);}function goOffline(){setIsOffline(true);}window.addEventListener("online",goOnline);window.addEventListener("offline",goOffline);return function(){window.removeEventListener("online",goOnline);window.removeEventListener("offline",goOffline);};},[]);
   useEffect(function(){
@@ -5335,7 +5332,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
   function BiometricLockScreen(){return <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",background:dark?"linear-gradient(160deg,#111827,#1E1E30)":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{width:"100%",maxWidth:420,background:cardBg,border:"1px solid "+borderC,borderRadius:24,boxShadow:dark?"0 18px 70px rgba(0,0,0,.45)":"0 18px 70px rgba(74,66,160,.22)",padding:24,textAlign:"center"}}><div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,borderRadius:24,background:dark?"#24213a":"#F0EDFF",marginBottom:14,fontSize:34}}>🔐</div><div style={{fontSize:22,fontWeight:950,color:textC,marginBottom:6}}>{L("fAInance è bloccata")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45,marginBottom:18}}>{L("Sblocca l’app per visualizzare i tuoi dati finanziari.")}</div>{biometricLockMessage&&<div style={{background:dark?"#342424":"#fff0f0",border:"1px solid "+(dark?"#5a3333":"#f3b6b6"),color:dark?"#ffd0d0":"#8a2d2d",borderRadius:12,padding:"10px 12px",fontSize:12,lineHeight:1.35,marginBottom:14}}>{L(biometricLockMessage)}</div>}<button onClick={function(){unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");}} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con biometria")}</button><button onClick={onLogout} style={{width:"100%",marginTop:10,background:dark?"#252535":"#f5f5f5",color:subC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"11px 16px",fontSize:13,fontWeight:800,cursor:"pointer"}}>{L("Esci dall’account")}</button></div></div>;}
 
   return <AppCtx.Provider value={ctxValue}>
-    {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
+    {false?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
     isMobile?
     <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden"}}>
