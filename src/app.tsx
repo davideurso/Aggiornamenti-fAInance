@@ -874,7 +874,10 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){
+    setUserData(u);
+    setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
+  }}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
