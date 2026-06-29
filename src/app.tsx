@@ -67,8 +67,6 @@ function readFainanceStoredLang(){
   }catch(e){return "it";}
 }
 
-// 1.6.79: biometria Android stabilizzata evitando doppio prompt e blocco immediato dopo l’attivazione.
-
 const ADMOB_APP_ID_ANDROID="ca-app-pub-4502496181111632~4013173874";
 const ADMOB_REWARDED_AD_UNIT_ID_ANDROID="ca-app-pub-4502496181111632/2700092208";
 const ADMOB_BANNER_AD_UNIT_ID_ANDROID="ca-app-pub-4502496181111632/3175905788";
@@ -110,19 +108,6 @@ function LoginScreen({onLogin}){
 
   var inp={width:"100%",borderRadius:10,border:"1px solid #e0e0e0",padding:"12px 14px",fontSize:15,background:"#fff",color:"#333",boxSizing:"border-box",outline:"none"};
 
-  function showAppleLoginButton(){
-    try{
-      var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
-      var platform=cap&&cap.getPlatform?String(cap.getPlatform()).toLowerCase():"";
-      if(platform==="android")return false;
-    }catch(e){}
-    try{
-      var ua=(typeof navigator!=="undefined"&&navigator.userAgent)?String(navigator.userAgent).toLowerCase():"";
-      if(ua.indexOf("android")>=0)return false;
-    }catch(e){}
-    return true;
-  }
-
   function doLogin(){
     setError("");setLoading(true);
     signInWithEmailAndPassword(fbAuth,email,password)
@@ -144,8 +129,11 @@ function LoginScreen({onLogin}){
     setLoading(true);
     createUserWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
-        onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
-        setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
+        // Save name to Firestore
+        return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
+          .then(function(){
+            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
+          });
       })
       .catch(function(err){
         setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
@@ -210,29 +198,12 @@ function LoginScreen({onLogin}){
         if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithApple){
           throw new Error("Sign in with Apple non disponibile nel plugin di autenticazione installato.");
         }
-        const result = await FirebaseAuthentication.signInWithApple({
-          scopes:["email","name"],
-          customParameters:[{key:"locale",value:loginLang()}]
-        });
-        const nativeUser=(result&&result.user)||{};
-        if(nativeUser&&nativeUser.uid){
-          try{
-            var appleNameNative=(nativeUser.displayName||nativeUser.name||"").trim();
-            var appleEmailNative=(nativeUser.email||"").toLowerCase();
-            var refNative=doc(fbDb,"users",nativeUser.uid);
-            var snapNative=await getDoc(refNative);
-            if(!snapNative.exists()){
-              await setDoc(refNative,{name:appleNameNative||"Utente",email:appleEmailNative,provider:"apple",createdAt:new Date().toISOString()});
-            }
-          }catch(saveNativeErr){}
-          onLogin({id:nativeUser.uid, email:nativeUser.email||"", name:nativeUser.displayName||nativeUser.name||"Utente"});
-          return;
-        }
+        const result = await FirebaseAuthentication.signInWithApple({scopes:["email","name"]});
         const credData=(result&&result.credential)||{};
         const idToken=credData.idToken||credData.id_token||credData.identityToken||credData.identity_token||"";
         const accessToken=credData.accessToken||credData.access_token||"";
         const rawNonce=credData.rawNonce||credData.raw_nonce||credData.nonce||"";
-        if(!idToken) throw new Error("Apple login non ha restituito né utente Firebase né identity token utilizzabile. Verifica provider Apple in Firebase Authentication.");
+        if(!idToken) throw new Error("Apple login non ha restituito un identity token utilizzabile.");
         const provider = new OAuthProvider("apple.com");
         const credential = provider.credential(rawNonce?{idToken:idToken,rawNonce:rawNonce,accessToken:accessToken||undefined}:{idToken:idToken,accessToken:accessToken||undefined});
         const cred = await signInWithCredential(fbAuth, credential);
@@ -252,7 +223,6 @@ function LoginScreen({onLogin}){
       const provider = new OAuthProvider("apple.com");
       provider.addScope("email");
       provider.addScope("name");
-      provider.setCustomParameters({locale:loginLang()});
       const cred = await signInWithPopup(fbAuth, provider);
       try{
         if(cred.user&&cred.user.uid){
@@ -268,8 +238,8 @@ function LoginScreen({onLogin}){
       console.error("Apple login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
-      if(code==="auth/operation-not-allowed"||msg.toLowerCase().indexOf("apple")>=0&&msg.toLowerCase().indexOf("provider")>=0&&msg.toLowerCase().indexOf("enable")>=0){
-        setError(L("Errore Apple: il provider Apple non è abilitato in Firebase Authentication."));
+      if(code==="auth/operation-not-allowed"){
+        setError(L("Errore Apple: abilita il provider Apple in Firebase Authentication e riprova."));
       }else if(code==="auth/account-exists-with-different-credential"){
         setError(L("Esiste già un account con questa email. Accedi con il metodo usato in precedenza."));
       }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
@@ -338,10 +308,10 @@ function LoginScreen({onLogin}){
             <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M47.5 24.6c0-1.6-.1-3.1-.4-4.6H24v8.7h13.1c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.4-10.6 7.4-17.3z"/><path fill="#34A853" d="M24 48c6.5 0 12-2.2 16-5.9l-7.9-6c-2.2 1.5-5 2.3-8.1 2.3-6.2 0-11.5-4.2-13.4-9.9H2.5v6.2C6.5 42.6 14.7 48 24 48z"/><path fill="#FBBC05" d="M10.6 28.5c-.5-1.5-.8-3-.8-4.5s.3-3 .8-4.5v-6.2H2.5C.9 16.8 0 20.3 0 24s.9 7.2 2.5 10.7l8.1-6.2z"/><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.2 30.5 0 24 0 14.7 0 6.5 5.4 2.5 13.3l8.1 6.2C12.5 13.7 17.8 9.5 24 9.5z"/></svg>
             {L("Accedi con Google")}
           </button>
-          {showAppleLoginButton()&&<button onClick={doApple} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#000",color:"#fff",border:"1.5px solid #000",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" style={{display:"block",flexShrink:0}}><path fill="currentColor" d="M16.365 1.43c0 1.14-.423 2.145-1.27 3.014-.91.93-1.91 1.466-3.013 1.384-.13-1.091.383-2.255 1.168-3.058.862-.888 2.23-1.526 3.115-1.34zM20.5 17.34c-.55 1.27-.813 1.837-1.52 2.963-.987 1.526-2.38 3.43-4.104 3.443-1.535.014-1.93-.997-4.014-.986-2.085.01-2.52 1.004-4.055.99-1.724-.015-3.04-1.733-4.027-3.26-2.757-4.265-3.047-9.268-1.344-11.927 1.21-1.89 3.12-2.997 4.916-2.997 1.83 0 2.98 1.004 4.49 1.004 1.464 0 2.354-1.006 4.465-1.006 1.596 0 3.287.87 4.493 2.373-3.95 2.166-3.31 7.804.7 9.403z"/></svg>
+          <button onClick={doApple} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#000",color:"#fff",border:"1.5px solid #000",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>
+            <span style={{fontSize:18,lineHeight:1}}></span>
             {L("Accedi con Apple")}
-          </button>}
+          </button>
         </div>
       </div>
       <div style={{textAlign:"center",marginTop:14,fontSize:11,color:"#aaa"}}>© 2026 fAInance</div>
@@ -798,57 +768,28 @@ function AppWithLogin(){
   var [userData,setUserData]=useState(null);
 
   useEffect(function(){
-    var cancelled=false;
-
-    function enterImmediately(user){
-      var normalizedEmail=String(user.email||"").toLowerCase();
-      setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
-      setFbUser(user);
-    }
-
-    var startupTimer=setTimeout(function(){
-      if(cancelled)return;
-      var current=null;
-      try{current=fbAuth.currentUser;}catch(e){}
-      if(current){
-        enterImmediately(current);
-      }else{
-        setFbUser(null);
-        setUserData(null);
-      }
-    },5000);
-
     var unsub=onAuthStateChanged(fbAuth,function(user){
-      if(cancelled)return;
-      clearTimeout(startupTimer);
-
       if(user){
-        // Entra subito: Firestore non deve bloccare la schermata Caricamento.
-        enterImmediately(user);
-
-        // Profilo Firestore in background.
+        // Load user profile from Firestore
         getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
-          if(cancelled)return;
           var profile=snap.exists()?snap.data():{};
           var displayName=profile.name||user.displayName||"Utente";
           var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
           setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+          setFbUser(user);
         }).catch(function(){
           var normalizedEmail=String(user.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+          setFbUser(user);
         });
       } else {
         setFbUser(null);
         setUserData(null);
       }
     });
-
-    return function(){
-      cancelled=true;
-      clearTimeout(startupTimer);
-      try{unsub&&unsub();}catch(e){}
-    };
+    return unsub;
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
@@ -871,10 +812,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){
-    setUserData(u);
-    setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
-  }}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -982,15 +920,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [mobileNavOrder,setMobileNavOrder]=useStorage(userKey("pref_mobile_nav_order_v1"),["home","spese","history","voice","more","share"]);
   var [mobileNavIconCount,setMobileNavIconCount]=useStorage(userKey("pref_mobile_nav_icon_count_v1"),5);
   var [mobileMenuOrder,setMobileMenuOrder]=useStorage(userKey("pref_mobile_menu_order_v1"),["consulenteAI","patrimonio","budget","share","debtCredits","shopping","goals","alerts","appunti","settings"]);
-  var [biometricLockEnabled,setBiometricLockEnabled]=useStorage(userKey("pref_biometric_lock_enabled_v1"),false);
-  var [biometricLockTimeout,setBiometricLockTimeout]=useStorage(userKey("pref_biometric_lock_timeout_v1"),1);
-  var [appLocked,setAppLocked]=useState(false);
-  var [biometricChecking,setBiometricChecking]=useState(false);
-  var [biometricLockMessage,setBiometricLockMessage]=useState("");
-  var biometricPromptRef=useRef(false);
-  var biometricInitialCheckRef=useRef(false);
-  var biometricBackgroundAtRef=useRef(null);
-  var biometricSkipAutoLockUntilRef=useRef(0);
   var DEFAULT_MOBILE_ALL_NAV_ORDER=["home","spese","history","voice","stats","consulenteAI","patrimonio","budget","share","debtCredits","shopping","goals","alerts","appunti","settings"];
   var [mobileAllNavOrderRaw,setMobileAllNavOrderRaw]=useStorage(userKey("pref_mobile_all_nav_order_v1"),DEFAULT_MOBILE_ALL_NAV_ORDER);
   var mobileAllNavOrder=useMemo(function(){
@@ -1128,7 +1057,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [shareInviteLoading,setShareInviteLoading]=useState(false);
 
   // ── FIRESTORE SYNC ──────────────────────────────────────────────────────────
-  var [firestoreReady,setFirestoreReady]=useState(true);
+  var [firestoreReady,setFirestoreReady]=useState(false);
   var [isOffline,setIsOffline]=useState(!navigator.onLine);
   useEffect(function(){function goOnline(){setIsOffline(false);}function goOffline(){setIsOffline(true);}window.addEventListener("online",goOnline);window.addEventListener("offline",goOffline);return function(){window.removeEventListener("online",goOnline);window.removeEventListener("offline",goOffline);};},[]);
   useEffect(function(){
@@ -1200,19 +1129,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       setFirestoreReady(true);
     }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
   },[userId]);
-
-  // iOS safety: se Firestore resta appeso, non lasciare l'app bloccata su "Caricamento dati account...".
-  useEffect(function(){
-    if(!userId||firestoreReady)return;
-    var t=setTimeout(function(){
-      if(!firestoreHydratedRef.current){
-        console.warn("Firestore load timeout: app unlocked with local/default data");
-        firestoreHydratedRef.current=true;
-        setFirestoreReady(true);
-      }
-    },8000);
-    return function(){clearTimeout(t);};
-  },[userId,firestoreReady]);
 
   async function saveToFirestore(){
     if(!userId||!firestoreHydratedRef.current)return;
@@ -1447,39 +1363,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
     if(url.indexOf("open-plan-info")>=0||url.indexOf("open-info")>=0||url.indexOf("plan-info")>=0){
       openPlanInfo();
-      return;
-    }
-    if(url.indexOf("quick-add")>=0||url.indexOf("open-quick-add")>=0){
-      setTab("spese");
-      setSpeseSubTab("add");
-      setAddType("expense");
-      setAddSubTab("single");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("shopping-list")>=0||url.indexOf("open-shopping-list")>=0||url.indexOf("fidelity")>=0){
-      setTab("shopping");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("note")>=0||url.indexOf("open-note")>=0){
-      setTab("appunti");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("goal")>=0||url.indexOf("open-goal")>=0){
-      setTab("goals");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("debt")>=0||url.indexOf("debiti")>=0||url.indexOf("credit")>=0){
-      setTab("debtCredits");
-      setSettingsPage(null);
-      setMobileMenu(false);
       return;
     }
     if(url.indexOf("open-receipt-camera")>=0||url.indexOf("receipt-camera")>=0){
@@ -1821,79 +1704,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     cleanBase=inferToastPresentation(finalText,cleanBase);
     setToastState({...cleanBase,text:finalText,id:Date.now()+Math.random()});
   } 
-
-
-  function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
-  async function getNativeBiometric(){try{var mod=await import("@aparajita/capacitor-biometric-auth");return mod&&mod.BiometricAuth?mod:null;}catch(e){return null;}}
-
-  function biometricErrorText(errorCode,details){
-    var code=String(errorCode||"");var raw=String(details||"");
-    if(code==="biometryNotEnrolled")return "Nessuna impronta o biometria configurata sul dispositivo.";
-    if(code==="biometryNotAvailable")return "La biometria non è disponibile per questa app o su questo dispositivo.";
-    if(code==="passcodeNotSet"||code==="noDeviceCredential")return "Configura prima un PIN, password, sequenza o impronta nelle impostazioni del telefono.";
-    if(code==="biometryLockout")return "Troppi tentativi non riusciti. Sblocca il telefono manualmente e riprova.";
-    if(code==="authenticationFailed")return "Autenticazione biometrica non riuscita.";
-    if(code==="systemCancel")return "Controllo biometrico annullato dal sistema.";
-    if(code==="userCancel")return "Controllo biometrico annullato.";
-    if(raw)return raw;
-    return "Controllo biometrico non completato.";
-  }
-  function withBiometricTimeout(promise,ms){return new Promise(function(resolve,reject){var done=false;var timer=setTimeout(function(){if(done)return;done=true;reject(new Error("TIMEOUT_BIOMETRIC_PROMPT"));},ms||25000);Promise.resolve(promise).then(function(v){if(done)return;done=true;clearTimeout(timer);resolve(v);}).catch(function(e){if(done)return;done=true;clearTimeout(timer);reject(e);});});}
-  async function checkBiometricAvailability(){
-    if(!isNativePlatform())return {available:false,reason:"Il controllo biometrico è disponibile solo nell’app installata su Android o iPhone."};
-    var mod=await getNativeBiometric();
-    var BiometricAuth=mod&&mod.BiometricAuth;
-    if(!BiometricAuth||!BiometricAuth.checkBiometry||!BiometricAuth.authenticate)return {available:false,reason:"Plugin biometrico non disponibile. Esegui npm install e npx cap sync."};
-    try{
-      var res:any=await withBiometricTimeout(BiometricAuth.checkBiometry(),8000);
-      if(res&&(res.isAvailable||res.deviceIsSecure))return {available:true,reason:"",details:res};
-      var reason=(res&&(res.reason||res.strongReason||res.code||res.strongCode))||"Il dispositivo non ha biometria o codice di sblocco configurati.";
-      return {available:false,reason:String(reason),details:res};
-    }catch(e){return {available:false,reason:String((e&&e.message)||e||"Impossibile verificare la disponibilità biometrica."),details:null};}
-  }
-  async function requestBiometricUnlock(reason){
-    if(biometricPromptRef.current)return null;
-    biometricPromptRef.current=true;setBiometricChecking(true);setBiometricLockMessage("");
-    try{
-      if(!isNativePlatform()){setBiometricLockMessage(L("Il controllo biometrico è disponibile solo nell’app installata su Android o iPhone."));return false;}
-      var mod=await getNativeBiometric();
-      var BiometricAuth=mod&&mod.BiometricAuth;
-      if(!BiometricAuth||!BiometricAuth.authenticate){setBiometricLockMessage(L("Plugin biometrico non disponibile. Esegui npm install e npx cap sync."));return false;}
-      var available=await checkBiometricAvailability();
-      if(!available.available){setBiometricLockMessage(L(available.reason||"Il controllo biometrico non è disponibile o non è configurato su questo dispositivo."));return false;}
-      var AndroidBiometryStrength=(mod&&mod.AndroidBiometryStrength)||{};
-      await withBiometricTimeout(BiometricAuth.authenticate({
-        reason:reason||"Sblocca fAInance",
-        cancelTitle:"Annulla",
-        allowDeviceCredential:true,
-        iosFallbackTitle:"Usa codice",
-        androidTitle:"fAInance",
-        androidSubtitle:"Sblocca fAInance",
-        androidConfirmationRequired:false,
-        androidBiometryStrength:AndroidBiometryStrength.weak!==undefined?AndroidBiometryStrength.weak:0
-      }),30000);
-      biometricBackgroundAtRef.current=null;
-      biometricSkipAutoLockUntilRef.current=Date.now()+3000;
-      setBiometricLockMessage("");
-      return true;
-    }catch(e){
-      var raw=String((e&&e.message)||e||"");
-      var code=(e&&e.code)||raw;
-      if(raw==="TIMEOUT_BIOMETRIC_PROMPT")setBiometricLockMessage(L("Il controllo biometrico non ha ricevuto risposta dal sistema Android. Chiudi e riapri l’app, poi riprova."));
-      else setBiometricLockMessage(L(biometricErrorText(code,raw)));
-      return false;
-    }finally{
-      biometricPromptRef.current=false;setBiometricChecking(false);
-    }
-  }
-  async function unlockBiometricApp(reason){if(biometricPromptRef.current)return null;var ok=await requestBiometricUnlock(reason);if(ok===true)setAppLocked(false);else if(ok===false)setAppLocked(true);return ok;}
-  async function handleBiometricToggle(next){
-    if(biometricChecking||biometricPromptRef.current)return;
-    if(next){var ok=await requestBiometricUnlock("Conferma l’attivazione del blocco biometrico");if(ok){biometricInitialCheckRef.current=true;biometricBackgroundAtRef.current=null;biometricSkipAutoLockUntilRef.current=Date.now()+5000;setBiometricLockEnabled(true);setAppLocked(false);setToast({text:"Protezione biometrica attivata",type:"success",icon:"🔐"});}else if(ok===false)setToast({text:biometricLockMessage||"Controllo biometrico non completato.",type:"error",icon:"🚫",color:"#E24B4A"});return;}
-    var confirmed=isNativePlatform()?await requestBiometricUnlock("Conferma la disattivazione del blocco biometrico"):true;if(confirmed){biometricInitialCheckRef.current=false;biometricBackgroundAtRef.current=null;biometricSkipAutoLockUntilRef.current=0;setBiometricLockEnabled(false);setAppLocked(false);setToast({text:"Protezione biometrica disattivata",type:"success",icon:"🔓"});}else if(confirmed===false)setToast({text:biometricLockMessage||"Controllo biometrico non completato.",type:"error",icon:"🚫",color:"#E24B4A"});
-  }
-  useEffect(function(){if(!biometricLockEnabled){setAppLocked(false);biometricInitialCheckRef.current=false;return;}if(!firestoreReady||biometricInitialCheckRef.current)return;biometricInitialCheckRef.current=true;if(!isNativePlatform())return;if(Date.now()<Number(biometricSkipAutoLockUntilRef.current||0))return;if(biometricPromptRef.current)return;setAppLocked(true);unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");},[biometricLockEnabled,firestoreReady]);
-  useEffect(function(){var removed=false;var listenerHandle=null;async function attach(){if(!isNativePlatform())return;try{var mod=await import("@capacitor/app");if(removed||!mod||!mod.App||!mod.App.addListener)return;listenerHandle=await mod.App.addListener("appStateChange",function(state){var active=!!(state&&state.isActive);if(!active){biometricBackgroundAtRef.current=Date.now();return;}if(!biometricLockEnabled)return;if(biometricPromptRef.current||Date.now()<Number(biometricSkipAutoLockUntilRef.current||0))return;var bgAt=Number(biometricBackgroundAtRef.current||0);biometricBackgroundAtRef.current=null;if(!bgAt)return;var minutes=Number(biometricLockTimeout);var elapsed=Date.now()-bgAt;if(minutes<=0||elapsed>=minutes*60*1000){setAppLocked(true);unlockBiometricApp("Sblocca fAInance per continuare");}});}catch(e){}}attach();return function(){removed=true;try{if(listenerHandle&&listenerHandle.remove)listenerHandle.remove();}catch(e){}};},[biometricLockEnabled,biometricLockTimeout,firestoreReady]);
   var [voiceModal,setVoiceModal]=useState(false);
   var [voiceListening,setVoiceListening]=useState(false);
   var [voiceText,setVoiceText]=useState("");
@@ -2954,97 +2764,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       var shoppingListString=JSON.stringify(payload.shoppingListWidget||{});
       var fidelityString=JSON.stringify(payload.fidelityWidget||{});
       var debtCreditsString=JSON.stringify(payload.debtCreditsWidget||{});
-      function saveIosWidgetPayload(){
-        try{
-          if(!isNativeIOSApp())return;
-          var iosBridge=window&&window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.FainanceWidgetBridge;
-          if(!iosBridge||!iosBridge.saveAll)return;
-          function cleanHex(v,f){var s=String(v||"").trim();return /^#?[0-9a-fA-F]{6}$/.test(s)?(s.charAt(0)==="#"?s:"#"+s):f;}
-          function asArray(v){return Array.isArray(v)?v:[];}
-          function n(v,f){var x=Number(v);return Number.isFinite(x)?x:f;}
-          var quick=payload.quickAdd||{};
-          var shopping=payload.shoppingListWidget||{};
-          var shoppingItems=asArray(shopping.items);
-          var openShoppingItems=shoppingItems.filter(function(x){return x&&!x.bought;});
-          var boughtShoppingItems=shoppingItems.filter(function(x){return x&&x.bought;});
-          var fidelity=payload.fidelityWidget||{};
-          var fidelityCards=asArray(fidelity.cards);
-          var selectedCard=fidelity.selectedCard||fidelityCards.find(function(c){return String(c.id)===String(fidelity.selectedCardId);})||fidelityCards[0]||null;
-          var cardCodeType=String((selectedCard&&(selectedCard.codeType||selectedCard.type))||"barcode").toLowerCase();
-          var note=payload.noteWidget||{};
-          var goal=payload.goalWidget||{};
-          var share=payload.shareWidget||{};
-          var debt=payload.debtCreditsWidget||{};
-          var debtItems=asArray(debt.items).filter(function(x){return x&&!x.closed;});
-          var debtsTotal=debtItems.filter(function(x){return String(x.kind||x.type||"debt")==="debt";}).reduce(function(sum,x){return sum+n(x.balance||x.amount,0);},0);
-          var creditsTotal=debtItems.filter(function(x){return String(x.kind||x.type||"")==="credit";}).reduce(function(sum,x){return sum+n(x.balance||x.amount,0);},0);
-          var shareParticipants=[];
-          try{
-            var selectedShareProjectId=String(share.projectId||"");
-            var selectedShareProject=asArray(shareProjects).find(function(p){return String(p.id)===selectedShareProjectId;})||null;
-            shareParticipants=asArray(selectedShareProject&&selectedShareProject.participants).map(function(p){return String(p.name||p.label||p.email||"").trim();}).filter(Boolean);
-          }catch(participantsErr){}
-          var iosPayload={
-            updatedAt:new Date().toISOString(),
-            locale:lang==="it"?"it-IT":String(lang||"it"),
-            currencySymbol:sym||"€",
-            colors:{
-              primaryHex:cleanHex((payload.quickAdd&&payload.quickAdd.bgColor)||payload.bgColor||widgetBgColor,"#315CFF"),
-              secondaryHex:cleanHex((payload.shareWidget&&payload.shareWidget.accentColor)||widgetShareAccentColor||confirmButtonColor,"#8C4DFF"),
-              incomeHex:cleanHex((payload.quickAdd&&payload.quickAdd.incomeColor)||payload.incomeColor||incomeColor,"#18A957"),
-              expenseHex:cleanHex((payload.quickAdd&&payload.quickAdd.expenseColor)||payload.expenseColor||expenseColor,"#E44B4B"),
-              textHex:cleanHex((payload.noteWidget&&payload.noteWidget.titleColor)||widget2TitleColor,"#FFFFFF"),
-              cardHex:cleanHex((payload.quickAdd&&payload.quickAdd.bgColor)||payload.bgColor||widgetBgColor,"#12172A")
-            },
-            quickAdd:{
-              sampleExpenseLabel:String(quick.expenseLabel||payload.expenseLabel||"+ Spesa"),
-              sampleIncomeLabel:String(quick.incomeLabel||payload.incomeLabel||"+ Entrata")
-            },
-            fidelity:{
-              title:String(fidelity.title||L("Fidelity card")),
-              cardName:String((selectedCard&&(selectedCard.name||selectedCard.title))||L("Carta")),
-              barcode:cardCodeType.indexOf("qr")>=0?"":String((selectedCard&&(selectedCard.code||selectedCard.barcode))||""),
-              qrCode:cardCodeType.indexOf("qr")>=0?String((selectedCard&&(selectedCard.code||selectedCard.qrCode))||""):"",
-              backgroundHex:cleanHex((selectedCard&&selectedCard.color)||fidelity.accentColor||widgetFidelityAccentColor,"#2F5BFF")
-            },
-            shopping:{
-              title:String(shopping.title||L("Lista spesa")),
-              listName:String(shopping.selectedListTitle||shopping.title||L("Lista spesa")),
-              remainingCount:openShoppingItems.length,
-              completedCount:boughtShoppingItems.length,
-              items:openShoppingItems.slice(0,8).map(function(x){return String(x.name||x.title||L("Prodotto"));})
-            },
-            note:{
-              title:note.type==="bank"?L("Coordinate"):L("Nota"),
-              noteTitle:String(note.title||L("Nota")),
-              body:String(note.body||"").slice(0,n(note.maxChars,500))
-            },
-            goal:{
-              title:L("Obiettivo"),
-              goalName:String(goal.title||L("Obiettivo")),
-              currentAmount:n(goal.saved,0),
-              targetAmount:n(goal.target,0),
-              currencySymbol:String(goal.currency||sym||"€")
-            },
-            share:{
-              title:"Share",
-              projectName:String(share.projectName||L("Progetto Share")),
-              myBalance:n(share.netAmount,0),
-              currencySymbol:String(share.currency||sym||"€"),
-              participants:shareParticipants
-            },
-            debts:{
-              title:L("Debiti / Crediti"),
-              debtsTotal:Math.round(debtsTotal*100)/100,
-              creditsTotal:Math.round(creditsTotal*100)/100,
-              currencySymbol:String(debt.currency||sym||"€"),
-              items:debtItems.slice(0,6).map(function(x){return{name:String(x.holder||x.name||L("Nome")),amount:n(x.balance||x.amount,0),type:String(x.kind||x.type||"debt")==="credit"?"credit":"debt"};})
-            }
-          };
-          iosBridge.saveAll({payload:iosPayload}).catch(function(e){try{console.warn("Errore aggiornamento widget iOS",e);}catch(ignore){}});
-        }catch(e){}
-      }
-      var afterNativeUpdate=function(){saveIosWidgetPayload();if(showMessage)setToast("Widget aggiornato");};
+      var afterNativeUpdate=function(){if(showMessage)setToast("Widget aggiornato");};
       var fallbackSave=function(){
         var afterSave=function(){
           if(bridge&&bridge.updateAllWidgets){
@@ -3332,7 +3052,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   var settingsSections=[
     {id:"profile",icon:"👤",label:translateUiRuntimeText("Profilo"),desc:translateUiRuntimeText("Dati personali, account, accesso")},
-    {id:"security",icon:"🔐",label:translateUiRuntimeText("Sicurezza"),desc:translateUiRuntimeText("Blocco biometrico dell’app")},
     {id:"general",icon:"🌐",label:translateUiRuntimeText("Generale"),desc:translateUiRuntimeText("Lingua, formato data, metriche, valute e IA")},
     {id:"appearance",icon:"🎨",label:translateUiRuntimeText("Aspetto"),desc:translateUiRuntimeText("Tema, colori, stile pulsanti e widget")},
     {id:"sections",icon:"🧩",label:translateUiRuntimeText("Sezioni"),desc:translateUiRuntimeText("Entrate, uscite, patrimonio e storico")},
@@ -3716,10 +3435,6 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       <ProfileCard currentUser={currentUser} onLogout={onLogout} dark={dark} textC={textC} subC={subC} borderC={borderC} cardBg={cardBg} btnRadius={btnRadius} dateFmt={dateFmt} setToast={setToast} fbDb={fbDb} onProfileUpdate={onProfileUpdate} onDeleteAccount={deleteCurrentAccount}/>
     </div>;
 
-    function SecuritySettingsPage(){var timeoutItems=[{id:"0",label:"Subito"},{id:"1",label:"1 minuto"},{id:"5",label:"5 minuti"},{id:"15",label:"15 minuti"}];return <div><PageHeader title="Sicurezza"/><div style={{display:"flex",flexDirection:"column",gap:14}}><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:900,color:textC,marginBottom:4}}>🔐 {L("Proteggi l’app con biometria")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45}}>{L("Richiede impronta, Face ID o codice dispositivo per aprire fAInance dopo il login.")}</div></div><button type="button" onClick={function(){handleBiometricToggle(!biometricLockEnabled);}} disabled={biometricChecking} aria-label={L("Proteggi l’app con biometria")} style={{width:44,height:26,borderRadius:999,border:"none",padding:3,background:biometricLockEnabled?"linear-gradient(135deg,#7F77DD,#378ADD)":(dark?"#4b4b5f":"#d4d4d8"),cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.65:1,display:"flex",alignItems:"center",justifyContent:biometricLockEnabled?"flex-end":"flex-start",transition:"all .2s ease",flexShrink:0}}><span style={{width:20,height:20,borderRadius:"50%",background:"#fff",display:"block",boxShadow:"0 2px 6px rgba(0,0,0,.18)"}}/></button></div>{biometricChecking&&<div style={{fontSize:12,color:subC,marginTop:10}}>⏳ {L("Controllo biometrico in corso...")}</div>}</div><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20,opacity:biometricLockEnabled?1:.55}}><div style={{fontSize:14,fontWeight:800,color:textC,marginBottom:4}}>⏱️ {L("Richiedi biometria al ritorno nell’app")}</div><div style={{fontSize:12,color:subC,marginBottom:12,lineHeight:1.4}}>{L("Dopo quanto tempo in background fAInance deve bloccarsi di nuovo.")}</div><Segmented items={timeoutItems} value={String(biometricLockTimeout)} onChange={function(v){setBiometricLockTimeout(Number(v));setToast("Impostazioni aggiornate");}}/></div><div style={{background:dark?"#24213a":"#F0EDFF",border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),borderRadius:14,padding:14,fontSize:12,color:dark?"#D8D2FF":"#534AB7",lineHeight:1.45}}>{L("La biometria non sostituisce il login Google, Apple o email: protegge solo l’accesso locale ai dati già disponibili sul dispositivo.")}</div></div></div>;}
-
-    if(settingsPage==="security")return <SecuritySettingsPage/>;
-
     if(settingsPage==="general")return <div><PageHeader title="Generale"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div style={{display:"flex",flexDirection:"column",gap:0,borderRadius:14,overflow:"hidden",border:"1px solid "+borderC}}>
@@ -3804,12 +3519,10 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     var [newListSettTitle,setNewListSettTitle]=useState("");
     var [newListSettIcon,setNewListSettIcon]=useState("🧺");
     var [showNewListSettForm,setShowNewListSettForm]=useState(false);
-    var [editingListSettId,setEditingListSettId]=useState("");
-    var SHOP_CREATE_ICONS=["🛒","🛍","🏪","🏬","🏦","🏥","🏗","🔧","🔨","🪛","🪚","🔩","🪜","🧲","💡","🔌","🪟","🚿","🛁","🪠","🚽","🧴","🧹","🧺","🧻","🫙","🖫","🍞","🥩","🐟","🥦","🍎","🧀","🥛","🍷","🫖","☕","🧃","🥤","🍕","🍔","🍣","🥗","🍜","🍰","🎂","🧁","🍫","🧸","🎮","📱","💻","🖥","📷","🎵","📚","📓","✏","🖊","🎨","🖼","🪴","🌿","🌸","🪑","🛋","🪞","🛏","🪣","🧯","🔑","🪝","🚗","🛻","🏍","🚲","⛽","🔋","🛞","🧳","👟","👠","👗","👔","🧥","🎩","💍","💄","🪥","💊","�z","🏋","⚽","🎾","🏄","🎸","🎭","🌊","🏖","🌄","✈","🗺","🏕"];
-    function resetSettingsShoppingListForm(){setNewListSettTitle("");setNewListSettIcon("🧺");setShowNewListSettForm(false);setEditingListSettId("");}
-    function createSettingsShoppingList(){setEditingListSettId("");setNewListSettTitle("");setNewListSettIcon("🧺");setShowNewListSettForm(true);}
-    function confirmCreateSettingsList(){var title=String(newListSettTitle||"").trim();if(!title){setToast({text:L("Inserisci il titolo della lista."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}var icon=newListSettIcon||"🧺";if(editingListSettId){setShoppingLists(function(items){return (items||[]).map(function(x){return String(x.id)===String(editingListSettId)?{...x,title:title,icon:icon,updatedAt:new Date().toISOString()}:x;});});setToast({text:L("Lista della spesa aggiornata"),type:"success",icon:"✅"});resetSettingsShoppingListForm();return;}var id="list_"+Date.now();setShoppingLists(function(list){return (list||[]).concat([{id:id,title:title,icon:icon,createdAt:new Date().toISOString()}]);});setToast({text:L("Lista della spesa creata"),type:"success",icon:"🗂️"});resetSettingsShoppingListForm();}
-    function editSettingsShoppingList(list){setEditingListSettId(String(list.id));setNewListSettTitle(list.title||"");setNewListSettIcon(list.icon||"🧺");setShowNewListSettForm(true);}
+    var SHOP_CREATE_ICONS=["🛒","🛍","🏪","🏬","🏦","🏥","🏗","🔧","🔨","🪛","🪚","🔩","🪜","🧲","💡","🔌","🪟","🚿","🛁","🪠","🚽","🧴","🧹","🧺","🧻","🫙","🖫","🍞","🥩","🐟","🥦","🍎","🧀","🥛","🍷","🫖","☕","🧃","🥤","🍕","🍔","🍣","🥗","🍜","🍰","🎂","🧁","🍫","🧸","🎮","📱","💻","🖥","📷","🎵","📚","📓","✏","🖊","🎨","🖼","🪴","🌿","🌸","🪑","🛋","🪞","🛏","🪣","🧯","🔑","🪝","🚗","🛻","🏍","🚲","⛽","🔋","🛞","🧳","👟","👠","👗","👔","🧥","🎩","💍","💄","🪥","💊","�z","🏋","⚽","🎾","🏄","🎸","🎭","🌊","🏖","🌄","✈","🗺","🏕"];
+    function createSettingsShoppingList(){setShowNewListSettForm(true);}
+    function confirmCreateSettingsList(){var title=String(newListSettTitle||"").trim();if(!title){setToast({text:L("Inserisci il titolo della lista."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}var icon=newListSettIcon||"🧺";var id="list_"+Date.now();setShoppingLists(function(list){return (list||[]).concat([{id:id,title:title,icon:icon,createdAt:new Date().toISOString()}]);});setToast({text:L("Lista della spesa creata"),type:"success",icon:"🗂️"});setNewListSettTitle("");setNewListSettIcon("🧺");setShowNewListSettForm(false);}
+    function editSettingsShoppingList(list){var title=window.prompt(L("Titolo lista"),list.title||"");if(title===null)return;var icon=window.prompt(L("Icona lista"),list.icon||"🧺");if(icon===null)return;setShoppingLists(function(items){return (items||[]).map(function(x){return String(x.id)===String(list.id)?{...x,title:String(title||"").trim()||list.title,icon:icon||"🧺",updatedAt:new Date().toISOString()}:x;});});setToast({text:L("Lista della spesa aggiornata"),type:"success",icon:"✅"});}
     function deleteSettingsShoppingList(id){var list=(shoppingLists||[]).find(function(x){return String(x.id)===String(id);});if(!list)return;if(String(id)==="main"&&((shoppingLists||[]).length<=1)){setToast({text:L("La lista principale non può essere eliminata se è l’unica lista."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}if(!window.confirm(L("Confermi la cancellazione?")))return;setShoppingLists(function(items){return (items||[]).filter(function(x){return String(x.id)!==String(id);});});setShoppingItems(function(items){return (items||[]).filter(function(x){return String(x.listId||"main")!==String(id)||x.archived;});});if(String(activeShoppingListId)===String(id))setActiveShoppingListId("main");setToast({text:L("Cancellazione completata"),type:"success",icon:"🗑️"});}
     function shoppingAreaSettingsItems(){return (shoppingAreas||DEFAULT_SHOPPING_AREAS).map(function(a,idx){return{id:String(a),name:String(a),icon:(shoppingAreaIcons&&shoppingAreaIcons[a])||"📂",color:COLORS[idx%COLORS.length]};});}
     function setShoppingAreaSettingsItems(nextItems){var oldIcons=shoppingAreaIcons||{};var nextAreas=[];var nextIcons={};(nextItems||[]).forEach(function(it,idx){var name=String((it&&it.name)||("Area "+(idx+1))).trim()||("Area "+(idx+1));nextAreas.push(name);nextIcons[name]=(it&&it.icon)||oldIcons[it&&it.id]||oldIcons[name]||"📂";});setShoppingAreas(nextAreas);setShoppingAreaIcons(nextIcons);if(shoppingDefaultArea&&nextAreas.indexOf(shoppingDefaultArea)<0)setShoppingDefaultArea(nextAreas[0]||"");}
@@ -3824,7 +3537,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     if(settingsPage==="shopping_settings_lists")return <div><PageHeader title="Spesa / Liste"/>
       <div style={{display:"flex",flexDirection:"column",gap:12}}>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:18}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}><div><div style={{fontSize:14,fontWeight:900,color:textC}}>🧺 {L("Liste della spesa")}</div><div style={{fontSize:12,color:subC}}>{L("Crea, modifica o elimina le liste disponibili nella sezione Spesa.")}</div></div><button onClick={createSettingsShoppingList} style={{background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontWeight:900,cursor:"pointer"}}>＋ {L("Nuova lista")}</button></div>{showNewListSettForm&&<div style={{background:dark?"#1e1e30":"#f9f9ff",borderRadius:14,border:"1.5px solid "+confirmButtonColor,padding:14,marginTop:12}}><div style={{fontSize:13,fontWeight:900,color:textC,marginBottom:10}}>{L(editingListSettId?"Modifica lista":"Nuova lista")}</div><div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}><span style={{fontSize:28,flexShrink:0}}>{newListSettIcon}</span><input placeholder={L("Nome lista")} value={newListSettTitle} onChange={function(e){setNewListSettTitle(e.target.value);}} style={{...sinp,flex:1}}/></div><div style={{marginBottom:10}}><div style={{fontSize:11,color:subC,marginBottom:6}}>{L("Scegli icona")}</div><div style={{display:"flex",flexWrap:"wrap",gap:4,maxHeight:160,overflowY:"auto"}}>{SHOP_CREATE_ICONS.map(function(ic){return <button key={ic} onClick={function(){setNewListSettIcon(ic);}} style={{fontSize:20,padding:"4px",background:newListSettIcon===ic?(dark?"#3d376a":"#EEEDFE"):"transparent",border:newListSettIcon===ic?"1.5px solid #7F77DD":"1.5px solid transparent",borderRadius:8,cursor:"pointer",lineHeight:1}}>{ic}</button>;})}</div></div><div style={{display:"flex",gap:8}}><Btn onClick={confirmCreateSettingsList} bg={confirmButtonColor} style={{flex:1}}>{L(editingListSettId?"Salva modifica":"Crea lista")}</Btn><Btn onClick={resetSettingsShoppingListForm} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#555"}>{L("Annulla")}</Btn></div></div>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:12}}><div><div style={{fontSize:14,fontWeight:900,color:textC}}>🧺 {L("Liste della spesa")}</div><div style={{fontSize:12,color:subC}}>{L("Crea, modifica o elimina le liste disponibili nella sezione Spesa.")}</div></div><button onClick={createSettingsShoppingList} style={{background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontWeight:900,cursor:"pointer"}}>＋ {L("Nuova lista")}</button></div>{showNewListSettForm&&<div style={{background:dark?"#1e1e30":"#f9f9ff",borderRadius:14,border:"1.5px solid "+confirmButtonColor,padding:14,marginTop:12}}><div style={{fontSize:13,fontWeight:900,color:textC,marginBottom:10}}>{L("Nuova lista")}</div><div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10}}><span style={{fontSize:28,flexShrink:0}}>{newListSettIcon}</span><input placeholder={L("Nome lista")} value={newListSettTitle} onChange={function(e){setNewListSettTitle(e.target.value);}} style={{...sinp,flex:1}}/></div><div style={{marginBottom:10}}><div style={{fontSize:11,color:subC,marginBottom:6}}>{L("Scegli icona")}</div><div style={{display:"flex",flexWrap:"wrap",gap:4,maxHeight:160,overflowY:"auto"}}>{SHOP_CREATE_ICONS.map(function(ic){return <button key={ic} onClick={function(){setNewListSettIcon(ic);}} style={{fontSize:20,padding:"4px",background:newListSettIcon===ic?(dark?"#3d376a":"#EEEDFE"):"transparent",border:newListSettIcon===ic?"1.5px solid #7F77DD":"1.5px solid transparent",borderRadius:8,cursor:"pointer",lineHeight:1}}>{ic}</button>;})}</div></div><div style={{display:"flex",gap:8}}><Btn onClick={confirmCreateSettingsList} bg={confirmButtonColor} style={{flex:1}}>{L("Crea lista")}</Btn><Btn onClick={function(){setShowNewListSettForm(false);setNewListSettTitle("");setNewListSettIcon("🧺");}} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#555"}>{L("Annulla")}</Btn></div></div>}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>{((shoppingLists&&shoppingLists.length)?shoppingLists:[{id:"main",title:"Lista principale",icon:"🧺"}]).map(function(list){return <div key={list.id} style={{display:"flex",alignItems:"center",gap:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:"10px 12px"}}><span style={{fontSize:22}}>{list.icon||"🧺"}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:900,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{list.title||L("Lista senza titolo")}</div>{String(activeShoppingListId)===String(list.id)&&<div style={{fontSize:11,color:incomeColor,fontWeight:800}}>{L("Lista selezionata")}</div>}</div><button onClick={function(){editSettingsShoppingList(list);}} style={{border:"none",background:dark?"#2b2b3a":"#EEF1FF",color:confirmButtonColor,borderRadius:8,padding:"6px 8px",cursor:"pointer"}}>✏️</button><button onClick={function(){deleteSettingsShoppingList(list.id);}} style={{border:"none",background:"#FFF0F0",color:"#E24B4A",borderRadius:8,padding:"6px 8px",cursor:"pointer"}}>🗑️</button></div>;})}</div>
         </div>
       </div>
@@ -5329,11 +5042,8 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
 
   var mobileMain=buildBottomNavItems();
 
-  function BiometricLockScreen(){return <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",background:dark?"linear-gradient(160deg,#111827,#1E1E30)":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{width:"100%",maxWidth:420,background:cardBg,border:"1px solid "+borderC,borderRadius:24,boxShadow:dark?"0 18px 70px rgba(0,0,0,.45)":"0 18px 70px rgba(74,66,160,.22)",padding:24,textAlign:"center"}}><div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,borderRadius:24,background:dark?"#24213a":"#F0EDFF",marginBottom:14,fontSize:34}}>🔐</div><div style={{fontSize:22,fontWeight:950,color:textC,marginBottom:6}}>{L("fAInance è bloccata")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45,marginBottom:18}}>{L("Sblocca l’app per visualizzare i tuoi dati finanziari.")}</div>{biometricLockMessage&&<div style={{background:dark?"#342424":"#fff0f0",border:"1px solid "+(dark?"#5a3333":"#f3b6b6"),color:dark?"#ffd0d0":"#8a2d2d",borderRadius:12,padding:"10px 12px",fontSize:12,lineHeight:1.35,marginBottom:14}}>{L(biometricLockMessage)}</div>}<button onClick={function(){unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");}} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con biometria")}</button><button onClick={onLogout} style={{width:"100%",marginTop:10,background:dark?"#252535":"#f5f5f5",color:subC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"11px 16px",fontSize:13,fontWeight:800,cursor:"pointer"}}>{L("Esci dall’account")}</button></div></div>;}
-
   return <AppCtx.Provider value={ctxValue}>
-    {false?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
-    appLocked?<BiometricLockScreen/>:
+    {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     isMobile?
     <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden"}}>
       {(showAppSummaryHeader&&!(tab==="consulenteAI"&&aiTab==="chat"))&&<div style={{background:headerBg,borderBottom:"1px solid "+borderC,padding:"10px 16px 8px",flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:subC,marginBottom:4}}>fAInance</div><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Uscite")}</div><div style={{fontSize:19,fontWeight:600,color:expenseColor}}>{fmt(curMonthExp)}</div></div><div style={{textAlign:"center"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Saldo")}</div><div style={{fontSize:17,fontWeight:600,color:BALANCE_COLOR}}>{fmt(curMonthInc-curMonthExp)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Entrate")}</div><div style={{fontSize:19,fontWeight:600,color:incomeColor}}>{fmt(curMonthInc)}</div></div></div></div>}
@@ -5361,7 +5071,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       {alertPopup&&alertPopup.length>0&&<AlertPopup newAlerts={alertPopup} onClose={function(list){markAlertsSeen(list||alertPopup);}}/>}
       {editingItem&&<EditModal item={editingItem.item} isExp={editingItem.isExp} onSave={function(updated){if(editingItem.isExp){setExpenses(expenses.map(function(e){return e.id===updated.id?updated:e;}));setToast("Spesa aggiornata");}else{setIncomes(incomes.map(function(i){return i.id===updated.id?updated:i;}));setToast("Entrata aggiornata");}setEditingItem(null);}} onClose={function(){setEditingItem(null);}}/>}
     </div>}
-    {(!appLocked&&(!termsAccepted||!privacyAccepted))&&<TermsAcceptanceModal/>}
+    {(!termsAccepted||!privacyAccepted)&&<TermsAcceptanceModal/>}
   </AppCtx.Provider>;
 }
 
@@ -5389,38 +5099,6 @@ export default AppWithLogin;
     'Salva e aggiorna widget':{en:'Save and update widget',es:'Guardar y actualizar widget',fr:'Enregistrer et mettre à jour le widget',de:'Widget speichern und aktualisieren',pt:'Guardar e atualizar widget',pl:'Zapisz i zaktualizuj widżet',nl:'Widget opslaan en bijwerken',ro:'Salvează și actualizează widgetul',el:'Αποθήκευση και ενημέρωση widget'},
     'Tocca un articolo quando è nel carrello':{en:'Tap an item when it is in the cart',es:'Toca un artículo cuando esté en el carrito',fr:'Touchez un article quand il est dans le panier',de:'Tippe auf einen Artikel, wenn er im Wagen liegt',pt:'Toca num artigo quando estiver no carrinho',pl:'Dotknij produktu, gdy jest w koszyku',nl:'Tik op een artikel wanneer het in de winkelwagen ligt',ro:'Atinge un articol când este în coș',el:'Πάτησε ένα προϊόν όταν είναι στο καλάθι'},
     'Rimuovi prodotti acquistati':{en:'Remove purchased products',es:'Eliminar productos comprados',fr:'Supprimer les produits achetés',de:'Gekaufte Produkte entfernen',pt:'Remover produtos comprados',pl:'Usuń kupione produkty',nl:'Gekochte producten verwijderen',ro:'Elimină produsele cumpărate',el:'Αφαίρεση αγορασμένων προϊόντων'}
-  };
-  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
-  try{fainanceTranslationCache={};}catch(e){}
-})();
-
-
-// fAInance 1.6.75 - Blocco biometrico: traduzioni aggiuntive.
-(function(){
-  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
-  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
-  var D={
-    'Sicurezza':{en:'Security',es:'Seguridad',fr:'Sécurité',de:'Sicherheit',pt:'Segurança',pl:'Bezpieczeństwo',nl:'Beveiliging',ro:'Securitate',el:'Ασφάλεια'},
-    'Blocco biometrico dell’app':{en:'App biometric lock',es:'Bloqueo biométrico de la app',fr:'Verrouillage biométrique de l’app',de:'Biometrische App-Sperre',pt:'Bloqueio biométrico da app',pl:'Blokada biometryczna aplikacji',nl:'Biometrische appvergrendeling',ro:'Blocare biometrică a aplicației',el:'Βιομετρικό κλείδωμα εφαρμογής'},
-    'Proteggi l’app con biometria':{en:'Protect the app with biometrics',es:'Proteger la app con biometría',fr:'Protéger l’app avec la biométrie',de:'App mit Biometrie schützen',pt:'Proteger a app com biometria',pl:'Chroń aplikację biometrią',nl:'App beveiligen met biometrie',ro:'Protejează aplicația cu biometrie',el:'Προστασία της εφαρμογής με βιομετρικά στοιχεία'},
-    'Richiede impronta, Face ID o codice dispositivo per aprire fAInance dopo il login.':{en:'Requires fingerprint, Face ID or device passcode to open fAInance after login.',es:'Requiere huella, Face ID o código del dispositivo para abrir fAInance después del inicio de sesión.',fr:'Demande l’empreinte, Face ID ou le code de l’appareil pour ouvrir fAInance après la connexion.',de:'Erfordert Fingerabdruck, Face ID oder Gerätecode, um fAInance nach dem Login zu öffnen.',pt:'Requer impressão digital, Face ID ou código do dispositivo para abrir fAInance após o login.',pl:'Wymaga odcisku palca, Face ID lub kodu urządzenia, aby otworzyć fAInance po zalogowaniu.',nl:'Vereist vingerafdruk, Face ID of apparaatcode om fAInance na het inloggen te openen.',ro:'Necesită amprentă, Face ID sau codul dispozitivului pentru a deschide fAInance după autentificare.',el:'Απαιτεί δακτυλικό αποτύπωμα, Face ID ή κωδικό συσκευής για άνοιγμα του fAInance μετά τη σύνδεση.'},
-    'Richiedi biometria al ritorno nell’app':{en:'Require biometrics when returning to the app',es:'Solicitar biometría al volver a la app',fr:'Demander la biométrie au retour dans l’app',de:'Biometrie beim Zurückkehren zur App anfordern',pt:'Solicitar biometria ao voltar à app',pl:'Wymagaj biometrii po powrocie do aplikacji',nl:'Biometrie vragen bij terugkeer naar de app',ro:'Solicită biometrie la revenirea în aplicație',el:'Απαίτηση βιομετρικών κατά την επιστροφή στην εφαρμογή'},
-    'Dopo quanto tempo in background fAInance deve bloccarsi di nuovo.':{en:'After how much time in the background fAInance should lock again.',es:'Después de cuánto tiempo en segundo plano fAInance debe bloquearse de nuevo.',fr:'Après combien de temps en arrière-plan fAInance doit se verrouiller à nouveau.',de:'Nach welcher Zeit im Hintergrund fAInance erneut gesperrt werden soll.',pt:'Depois de quanto tempo em segundo plano o fAInance deve bloquear novamente.',pl:'Po jakim czasie w tle fAInance ma ponownie się zablokować.',nl:'Na hoeveel tijd op de achtergrond fAInance opnieuw moet vergrendelen.',ro:'După cât timp în fundal fAInance trebuie să se blocheze din nou.',el:'Μετά από πόσο χρόνο στο παρασκήνιο το fAInance πρέπει να κλειδώνει ξανά.'},
-    'La biometria non sostituisce il login Google, Apple o email: protegge solo l’accesso locale ai dati già disponibili sul dispositivo.':{en:'Biometrics does not replace Google, Apple or email login: it only protects local access to data already available on the device.',es:'La biometría no sustituye el inicio de sesión con Google, Apple o email: solo protege el acceso local a los datos ya disponibles en el dispositivo.',fr:'La biométrie ne remplace pas la connexion Google, Apple ou email : elle protège seulement l’accès local aux données déjà disponibles sur l’appareil.',de:'Biometrie ersetzt nicht den Login mit Google, Apple oder E-Mail: Sie schützt nur den lokalen Zugriff auf bereits auf dem Gerät verfügbare Daten.',pt:'A biometria não substitui o login Google, Apple ou email: protege apenas o acesso local aos dados já disponíveis no dispositivo.',pl:'Biometria nie zastępuje logowania Google, Apple ani e-mail: chroni tylko lokalny dostęp do danych już dostępnych na urządzeniu.',nl:'Biometrie vervangt de login met Google, Apple of e-mail niet: het beschermt alleen lokale toegang tot gegevens die al op het apparaat staan.',ro:'Biometria nu înlocuiește autentificarea Google, Apple sau email: protejează doar accesul local la datele deja disponibile pe dispozitiv.',el:'Τα βιομετρικά στοιχεία δεν αντικαθιστούν τη σύνδεση Google, Apple ή email: προστατεύουν μόνο την τοπική πρόσβαση στα δεδομένα που υπάρχουν ήδη στη συσκευή.'},
-    'Protezione biometrica attivata':{en:'Biometric protection enabled',es:'Protección biométrica activada',fr:'Protection biométrique activée',de:'Biometrischer Schutz aktiviert',pt:'Proteção biométrica ativada',pl:'Ochrona biometryczna włączona',nl:'Biometrische beveiliging ingeschakeld',ro:'Protecția biometrică a fost activată',el:'Η βιομετρική προστασία ενεργοποιήθηκε'},
-    'Protezione biometrica disattivata':{en:'Biometric protection disabled',es:'Protección biométrica desactivada',fr:'Protection biométrique désactivée',de:'Biometrischer Schutz deaktiviert',pt:'Proteção biométrica desativada',pl:'Ochrona biometryczna wyłączona',nl:'Biometrische beveiliging uitgeschakeld',ro:'Protecția biometrică a fost dezactivată',el:'Η βιομετρική προστασία απενεργοποιήθηκε'},
-    'Controllo biometrico non completato.':{en:'Biometric check not completed.',es:'Control biométrico no completado.',fr:'Contrôle biométrique non terminé.',de:'Biometrische Prüfung nicht abgeschlossen.',pt:'Controlo biométrico não concluído.',pl:'Kontrola biometryczna nie została ukończona.',nl:'Biometrische controle niet voltooid.',ro:'Verificarea biometrică nu a fost finalizată.',el:'Ο βιομετρικός έλεγχος δεν ολοκληρώθηκε.'},
-    'Il controllo biometrico non ha ricevuto risposta dal sistema Android. Chiudi e riapri l’app, poi riprova.':{en:'The biometric check did not receive a response from Android. Close and reopen the app, then try again.',es:'El control biométrico no recibió respuesta del sistema Android. Cierra y vuelve a abrir la app, luego inténtalo de nuevo.',fr:'Le contrôle biométrique n’a reçu aucune réponse du système Android. Ferme et rouvre l’app, puis réessaie.',de:'Die biometrische Prüfung hat keine Antwort vom Android-System erhalten. Schließe und öffne die App erneut und versuche es dann noch einmal.',pt:'O controlo biométrico não recebeu resposta do sistema Android. Fecha e reabre a app e tenta novamente.',pl:'Kontrola biometryczna nie otrzymała odpowiedzi z systemu Android. Zamknij i ponownie otwórz aplikację, a potem spróbuj jeszcze raz.',nl:'De biometrische controle kreeg geen reactie van Android. Sluit en open de app opnieuw en probeer het daarna opnieuw.',ro:'Verificarea biometrică nu a primit răspuns de la sistemul Android. Închide și redeschide aplicația, apoi încearcă din nou.',el:'Ο βιομετρικός έλεγχος δεν έλαβε απάντηση από το σύστημα Android. Κλείσε και άνοιξε ξανά την εφαρμογή και δοκίμασε πάλι.'},
-    'fAInance è bloccata':{en:'fAInance is locked',es:'fAInance está bloqueada',fr:'fAInance est verrouillée',de:'fAInance ist gesperrt',pt:'fAInance está bloqueada',pl:'fAInance jest zablokowana',nl:'fAInance is vergrendeld',ro:'fAInance este blocată',el:'Το fAInance είναι κλειδωμένο'},
-    'Sblocca l’app per visualizzare i tuoi dati finanziari.':{en:'Unlock the app to view your financial data.',es:'Desbloquea la app para ver tus datos financieros.',fr:'Déverrouille l’app pour voir tes données financières.',de:'Entsperre die App, um deine Finanzdaten zu sehen.',pt:'Desbloqueia a app para ver os teus dados financeiros.',pl:'Odblokuj aplikację, aby zobaczyć swoje dane finansowe.',nl:'Ontgrendel de app om je financiële gegevens te bekijken.',ro:'Deblochează aplicația pentru a vedea datele tale financiare.',el:'Ξεκλείδωσε την εφαρμογή για να δεις τα οικονομικά σου δεδομένα.'},
-    'Sblocca con biometria':{en:'Unlock with biometrics',es:'Desbloquear con biometría',fr:'Déverrouiller avec la biométrie',de:'Mit Biometrie entsperren',pt:'Desbloquear com biometria',pl:'Odblokuj biometrią',nl:'Ontgrendelen met biometrie',ro:'Deblochează cu biometrie',el:'Ξεκλείδωμα με βιομετρικά στοιχεία'},
-    'Controllo in corso...':{en:'Checking...',es:'Comprobando...',fr:'Contrôle en cours...',de:'Prüfung läuft...',pt:'A verificar...',pl:'Sprawdzanie...',nl:'Controleren...',ro:'Se verifică...',el:'Γίνεται έλεγχος...'},
-    'Controllo biometrico in corso...':{en:'Biometric check in progress...',es:'Control biométrico en curso...',fr:'Contrôle biométrique en cours...',de:'Biometrische Prüfung läuft...',pt:'Controlo biométrico em curso...',pl:'Trwa kontrola biometryczna...',nl:'Biometrische controle bezig...',ro:'Verificare biometrică în curs...',el:'Βιομετρικός έλεγχος σε εξέλιξη...'},
-    'Esci dall’account':{en:'Log out',es:'Cerrar sesión',fr:'Se déconnecter',de:'Abmelden',pt:'Terminar sessão',pl:'Wyloguj się',nl:'Uitloggen',ro:'Deconectare',el:'Αποσύνδεση'},
-    'Subito':{en:'Immediately',es:'Inmediatamente',fr:'Tout de suite',de:'Sofort',pt:'Imediatamente',pl:'Od razu',nl:'Meteen',ro:'Imediat',el:'Αμέσως'},
-    '1 minuto':{en:'1 minute',es:'1 minuto',fr:'1 minute',de:'1 Minute',pt:'1 minuto',pl:'1 minuta',nl:'1 minuut',ro:'1 minut',el:'1 λεπτό'},
-    '5 minuti':{en:'5 minutes',es:'5 minutos',fr:'5 minutes',de:'5 Minuten',pt:'5 minutos',pl:'5 minut',nl:'5 minuten',ro:'5 minute',el:'5 λεπτά'},
-    '15 minuti':{en:'15 minutes',es:'15 minutos',fr:'15 minutes',de:'15 Minuten',pt:'15 minutos',pl:'15 minut',nl:'15 minuten',ro:'15 minute',el:'15 λεπτά'}
   };
   Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
   try{fainanceTranslationCache={};}catch(e){}

@@ -779,399 +779,82 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
   function changeVoiceMethod(id){var m=(methods||[]).find(function(x){return String(x.id)===String(id);});if(m)updateVoiceParsed({methodId:m.id,methodName:m.name});}
   function changeVoiceIncomeType(id){var it=(incomeTypes||[]).find(function(x){return String(x.id)===String(id);});if(it)updateVoiceParsed({incomeType:it.id,incomeTypeName:it.name});}
   function analyzeVoiceText(){setVoiceError("");var parsed=parseVoiceCommand(voiceText);setVoiceParsed(parsed);}
-  var voiceNativeSessionRef:any=useRef({seq:0,plugin:null,partialSub:null,listeningSub:null,timer:null,stopWaitTimer:null,latestText:"",active:false,finalizing:false,stopRequested:false,manualStop:false,isIOS:false});
-  var voiceWebRecognitionRef:any=useRef(null);
-
-  function nativeSpeechUnavailableMessage(isIOS){
-    if(isIOS)return "Riconoscimento vocale non disponibile in questa build iOS. Puoi comunque scrivere il comando nel campo testo e premere Analizza.";
-    return "Riconoscimento vocale nativo non disponibile in questa build. Installa la build più recente e riprova, oppure scrivi il comando nel campo testo.";
-  }
-  function loadNativeSpeechPlugin(cap:any){
-    try{
-      var href=String((window.location&&window.location.href)||"");
-      var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
-      var isIOSNative=platform==="ios"||/^capacitor:\/\//i.test(href);
-      if(isIOSNative){
-        return import("@capacitor/core")
-          .then(function(core:any){
-            try{if(cap&&cap.Plugins&&cap.Plugins.FainanceSpeech)return cap.Plugins.FainanceSpeech;}catch(e){}
-            var registered=core&&core.registerPlugin?core.registerPlugin("FainanceSpeech"):null;
-            return registered;
-          })
-          .catch(function(){try{return cap&&cap.Plugins&&cap.Plugins.FainanceSpeech?cap.Plugins.FainanceSpeech:null;}catch(e){return null;}});
-      }
-    }catch(e){}
-    return import("@capacitor-community/speech-recognition")
-      .then(function(mod:any){return mod&&mod.SpeechRecognition?mod.SpeechRecognition:null;})
-      .catch(function(){try{return cap&&cap.Plugins&&cap.Plugins.SpeechRecognition?cap.Plugins.SpeechRecognition:null;}catch(e){return null;}});
-  }
-  function isVoiceIOSPlatform(){
-    try{
-      var win:any=window;
-      var cap=win&&win.Capacitor;
-      var platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";
-      if(platform==="ios")return true;
-      var href=String((window.location&&window.location.href)||"");
-      var ua=String(navigator.userAgent||"");
-      return /^capacitor:\/\//i.test(href)&&/iPad|iPhone|iPod/i.test(ua);
-    }catch(e){return false;}
-  }
-  function normalizePermState(res:any){
-    var values=[];
-    try{if(res&&res.speechRecognition!=null)values.push(String(res.speechRecognition||"").toLowerCase());}catch(e){}
-    try{if(res&&res.microphone!=null)values.push(String(res.microphone||"").toLowerCase());}catch(e){}
-    try{if(res&&(res.permission||res.state||res.status))values.push(String(res.permission||res.state||res.status||"").toLowerCase());}catch(e){}
-    values=values.filter(function(v){return !!v&&v!=="undefined"&&v!=="null";});
-    if(values.some(function(v){return v==="denied"||v==="restricted";}))return "denied";
-    if(values.some(function(v){return v==="prompt"||v==="prompt-with-rationale"||v==="notdetermined"||v==="not_determined"||v==="undetermined";}))return "prompt";
-    if(values.length&&values.every(function(v){return v==="granted"||v==="authorized";}))return "granted";
-    return String((res&&(res.speechRecognition||res.microphone||res.permission||res.state||res.status))||"").toLowerCase();
-  }
-  function bestNativeSpeechText(res:any){
-    var matches=res&&res.matches?res.matches:(res&&res.results?res.results:[]);
-    if(Array.isArray(matches)&&matches.length){
-      if(typeof matches[0]==="string")return matches[0];
-      if(matches[0]&&matches[0].transcript)return matches[0].transcript;
-    }
-    if(res&&typeof res.transcript==="string")return res.transcript;
-    if(res&&typeof res.value==="string")return res.value;
-    if(res&&typeof res.text==="string")return res.text;
-    return "";
-  }
-  function requestIOSMicrophoneLikeReceiptCamera(){
-    if(!isVoiceIOSPlatform())return Promise.resolve(true);
-    try{
-      var nav:any=navigator;
-      if(nav&&nav.mediaDevices&&nav.mediaDevices.getUserMedia){
-        return nav.mediaDevices.getUserMedia({audio:true,video:false}).then(function(stream:any){
-          try{if(stream&&stream.getTracks)stream.getTracks().forEach(function(track:any){try{track.stop();}catch(e){}});}catch(e){}
-          return true;
-        }).catch(function(err:any){
-          var msg=err&&err.message?err.message:String(err||"");
-          throw new Error("Permesso microfono non concesso. Apri Impostazioni > fAInance > Microfono e consenti l’accesso. Dettaglio: "+msg);
-        });
-      }
-    }catch(e){return Promise.reject(e);}
-    return Promise.resolve(true);
-  }
-  function clearVoiceNativeSession(){
-    var s=voiceNativeSessionRef.current||{};
-    try{if(s.timer)clearTimeout(s.timer);}catch(e){}
-    try{if(s.stopWaitTimer)clearTimeout(s.stopWaitTimer);}catch(e){}
-    try{if(s.partialSub&&s.partialSub.remove)s.partialSub.remove();}catch(e){}
-    try{if(s.listeningSub&&s.listeningSub.remove)s.listeningSub.remove();}catch(e){}
-    voiceNativeSessionRef.current={seq:Number(s.seq||0),plugin:null,partialSub:null,listeningSub:null,timer:null,stopWaitTimer:null,latestText:"",active:false,finalizing:false,stopRequested:false,manualStop:false,isIOS:false};
-  }
-  function applyRecognizedVoiceText(txt:any,emptyMessage:any){
-    var clean=String(txt||"").trim();
-    if(clean){
-      setVoiceText(clean);
-      var parsed=parseVoiceCommand(clean);
-      setVoiceParsed(parsed);
-      setVoiceError("");
-      return true;
-    }
-    if(emptyMessage)setVoiceError(emptyMessage);
-    return false;
-  }
-  function finishNativeVoiceSession(seq:any,manual?:any,extraText?:any,emptyMessage?:any){
-    var s=voiceNativeSessionRef.current||{};
-    if(seq!=null&&s.seq!==seq)return;
-    if(s.finalizing)return;
-    s.finalizing=true;
-    voiceNativeSessionRef.current=s;
-    var latest=String(extraText||s.latestText||voiceText||"").trim();
-    try{if(s.timer)clearTimeout(s.timer);}catch(e){}
-    applyRecognizedVoiceText(latest,emptyMessage||(manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":""));
-    clearVoiceNativeSession();
-    setVoiceListening(false);
-  }
-  function stopVoiceListening(manual?:any){
-    var s=voiceNativeSessionRef.current||{};
-    if(s.plugin&&s.plugin.stop){
-      var seq=s.seq;
-      var latest=String(s.latestText||voiceText||"").trim();
-      try{if(s.timer)clearTimeout(s.timer);}catch(e){}
-      s.stopRequested=true;
-      s.manualStop=!!manual;
-      voiceNativeSessionRef.current=s;
-      if(s.isIOS){
-        var waitTimer=setTimeout(function(){
-          var cur=voiceNativeSessionRef.current||{};
-          if(cur.active&&cur.seq===seq){
-            finishNativeVoiceSession(seq,manual,cur.latestText||latest,manual?"Nessun testo riconosciuto. Riprova parlando chiaramente, oppure scrivi il comando nel campo testo e premi Analizza.":"");
-          }
-        },14000);
-        var s2=voiceNativeSessionRef.current||{};
-        if(s2.seq===seq&&s2.active){s2.stopWaitTimer=waitTimer;voiceNativeSessionRef.current=s2;}
-        Promise.resolve(s.plugin.stop())
-          .then(function(res:any){
-            var txt=bestNativeSpeechText(res)||latest;
-            finishNativeVoiceSession(seq,manual,txt,manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":"");
-          })
-          .catch(function(){
-            var cur=voiceNativeSessionRef.current||{};
-            finishNativeVoiceSession(seq,manual,cur.latestText||latest,manual?"Ascolto interrotto. Se non compare testo, scrivi il comando nel campo testo e premi Analizza.":"");
-          });
-        return;
-      }
-      Promise.resolve(s.plugin.stop())
-        .then(function(res:any){
-          var txt=bestNativeSpeechText(res)||latest;
-          finishNativeVoiceSession(seq,manual,txt,manual?"Nessun testo riconosciuto. Puoi scrivere il comando nel campo testo e premere Analizza.":"");
-        })
-        .catch(function(){
-          finishNativeVoiceSession(seq,manual,latest,manual?"Ascolto interrotto. Se non compare testo, scrivi il comando nel campo testo e premi Analizza.":"");
-        });
-      return;
-    }
-    try{if(voiceWebRecognitionRef.current&&voiceWebRecognitionRef.current.stop)voiceWebRecognitionRef.current.stop();}catch(e){}
-    voiceWebRecognitionRef.current=null;
-    clearVoiceNativeSession();
-    setVoiceListening(false);
-  }
-  function openVoiceModal(autoStart){setVoiceModal(true);setVoiceText("");setVoiceParsed(null);setVoiceError("");setVoiceListening(false);}
-  function closeVoiceModal(){try{stopVoiceListening(false);}catch(e){}setVoiceModal(false);setVoiceListening(false);setVoiceText("");setVoiceParsed(null);setVoiceError("");}
-  function saveVoiceEntry(){
-    var p=voiceParsed;
-    var V2=voiceUiText(lang);
-    if(!p){setVoiceError(V2.invalid||"Comando non valido.");return;}
-    if(voiceSaving)return;
-    try{
-      if(setVoiceSaving)setVoiceSaving(true);
-      var amount=Math.abs(parseMoney(p.amount));
-      if(!amount||amount<=0){setVoiceError(V2.invalid||"Importo non valido.");return;}
-      var date=p.date||todayStr();
-      var base:any={
-        id:Date.now(),
-        amount:amount,
-        date:date,
-        desc:p.desc||((p.type==="income")?(p.incomeTypeName||"Entrata"):(p.catName||"Spesa")),
-        rateizzato:!!p.rateizzato,
-        rate:Math.max(1,parseInt(String(p.rate||1),10)||1),
-        createdAt:new Date().toISOString()
-      };
-      var ok=false;
-      if(p.type==="income"){
-        var incomeType=p.incomeType||p.typeId||defaultIncomeType||((incomeTypes&&incomeTypes[0]&&incomeTypes[0].id)||"salario");
-        ok=addIncomes([{...base,typeId:incomeType}],"voice")!==false;
-      }else{
-        var catId=p.catId||defaultExpenseCat||((cats&&cats[0]&&cats[0].id)||1);
-        var methodId=p.methodId||defaultExpenseMethod||((methods&&methods[0]&&methods[0].id)||1);
-        ok=addExpenses([{...base,catId:Number(catId),methodId:Number(methodId)}],"voice")!==false;
-      }
-      if(!ok){return;}
-    }catch(err:any){
-      var msg=err&&err.message?err.message:String(err||"Errore sconosciuto");
-      setVoiceError("Errore durante il salvataggio del comando vocale: "+msg);
-    }finally{
-      if(setVoiceSaving)setTimeout(function(){setVoiceSaving(false);},250);
-    }
-  }
+  function openVoiceModal(autoStart){setVoiceModal(true);setVoiceText("");setVoiceParsed(null);setVoiceError("");setVoiceListening(false);if(autoStart!==false){setTimeout(function(){startVoiceListening();},250);}}
+  function closeVoiceModal(){setVoiceModal(false);setVoiceListening(false);setVoiceText("");setVoiceParsed(null);setVoiceError("");}
   function startVoiceListening(){
-    if(voiceListening){stopVoiceListening(true);return;}
-    setVoiceError("");setVoiceParsed(null);
-    var win:any=window;
-    var language=VOICE_LANGS[lang]||"en-US";
-    var cap=win.Capacitor;
-    var platform="";
-    try{platform=cap&&cap.getPlatform?String(cap.getPlatform()||""):"";}catch(e){}
-    var isIOS=isVoiceIOSPlatform();
-    var href="";
-    try{href=String((window.location&&window.location.href)||"");}catch(e){}
-    var isCapacitorUrl=/^capacitor:\/\//i.test(href);
-    var isNative=!!(cap&&cap.isNativePlatform&&cap.isNativePlatform())||isCapacitorUrl||platform==="ios"||platform==="android";
-    if(isNative&&!isIOS){
-      function runAndroidNativeSpeech(nativeSpeech:any){
-        if(!nativeSpeech){setVoiceError("Su Android la WebView non gestisce il riconoscimento vocale in modo affidabile. Serve il plugin nativo SpeechRecognition. Installa @capacitor-community/speech-recognition e poi esegui npx cap sync android.");setVoiceListening(false);return;}
-        setVoiceListening(true);
-        function ensureAndroidNativeSpeechPermission(){
-          var checked=Promise.resolve(nativeSpeech.checkPermissions?nativeSpeech.checkPermissions():{});
-          return checked.then(function(res:any){
-            var state=normalizePermState(res);
-            if(state==="granted"||state==="authorized")return res;
-            if(nativeSpeech.requestPermissions)return nativeSpeech.requestPermissions();
-            if(nativeSpeech.requestPermission)return nativeSpeech.requestPermission();
-            return res;
-          }).then(function(res2:any){
-            var state2=normalizePermState(res2);
-            if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
-              throw new Error("Permesso microfono non concesso. Apri Impostazioni Android > App > fAInance > Autorizzazioni > Microfono > Consenti.");
-            }
-            return res2;
-          });
-        }
-        var runNative=function(retry:any){return ensureAndroidNativeSpeechPermission()
-          .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
-          .then(function(av:any){if(av&&av.available===false)throw new Error("Riconoscimento vocale non disponibile sul dispositivo.");return nativeSpeech.start({language:language,maxResults:3,prompt:"Parla ora",partialResults:false,popup:false});})
-          .then(function(res:any){
-            var matches=res&&res.matches?res.matches:[];
-            var txt2=matches&&matches[0]?matches[0]:bestNativeSpeechText(res);
-            if(!txt2)throw new Error("Nessun testo riconosciuto");
-            setVoiceText(txt2);
-            setVoiceParsed(parseVoiceCommand(txt2));
-          })
-          .catch(function(err:any){
-            var msg=err&&err.message?err.message:String(err||"");
-            var low=msg.toLowerCase();
-            if(retry&&(low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("nessun")>=0)){return new Promise(function(resolve){setTimeout(resolve,450);}).then(function(){return runNative(false);});}
-            if(low.indexOf("missing permission")>=0||low.indexOf("permission")>=0||low.indexOf("permesso")>=0){setVoiceError("Permesso microfono mancante o non letto correttamente. Controlla che il microfono sia consentito nelle impostazioni Android dell'app, poi chiudi e riapri fAInance.");return;}
-            setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);
-          })
-          .finally(function(){setVoiceListening(false);});};
-        runNative(true);
-      }
-      var androidNativeSpeech=null;
-      try{androidNativeSpeech=cap&&cap.Plugins&&cap.Plugins.SpeechRecognition?cap.Plugins.SpeechRecognition:null;}catch(e){}
-      if(androidNativeSpeech){runAndroidNativeSpeech(androidNativeSpeech);return;}
-      loadNativeSpeechPlugin(cap).then(function(nativeSpeech:any){runAndroidNativeSpeech(nativeSpeech);}).catch(function(){setVoiceListening(false);setVoiceError(nativeSpeechUnavailableMessage(false));});
-      return;
+  setVoiceError("");setVoiceParsed(null);
+  var win:any=window;
+  var language=VOICE_LANGS[lang]||"en-US";
+  var cap=win.Capacitor;
+  var isNative=cap&&cap.isNativePlatform&&cap.isNativePlatform();
+  var nativeSpeech=cap&&cap.Plugins&&cap.Plugins.SpeechRecognition;
+  if(isNative){
+    if(!nativeSpeech){setVoiceError("Su Android la WebView non gestisce il riconoscimento vocale in modo affidabile. Serve il plugin nativo SpeechRecognition. Installa @capacitor-community/speech-recognition e poi esegui npx cap sync android.");return;}
+    setVoiceListening(true);
+    function normalizePermState(res){
+      var v=res&&(res.speechRecognition||res.microphone||res.permission||res.state||res.status);
+      return String(v||"").toLowerCase();
     }
-    if(isNative){
-      clearVoiceNativeSession();
-      var seq=Number((voiceNativeSessionRef.current&&voiceNativeSessionRef.current.seq)||0)+1;
-      voiceNativeSessionRef.current={seq:seq,plugin:null,partialSub:null,listeningSub:null,timer:null,stopWaitTimer:null,latestText:"",active:true,finalizing:false,stopRequested:false,manualStop:false,isIOS:isIOS};
-      setVoiceListening(true);
-      loadNativeSpeechPlugin(cap).then(function(nativeSpeech:any){
-        var session=voiceNativeSessionRef.current||{};
-        if(!session.active||session.seq!==seq)return;
-        if(!nativeSpeech){setVoiceError(isIOS?"Plugin vocale iOS non trovato: il ponte Capacitor FainanceSpeech non è stato caricato. Invia questa schermata a Davide.":nativeSpeechUnavailableMessage(isIOS));setVoiceListening(false);clearVoiceNativeSession();return;}
-        session.plugin=nativeSpeech;
-        voiceNativeSessionRef.current=session;
-        function ensureNativeSpeechPermission(){
-          var checkFn=(isIOS&&(nativeSpeech.speechCheckPermissions||nativeSpeech.checkMicrophonePermission))||nativeSpeech.checkPermissions||nativeSpeech.speechCheckPermissions;
-          var requestFn=(isIOS&&(nativeSpeech.speechRequestPermissions||nativeSpeech.requestMicrophonePermission))||nativeSpeech.requestPermissions||nativeSpeech.requestPermission||nativeSpeech.speechRequestPermissions;
-          if(isIOS&&requestFn){
-            return Promise.resolve(requestFn.call(nativeSpeech)).then(function(res:any){
-              var state=normalizePermState(res);
-              if(state&&state!=="granted"&&state!=="authorized"&&state!=="prompt"&&state!=="undefined"){
-                throw new Error("Permesso microfono o riconoscimento vocale non concesso. Apri Impostazioni > fAInance > Microfono/Riconoscimento vocale e consenti l’accesso.");
-              }
-              return requestIOSMicrophoneLikeReceiptCamera().catch(function(){return true;}).then(function(){return res;});
-            });
-          }
-          var checked=Promise.resolve(checkFn?checkFn.call(nativeSpeech):{});
-          return checked.then(function(res:any){
-            var state=normalizePermState(res);
-            if(state==="granted"||state==="authorized")return res;
-            if(requestFn)return requestFn.call(nativeSpeech);
-            return res;
-          }).then(function(res2:any){
-            var state2=normalizePermState(res2);
-            if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
-              throw new Error(isIOS?"Permesso microfono o riconoscimento vocale non concesso. Apri Impostazioni > fAInance > Microfono/Riconoscimento vocale e consenti l’accesso.":"Permesso microfono non concesso. Apri le impostazioni dell’app e consenti il microfono.");
-            }
-            return requestIOSMicrophoneLikeReceiptCamera().then(function(){return res2;});
-          });
+    function ensureNativeSpeechPermission(){
+      var checked=Promise.resolve(nativeSpeech.checkPermissions?nativeSpeech.checkPermissions():{});
+      return checked.then(function(res){
+        var state=normalizePermState(res);
+        if(state==="granted"||state==="authorized")return res;
+        if(nativeSpeech.requestPermissions)return nativeSpeech.requestPermissions();
+        if(nativeSpeech.requestPermission)return nativeSpeech.requestPermission();
+        return res;
+      }).then(function(res2){
+        var state2=normalizePermState(res2);
+        if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
+          throw new Error("Permesso microfono non concesso. Apri Impostazioni Android > App > fAInance Test > Autorizzazioni > Microfono > Consenti.");
         }
-        function updateLatestFromResult(res:any){
-          var txt=bestNativeSpeechText(res);
-          if(txt){
-            var s2=voiceNativeSessionRef.current||{};
-            if(s2.seq!==seq||!s2.active)return txt;
-            s2.latestText=txt;
-            voiceNativeSessionRef.current=s2;
-            setVoiceText(txt);
-          }
-          return txt;
-        }
-        function failNativeSpeech(err:any){
-          var msg=err&&err.message?err.message:String(err||"");
-          var low=msg.toLowerCase();
-          if(low.indexOf("permission")>=0||low.indexOf("permesso")>=0||low.indexOf("not authorized")>=0||low.indexOf("denied")>=0){setVoiceError(msg);}
-          else if(low.indexOf("cancel")>=0){/* stop manuale */}
-          else setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);
-          clearVoiceNativeSession();
-          setVoiceListening(false);
-        }
-        ensureNativeSpeechPermission()
-          .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
-          .then(function(av:any){
-            if(av&&av.available===false)throw new Error("Riconoscimento vocale non disponibile sul dispositivo.");
-            if(nativeSpeech.addListener){
-              try{
-                Promise.resolve(nativeSpeech.addListener("partialResults",function(data:any){updateLatestFromResult(data);})).then(function(sub:any){
-                  var s3=voiceNativeSessionRef.current||{};
-                  if(s3.seq===seq&&s3.active){s3.partialSub=sub;voiceNativeSessionRef.current=s3;}else{try{if(sub&&sub.remove)sub.remove();}catch(e){}}
-                });
-              }catch(e){}
-              try{
-                Promise.resolve(nativeSpeech.addListener("listeningState",function(data:any){
-                  var status=String((data&&data.status)||"").toLowerCase();
-                  if(status==="stopped"){
-                    var cur=voiceNativeSessionRef.current||{};
-                    if(cur.active&&cur.seq===seq){
-                      if(cur.isIOS){
-                        cur.stopRequested=true;
-                        voiceNativeSessionRef.current=cur;
-                        if(!cur.stopWaitTimer){
-                          var waitTimer=setTimeout(function(){
-                            var latestCur=voiceNativeSessionRef.current||{};
-                            if(latestCur.active&&latestCur.seq===seq)finishNativeVoiceSession(seq,false,latestCur.latestText,"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
-                          },3500);
-                          cur.stopWaitTimer=waitTimer;
-                          voiceNativeSessionRef.current=cur;
-                        }
-                      }else{
-                        finishNativeVoiceSession(seq,false,cur.latestText,"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
-                      }
-                    }
-                  }
-                })).then(function(sub:any){
-                  var s4=voiceNativeSessionRef.current||{};
-                  if(s4.seq===seq&&s4.active){s4.listeningSub=sub;voiceNativeSessionRef.current=s4;}else{try{if(sub&&sub.remove)sub.remove();}catch(e){}}
-                });
-              }catch(e){}
-            }
-            var s5=voiceNativeSessionRef.current||{};
-            s5.timer=setTimeout(function(){
-              var cur=voiceNativeSessionRef.current||{};
-              if(cur.active&&cur.seq===seq)stopVoiceListening(false);
-            },isIOS?9000:12000);
-            voiceNativeSessionRef.current=s5;
-            return nativeSpeech.start({language:language,maxResults:5,prompt:voiceUiText(lang).speak||"Parla ora",partialResults:!isIOS,popup:false,timeoutMs:isIOS?15000:12000});
-          })
-          .then(function(res:any){
-            var cur=voiceNativeSessionRef.current||{};
-            if(!cur.active||cur.seq!==seq)return;
-            var finalText=updateLatestFromResult(res)||cur.latestText||voiceText||"";
-            if(cur.isIOS){
-              finishNativeVoiceSession(seq,cur.manualStop,finalText,cur.manualStop?"Nessun testo riconosciuto. Riprova parlando chiaramente, oppure scrivi il comando nel campo testo e premi Analizza.":"Nessun testo riconosciuto. Riprova, oppure scrivi il comando nel campo testo e premi Analizza.");
-            }
-            /* Android resta gestito da partialResults/listeningState per mantenere il comportamento automatico precedente. */
-          })
-          .catch(failNativeSpeech);
-      }).catch(function(){setVoiceListening(false);setVoiceError(nativeSpeechUnavailableMessage(isIOS));clearVoiceNativeSession();});
-      return;
+        return res2;
+      });
     }
-    var SpeechRecognition=win.SpeechRecognition||win.webkitSpeechRecognition;
-    if(!SpeechRecognition){setVoiceError("Riconoscimento vocale non disponibile su questo dispositivo. Puoi scrivere il comando nel campo testo e premere Analizza.");return;}
-    try{
-      var rec=new SpeechRecognition();
-      voiceWebRecognitionRef.current=rec;
-      rec.lang=language;
-      rec.interimResults=false;rec.maxAlternatives=1;rec.continuous=false;
-      setVoiceListening(true);
-      rec.onresult=function(ev:any){var txt2="";for(var ri=0;ri<ev.results.length;ri++){if(ev.results[ri]&&ev.results[ri][0]&&ev.results[ri][0].transcript){txt2+=(txt2?" ":"")+ev.results[ri][0].transcript;}}if(txt2){setVoiceText(txt2);if(ev.results[ev.results.length-1].isFinal){setVoiceParsed(parseVoiceCommand(txt2));}}};
-      rec.onerror=function(ev:any){var errCode=ev&&ev.error?ev.error:"non disponibile";var errMsg=errCode==="not-allowed"?"Permesso microfono negato dal browser. Puoi scrivere il comando nel campo testo e premere Analizza.":"Errore riconoscimento vocale: "+errCode;setVoiceError(errMsg);setVoiceListening(false);voiceWebRecognitionRef.current=null;};
-      rec.onend=function(){setVoiceListening(false);voiceWebRecognitionRef.current=null;};
-      rec.start();
-    }catch(err){setVoiceListening(false);voiceWebRecognitionRef.current=null;setVoiceError("Impossibile avviare il microfono. Verifica i permessi audio oppure scrivi il comando nel campo testo.");}
+    var runNative=function(retry){return ensureNativeSpeechPermission()
+      .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
+      .then(function(av){if(av&&av.available===false)throw new Error("Riconoscimento vocale non disponibile sul dispositivo.");return nativeSpeech.start({language:language,maxResults:3,prompt:"Parla ora",partialResults:false,popup:false});})
+      .then(function(res){var matches=res&&res.matches?res.matches:[];var txt2=matches&&matches[0]?matches[0]:"";if(!txt2)throw new Error("Nessun testo riconosciuto");setVoiceText(txt2);setVoiceParsed(parseVoiceCommand(txt2));})
+      .catch(function(err){var msg=err&&err.message?err.message:String(err||"");var low=msg.toLowerCase();if(retry&&(low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("nessun")>=0)){return new Promise(function(resolve){setTimeout(resolve,450);}).then(function(){return runNative(false);});}if(low.indexOf("missing permission")>=0||low.indexOf("permission")>=0){setVoiceError("Permesso microfono mancante o non letto correttamente. Controlla che il microfono sia consentito nelle impostazioni Android dell'app, poi chiudi e riapri fAInance Test.");return;}setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);})
+      .finally(function(){setVoiceListening(false);});};
+    runNative(true);
+    return;
   }
-  var parsed=voiceParsed;
+  var SpeechRecognition=win.SpeechRecognition||win.webkitSpeechRecognition;
+  if(!SpeechRecognition){setVoiceError("Riconoscimento vocale non disponibile su questo dispositivo. Puoi scrivere il comando nel campo testo e premere Analizza.");return;}
+  try{
+    var rec=new SpeechRecognition();
+    rec.lang=language;
+    rec.interimResults=false;rec.maxAlternatives=1;rec.continuous=false;
+    setVoiceListening(true);
+    rec.onresult=function(ev){var txt2="";for(var ri=0;ri<ev.results.length;ri++){if(ev.results[ri]&&ev.results[ri][0]&&ev.results[ri][0].transcript){txt2+=(txt2?" ":"")+ev.results[ri][0].transcript;}}if(txt2){setVoiceText(txt2);if(ev.results[ev.results.length-1].isFinal){setVoiceParsed(parseVoiceCommand(txt2));}}};
+    rec.onerror=function(ev){var errCode=ev&&ev.error?ev.error:"non disponibile";var errMsg=errCode==="not-allowed"?"Permesso microfono negato dal browser. Su Android usa il plugin nativo SpeechRecognition oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale: "+errCode;setVoiceError(errMsg);setVoiceListening(false);};
+    rec.onend=function(){setVoiceListening(false);};
+    rec.start();
+  }catch(err){setVoiceListening(false);setVoiceError("Impossibile avviare il microfono. Verifica i permessi audio.");}
+}
+  
+  function saveVoiceEntry(){
+  if(!voiceParsed)return;
+  if(voiceParsed.type==="income"){
+    if(addIncomes([{id:Date.now(),amount:Number(voiceParsed.amount)||0,type:voiceParsed.incomeType,desc:voiceParsed.desc,date:voiceParsed.date,rateizzato:!!voiceParsed.rateizzato,rate:Number(voiceParsed.rate)||1}],"voice")){closeVoiceModal();}
+  }else{
+    if(addExpenses([{id:Date.now(),amount:Number(voiceParsed.amount)||0,catId:Number(voiceParsed.catId),methodId:Number(voiceParsed.methodId),desc:voiceParsed.desc,date:voiceParsed.date,rateizzato:!!voiceParsed.rateizzato,rate:Number(voiceParsed.rate)||1}],"voice")){closeVoiceModal();}
+  }
+}  var parsed=voiceParsed;
   var V=voiceUiText(lang);
   var voiceAutoStartedRef=useRef(false);
   useEffect(function(){
     if(voiceAutoStartedRef.current)return;
     voiceAutoStartedRef.current=true;
     var t1=setTimeout(function(){startVoiceListening();},350);
-    return function(){clearTimeout(t1);try{stopVoiceListening(false);}catch(e){}};
+    return function(){clearTimeout(t1);};
   },[]);
   return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:520,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)closeVoiceModal();}}>
     <div style={{background:cardBg,borderRadius:20,border:"1px solid "+borderC,width:"100%",maxWidth:430,maxHeight:"92vh",boxShadow:"0 10px 40px rgba(0,0,0,0.28)",overflow:"hidden",display:"flex",flexDirection:"column"}}>
       <div style={{background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",padding:"18px 20px",display:"flex",alignItems:"center",gap:12}}><div style={{fontSize:30}}>🎙️</div><div style={{flex:1}}><div style={{fontSize:17,fontWeight:900}}>{V.title}</div><div style={{fontSize:12,opacity:0.85}}>{V.sub}</div></div><button onClick={closeVoiceModal} style={{background:"rgba(255,255,255,0.18)",border:"none",borderRadius:9,color:"#fff",fontSize:18,cursor:"pointer",padding:"4px 10px"}}>×</button></div>
       <div style={{padding:18,display:"flex",flexDirection:"column",gap:12,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
-        {(!voiceListening||isVoiceIOSPlatform())?<button onClick={function(){voiceListening?stopVoiceListening(true):startVoiceListening();}} style={{background:voiceListening?"#EF9F27":"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 14px",fontSize:15,fontWeight:800,cursor:"pointer"}}>{voiceListening?"⏹️ Ferma ascolto":V.retry}</button>:<div style={{background:dark?"#252535":"#F4F2FF",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"13px 14px",fontSize:15,fontWeight:800,textAlign:"center"}}>🎙️ {V.listening||"Sto ascoltando..."}</div>}
+        <button onClick={startVoiceListening} disabled={voiceListening} style={{background:voiceListening?"#EF9F27":"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 14px",fontSize:15,fontWeight:800,cursor:"pointer"}}>{voiceListening?V.listening:V.retry}</button>
         <div style={{fontSize:12,color:subC,lineHeight:1.45}}>{V.hint}</div>
         <div style={{fontSize:12,color:subC,lineHeight:1.45}}>{V.examples}</div>
         <textarea value={voiceText} onChange={function(e){setVoiceText(e.target.value);setVoiceParsed(null);setVoiceError("");}} placeholder={V.placeholder} style={{minHeight:74,borderRadius:12,border:"1px solid "+borderC,padding:"10px 12px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:textC,resize:"vertical"}}/>
@@ -1187,7 +870,7 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
             <div style={{gridColumn:"1/-1",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,alignItems:"end"}}><label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,fontWeight:800}}><input type="checkbox" checked={!!parsed.rateizzato} onChange={function(e){updateVoiceParsed({rateizzato:e.target.checked});}}/> {V.inst}</label><input type="number" min="1" max="60" disabled={!parsed.rateizzato} value={parsed.rate||1} onChange={function(e){updateVoiceParsed({rate:e.target.value});}} style={{...sinp,opacity:parsed.rateizzato?1:0.45}}/></div>
           </div>
         </div>}
-        <div style={{display:"flex",gap:10}}><Btn onClick={closeVoiceModal} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:12}}>{V.cancel}</Btn><Btn onClick={saveVoiceEntry} disabled={!parsed||voiceSaving} bg={(parsed&&!voiceSaving)?"#1D9E75":"#999"} style={{flex:1,padding:12,fontWeight:900}}>{voiceSaving?"...":V.save}</Btn></div>
+        <div style={{display:"flex",gap:10}}><Btn onClick={closeVoiceModal} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:12}}>{V.cancel}</Btn><Btn onClick={saveVoiceEntry} disabled={!parsed} bg={parsed?"#1D9E75":"#999"} style={{flex:1,padding:12,fontWeight:900}}>{V.save}</Btn></div>
       </div>
     </div>
   </div>;
@@ -2195,13 +1878,9 @@ export function ShoppingPanel(){
   function areaIcon(a){return (shoppingAreaIcons&&shoppingAreaIcons[a])||"📌";}
   function qtyLabel(x){var q=String((x&&x.qty)||"").trim();var u=String((x&&x.unit)||"").trim();if(!q||q==="1")return "";return q+(u?" "+L(u):"");}
   function normName(v){return String(v||"").trim().toLowerCase();}
-  function catalogRefId(x){return String((x&&x.catalogProductId)||(x&&x.sourceProductId)||((x&&x.archived)?x.id:"")||"").trim();}
-  function sameProduct(a,b){var ar=catalogRefId(a);var br=catalogRefId(b);if(ar&&br&&ar===br)return true;return normName(a&&a.name)===normName(b&&b.name)&&String((a&&a.area)||"Altro")===String((b&&b.area)||"Altro");}
+  function sameProduct(a,b){return normName(a&&a.name)===normName(b&&b.name)&&String((a&&a.area)||"Altro")===String((b&&b.area)||"Altro");}
   function itemBelongsToList(x){return !x.archived&&(String(x.listId||"main")===String(activeListId));}
-  function activeItemsRaw(){return (shoppingItems||[]).filter(itemBelongsToList);}
-  function canonicalAreaForName(name){var n=normName(name);var found=(shoppingItems||[]).find(function(x){return x.archived&&normName(x.name)===n;});return found?String(found.area||"Altro"):"";}
-  function dedupeActiveShoppingItems(items){var chosen={};(items||[]).forEach(function(x){var listKey=String(x.listId||"main");var ref=catalogRefId(x);var nameKey=normName(x.name);var key=listKey+"|"+(nameKey?("name:"+nameKey):(ref?("id:"+ref):"unknown:"+String(x&&x.id||"")));var current=chosen[key];if(!current){chosen[key]=x;return;}var canonicalArea=canonicalAreaForName(x.name);var xScore=(ref?4:0)+(canonicalArea&&String(x.area||"Altro")===canonicalArea?3:0)+(!x.bought?1:0)-((x.order||0)/10000000000000);var cScore=(catalogRefId(current)?4:0)+(canonicalArea&&String(current.area||"Altro")===canonicalArea?3:0)+(!current.bought?1:0)-((current.order||0)/10000000000000);if(xScore>cScore)chosen[key]=x;});return Object.keys(chosen).map(function(k){return chosen[k];});}
-  function activeItems(){return dedupeActiveShoppingItems(activeItemsRaw());}
+  function activeItems(){return (shoppingItems||[]).filter(itemBelongsToList);}
   function activeItemsOrdered(){return activeItems().slice().sort(function(a,b){if(!!a.bought!==!!b.bought)return a.bought?1:-1;return (a.order||0)-(b.order||0);});}
   function productArchive(){var seen={};var base=(shoppingItems||[]).filter(function(x){return x.archived;}).filter(function(x){var k=normName(x.name)+"|"+String(x.area||"");if(seen[k])return false;seen[k]=true;return true;});return sortProducts(base);}
   function areaIndex(a){var i=areas.indexOf(a||"Altro");return i<0?999:i;}
@@ -2231,10 +1910,8 @@ export function ShoppingPanel(){
   function uploadCardPhoto(){scanCardFromImage(false);}
   function makeItem(name,area,archived,extra){return {id:(archived?"prod_":"shop_")+Date.now()+"_"+Math.floor(Math.random()*9999),name:name,area:area||"Altro",note:(extra&&extra.note)||"",qty:(extra&&extra.qty)||"1",unit:(extra&&extra.unit)||"unità",bought:false,archived:!!archived,listId:archived?"":activeListId,order:Date.now(),createdAt:new Date().toISOString(),catalogOnly:!!archived,usageCount:(extra&&extra.usageCount)||0};}
   function saveItem(){if(!itemName.trim()){setToast({text:L("Inserisci il nome del prodotto."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}var lim=(PLAN_LIMITS[currentPlan]&&PLAN_LIMITS[currentPlan].shoppingListItems)||25;if(lim!==Infinity&&activeItems().length>=lim){setToast({text:L("Hai raggiunto il limite della lista spesa del tuo piano."),type:"error",color:"#E24B4A",icon:"🚫"});return;}var area=itemArea||"Altro";var name=itemName.trim();var extra={note:itemNote,qty:itemQty,unit:itemUnit,usageCount:1};var it=makeItem(name,area,false,extra);setShoppingItems(function(list){var next=[it].concat(list||[]);if(!catalogHas(name,area,next)){next.push(makeItem(name,area,true,extra));}else{next=next.map(function(x){return x.archived&&normName(x.name)===normName(name)&&String(x.area||"Altro")===String(area||"Altro")?{...x,usageCount:(x.usageCount||0)+1,lastUsedAt:new Date().toISOString()}:x;});}return next;});setItemName("");setItemNote("");setItemQty("1");setItemUnit("unità");setShowItemForm(false);}
-  function dedupeShoppingItemsAfterProductEdit(items){var seenCatalog={};var seenList={};var out=[];(items||[]).forEach(function(x){var nameKey=normName(x&&x.name);var areaKey=String((x&&x.area)||"Altro");if(x&&x.archived){var catalogKey=nameKey+"|"+areaKey;if(seenCatalog[catalogKey]){var existing=seenCatalog[catalogKey];existing.usageCount=Math.max(existing.usageCount||0,x.usageCount||0);existing.lastUsedAt=existing.lastUsedAt||x.lastUsedAt||"";return;}seenCatalog[catalogKey]=x;out.push(x);return;}var ref=catalogRefId(x);var listKey=String((x&&x.listId)||"main")+"|"+(nameKey?("name:"+nameKey):(ref?("id:"+ref):"unknown:"+String(x&&x.id||"")));if(seenList[listKey]){var prev=seenList[listKey];prev.bought=!!prev.bought&&!!x.bought;prev.note=prev.note||x.note||"";prev.qty=prev.qty||x.qty||"1";prev.unit=prev.unit||x.unit||"unità";prev.updatedAt=new Date().toISOString();return;}seenList[listKey]=x;out.push(x);});return out;}
-  function saveProductOnly(){if(!productName.trim()){setToast({text:L("Inserisci il nome del prodotto."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}var name=productName.trim();var area=productArea||"Altro";var extra={note:productNote,qty:productQty,unit:productUnit};if(editingProductId){var editedId=String(editingProductId);setShoppingItems(function(list){var arr=list||[];var old=arr.find(function(x){return String(x.id)===editedId;});var oldName=normName(old&&old.name);var oldArea=String((old&&old.area)||"Altro");var updated=arr.map(function(x){var linkedById=String((x&&x.sourceProductId)||(x&&x.catalogProductId)||"")===editedId;var linkedBySnapshot=!!oldName&&normName(x&&x.name)===oldName&&String((x&&x.area)||"Altro")===oldArea;var shouldUpdate=String(x.id)===editedId||linkedById||linkedBySnapshot;return shouldUpdate?{...x,name:name,area:area,note:productNote,qty:productQty,unit:productUnit,sourceProductId:x.archived?(x.sourceProductId||""):(x.sourceProductId||editedId),catalogProductId:x.archived?(x.catalogProductId||""):(x.catalogProductId||editedId),updatedAt:new Date().toISOString()}:x;});return dedupeShoppingItemsAfterProductEdit(updated);});cancelEditProduct();setTabShop("products");setToast({text:L("Prodotto aggiornato"),type:"success",icon:"✅"});return;}setShoppingItems(function(list){if(catalogHas(name,area,list)){setToast({text:L("Prodotto già presente in Prodotti"),type:"warning",color:"#FFF8E1",icon:"📦",textColor:"#856404"});return list||[];}return [makeItem(name,area,true,extra)].concat(list||[]);});setProductName("");setProductNote("");setProductQty("1");setProductUnit("unità");setShowProductForm(false);setTabShop("products");}
-  useEffect(function(){var list=shoppingItems||[];if(!list.length)return;var next=dedupeShoppingItemsAfterProductEdit(list);if(next.length!==list.length)setShoppingItems(next);},[(shoppingItems||[]).length]);
-  function addProductToList(x){if(listHasProduct(x))return;var lim=(PLAN_LIMITS[currentPlan]&&PLAN_LIMITS[currentPlan].shoppingListItems)||25;if(lim!==Infinity&&activeItems().length>=lim){setToast({text:L("Hai raggiunto il limite della lista spesa del tuo piano."),type:"error",color:"#E24B4A",icon:"🚫"});return;}setShoppingItems(function(list){return [{...x,id:"shop_"+Date.now()+"_"+Math.floor(Math.random()*9999),sourceProductId:String(x.id),catalogProductId:String(x.id),archived:false,bought:false,listId:activeListId,order:Date.now(),restoredAt:new Date().toISOString()}].concat((list||[]).map(function(p){return p.archived&&String(p.id)===String(x.id)?{...p,usageCount:(p.usageCount||0)+1,lastUsedAt:new Date().toISOString()}:p;}));});setTabShop("products");}
+  function saveProductOnly(){if(!productName.trim()){setToast({text:L("Inserisci il nome del prodotto."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}var name=productName.trim();var area=productArea||"Altro";var extra={note:productNote,qty:productQty,unit:productUnit};if(editingProductId){setShoppingItems(function(list){return (list||[]).map(function(x){return String(x.id)===String(editingProductId)?{...x,name:name,area:area,note:productNote,qty:productQty,unit:productUnit,updatedAt:new Date().toISOString()}:x;});});cancelEditProduct();setTabShop("products");return;}setShoppingItems(function(list){if(catalogHas(name,area,list)){setToast({text:L("Prodotto già presente in Prodotti"),type:"warning",color:"#FFF8E1",icon:"📦",textColor:"#856404"});return list||[];}return [makeItem(name,area,true,extra)].concat(list||[]);});setProductName("");setProductNote("");setProductQty("1");setProductUnit("unità");setShowProductForm(false);setTabShop("products");}
+  function addProductToList(x){if(listHasProduct(x))return;var lim=(PLAN_LIMITS[currentPlan]&&PLAN_LIMITS[currentPlan].shoppingListItems)||25;if(lim!==Infinity&&activeItems().length>=lim){setToast({text:L("Hai raggiunto il limite della lista spesa del tuo piano."),type:"error",color:"#E24B4A",icon:"🚫"});return;}setShoppingItems(function(list){return [{...x,id:"shop_"+Date.now()+"_"+Math.floor(Math.random()*9999),archived:false,bought:false,listId:activeListId,order:Date.now(),restoredAt:new Date().toISOString()}].concat((list||[]).map(function(p){return p.archived&&String(p.id)===String(x.id)?{...p,usageCount:(p.usageCount||0)+1,lastUsedAt:new Date().toISOString()}:p;}));});setTabShop("products");}
   function editProduct(x){setEditingProductId(x.id);setProductName(x.name||"");setProductArea(x.area||shoppingDefaultArea||"Alimenti");setProductNote(x.note||"");setProductQty(x.qty||"1");setProductUnit(x.unit||"unità");setShowProductForm(false);setTabShop("products");}
   function deleteProduct(id){if(!window.confirm(L("Eliminare questo prodotto?")))return;setShoppingItems(function(list){return (list||[]).filter(function(x){return String(x.id)!==String(id);});});if(String(editingProductId)===String(id))cancelEditProduct();setToast({text:L("Prodotto eliminato"),type:"success",icon:"🗑️"});}
   function cancelEditProduct(){setEditingProductId("");setProductName("");setProductArea(shoppingDefaultArea||"Alimenti");setProductNote("");setProductQty("1");setProductUnit("unità");setShowProductForm(false);}
