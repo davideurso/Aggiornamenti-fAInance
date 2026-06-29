@@ -144,8 +144,11 @@ function LoginScreen({onLogin}){
     setLoading(true);
     createUserWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
-        onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
-        setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
+        // Save name to Firestore
+        return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
+          .then(function(){
+            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
+          });
       })
       .catch(function(err){
         setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
@@ -798,57 +801,28 @@ function AppWithLogin(){
   var [userData,setUserData]=useState(null);
 
   useEffect(function(){
-    var cancelled=false;
-
-    function enterImmediately(user){
-      var normalizedEmail=String(user.email||"").toLowerCase();
-      setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
-      setFbUser(user);
-    }
-
-    var startupTimer=setTimeout(function(){
-      if(cancelled)return;
-      var current=null;
-      try{current=fbAuth.currentUser;}catch(e){}
-      if(current){
-        enterImmediately(current);
-      }else{
-        setFbUser(null);
-        setUserData(null);
-      }
-    },5000);
-
     var unsub=onAuthStateChanged(fbAuth,function(user){
-      if(cancelled)return;
-      clearTimeout(startupTimer);
-
       if(user){
-        // Entra subito: Firestore non deve bloccare la schermata Caricamento.
-        enterImmediately(user);
-
-        // Profilo Firestore in background.
+        // Load user profile from Firestore
         getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
-          if(cancelled)return;
           var profile=snap.exists()?snap.data():{};
           var displayName=profile.name||user.displayName||"Utente";
           var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
           setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+          setFbUser(user);
         }).catch(function(){
           var normalizedEmail=String(user.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+          setFbUser(user);
         });
       } else {
         setFbUser(null);
         setUserData(null);
       }
     });
-
-    return function(){
-      cancelled=true;
-      clearTimeout(startupTimer);
-      try{unsub&&unsub();}catch(e){}
-    };
+    return unsub;
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
@@ -871,10 +845,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){
-    setUserData(u);
-    setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
-  }}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1128,7 +1099,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [shareInviteLoading,setShareInviteLoading]=useState(false);
 
   // ── FIRESTORE SYNC ──────────────────────────────────────────────────────────
-  var [firestoreReady,setFirestoreReady]=useState(true);
+  var [firestoreReady,setFirestoreReady]=useState(false);
   var [isOffline,setIsOffline]=useState(!navigator.onLine);
   useEffect(function(){function goOnline(){setIsOffline(false);}function goOffline(){setIsOffline(true);}window.addEventListener("online",goOnline);window.addEventListener("offline",goOffline);return function(){window.removeEventListener("online",goOnline);window.removeEventListener("offline",goOffline);};},[]);
   useEffect(function(){
@@ -1200,19 +1171,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       setFirestoreReady(true);
     }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
   },[userId]);
-
-  // iOS safety: se Firestore resta appeso, non lasciare l'app bloccata su "Caricamento dati account...".
-  useEffect(function(){
-    if(!userId||firestoreReady)return;
-    var t=setTimeout(function(){
-      if(!firestoreHydratedRef.current){
-        console.warn("Firestore load timeout: app unlocked with local/default data");
-        firestoreHydratedRef.current=true;
-        setFirestoreReady(true);
-      }
-    },8000);
-    return function(){clearTimeout(t);};
-  },[userId,firestoreReady]);
 
   async function saveToFirestore(){
     if(!userId||!firestoreHydratedRef.current)return;
@@ -1447,39 +1405,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
     if(url.indexOf("open-plan-info")>=0||url.indexOf("open-info")>=0||url.indexOf("plan-info")>=0){
       openPlanInfo();
-      return;
-    }
-    if(url.indexOf("quick-add")>=0||url.indexOf("open-quick-add")>=0){
-      setTab("spese");
-      setSpeseSubTab("add");
-      setAddType("expense");
-      setAddSubTab("single");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("shopping-list")>=0||url.indexOf("open-shopping-list")>=0||url.indexOf("fidelity")>=0){
-      setTab("shopping");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("note")>=0||url.indexOf("open-note")>=0){
-      setTab("appunti");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("goal")>=0||url.indexOf("open-goal")>=0){
-      setTab("goals");
-      setSettingsPage(null);
-      setMobileMenu(false);
-      return;
-    }
-    if(url.indexOf("debt")>=0||url.indexOf("debiti")>=0||url.indexOf("credit")>=0){
-      setTab("debtCredits");
-      setSettingsPage(null);
-      setMobileMenu(false);
       return;
     }
     if(url.indexOf("open-receipt-camera")>=0||url.indexOf("receipt-camera")>=0){
@@ -2954,97 +2879,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       var shoppingListString=JSON.stringify(payload.shoppingListWidget||{});
       var fidelityString=JSON.stringify(payload.fidelityWidget||{});
       var debtCreditsString=JSON.stringify(payload.debtCreditsWidget||{});
-      function saveIosWidgetPayload(){
-        try{
-          if(!isNativeIOSApp())return;
-          var iosBridge=window&&window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.FainanceWidgetBridge;
-          if(!iosBridge||!iosBridge.saveAll)return;
-          function cleanHex(v,f){var s=String(v||"").trim();return /^#?[0-9a-fA-F]{6}$/.test(s)?(s.charAt(0)==="#"?s:"#"+s):f;}
-          function asArray(v){return Array.isArray(v)?v:[];}
-          function n(v,f){var x=Number(v);return Number.isFinite(x)?x:f;}
-          var quick=payload.quickAdd||{};
-          var shopping=payload.shoppingListWidget||{};
-          var shoppingItems=asArray(shopping.items);
-          var openShoppingItems=shoppingItems.filter(function(x){return x&&!x.bought;});
-          var boughtShoppingItems=shoppingItems.filter(function(x){return x&&x.bought;});
-          var fidelity=payload.fidelityWidget||{};
-          var fidelityCards=asArray(fidelity.cards);
-          var selectedCard=fidelity.selectedCard||fidelityCards.find(function(c){return String(c.id)===String(fidelity.selectedCardId);})||fidelityCards[0]||null;
-          var cardCodeType=String((selectedCard&&(selectedCard.codeType||selectedCard.type))||"barcode").toLowerCase();
-          var note=payload.noteWidget||{};
-          var goal=payload.goalWidget||{};
-          var share=payload.shareWidget||{};
-          var debt=payload.debtCreditsWidget||{};
-          var debtItems=asArray(debt.items).filter(function(x){return x&&!x.closed;});
-          var debtsTotal=debtItems.filter(function(x){return String(x.kind||x.type||"debt")==="debt";}).reduce(function(sum,x){return sum+n(x.balance||x.amount,0);},0);
-          var creditsTotal=debtItems.filter(function(x){return String(x.kind||x.type||"")==="credit";}).reduce(function(sum,x){return sum+n(x.balance||x.amount,0);},0);
-          var shareParticipants=[];
-          try{
-            var selectedShareProjectId=String(share.projectId||"");
-            var selectedShareProject=asArray(shareProjects).find(function(p){return String(p.id)===selectedShareProjectId;})||null;
-            shareParticipants=asArray(selectedShareProject&&selectedShareProject.participants).map(function(p){return String(p.name||p.label||p.email||"").trim();}).filter(Boolean);
-          }catch(participantsErr){}
-          var iosPayload={
-            updatedAt:new Date().toISOString(),
-            locale:lang==="it"?"it-IT":String(lang||"it"),
-            currencySymbol:sym||"€",
-            colors:{
-              primaryHex:cleanHex((payload.quickAdd&&payload.quickAdd.bgColor)||payload.bgColor||widgetBgColor,"#315CFF"),
-              secondaryHex:cleanHex((payload.shareWidget&&payload.shareWidget.accentColor)||widgetShareAccentColor||confirmButtonColor,"#8C4DFF"),
-              incomeHex:cleanHex((payload.quickAdd&&payload.quickAdd.incomeColor)||payload.incomeColor||incomeColor,"#18A957"),
-              expenseHex:cleanHex((payload.quickAdd&&payload.quickAdd.expenseColor)||payload.expenseColor||expenseColor,"#E44B4B"),
-              textHex:cleanHex((payload.noteWidget&&payload.noteWidget.titleColor)||widget2TitleColor,"#FFFFFF"),
-              cardHex:cleanHex((payload.quickAdd&&payload.quickAdd.bgColor)||payload.bgColor||widgetBgColor,"#12172A")
-            },
-            quickAdd:{
-              sampleExpenseLabel:String(quick.expenseLabel||payload.expenseLabel||"+ Spesa"),
-              sampleIncomeLabel:String(quick.incomeLabel||payload.incomeLabel||"+ Entrata")
-            },
-            fidelity:{
-              title:String(fidelity.title||L("Fidelity card")),
-              cardName:String((selectedCard&&(selectedCard.name||selectedCard.title))||L("Carta")),
-              barcode:cardCodeType.indexOf("qr")>=0?"":String((selectedCard&&(selectedCard.code||selectedCard.barcode))||""),
-              qrCode:cardCodeType.indexOf("qr")>=0?String((selectedCard&&(selectedCard.code||selectedCard.qrCode))||""):"",
-              backgroundHex:cleanHex((selectedCard&&selectedCard.color)||fidelity.accentColor||widgetFidelityAccentColor,"#2F5BFF")
-            },
-            shopping:{
-              title:String(shopping.title||L("Lista spesa")),
-              listName:String(shopping.selectedListTitle||shopping.title||L("Lista spesa")),
-              remainingCount:openShoppingItems.length,
-              completedCount:boughtShoppingItems.length,
-              items:openShoppingItems.slice(0,8).map(function(x){return String(x.name||x.title||L("Prodotto"));})
-            },
-            note:{
-              title:note.type==="bank"?L("Coordinate"):L("Nota"),
-              noteTitle:String(note.title||L("Nota")),
-              body:String(note.body||"").slice(0,n(note.maxChars,500))
-            },
-            goal:{
-              title:L("Obiettivo"),
-              goalName:String(goal.title||L("Obiettivo")),
-              currentAmount:n(goal.saved,0),
-              targetAmount:n(goal.target,0),
-              currencySymbol:String(goal.currency||sym||"€")
-            },
-            share:{
-              title:"Share",
-              projectName:String(share.projectName||L("Progetto Share")),
-              myBalance:n(share.netAmount,0),
-              currencySymbol:String(share.currency||sym||"€"),
-              participants:shareParticipants
-            },
-            debts:{
-              title:L("Debiti / Crediti"),
-              debtsTotal:Math.round(debtsTotal*100)/100,
-              creditsTotal:Math.round(creditsTotal*100)/100,
-              currencySymbol:String(debt.currency||sym||"€"),
-              items:debtItems.slice(0,6).map(function(x){return{name:String(x.holder||x.name||L("Nome")),amount:n(x.balance||x.amount,0),type:String(x.kind||x.type||"debt")==="credit"?"credit":"debt"};})
-            }
-          };
-          iosBridge.saveAll({payload:iosPayload}).catch(function(e){try{console.warn("Errore aggiornamento widget iOS",e);}catch(ignore){}});
-        }catch(e){}
-      }
-      var afterNativeUpdate=function(){saveIosWidgetPayload();if(showMessage)setToast("Widget aggiornato");};
+      var afterNativeUpdate=function(){if(showMessage)setToast("Widget aggiornato");};
       var fallbackSave=function(){
         var afterSave=function(){
           if(bridge&&bridge.updateAllWidgets){
@@ -5332,7 +5167,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
   function BiometricLockScreen(){return <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",background:dark?"linear-gradient(160deg,#111827,#1E1E30)":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{width:"100%",maxWidth:420,background:cardBg,border:"1px solid "+borderC,borderRadius:24,boxShadow:dark?"0 18px 70px rgba(0,0,0,.45)":"0 18px 70px rgba(74,66,160,.22)",padding:24,textAlign:"center"}}><div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,borderRadius:24,background:dark?"#24213a":"#F0EDFF",marginBottom:14,fontSize:34}}>🔐</div><div style={{fontSize:22,fontWeight:950,color:textC,marginBottom:6}}>{L("fAInance è bloccata")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45,marginBottom:18}}>{L("Sblocca l’app per visualizzare i tuoi dati finanziari.")}</div>{biometricLockMessage&&<div style={{background:dark?"#342424":"#fff0f0",border:"1px solid "+(dark?"#5a3333":"#f3b6b6"),color:dark?"#ffd0d0":"#8a2d2d",borderRadius:12,padding:"10px 12px",fontSize:12,lineHeight:1.35,marginBottom:14}}>{L(biometricLockMessage)}</div>}<button onClick={function(){unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");}} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con biometria")}</button><button onClick={onLogout} style={{width:"100%",marginTop:10,background:dark?"#252535":"#f5f5f5",color:subC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"11px 16px",fontSize:13,fontWeight:800,cursor:"pointer"}}>{L("Esci dall’account")}</button></div></div>;}
 
   return <AppCtx.Provider value={ctxValue}>
-    {false?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
+    {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
     isMobile?
     <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden"}}>

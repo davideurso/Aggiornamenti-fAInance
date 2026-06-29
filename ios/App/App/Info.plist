@@ -20,54 +20,10 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>com.googleusercontent.apps.739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72</string>
-			</array>
-		</dict>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>it.fainanceapp.app</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>fainance</string>
-			</array>
-		</dict>
-	</array>
 	<key>CFBundleVersion</key>
-	<string>181</string>
-	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
-	<true/>
-	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
-	<false/>
-	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-4502496181111632~7115058902</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>Serve per scansionare scontrini e carte fidelity.</string>
-	<key>NSContactsUsageDescription</key>
-	<string>fAInance usa la rubrica solo per inserire il titolare di un debito o credito.</string>
-	<key>NSFaceIDUsageDescription</key>
-	<string>fAInance usa Face ID per proteggere l’accesso ai tuoi dati finanziari.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>fAInance usa il microfono per registrare brevi comandi vocali e trasformarli in movimenti finanziari.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>fAInance usa il riconoscimento vocale per convertire i tuoi comandi vocali in uscite o entrate.</string>
-	<key>SKAdNetworkItems</key>
-	<array>
-		<dict>
-			<key>SKAdNetworkIdentifier</key>
-			<string>cstr6suwn9.skadnetwork</string>
-		</dict>
-	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -91,5 +47,39 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-4502496181111632~7115058902</string>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72</string>
+			</array>
+		</dict>
+	</array>
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<false/>
+	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
+	<true/>
+	<key>NSContactsUsageDescription</key>
+	<string>fAInance usa la rubrica solo per inserire il titolare di un debito o credito.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Serve per scansionare scontrini e carte fidelity.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>fAInance usa Face ID per proteggere l’accesso ai tuoi dati finanziari.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>fAInance usa il microfono per registrare brevi comandi vocali e trasformarli in movimenti finanziari.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>fAInance usa il riconoscimento vocale per convertire i tuoi comandi vocali in uscite o entrate.</string>
 </dict>
 </plist>
