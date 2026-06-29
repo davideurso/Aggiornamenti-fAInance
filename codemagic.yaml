@@ -24,7 +24,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.63"
+        APP_VERSION: "1.6.64"
         VITE_FIREBASE_API_KEY: "AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
