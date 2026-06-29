@@ -88,6 +88,13 @@ try{
 }catch(e){}
 
 function LoginScreen({onLogin}){
+  var showAppleLoginButton=false;
+  try{
+    var capPlatform=(typeof window!=="undefined"&&window.Capacitor&&window.Capacitor.getPlatform)?window.Capacitor.getPlatform():"web";
+    showAppleLoginButton=capPlatform==="ios";
+  }catch(e){
+    showAppleLoginButton=false;
+  }
   var [mode,setMode]=useState("login");
   var [email,setEmail]=useState("");
   var [password,setPassword]=useState("");
