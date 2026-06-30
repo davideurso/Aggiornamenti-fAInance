@@ -371,17 +371,36 @@ function LoginScreen({onLogin}){
     setLoading(false);
     onLogin({id:user.uid,email:user.email||"",name:user.displayName||fallbackName||"Utente"});
   }
+  function waitForFirebaseUser(actionPromise,timeoutMs,fallbackName){
+    return new Promise(function(resolve,reject){
+      var done=false;var unsub=null;var timer=null;var poller=null;
+      function cleanup(){try{if(unsub)unsub();}catch(e){}try{clearTimeout(timer);}catch(e){}try{clearInterval(poller);}catch(e){}}
+      function finish(user){if(done)return;if(!user||!user.uid)return;done=true;cleanup();try{completeLoginFromFirebaseUser(user,fallbackName||"Utente");resolve(user);}catch(e){reject(e);}}
+      function fail(err){if(done)return;var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;if(cur&&cur.uid){finish(cur);return;}done=true;cleanup();reject(err);}
+      try{
+        unsub=onAuthStateChanged(fbAuth,function(user){if(user&&user.uid)finish(user);});
+      }catch(listenerErr){}
+      Promise.resolve(actionPromise).then(function(cred){
+        var user=(cred&&cred.user)||(fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null);
+        if(user&&user.uid)finish(user);
+        else setTimeout(function(){var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;if(cur&&cur.uid)finish(cur);},500);
+      }).catch(function(err){fail(err);});
+      poller=setInterval(function(){var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;if(cur&&cur.uid)finish(cur);},350);
+      timer=setTimeout(function(){fail(new Error("TIMEOUT_AUTH_STATE"));},timeoutMs||35000);
+    });
+  }
 
   function doLogin(){
     setError("");setLoading(true);
-    withLoginTimeout(signInWithEmailAndPassword(fbAuth,email,password),18000,"Login completato, ma Firebase non ha risposto in tempo.")
-      .then(function(cred){
-        completeLoginFromFirebaseUser(cred.user,name||"Utente");
-      })
+    waitForFirebaseUser(signInWithEmailAndPassword(fbAuth,email,password),35000,name||"Utente")
       .catch(function(err){
         var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
         if(cur&&cur.uid){try{completeLoginFromFirebaseUser(cur,name||"Utente");return;}catch(e){}}
-        setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+((err&&err.message)||err));
+        var code=(err&&err.code)||"";
+        var msg=String((err&&err.message)||err||"");
+        if(code==="auth/user-not-found"||code==="auth/wrong-password"||code==="auth/invalid-credential")setError(L("Email o password non corretti."));
+        else if(msg==="TIMEOUT_AUTH_STATE")setError(L("Login completato, ma l’app non ha ricevuto lo stato account. Chiudi e riapri l’app, poi riprova."));
+        else setError(L("Errore: ")+msg);
         setLoading(false);
       });
   }
@@ -393,10 +412,9 @@ function LoginScreen({onLogin}){
     if(password.length<6){setError(L("Password: minimo 6 caratteri."));return;}
     if(password!==confirmPwd){setError(L("Le password non coincidono."));return;}
     setLoading(true);
-    withLoginTimeout(createUserWithEmailAndPassword(fbAuth,email,password),18000,"Account creato, ma Firebase non ha risposto in tempo.")
-      .then(function(cred){
-        setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
-        completeLoginFromFirebaseUser(cred.user,name.trim());
+    waitForFirebaseUser(createUserWithEmailAndPassword(fbAuth,email,password),35000,name.trim())
+      .then(function(user){
+        setDoc(doc(fbDb,"users",user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
       })
       .catch(function(err){
         var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
@@ -439,13 +457,18 @@ function LoginScreen({onLogin}){
           return;
         }
         const credential = GoogleAuthProvider.credential(idToken||null, accessToken||null);
-        const cred = await withLoginTimeout(signInWithCredential(fbAuth, credential),18000,"Google login completato, ma Firebase non ha risposto in tempo.");
-        completeLoginFromFirebaseUser(cred.user,"Utente");
+        try{
+          await waitForFirebaseUser(signInWithCredential(fbAuth, credential),35000,"Utente");
+        }catch(jsAuthErr){
+          var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
+          if(cur&&cur.uid){completeLoginFromFirebaseUser(cur,"Utente");return;}
+          if(pluginUser&&pluginUser.uid){setLoading(false);onLogin({id:pluginUser.uid,email:pluginUser.email||"",name:pluginUser.displayName||"Utente"});return;}
+          throw jsAuthErr;
+        }
         return;
       }
       googleProvider.setCustomParameters({prompt:"select_account"});
-      const cred = await withLoginTimeout(signInWithPopup(fbAuth, googleProvider),18000,"Google login web scaduto.");
-      completeLoginFromFirebaseUser(cred.user,"Utente");
+      await waitForFirebaseUser(signInWithPopup(fbAuth, googleProvider),35000,"Utente");
     } catch(err){
       console.error("Google login error",(err&&err.code)||"unknown");
       var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
@@ -2274,20 +2297,97 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
   async function getNativeBiometric(){
-    try{
-      var cap=(typeof window!=="undefined"?(window as any).Capacitor:null);
-      var legacy=cap&&cap.Plugins&&cap.Plugins.BiometricAuth;
-      if(legacy)return {BiometricAuth:legacy,AndroidBiometryStrength:{weak:0,strong:1}};
-      var core=await import("@capacitor/core");
-      var registerPlugin=(core&&core.registerPlugin)||null;
-      if(registerPlugin){
-        var proxy=registerPlugin("BiometricAuth");
-        return {BiometricAuth:proxy,AndroidBiometryStrength:{weak:0,strong:1}};
+    var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
+    var registerPlugin=cap&&cap.registerPlugin?cap.registerPlugin:null;
+    var plugins=(cap&&cap.Plugins)||{};
+    var nativeBiometricCandidates=[];
+    var biometricAuthCandidates=[];
+    if(plugins.NativeBiometric)nativeBiometricCandidates.push(plugins.NativeBiometric);
+    if(registerPlugin){try{nativeBiometricCandidates.push(registerPlugin("NativeBiometric"));}catch(e){}}
+    if(plugins.BiometricAuth)biometricAuthCandidates.push(plugins.BiometricAuth);
+    if(registerPlugin){try{biometricAuthCandidates.push(registerPlugin("BiometricAuth"));}catch(e){}}
+    function normalizeAvailable(res){
+      var available=!!(res&&(res.isAvailable===true||res.available===true||res.hasBiometrics===true||res.biometryType||res.biometryTypes));
+      return {isAvailable:available,strongBiometryIsAvailable:available,biometryType:res&&res.biometryType,details:res||null};
+    }
+    function isMissingPluginError(e){return /not implemented|not available|plugin|unimplemented|not found/i.test(String((e&&e.message)||e||""));}
+    async function tryNativeCheck(){
+      var lastErr=null;
+      for(var i=0;i<nativeBiometricCandidates.length;i++){
+        var p=nativeBiometricCandidates[i];
+        if(!p)continue;
+        try{
+          if(p.isAvailable)return normalizeAvailable(await p.isAvailable());
+          if(p.checkBiometry)return normalizeAvailable(await p.checkBiometry());
+        }catch(e){lastErr=e;if(!isMissingPluginError(e))throw e;}
       }
-    }catch(e){}
-    return null;
+      if(lastErr)throw lastErr;
+      throw new Error("NativeBiometric plugin not implemented");
+    }
+    async function tryBiometricAuthCheck(){
+      var lastErr=null;
+      for(var i=0;i<biometricAuthCandidates.length;i++){
+        var p=biometricAuthCandidates[i];
+        if(!p)continue;
+        try{
+          if(p.checkBiometry)return normalizeAvailable(await p.checkBiometry());
+          if(p.isAvailable)return normalizeAvailable(await p.isAvailable());
+        }catch(e){lastErr=e;if(!isMissingPluginError(e))throw e;}
+      }
+      if(lastErr)throw lastErr;
+      throw new Error("BiometricAuth plugin not implemented");
+    }
+    async function tryNativeAuth(opts){
+      var lastErr=null;
+      for(var i=0;i<nativeBiometricCandidates.length;i++){
+        var p=nativeBiometricCandidates[i];
+        if(!p)continue;
+        try{
+          if(p.verifyIdentity)return await p.verifyIdentity({
+            title:(opts&&opts.title)||"fAInance",
+            subtitle:(opts&&opts.subtitle)||"Protezione app",
+            description:(opts&&opts.reason)||"Sblocca fAInance",
+            reason:(opts&&opts.reason)||"Sblocca fAInance",
+            negativeButtonText:(opts&&opts.cancelTitle)||"Annulla",
+            useFallback:true,
+            maxAttempts:3
+          });
+          if(p.authenticate)return await p.authenticate(opts||{});
+        }catch(e){lastErr=e;if(!isMissingPluginError(e))throw e;}
+      }
+      if(lastErr)throw lastErr;
+      throw new Error("NativeBiometric plugin not implemented");
+    }
+    async function tryBiometricAuth(opts){
+      var lastErr=null;
+      for(var i=0;i<biometricAuthCandidates.length;i++){
+        var p=biometricAuthCandidates[i];
+        if(!p)continue;
+        try{
+          if(p.authenticate)return await p.authenticate(opts||{});
+          if(p.verifyIdentity)return await p.verifyIdentity({
+            title:(opts&&opts.title)||"fAInance",
+            subtitle:(opts&&opts.subtitle)||"Protezione app",
+            description:(opts&&opts.reason)||"Sblocca fAInance",
+            reason:(opts&&opts.reason)||"Sblocca fAInance",
+            negativeButtonText:(opts&&opts.cancelTitle)||"Annulla",
+            useFallback:true,
+            maxAttempts:3
+          });
+        }catch(e){lastErr=e;if(!isMissingPluginError(e))throw e;}
+      }
+      if(lastErr)throw lastErr;
+      throw new Error("BiometricAuth plugin not implemented");
+    }
+    return {BiometricAuth:{
+      checkBiometry:async function(){
+        try{return await tryNativeCheck();}catch(nativeErr){return await tryBiometricAuthCheck();}
+      },
+      authenticate:async function(opts){
+        try{return await tryNativeAuth(opts);}catch(nativeErr){return await tryBiometricAuth(opts);}
+      }
+    },AndroidBiometryStrength:{weak:0,strong:1}};
   }
-
   function biometricErrorText(errorCode,details){
     var code=String(errorCode||"");var raw=String(details||"");
     if(code==="biometryNotEnrolled")return "Nessuna impronta o biometria configurata sul dispositivo.";
