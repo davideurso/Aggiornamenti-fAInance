@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useApp, useStorage, COLORS, EMOJI_LIST, DEFAULT_CATS, DEFAULT_METHODS,
-  DEFAULT_EXPENSE_GROUPS, DEFAULT_PATRIMONIO_AREAS, DEFAULT_PATRIMONIO_ENTRIES,
+  DEFAULT_EXPENSE_GROUPS, DEFAULT_INCOME_GROUPS, DEFAULT_PATRIMONIO_AREAS, DEFAULT_PATRIMONIO_ENTRIES,
   DEFAULT_BUDGET_PLAN, MONTHS_FULL, MONTHS_SHORT, INCOME_TYPES, CURRENCIES,
   GOAL_ICONS, BALANCE_COLOR, BG_THEMES,
   getAllIncomeTypes, sortedCats, sortedMethods, fmtDate, fmtAmt, parseMoney,
@@ -16,6 +16,34 @@ import { useApp, useStorage, COLORS, EMOJI_LIST, DEFAULT_CATS, DEFAULT_METHODS,
   appLogo, appBanner, aiGrilloMascot
 } from './core';
 import { TRANSLATIONS, translateFainanceText } from './traduzioni';
+
+
+const GOOGLE_PICKER_CLIENT_ID = '739607555867-i5uhrj1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com';
+const GOOGLE_PICKER_API_KEY = 'AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno';
+const GOOGLE_PICKER_APP_ID = '739607555867';
+const GOOGLE_PICKER_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+var FAINANCE_GOOGLE_PICKER_TOKEN = '';
+var FAINANCE_GOOGLE_SCRIPT_PROMISES:any = {};
+
+function loadFainanceExternalScript(src:string,id:string){
+  if(typeof document==='undefined')return Promise.reject(new Error('document non disponibile'));
+  if(FAINANCE_GOOGLE_SCRIPT_PROMISES[id])return FAINANCE_GOOGLE_SCRIPT_PROMISES[id];
+  FAINANCE_GOOGLE_SCRIPT_PROMISES[id]=new Promise(function(resolve,reject){
+    var existing=document.getElementById(id) as HTMLScriptElement | null;
+    if(existing){
+      if((existing as any).dataset&&((existing as any).dataset.loaded==='1')){resolve(true);return;}
+      existing.addEventListener('load',function(){resolve(true);});
+      existing.addEventListener('error',function(){delete FAINANCE_GOOGLE_SCRIPT_PROMISES[id];reject(new Error('Script Google non caricato'));});
+      return;
+    }
+    var script=document.createElement('script');
+    script.id=id;script.src=src;script.async=true;script.defer=true;
+    script.onload=function(){try{(script as any).dataset.loaded='1';}catch(e){}resolve(true);};
+    script.onerror=function(){try{script.remove();}catch(e){}delete FAINANCE_GOOGLE_SCRIPT_PROMISES[id];reject(new Error('Script Google non caricato: '+src));};
+    document.head.appendChild(script);
+  });
+  return FAINANCE_GOOGLE_SCRIPT_PROMISES[id];
+}
 
 
 // 1.6.68: safe module-level translator fallback.
@@ -30,9 +58,28 @@ function FAI_TRANSLATE(value:any){
 function L(value:any){return FAI_TRANSLATE(value);}
 function PL(value:any){return FAI_TRANSLATE(value);}
 
+function effectiveExpenseGroups(groups:any){
+  var base=(Array.isArray(groups)&&groups.length)?groups:DEFAULT_EXPENSE_GROUPS;
+  var out=base.slice();
+  var hasAltro=out.some(function(g:any){return String(g.id)==="altro";});
+  if(!hasAltro){var defAltro=(DEFAULT_EXPENSE_GROUPS||[]).find(function(g:any){return String(g.id)==="altro";})||{id:"altro",name:"Altro",icon:"📦",color:"#D3D1C7"};out.push(defAltro);}
+  return out;
+}
+function effectiveExpenseCats(list:any){
+  return (Array.isArray(list)&&list.length)?list:DEFAULT_CATS;
+}
+function effectiveMethods(list:any){
+  return (Array.isArray(list)&&list.length)?list:DEFAULT_METHODS;
+}
+function safeCatsForGroup(list:any, groups:any, g:any){
+  var effectiveGroups=effectiveExpenseGroups(groups);
+  var ids=(effectiveGroups||[]).map(function(x:any){return String(x.id);});
+  return (effectiveExpenseCats(list)||[]).filter(function(c:any){var cg=String(c.group||"");return cg===String(g.id)||((!cg||ids.indexOf(cg)<0)&&String(g.id)==="altro");});
+}
+
 export function DonutChart({data,size}){var {dark}=useApp();if(!data||!data.length)return <div style={{width:size,height:size,borderRadius:"50%",background:dark?"#2a2a3e":"#f0f0f0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#aaa"}}>vuoto</div>;var total=data.reduce(function(a,d){return a+(d.value||0);},0);if(!total)return null;var r=size/2,cx=r,cy=r,ir=r*0.56,angle=-Math.PI/2,slices=[];data.forEach(function(d){var sw=(d.value/total)*2*Math.PI,x1=cx+r*Math.cos(angle),y1=cy+r*Math.sin(angle),a2=angle+sw,x2=cx+r*Math.cos(a2),y2=cy+r*Math.sin(a2),ix1=cx+ir*Math.cos(angle),iy1=cy+ir*Math.sin(angle),ix2=cx+ir*Math.cos(a2),iy2=cy+ir*Math.sin(a2),lg=sw>Math.PI?1:0;slices.push({path:"M "+x1+" "+y1+" A "+r+" "+r+" 0 "+lg+" 1 "+x2+" "+y2+" L "+ix2+" "+iy2+" A "+ir+" "+ir+" 0 "+lg+" 0 "+ix1+" "+iy1+" Z",color:d.color});angle=a2;});return <svg width={size} height={size} viewBox={"0 0 "+size+" "+size}>{slices.map(function(s,i){return <path key={i} d={s.path} fill={s.color} opacity={0.85}/>;})}</svg>;}
-export function BarChart({data,width,height}){var {dark}=useApp();if(!data||!data.length)return null;var max=Math.max.apply(null,data.map(function(d){return Math.max(d.exp||0,d.inc||0);}));if(!max)max=1;var pl=4,pr=4,pt=8,pb=22,cw=width-pl-pr,ch=height-pt-pb,bw=cw/data.length,barW=Math.max(3,Math.floor(bw*0.32)),gap=2,tc=dark?"#888":"#bbb";return <svg width={width} height={height}>{[0,0.5,1].map(function(p){var y=pt+ch*(1-p);return <line key={p} x1={pl} y1={y} x2={width-pr} y2={y} stroke={dark?"#2a2a3e":"#f0f0f0"} strokeWidth={1}/>;})}{data.map(function(d,i){var cx2=pl+i*bw+bw/2,hE=d.exp>0?Math.max(2,Math.round((d.exp/max)*ch)):0,hI=d.inc>0?Math.max(2,Math.round((d.inc/max)*ch)):0;return <g key={i}>{hE>0&&<rect x={cx2-barW-gap/2} y={pt+ch-hE} width={barW} height={hE} fill="#E24B4A" rx={2} opacity={0.82}/>}{hI>0&&<rect x={cx2+gap/2} y={pt+ch-hI} width={barW} height={hI} fill="#1D9E75" rx={2} opacity={0.82}/>}<text x={cx2} y={height-5} textAnchor="middle" fontSize={8} fill={tc}>{d.label}</text></g>;})}</svg>;}
-export function LineChart({data,width,height,color}){var {dark}=useApp();if(!data||data.length<2)return null;color=color||"#7F77DD";var max=Math.max.apply(null,data.map(function(d){return d.value||0;}));var min=Math.min.apply(null,data.map(function(d){return d.value||0;}));var range=max-min;if(!range){range=max||1;}var pl=4,pr=4,pt=8,pb=22,cw=width-pl-pr,ch=height-pt-pb;var pts=data.map(function(d,i){return{x:pl+i*(cw/(data.length-1)),y:pt+ch-((d.value-min)/range)*ch,v:d.value,label:d.label};});var line=pts.map(function(p,i){return(i===0?"M":"L")+p.x.toFixed(1)+" "+p.y.toFixed(1);}).join(" ");var area=line+" L"+pts[pts.length-1].x+" "+(pt+ch)+" L"+pts[0].x+" "+(pt+ch)+" Z";var gid="lg"+color.replace("#","");var tc=dark?"#888":"#bbb";return <svg width={width} height={height}><defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.25"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>{[0,0.5,1].map(function(p){var y=pt+ch*(1-p);return <line key={p} x1={pl} y1={y} x2={width-pr} y2={y} stroke={dark?"#2a2a3e":"#f0f0f0"} strokeWidth={1}/>;})}<path d={area} fill={"url(#"+gid+")"}/><path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>{pts.map(function(p,i){return <text key={i} x={p.x} y={height-5} textAnchor="middle" fontSize={8} fill={tc}>{p.label}</text>;})}</svg>;}
+export function BarChart({data,width,height}){var {dark}=useApp();if(!data||!data.length)return null;var max=Math.max.apply(null,data.map(function(d){return Math.max(d.exp||0,d.inc||0);}));if(!max)max=1;var pl=4,pr=4,pt=8,pb=22,cw=width-pl-pr,ch=height-pt-pb,bw=cw/data.length,barW=Math.max(3,Math.floor(bw*0.32)),gap=2,tc=dark?"#888":"#bbb";return <svg data-no-translate="true" className="notranslate" width={width} height={height}>{[0,0.5,1].map(function(p){var y=pt+ch*(1-p);return <line key={p} x1={pl} y1={y} x2={width-pr} y2={y} stroke={dark?"#2a2a3e":"#f0f0f0"} strokeWidth={1}/>;})}{data.map(function(d,i){var cx2=pl+i*bw+bw/2,hE=d.exp>0?Math.max(2,Math.round((d.exp/max)*ch)):0,hI=d.inc>0?Math.max(2,Math.round((d.inc/max)*ch)):0;return <g key={i}>{hE>0&&<rect x={cx2-barW-gap/2} y={pt+ch-hE} width={barW} height={hE} fill="#E24B4A" rx={2} opacity={0.82}/>}{hI>0&&<rect x={cx2+gap/2} y={pt+ch-hI} width={barW} height={hI} fill="#1D9E75" rx={2} opacity={0.82}/>}<text className="notranslate" data-no-translate="true" x={cx2} y={height-5} textAnchor="middle" fontSize={8} fill={tc}>{d.label}</text></g>;})}</svg>;}
+export function LineChart({data,width,height,color}){var {dark}=useApp();if(!data||data.length<2)return null;color=color||"#7F77DD";var max=Math.max.apply(null,data.map(function(d){return d.value||0;}));var min=Math.min.apply(null,data.map(function(d){return d.value||0;}));var range=max-min;if(!range){range=max||1;}var pl=4,pr=4,pt=8,pb=22,cw=width-pl-pr,ch=height-pt-pb;var pts=data.map(function(d,i){return{x:pl+i*(cw/(data.length-1)),y:pt+ch-((d.value-min)/range)*ch,v:d.value,label:d.label};});var line=pts.map(function(p,i){return(i===0?"M":"L")+p.x.toFixed(1)+" "+p.y.toFixed(1);}).join(" ");var area=line+" L"+pts[pts.length-1].x+" "+(pt+ch)+" L"+pts[0].x+" "+(pt+ch)+" Z";var gid="lg"+color.replace("#","");var tc=dark?"#888":"#bbb";return <svg data-no-translate="true" className="notranslate" width={width} height={height}><defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.25"/><stop offset="100%" stopColor={color} stopOpacity="0"/></linearGradient></defs>{[0,0.5,1].map(function(p){var y=pt+ch*(1-p);return <line key={p} x1={pl} y1={y} x2={width-pr} y2={y} stroke={dark?"#2a2a3e":"#f0f0f0"} strokeWidth={1}/>;})}<path d={area} fill={"url(#"+gid+")"}/><path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>{pts.map(function(p,i){return <text key={i} className="notranslate" data-no-translate="true" x={p.x} y={height-5} textAnchor="middle" fontSize={8} fill={tc}>{p.label}</text>;})}</svg>;}
 
 // ── UI ATOMS ─────────────────────────────────────────────────────────────────
 export function Btn({children,onClick,bg,color,style,disabled}){var {btnRadius}=useApp();return <button onClick={onClick} disabled={disabled} style={{background:bg||"#333",color:color||"#fff",border:"none",borderRadius:btnRadius,padding:"8px 16px",cursor:disabled?"not-allowed":"pointer",fontWeight:500,fontSize:13,opacity:disabled?0.5:1,...(style||{})}}>{children}</button>;}
@@ -120,16 +167,17 @@ export function AlertPopup({newAlerts,onClose}){
 
 // ── FORMS ────────────────────────────────────────────────────────────────────
 export function ExpenseForm({onSave,type}){
-  var ctx=useApp();var t=ctx.t,cats=ctx.cats,methods=ctx.methods,sym=ctx.sym,dark=ctx.dark,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=ctx.expenseGroups,expenseColor=ctx.expenseColor,incomeColor=ctx.incomeColor,btnRadius=ctx.btnRadius,isMobile=ctx.isMobile;
+  var ctx=useApp();var t=ctx.t,cats=effectiveExpenseCats(ctx.cats),methods=effectiveMethods(ctx.methods),sym=ctx.sym,dark=ctx.dark,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups),expenseColor=ctx.expenseColor,incomeColor=ctx.incomeColor,confirmButtonColor=ctx.confirmButtonColor,btnRadius=ctx.btnRadius,isMobile=ctx.isMobile;
   var sCats=useMemo(function(){return sortedCats(cats,catOrder,catSortMode,expenseGroups);},[cats,catOrder,catSortMode,expenseGroups]);
   var sMethods=useMemo(function(){return sortedMethods(methods,methodOrder,methodSortMode);},[methods,methodOrder,methodSortMode]);
-  var grps=expenseGroups||DEFAULT_EXPENSE_GROUPS;
-  var defaultCat=(sCats.find(function(c){return c.id===4;})||sCats[0]||{id:1});
-  var defaultMethod=(sMethods.find(function(m){return m.id===2;})||sMethods[0]||{id:1});
+  var grps=effectiveExpenseGroups(expenseGroups);
+  var defaultCat=(sCats.find(function(c){return String(c.id)==="4";})||sCats[0]||{id:1});
+  var defaultMethod=(sMethods.find(function(m){return String(m.id)==="2";})||sMethods[0]||{id:1});
   var eE={amount:"",catId:defaultCat.id,methodId:defaultMethod.id,desc:"",date:todayStr(),rateizzato:false,rate:12,rateDirection:"forward"};
   var eI={amount:"",itype:"salario",desc:"",date:todayStr(),rateizzato:false,rate:12,rateDirection:"forward"};
   var [f,setF]=useState(type==="expense"?eE:eI);
   var btnC=type==="expense"?expenseColor:incomeColor;
+  var mainButtonC=confirmButtonColor||"#378ADD";
   var lang=(ctx&&ctx.lang)||"it";
   var t=TRANSLATIONS[lang]||TRANSLATIONS.it;
   var V=t;
@@ -140,7 +188,7 @@ export function ExpenseForm({onSave,type}){
   var inp={width:"100%",borderRadius:10,border:"1px solid "+borderC,padding:isMobile?"6px 8px":"10px 12px",fontSize:14,background:fieldBg,color:tc,boxSizing:"border-box",outline:"none"};
   var fieldCard={background:fieldBg,border:"1px solid "+borderC,borderRadius:14,padding:isMobile?"7px 8px":"11px 13px",boxShadow:dark?"none":"0 2px 12px rgba(0,0,0,0.03)"};
   var label={fontSize:10,color:sc,display:"block",marginBottom:4,fontWeight:700,textTransform:"uppercase",letterSpacing:.35};
-  function save(){var amount=parseMoney(f.amount);if(!amount||amount<=0)return;var item={id:Date.now(),amount:amount,desc:f.desc,date:f.date,rateizzato:f.rateizzato,rate:f.rate,rateDirection:f.rateDirection||"forward"};if(type==="expense"){item.catId=Number(f.catId);item.methodId=Number(f.methodId);}else{item.type=f.itype;}onSave(item);setF(type==="expense"?eE:eI);}
+  function save(){var amount=parseMoney(f.amount);if(!amount||amount<=0)return;var item={id:Date.now(),amount:amount,desc:f.desc,date:f.date,rateizzato:f.rateizzato,rate:f.rate,rateDirection:f.rateDirection||"forward"};if(type==="expense"){item.catId=f.catId;item.methodId=f.methodId;}else{item.type=f.itype;}onSave(item);setF(type==="expense"?eE:eI);}
   return <div style={{background:panelBg,border:"1px solid "+borderC,borderRadius:16,padding:isMobile?8:18,boxShadow:dark?"none":"0 8px 28px rgba(83,74,183,0.08)",display:"flex",flexDirection:"column",gap:isMobile?6:12}}>
     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:0}}>
       <div style={{width:isMobile?28:42,height:isMobile?28:42,borderRadius:12,background:btnC+"22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:isMobile?16:22}}>{type==="expense"?"💸":"💰"}</div>
@@ -155,19 +203,19 @@ export function ExpenseForm({onSave,type}){
         <input type="number" placeholder="0,00" value={f.amount} onChange={function(e){setF(function(p){return{...p,amount:e.target.value};});}} style={{...inp,border:"none",background:"transparent",padding:"0",fontSize:isMobile?21:34,fontWeight:800,color:btnC}}/>
       </div>
       {type==="expense"?<div style={{display:"grid",gridTemplateColumns:"1fr",gap:isMobile?7:10}}>
-        <div style={fieldCard}><label style={label}>{t.category}</label>{catSortMode==="custom"?<select value={f.catId} onChange={function(e){setF(function(p){return{...p,catId:e.target.value};});}} style={inp}>{sCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</select>:<select value={f.catId} onChange={function(e){setF(function(p){return{...p,catId:e.target.value};});}} style={inp}>{grps.map(function(g){var gc=sCats.filter(function(c){return c.group===g.id;});return gc.length?<optgroup key={g.id} label={g.name}>{gc.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</optgroup>:null;})}</select>}</div>
+        <div style={fieldCard}><label style={label}>{t.category}</label>{catSortMode==="custom"?<select value={f.catId} onChange={function(e){setF(function(p){return{...p,catId:e.target.value};});}} style={inp}>{sCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</select>:<select value={f.catId} onChange={function(e){setF(function(p){return{...p,catId:e.target.value};});}} style={inp}>{grps.map(function(g){var gc=safeCatsForGroup(sCats,grps,g);return gc.length?<optgroup key={g.id} label={g.name}>{gc.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</optgroup>:null;})}</select>}</div>
         <div style={fieldCard}><label style={label}>{TL("Metodo di pagamento")}</label><select value={f.methodId} onChange={function(e){setF(function(p){return{...p,methodId:e.target.value};});}} style={inp}>{sMethods.map(function(m){return <option key={m.id} value={m.id}>{m.icon} {m.name}</option>;})}</select></div>
-      </div>:<div style={{display:"flex",flexDirection:"column",justifyContent:"center"}}><div style={fieldCard}><label style={label}>{t.incomeType}</label><select value={f.itype} onChange={function(e){setF(function(p){return{...p,itype:e.target.value};});}} style={inp}>{(ctx.incomeTypes||getAllIncomeTypes()).map(function(it){return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>;})}</select></div></div>}
+      </div>:<div style={{display:"flex",flexDirection:"column",justifyContent:"center"}}><div style={fieldCard}><label style={label}>{t.incomeType}</label><select value={f.itype} onChange={function(e){setF(function(p){return{...p,itype:e.target.value};});}} style={inp}>{((ctx.incomeTypes&&ctx.incomeTypes.length)?ctx.incomeTypes:getAllIncomeTypes()).map(function(it){return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>;})}</select></div></div>}
     </div>
     <div style={fieldCard}><label style={label}>{t.description}</label><input type="text" placeholder={TL("Descrizione")} value={f.desc} onChange={function(e){setF(function(p){return{...p,desc:e.target.value};});}} onKeyDown={function(e){if(e.key==="Enter")save();}} style={inp}/></div>
     <div style={fieldCard}><label style={{...label,marginBottom:6}}>{t.date}</label><DatePickerField value={f.date} onChange={function(v){setF(function(p){return{...p,date:v};});}}/></div>
     <div style={{background:f.rateizzato?(dark?"#24213a":"#F0EDFF"):(dark?"#1e1e30":"#fff"),borderRadius:14,padding:isMobile?9:14,border:"1px solid "+(f.rateizzato?(dark?"#3d376a":"#D8D2FF"):borderC)}}><Toggle label={t.instalment} checked={f.rateizzato} onChange={function(){setF(function(p){return{...p,rateizzato:!p.rateizzato};});}} color={btnC}/>{f.rateizzato&&<div style={{marginTop:10}}><div style={{fontSize:12,color:dark?"#BEB8FF":"#534AB7",marginBottom:6,fontWeight:700}}>{t.instalmentIn} {f.rate} {t.months} - {fmtAmt(parseMoney(f.amount)?parseMoney(f.amount)/f.rate:0,sym)} {t.perMonth}</div><RatePicker value={f.rate} direction={f.rateDirection||"forward"} onChange={function(n){setF(function(p){return{...p,rate:n};});}} onDirectionChange={function(d){setF(function(p){return{...p,rateDirection:d};});}}/></div>}</div>
-    <button onClick={save} style={{background:"linear-gradient(135deg,"+btnC+",#7F77DD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:isMobile?11:15,fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:dark?"none":"0 6px 18px "+btnC+"44"}}>{type==="expense"?t.addExpense:t.addIncome}</button>
+    <button onClick={save} style={{background:mainButtonC,color:"#fff",border:"none",borderRadius:btnRadius,padding:isMobile?11:15,fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:dark?"none":"0 6px 18px "+mainButtonC+"44"}}>{type==="expense"?TL("Salva Uscita"):TL("Salva Entrata")}</button>
   </div>;
 }
 
 export function ReceiptScanPanel({onSave,shareMode}){
-  var ctx=useApp();var cats=ctx.cats,methods=ctx.methods,sym=ctx.sym,dark=ctx.dark,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=ctx.expenseGroups,expenseColor=ctx.expenseColor,btnRadius=ctx.btnRadius,isMobile=ctx.isMobile;
+  var ctx=useApp();var cats=effectiveExpenseCats(ctx.cats),methods=effectiveMethods(ctx.methods),sym=ctx.sym,dark=ctx.dark,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups),expenseColor=ctx.expenseColor,confirmButtonColor=ctx.confirmButtonColor,btnRadius=ctx.btnRadius,isMobile=ctx.isMobile;
   var L=ctx.translateUiRuntimeText||function(s){return s;};
   var sCats=useMemo(function(){return sortedCats(cats,catOrder,catSortMode,expenseGroups);},[cats,catOrder,catSortMode,expenseGroups]);
   var sMethods=useMemo(function(){return sortedMethods(methods,methodOrder,methodSortMode);},[methods,methodOrder,methodSortMode]);
@@ -242,6 +290,15 @@ export function ReceiptScanPanel({onSave,shareMode}){
         var raw=m[1]||m[0];var n=toNum(raw);
         if(n>0&&n<100000)out.push({raw:raw,amount:n,pos:m.index,decimal:true});
       }
+      // 1b) OCR spesso separa i centesimi: "30 06" vicino a TOTALE/PAGATO = 30,06.
+      var lowLine=normLine(l);
+      if(isTotalLabel(lowLine)||isPaymentLabel(lowLine)){
+        var reSplit=/\b(\d{1,4})\s+(\d{2})\b/g;
+        while((m=reSplit.exec(textLine))!==null){
+          var rawSplit=(m[1]||"")+","+(m[2]||"");var ns=toNum(rawSplit);
+          if(ns>0&&ns<100000&&!out.some(function(x){return Math.abs(x.amount-ns)<0.009;}))out.push({raw:rawSplit,amount:ns,pos:m.index,decimal:true,splitDecimal:true});
+        }
+      }
       // 2) importi interi solo se esplicitamente vicini a valuta/totale: evita quantità tipo 2 o righe IVA.
       var reInt=/(?:€|eur|euro|euros)\s*(\d{1,5})\b|\b(\d{1,5})\s*(?:€|eur|euro|euros)\b/ig;
       while((m=reInt.exec(textLine))!==null){
@@ -260,6 +317,15 @@ export function ReceiptScanPanel({onSave,shareMode}){
       candidates.push({amount:amount,score:score,line:line,index:index,reason:reason||"",decimal:!!decimal});
     }
     var candidates=[];
+    // OCR a blocchi: label e totale possono finire su righe diverse o con centesimi separati.
+    (function(){
+      var labelWindow=/(totale\s+complessivo|totale\s+documento|totale\s+doc|totale\s+scontrino|totale\s+da\s+pagare|da\s+pagare|importo\s+totale|importo\s+pagato|totale\s+pagato|pagamento\s+elettronico|pagamento\s+carta|amount\s+due|grand\s+total|total\s+due|total\s+amount)[\s\S]{0,90}?(\d{1,4})\s+(\d{2})\b/ig;
+      var fm;
+      while((fm=labelWindow.exec(fullText))!==null){
+        var amt=toNum((fm[2]||"")+","+(fm[3]||""));
+        if(amt>0&&amt<100000)pushCandidate(candidates,amt,1180,String(fm[0]).slice(0,120),0,"label_split_decimal_window",true);
+      }
+    })();
     lines.forEach(function(l,idx){
       var low=normLine(l);
       var around=normLine(((lines[idx-2]||"")+" "+(lines[idx-1]||"")+" "+l+" "+(lines[idx+1]||"")+" "+(lines[idx+2]||"")));
@@ -396,7 +462,7 @@ export function ReceiptScanPanel({onSave,shareMode}){
   if(suggested){var sc=findCatByName(suggested);if(sc)return sc.id;}
   return defaultCat.id;}
   function methodFor(text,suggested){var low=normalizeReceiptText((text||"")+" "+(suggested||""));if(/contanti|cash|resto/.test(low)){var cash=findMethodByAliases(["Contanti","Cash"]);if(cash)return cash.id;}if(/amex|american express/.test(low)){var am=findMethodByAliases(["Amex","American Express"]);if(am)return am.id;}if(/bbva/.test(low)){var bb=findMethodByAliases(["BBVA"]);if(bb)return bb.id;}if(/paypal/.test(low)){var pp=findMethodByAliases(["PayPal"]);if(pp)return pp.id;}if(/revolut/.test(low)){var rv=findMethodByAliases(["Revolut"]);if(rv)return rv.id;}if(/carta|bancomat|pos|visa|mastercard|pagobancomat|contactless|credito|debito|elettronico|elettronica/.test(low)){var cm=sMethods.find(function(m){return m.name&&/(revolut|bbva|amex|carta|card|debito|bancomat)/i.test(m.name);});if(cm)return cm.id;}return defaultMethod.id;}
-  function applyParsed(data,sourceText){var txt=sourceText||data.text||data.ocrText||data.rawText||data.fullText||data.extractedText||data.receiptText||receiptText||"";var rawMerchant=data.merchant||data.shop||data.store||parseMerchant(txt);var localAmount=parseAmount(txt);var backendAmount=data.totalAmount||data.total||data.grandTotal||data.paidAmount||data.amount;var amount=backendAmount!=null&&backendAmount!==""?String(backendAmount):localAmount;if(localAmount){var parsedBackend=parseFloat(String(amount).replace(",","."))||0;var parsedLocal=parseFloat(String(localAmount).replace(",","."))||0;if(!parsedBackend||Math.abs(parsedBackend-parsedLocal)>0.009||String(amount).indexOf(",")<0&&String(amount).indexOf(".")<0){amount=localAmount;}}var date=data.date||parseDate(txt);var suggestedCat=data.categoryId||data.catId||data.categoryName||data.category||data.suggestedCategory||"";var suggestedMethod=data.methodId||data.methodName||data.method||data.paymentMethod||"";var merchant=inferReceiptDescription(txt,rawMerchant,suggestedCat);var cat=null;if(data.categoryId||data.catId)cat=sCats.find(function(c){return String(c.id)===String(data.categoryId||data.catId);})||null;if(!cat)cat=findCatByName(suggestedCat)||null;var meth=null;if(data.methodId)meth=sMethods.find(function(m){return String(m.id)===String(data.methodId);})||null;if(!meth)meth=findMethodByName(suggestedMethod)||null;setF(function(p){return{...p,amount:amount||p.amount,date:date||p.date,catId:cat?cat.id:categoryFor(txt,merchant,suggestedCat),methodId:meth?meth.id:methodFor(txt,suggestedMethod),desc:merchant||p.desc};});if(txt)setReceiptText(txt);if(data.confidence!=null)setOcrConfidence(data.confidence);}
+  function applyParsed(data,sourceText){var txt=sourceText||data.text||data.ocrText||data.rawText||data.fullText||data.extractedText||data.receiptText||receiptText||"";var rawMerchant=data.merchant||data.shop||data.store||parseMerchant(txt);var localAmount=parseAmount(txt);var backendAmount=data.totalAmount||data.total||data.grandTotal||data.paidAmount||data.amount;var amount=backendAmount!=null&&backendAmount!==""?String(backendAmount):localAmount;if(localAmount){var parsedBackend=parseFloat(String(amount).replace(",","."))||0;var parsedLocal=parseFloat(String(localAmount).replace(",","."))||0;var backendLooksInteger=String(amount).indexOf(",")<0&&String(amount).indexOf(".")<0;if(!parsedBackend||Math.abs(parsedBackend-parsedLocal)>0.009||backendLooksInteger||(parsedLocal>parsedBackend&&parsedBackend>0&&parsedBackend/parsedLocal<0.92)){amount=localAmount;}}var date=data.date||parseDate(txt);var suggestedCat=data.categoryId||data.catId||data.categoryName||data.category||data.suggestedCategory||"";var suggestedMethod=data.methodId||data.methodName||data.method||data.paymentMethod||"";var merchant=inferReceiptDescription(txt,rawMerchant,suggestedCat);var cat=null;if(data.categoryId||data.catId)cat=sCats.find(function(c){return String(c.id)===String(data.categoryId||data.catId);})||null;if(!cat)cat=findCatByName(suggestedCat)||null;var meth=null;if(data.methodId)meth=sMethods.find(function(m){return String(m.id)===String(data.methodId);})||null;if(!meth)meth=findMethodByName(suggestedMethod)||null;setF(function(p){return{...p,amount:amount||p.amount,date:date||p.date,catId:cat?cat.id:categoryFor(txt,merchant,suggestedCat),methodId:meth?meth.id:methodFor(txt,suggestedMethod),desc:merchant||p.desc};});if(txt)setReceiptText(txt);if(data.confidence!=null)setOcrConfidence(data.confidence);}
   async function prepareReceiptImage(file){
     return new Promise(function(resolve){
       try{
@@ -405,15 +471,15 @@ export function ReceiptScanPanel({onSave,shareMode}){
           var img=new Image();
           img.onload=function(){
             try{
-              var maxSide=1400;
+              var maxSide=1900;
               var w=img.width,h=img.height;
               var scale=Math.min(1,maxSide/Math.max(w,h));
               var canvas=document.createElement("canvas");
               canvas.width=Math.max(1,Math.round(w*scale));
               canvas.height=Math.max(1,Math.round(h*scale));
               var ctx2=canvas.getContext("2d");
-              if(ctx2){ctx2.drawImage(img,0,0,canvas.width,canvas.height);}
-              resolve(canvas.toDataURL("image/jpeg",0.82));
+              if(ctx2){ctx2.imageSmoothingEnabled=true;ctx2.imageSmoothingQuality="high";ctx2.fillStyle="#fff";ctx2.fillRect(0,0,canvas.width,canvas.height);ctx2.drawImage(img,0,0,canvas.width,canvas.height);}
+              resolve(canvas.toDataURL("image/jpeg",0.90));
             }catch(e){resolve(String(ev.target.result||""));}
           };
           img.onerror=function(){resolve(String(ev.target.result||""));};
@@ -432,7 +498,7 @@ export function ReceiptScanPanel({onSave,shareMode}){
     setOcrLoading(true);setMsg(L("Sto leggendo lo scontrino..."));setOcrConfidence(null);
     try{
       var token="";try{if(fbAuth.currentUser)token=await fbAuth.currentUser.getIdToken();}catch(e){}
-      var ocrCtrl=new AbortController();var ocrTimeout=setTimeout(function(){ocrCtrl.abort();},15000);var res=await fetch(RECEIPT_OCR_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json",...(token?{"Authorization":"Bearer "+token}:{})},signal:ocrCtrl.signal,body:JSON.stringify({imageBase64:img,imageData:img,imageName:name||imageName||"receipt.jpg",categories:sCats.map(function(c){return{name:c.name,id:c.id};}),methods:sMethods.map(function(m){return{name:m.name,id:m.id};}),locale:receiptLocale(),strictTotal:true,instructions:"Estrai il totale finale pagato dello scontrino. Dai priorità a TOTALE COMPLESSIVO, TOTALE DOCUMENTO, TOTALE DA PAGARE, IMPORTO PAGATO, PAGAMENTO ELETTRONICO. Non usare IVA, di cui IVA, imponibile, prezzo unitario o righe prodotto. Restituisci anche il testo OCR completo."})});
+      var ocrCtrl=new AbortController();var ocrTimeout=setTimeout(function(){ocrCtrl.abort();},15000);var res=await fetch(RECEIPT_OCR_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json",...(token?{"Authorization":"Bearer "+token}:{})},signal:ocrCtrl.signal,body:JSON.stringify({imageBase64:img,imageData:img,imageName:name||imageName||"receipt.jpg",categories:sCats.map(function(c){return{name:c.name,id:c.id};}),methods:sMethods.map(function(m){return{name:m.name,id:m.id};}),locale:receiptLocale(),strictTotal:true,instructions:"Estrai il totale finale pagato dello scontrino. Dai priorità a TOTALE COMPLESSIVO, TOTALE DOCUMENTO, TOTALE DA PAGARE, IMPORTO PAGATO, PAGAMENTO ELETTRONICO. Se i centesimi sono separati, ad esempio 30 06 vicino al totale o al pagamento, interpretali come 30,06. Non usare IVA, di cui IVA, imponibile, prezzo unitario, quantità, reparto, numero documento, numero scontrino, codici o righe prodotto. Restituisci anche il testo OCR completo."})});
       var data=await res.json().catch(function(){return{};});
       if(!res.ok||data.ok===false)throw new Error(data.error||("Errore OCR "+res.status));
       var fullText=data.text||data.ocrText||data.rawText||data.fullText||data.extractedText||data.receiptText||"";
@@ -470,11 +536,11 @@ export function ReceiptScanPanel({onSave,shareMode}){
     {ocrConfidence!=null&&<div style={{fontSize:11,color:sc,marginTop:-4}}>{L("Confidenza OCR")}: {Math.round(Number(ocrConfidence)*100)}%</div>}
     {msg&&<div style={{background:dark?"#1e1e30":"#fff8e1",border:"1px solid "+(dark?"#555":"#ffe08a"),borderRadius:12,padding:"10px 12px",fontSize:12,color:dark?"#ddd":"#745400",lineHeight:1.45}}>{L(msg)}</div>}
     <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}><div style={card}><label style={label}>{L("Importo")} ({sym})</label><input type="number" value={f.amount} onChange={function(e){setF(function(p){return{...p,amount:e.target.value};});}} placeholder="0,00" style={{...inp,fontSize:22,fontWeight:900,color:expenseColor}}/></div><div style={card}><label style={label}>{L("Data")}</label><DatePickerField value={f.date} onChange={function(v){setF(function(p){return{...p,date:v};});}}/></div>{!shareMode&&<div style={card}><label style={label}>{L("Categoria")}</label><select value={f.catId} onChange={function(e){setF(function(p){return{...p,catId:e.target.value};});}} style={inp}>{sCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</select></div>}{!shareMode&&<div style={card}><label style={label}>{L("Metodo")}</label><select value={f.methodId} onChange={function(e){setF(function(p){return{...p,methodId:e.target.value};});}} style={inp}>{sMethods.map(function(m){return <option key={m.id} value={m.id}>{m.icon} {m.name}</option>;})}</select></div>}<div style={{...card,gridColumn:isMobile?"auto":"1/-1"}}><label style={label}>{L("Descrizione")}</label><input value={f.desc} onChange={function(e){setF(function(p){return{...p,desc:e.target.value};});}} placeholder={L("Negozio o descrizione")} style={inp}/></div></div>
-    <button onClick={save} style={{background:"linear-gradient(135deg,"+expenseColor+",#7F77DD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:isMobile?12:15,fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:dark?"none":"0 6px 18px "+expenseColor+"44"}}>{L("Salva uscita da scontrino")}</button>
+    <button onClick={save} style={{background:confirmButtonColor||"#378ADD",color:"#fff",border:"none",borderRadius:btnRadius,padding:isMobile?12:15,fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:dark?"none":"0 6px 18px "+(confirmButtonColor||"#378ADD")+"44"}}>{L("Salva uscita da scontrino")}</button>
   </div>;
 }
 export function BulkEntry({onSave,type,maxRows,limitMessage}){
-  var ctx=useApp();var t=ctx.t,cats=ctx.cats,methods=ctx.methods,dark=ctx.dark,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=ctx.expenseGroups,isMobile=ctx.isMobile;
+  var ctx=useApp();var t=ctx.t,cats=effectiveExpenseCats(ctx.cats),methods=effectiveMethods(ctx.methods),dark=ctx.dark,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups),isMobile=ctx.isMobile;
   var L=ctx.translateUiRuntimeText||function(s){return translateFainanceText(s,(ctx&&ctx.lang)||"it");};
   var sCats=useMemo(function(){return sortedCats(cats,catOrder,catSortMode,expenseGroups);},[cats,catOrder,catSortMode,expenseGroups]);
   var sMethods=useMemo(function(){return sortedMethods(methods,methodOrder,methodSortMode);},[methods,methodOrder,methodSortMode]);
@@ -506,7 +572,7 @@ export function BulkEntry({onSave,type,maxRows,limitMessage}){
           </div>
         </div>:<div style={{display:"grid",gridTemplateColumns:"42% 1fr",gap:8,marginBottom:6,alignItems:"end"}}>
           <div><label style={{fontSize:11,color:tc,display:"block",marginBottom:3,fontWeight:700}}>{L('Importo')}</label><input type="number" value={r.amount} onChange={function(e){upd(r._id,"amount",e.target.value);}} style={{...inp,height:120,fontSize:38,fontWeight:950,borderRadius:14}} placeholder="0,00"/></div>
-          <div><label style={{fontSize:11,color:tc,display:"block",marginBottom:3,fontWeight:700}}>{L('Tipo')}</label><select value={r.itype} onChange={function(e){upd(r._id,"itype",e.target.value);}} style={{...inp,height:42}}>{(ctx.incomeTypes||getAllIncomeTypes()).map(function(it){return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>;})}</select></div>
+          <div><label style={{fontSize:11,color:tc,display:"block",marginBottom:3,fontWeight:700}}>{L('Tipo')}</label><select value={r.itype} onChange={function(e){upd(r._id,"itype",e.target.value);}} style={{...inp,height:42}}>{((ctx.incomeTypes&&ctx.incomeTypes.length)?ctx.incomeTypes:getAllIncomeTypes()).map(function(it){return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>;})}</select></div>
         </div>}
         <div style={{marginBottom:6}}><label style={{fontSize:11,color:tc,display:"block",marginBottom:3,fontWeight:700}}>{L("Data")}</label><DatePickerField value={r.date} onChange={function(v){upd(r._id,"date",v);}}/></div>
         <div style={{marginBottom:8}}><label style={{fontSize:11,color:tc,display:"block",marginBottom:3}}>{L("Descrizione")}</label><input type="text" value={r.desc} onChange={function(e){upd(r._id,"desc",e.target.value);}} style={inp} placeholder={L("Inserisci una descrizione...")}/></div>
@@ -524,12 +590,12 @@ export function BulkEntry({onSave,type,maxRows,limitMessage}){
   }
 
   // DESKTOP: tabella orizzontale
-  return <div><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{background:dark?"#252535":"#f5f5f5"}}><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:190}}>{t.amount}</th>{type==="expense"?<><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:120}}>{t.category}</th><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:100}}>{t.method}</th></>:<th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc}}>{t.incomeType}</th>}<th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:120}}>{t.description}</th><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:126}}>{t.date}</th><th style={{padding:"8px 6px",color:tc}}>÷</th><th></th></tr></thead><tbody>{rows.map(function(r){return <tr key={r._id} style={{borderBottom:"1px solid "+(dark?"#333":"#f0f0f0")}}><td style={{padding:5}}><input type="number" value={r.amount} onChange={function(e){upd(r._id,"amount",e.target.value);}} style={{...sinp,width:190,minWidth:190,fontSize:22,fontWeight:900}} placeholder="0,00"/></td>{type==="expense"?<><td style={{padding:5}}><select value={r.catId} onChange={function(e){upd(r._id,"catId",e.target.value);}} style={sinp}>{sCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</select></td><td style={{padding:5}}><select value={r.methodId} onChange={function(e){upd(r._id,"methodId",e.target.value);}} style={sinp}>{sMethods.map(function(m){return <option key={m.id} value={m.id}>{m.icon} {m.name}</option>;})}</select></td></>:<td style={{padding:5}}><select value={r.itype} onChange={function(e){upd(r._id,"itype",e.target.value);}} style={sinp}>{(ctx.incomeTypes||getAllIncomeTypes()).map(function(it){return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>;})}</select></td>}<td style={{padding:5}}><input type="text" value={r.desc} onChange={function(e){upd(r._id,"desc",e.target.value);}} style={{...sinp,minWidth:110}} placeholder={L("Inserisci una descrizione...")}/></td><td style={{padding:5}}><input type="date" value={r.date} onChange={function(e){upd(r._id,"date",e.target.value);}} style={{...sinp,minWidth:126}}/></td><td style={{padding:5,textAlign:"center"}}><input type="checkbox" checked={r.rateizzato} onChange={function(){upd(r._id,"rateizzato",!r.rateizzato);}}/>{r.rateizzato&&<div style={{marginTop:4,minWidth:150}}><RatePicker value={r.rate} direction={r.rateDirection||"forward"} onChange={function(n){upd(r._id,"rate",n);}} onDirectionChange={function(d){upd(r._id,"rateDirection",d);}}/></div>}</td><td style={{padding:5}}><button onClick={function(){setRows(function(p){return p.filter(function(x){return x._id!==r._id;});});}} style={{background:"none",border:"none",cursor:"pointer",color:"#aaa",fontSize:15}}>x</button></td></tr>;})} </tbody></table></div><div style={{display:"flex",gap:10,marginTop:12}}>{rowLimitReached?limitBox:<Btn onClick={function(){setRows(function(p){return rowLimitReached?p:[...p,blank()];});}} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#444"}>{L(t.addRow)}</Btn>}<Btn onClick={saveAll} bg={type==="expense"?"#E24B4A":"#1D9E75"}>{L(t.saveAll)} ({rows.length})</Btn></div></div>;
+  return <div><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr style={{background:dark?"#252535":"#f5f5f5"}}><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:190}}>{t.amount}</th>{type==="expense"?<><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:120}}>{t.category}</th><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:100}}>{t.method}</th></>:<th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc}}>{t.incomeType}</th>}<th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:120}}>{t.description}</th><th style={{padding:"8px 6px",textAlign:"left",fontWeight:500,color:tc,minWidth:126}}>{t.date}</th><th style={{padding:"8px 6px",color:tc}}>÷</th><th></th></tr></thead><tbody>{rows.map(function(r){return <tr key={r._id} style={{borderBottom:"1px solid "+(dark?"#333":"#f0f0f0")}}><td style={{padding:5}}><input type="number" value={r.amount} onChange={function(e){upd(r._id,"amount",e.target.value);}} style={{...sinp,width:190,minWidth:190,fontSize:22,fontWeight:900}} placeholder="0,00"/></td>{type==="expense"?<><td style={{padding:5}}><select value={r.catId} onChange={function(e){upd(r._id,"catId",e.target.value);}} style={sinp}>{sCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</select></td><td style={{padding:5}}><select value={r.methodId} onChange={function(e){upd(r._id,"methodId",e.target.value);}} style={sinp}>{sMethods.map(function(m){return <option key={m.id} value={m.id}>{m.icon} {m.name}</option>;})}</select></td></>:<td style={{padding:5}}><select value={r.itype} onChange={function(e){upd(r._id,"itype",e.target.value);}} style={sinp}>{((ctx.incomeTypes&&ctx.incomeTypes.length)?ctx.incomeTypes:getAllIncomeTypes()).map(function(it){return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>;})}</select></td>}<td style={{padding:5}}><input type="text" value={r.desc} onChange={function(e){upd(r._id,"desc",e.target.value);}} style={{...sinp,minWidth:110}} placeholder={L("Inserisci una descrizione...")}/></td><td style={{padding:5}}><input type="date" value={r.date} onChange={function(e){upd(r._id,"date",e.target.value);}} style={{...sinp,minWidth:126}}/></td><td style={{padding:5,textAlign:"center"}}><input type="checkbox" checked={r.rateizzato} onChange={function(){upd(r._id,"rateizzato",!r.rateizzato);}}/>{r.rateizzato&&<div style={{marginTop:4,minWidth:150}}><RatePicker value={r.rate} direction={r.rateDirection||"forward"} onChange={function(n){upd(r._id,"rate",n);}} onDirectionChange={function(d){upd(r._id,"rateDirection",d);}}/></div>}</td><td style={{padding:5}}><button onClick={function(){setRows(function(p){return p.filter(function(x){return x._id!==r._id;});});}} style={{background:"none",border:"none",cursor:"pointer",color:"#aaa",fontSize:15}}>x</button></td></tr>;})} </tbody></table></div><div style={{display:"flex",gap:10,marginTop:12}}>{rowLimitReached?limitBox:<Btn onClick={function(){setRows(function(p){return rowLimitReached?p:[...p,blank()];});}} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#444"}>{L(t.addRow)}</Btn>}<Btn onClick={saveAll} bg={type==="expense"?"#E24B4A":"#1D9E75"}>{L(t.saveAll)} ({rows.length})</Btn></div></div>;
 }
 export function RecurringManager(){
   var ctx=useApp();
   function L(v){return translateFainanceText(v,ctx.lang||'it');}
-  var cats=ctx.cats||[],methods=ctx.methods||[],recurring=ctx.recurring||[],setRecurring=ctx.setRecurring,sym=ctx.sym,dark=ctx.dark,curMonthKey=ctx.curMonthKey,confirmRecurring=ctx.confirmRecurring,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=ctx.expenseGroups,btnRadius=ctx.btnRadius||12;
+  var cats=effectiveExpenseCats(ctx.cats),methods=effectiveMethods(ctx.methods),recurring=ctx.recurring||[],setRecurring=ctx.setRecurring,sym=ctx.sym,dark=ctx.dark,curMonthKey=ctx.curMonthKey,confirmRecurring=ctx.confirmRecurring,catOrder=ctx.catOrder,methodOrder=ctx.methodOrder,catSortMode=ctx.catSortMode,methodSortMode=ctx.methodSortMode,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups),btnRadius=ctx.btnRadius||12;
   var lang=(ctx&&ctx.lang)||"it";
   var t=TRANSLATIONS[lang]||TRANSLATIONS.it;
   var incomeTypes=(ctx.incomeTypes||getAllIncomeTypes());
@@ -562,7 +628,7 @@ export function RecurringManager(){
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:900,color:tc}}>{L('Transazioni ricorrenti')}</div><div style={{fontSize:12,color:sc,marginTop:2}}>{L('Le modifiche valgono solo per le prossime conferme. Lo storico già generato non viene toccato.')}</div></div><Btn onClick={startCreate} bg="#7F77DD" style={{padding:"7px 12px",fontWeight:700,fontSize:12,borderRadius:10,flexShrink:0,whiteSpace:"nowrap"}}>{L('+ Nuova')}</Btn></div>
     {pending.length>0?<div style={{background:dark?"#342b16":"#FFF8E1",borderRadius:16,border:"1px solid "+(dark?"#6a5520":"#FFD54F"),padding:14}}><div style={{fontSize:13,fontWeight:900,color:dark?"#ffd58a":"#856404",marginBottom:10}}>{L('Da confermare per')} {(ctx.monthFullName?ctx.monthFullName(now.getMonth()):L(MONTHS_FULL[now.getMonth()]))}:</div>{pending.map(function(r){return <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,flexWrap:"wrap",background:dark?"#252535":"#fff",borderRadius:12,padding:"10px 12px",border:"1px solid "+borderC}}><div style={{width:38,height:38,borderRadius:14,background:r.rtype==="income"?"#1D9E7522":"#E24B4A22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{r.rtype==="income"?"💰":"💸"}</div><div style={{flex:1,minWidth:160}}><div style={{fontSize:14,fontWeight:900,color:tc}}>{r.name}</div><div style={{fontSize:12,color:sc}}>{fmtAmt(r.amount,sym)} · {categoryLabel(r)}</div></div><Btn onClick={function(){confirmOne(r);}} bg="#1D9E75" style={{padding:"7px 12px",fontSize:12}}>{L('Conferma')}</Btn><Btn onClick={function(){skipRecurring(r);}} bg={dark?"#333":"#f0f0f0"} color={tc} style={{padding:"7px 12px",fontSize:12}}>{L('Salta')}</Btn></div>;})}</div>:<div style={{background:dark?"#153025":"#e8f8f0",borderRadius:14,padding:"12px 16px",fontSize:13,color:"#1D9E75",fontWeight:800}}>{L("Nessuna entrata o uscita ricorrente")}</div>}
     {showForm&&<div style={{background:dark?"#1e1e30":"#f9f9ff",borderRadius:18,border:"1.5px solid "+(editingId?"#7F77DD":borderC),padding:16,boxShadow:dark?"none":"0 6px 20px rgba(127,119,221,0.08)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div><div style={{fontSize:15,fontWeight:900,color:tc}}>{editingId?L('Modifica ricorrente'):L('Nuova ricorrente')}</div><div style={{fontSize:12,color:sc}}>{L('Non modifica le voci già presenti nello storico.')}</div></div><button onClick={cancelForm} style={{background:dark?"#333":"#fff",border:"1px solid "+borderC,borderRadius:10,color:sc,cursor:"pointer",fontSize:18,width:34,height:34}}>×</button></div><div style={{display:"flex",flexDirection:"column",gap:10}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:4}}>{L('Nome')}</label><input value={form.name} onChange={function(e){setField("name",e.target.value);}} style={inp}/></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:4}}>{L('Importo')}</label><input type="number" value={form.amount} onChange={function(e){setField("amount",e.target.value);}} style={inp}/></div></div><div style={{display:"flex",gap:6,marginBottom:2,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:4}}><button onClick={function(){setField("frequency","monthly");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:form.frequency!=="annual"?"#7F77DD":"transparent",color:form.frequency!=="annual"?"#fff":sc,fontSize:13,cursor:"pointer",fontWeight:form.frequency!=="annual"?700:500,boxShadow:form.frequency!=="annual"?"0 4px 12px rgba(127,119,221,0.22)":"none"}}>{L("Mensile")}</button><button onClick={function(){setField("frequency","annual");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:form.frequency==="annual"?"#7F77DD":"transparent",color:form.frequency==="annual"?"#fff":sc,fontSize:13,cursor:"pointer",fontWeight:form.frequency==="annual"?700:500,boxShadow:form.frequency==="annual"?"0 4px 12px rgba(127,119,221,0.22)":"none"}}>{L("Annuale")}</button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:4}}>{L('Tipo')}</label><select value={form.rtype} onChange={function(e){setField("rtype",e.target.value);}} style={inp}><option value="expense">{L('Uscita')}</option><option value="income">{L('Entrata')}</option></select></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:4}}>{form.frequency==="annual"?L("Mese"):L("Giorno del mese")}</label>{form.frequency==="annual"?<select value={form.dayOfMonth||1} onChange={function(e){setField("dayOfMonth",Number(e.target.value));}} style={inp}>{["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"].map(function(m,i){return <option key={i+1} value={i+1}>{L(m)}</option>;})}</select>:<input type="number" min={0} max={31} value={form.dayOfMonth} onChange={function(e){setField("dayOfMonth",Number(e.target.value));}} style={inp}/>}</div></div>{form.rtype==="expense"?<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:4}}>{L('Categoria')}</label><select value={form.catId} onChange={function(e){setField("catId",e.target.value);}} style={inp}>{sCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</select></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:4}}>{L('Metodo')}</label><select value={form.methodId} onChange={function(e){setField("methodId",e.target.value);}} style={inp}>{sMethods.map(function(m){return <option key={m.id} value={m.id}>{m.icon} {m.name}</option>;})}</select></div></div>:<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:4}}>{L('Tipo entrata')}</label><select value={form.incomeType} onChange={function(e){setField("incomeType",e.target.value);}} style={inp}>{incomeTypes.map(function(it){return <option key={it.id} value={it.id}>{it.icon} {L(it.name)}</option>;})}</select></div>}<div style={{background:dark?"#252535":"#fff",border:"1px solid "+borderC,borderRadius:14,padding:12}}><Toggle label={L('Rateizza')} checked={!!form.rateizzato} onChange={function(){setField("rateizzato",!form.rateizzato);}}/>{form.rateizzato&&<RatePicker value={form.rate||12} onChange={function(n){setField("rate",n);}}/>}</div><div style={{display:"flex",gap:10,marginTop:4}}><Btn onClick={saveRecurring} bg={editingId?"#7F77DD":"#1D9E75"} style={{flex:1,padding:12,fontWeight:900}}>{editingId?L('Salva modifiche'):L('Crea ricorrente')}</Btn><Btn onClick={cancelForm} bg={dark?"#333":"#f0f0f0"} color={tc} style={{padding:"12px 16px"}}>{L('Annulla')}</Btn></div></div></div>}
-    <div style={{display:"flex",flexDirection:"column",gap:10}}>{recurring.length===0&&<div style={{fontSize:13,color:"#ccc",textAlign:"center",padding:"24px 0"}}>{L('Nessuna ricorrente configurata.')}</div>}{recurring.map(function(r){var isDelete=deleteId===r.id;return <div key={r.id} style={{background:cardBg,borderRadius:16,border:"1px solid "+borderC,padding:14,boxShadow:dark?"none":"0 2px 12px rgba(0,0,0,0.04)"}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:44,height:44,borderRadius:16,background:r.rtype==="income"?"#1D9E7522":"#E24B4A22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21}}>{r.rtype==="income"?"💰":"💸"}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{fontSize:15,fontWeight:900,color:tc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div><span style={{fontSize:10,borderRadius:20,padding:"2px 8px",fontWeight:900,background:r.rtype==="income"?"#1D9E7522":"#E24B4A22",color:r.rtype==="income"?"#1D9E75":"#E24B4A"}}>{typeLabel(r)}</span></div><div style={{fontSize:12,color:sc,marginTop:3}}>{fmtAmt(r.amount,sym)} · {L('giorno')} {r.dayOfMonth===0?L('ultimo'):r.dayOfMonth} · {categoryLabel(r)}</div><div style={{fontSize:11,color:sc,marginTop:2}}>{r.frequency==="annual"?L("Annuale")+" � ":L("Mensile")+" � "}{L('Confermate')}: {(r.confirmed||[]).length} · {L('Saltate')}: {(r.skipped||[]).length}</div></div><div style={{display:"flex",gap:7,flexShrink:0}}><button onClick={function(){startEdit(r);}} style={{background:dark?"#24213a":"#EEF4FF",border:"1px solid "+(dark?"#3d376a":"#BFD7FF"),borderRadius:10,padding:"8px 10px",cursor:"pointer",color:dark?"#BEB8FF":"#378ADD",fontSize:12,fontWeight:900}}>✏️ {L('Modifica')}</button><button onClick={function(){setDeleteId(r.id);setShowForm(false);}} style={{background:dark?"#3a1a1a":"#FFF0F0",border:"1px solid "+(dark?"#6a3030":"#FFD0D0"),borderRadius:10,padding:"8px 10px",cursor:"pointer",color:"#E24B4A",fontSize:12,fontWeight:900}}>🗑 {L('Elimina')}</button></div></div>{isDelete&&<div style={{marginTop:12,background:dark?"#3a1a1a":"#fff0f0",border:"1px solid "+(dark?"#6a3030":"#ffd0d0"),borderRadius:14,padding:12,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}><div style={{flex:1,minWidth:190}}><div style={{fontSize:13,fontWeight:900,color:"#E24B4A"}}>{L('Eliminare questa ricorrente?')}</div><div style={{fontSize:12,color:dark?"#f0bbbb":"#8a4a4a",marginTop:2}}>{L('Le uscite/entrate già presenti nello storico resteranno salvate.')}</div></div><Btn onClick={function(){deleteRecurring(r.id);}} bg="#E24B4A" style={{padding:"8px 14px",fontWeight:900}}>{L('Elimina')}</Btn><Btn onClick={function(){setDeleteId(null);}} bg={dark?"#333":"#fff"} color={tc} style={{padding:"8px 14px"}}>{L('Annulla')}</Btn></div>}</div>;})}</div>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>{recurring.length===0&&<div style={{fontSize:13,color:"#ccc",textAlign:"center",padding:"24px 0"}}>{L('Nessuna ricorrente configurata.')}</div>}{recurring.map(function(r){var isDelete=deleteId===r.id;return <div key={r.id} style={{background:cardBg,borderRadius:16,border:"1px solid "+borderC,padding:14,boxShadow:dark?"none":"0 2px 12px rgba(0,0,0,0.04)"}}><div style={{display:"flex",alignItems:"center",gap:12}}><div style={{width:44,height:44,borderRadius:16,background:r.rtype==="income"?"#1D9E7522":"#E24B4A22",display:"flex",alignItems:"center",justifyContent:"center",fontSize:21}}>{r.rtype==="income"?"💰":"💸"}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{fontSize:15,fontWeight:900,color:tc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.name}</div><span style={{fontSize:10,borderRadius:20,padding:"2px 8px",fontWeight:900,background:r.rtype==="income"?"#1D9E7522":"#E24B4A22",color:r.rtype==="income"?"#1D9E75":"#E24B4A"}}>{typeLabel(r)}</span></div><div style={{fontSize:12,color:sc,marginTop:3}}>{fmtAmt(r.amount,sym)} · {L('giorno')} {r.dayOfMonth===0?L('ultimo'):r.dayOfMonth} · {categoryLabel(r)}</div><div style={{fontSize:11,color:sc,marginTop:2}}>{r.frequency==="annual"?L("Annuale")+" � ":L("Mensile")+" � "}{L('Confermate')}: {(r.confirmed||[]).length} · {L('Saltate')}: {(r.skipped||[]).length}</div></div><div style={{display:"flex",gap:7,flexShrink:0}}><button onClick={function(){startEdit(r);}} style={{background:dark?"#24213a":"#EEF4FF",border:"1px solid "+(dark?"#3d376a":"#BFD7FF"),borderRadius:10,padding:"8px 10px",cursor:"pointer",color:dark?"#BEB8FF":"#378ADD",fontSize:12,fontWeight:900}}>✏️ {L('Modifica')}</button><button onClick={function(){setDeleteId(r.id);setShowForm(false);}} style={{background:dark?"#3a1a1a":"#FFF0F0",border:"1px solid "+(dark?"#6a3030":"#FFD0D0"),borderRadius:10,padding:"8px 10px",cursor:"pointer",color:"#E24B4A",fontSize:12,fontWeight:900}}>🗑 {L('Elimina')}</button></div></div>{isDelete&&<div style={{marginTop:12,background:dark?"#3a1a1a":"#fff0f0",border:"1px solid "+(dark?"#6a3030":"#ffd0d0"),borderRadius:14,padding:12,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}><div style={{flex:1,minWidth:190}}><div style={{fontSize:13,fontWeight:900,color:"#E24B4A"}}>{L('Eliminare questa ricorrente?')}</div><div style={{fontSize:12,color:dark?"#f0bbbb":"#8a4a4a",marginTop:2}}>{L('Le uscite/entrate già presenti nello storico resteranno salvate.')}</div></div><Btn onClick={function(){deleteRecurring(r.id);}} bg="#E24B4A" style={{padding:"8px 14px",fontWeight:900}}>{L('Elimina')}</Btn><Btn onClick={function(){setDeleteId(null);}} bg={dark?"#333":"#fff"} color={tc} style={{padding:"8px 14px"}}>{L('Annulla')}</Btn></div>}</div>;})}</div>
   </div>;
 }
 export function GoalsPanel(){
@@ -599,9 +665,9 @@ export function GoalsPanel(){
   </div>;
 }
 export function AlertsPanel(){
-  var ctx=useApp();var t=ctx.t,alerts=ctx.alerts,setAlerts=ctx.setAlerts,cats=ctx.cats,expenses=ctx.expenses,sym=ctx.sym,dark=ctx.dark,curMonthKey=ctx.curMonthKey,budgetPlan=ctx.budgetPlan,expenseGroups=ctx.expenseGroups,setToast=ctx.setToast;
+  var ctx=useApp();var t=ctx.t,alerts=ctx.alerts,setAlerts=ctx.setAlerts,cats=effectiveExpenseCats(ctx.cats),expenses=ctx.expenses,sym=ctx.sym,dark=ctx.dark,curMonthKey=ctx.curMonthKey,budgetPlan=ctx.budgetPlan,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups),setToast=ctx.setToast;
   function L(s){return translateFainanceText(s,(ctx&&ctx.lang)||"it");}
-  var groups=expenseGroups||DEFAULT_EXPENSE_GROUPS;
+  var groups=effectiveExpenseGroups(expenseGroups);
   var canAddPlanItem=ctx.canAddPlanItem||function(){return true;};
   var upgradeMessage=ctx.upgradeMessage||function(){return L("Hai raggiunto il limite massimo del tuo piano. Non puoi aggiungere altri elementi in questa sezione.");};
   var blank={name:"",type:"cat",catId:cats[0]?cats[0].id:1,groupId:groups[0]?groups[0].id:"casa",budget:"",triggerMode:"immediate",triggerPct:0,customText:"",period:"monthly"};
@@ -630,16 +696,16 @@ export function AlertsPanel(){
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{fontSize:14,fontWeight:700,color:tc}}>🔔 {L("Alert di spesa")}</div>{triggered>0&&<span style={{background:"#E24B4A",color:"#fff",borderRadius:20,padding:"2px 8px",fontSize:12,fontWeight:600}}>{triggered} {L("attivi")}</span>}</div><Btn onClick={function(){if(alertLimitReached)return;setEditingId(null);setForm(blank);setShowAdd(function(s){return !s;});}} bg={alertLimitReached?"#999":"#E24B4A"} disabled={alertLimitReached}>+ {L("Nuovo alert")}</Btn></div>
     {alertLimitReached&&<LimitReachedBox/>}
-    {showAdd&&!alertLimitReached&&<div style={{background:dark?"#252535":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:18}}><div style={{fontSize:15,fontWeight:900,color:tc,marginBottom:12}}>{L(editingId?"Modifica alert":"Nuovo alert")}</div><div style={{display:"flex",flexDirection:"column",gap:10}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Nome alert")}</label><input value={form.name} onChange={function(e){setForm(function(p){return{...p,name:e.target.value};});}} style={inp} placeholder={L("es. Budget ristorante")}/></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Budget")} ({sym})</label><input type="number" value={form.budget} onChange={function(e){setForm(function(p){return{...p,budget:e.target.value};});}} style={inp} placeholder="200"/></div></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Periodo")}</label><div style={{display:"flex",gap:0,background:dark?"#333":"#f0f0f0",borderRadius:10,padding:3}}><button onClick={function(){setForm(function(p){return{...p,period:"monthly"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.period==="monthly"?(dark?"#555":"#fff"):"transparent",color:form.period==="monthly"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Mensile")}</button><button onClick={function(){setForm(function(p){return{...p,period:"annual"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.period==="annual"?(dark?"#555":"#fff"):"transparent",color:form.period==="annual"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Annuale")}</button></div></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Testo personalizzato")}</label><textarea value={form.customText} onChange={function(e){setForm(function(p){return{...p,customText:e.target.value};});}} style={{...inp,height:60,resize:"vertical"}} placeholder={L("es. Troppo al ristorante!")}/></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Tipo soglia")}</label><div style={{display:"flex",gap:0,background:dark?"#333":"#f0f0f0",borderRadius:10,padding:3}}><button onClick={function(){handleTypeChange("cat");}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.type==="cat"?(dark?"#555":"#fff"):"transparent",color:form.type==="cat"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Singola categoria")}</button><button onClick={function(){handleTypeChange("group");}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.type==="group"?(dark?"#555":"#fff"):"transparent",color:form.type==="group"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Area")}</button></div></div>{form.type==="cat"?<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L('Categoria')}</label><select value={form.catId} onChange={function(e){handleCatChange(e.target.value);}} style={inp}>{groups.map(function(g){return <optgroup key={g.id} label={g.name}>{cats.filter(function(c){return c.group===g.id;}).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</optgroup>;})}</select></div>:<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Area")}</label><select value={form.groupId} onChange={function(e){handleGroupChange(e.target.value);}} style={inp}>{groups.map(function(g){return <option key={g.id} value={g.id}>{g.name}</option>;})}</select></div>}<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Modalità attivazione")}</label><div style={{display:"flex",gap:0,background:dark?"#333":"#f0f0f0",borderRadius:10,padding:3}}><button onClick={function(){setForm(function(p){return{...p,triggerMode:"immediate"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.triggerMode==="immediate"?(dark?"#555":"#fff"):"transparent",color:form.triggerMode==="immediate"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Superamento immediato")}</button><button onClick={function(){setForm(function(p){return{...p,triggerMode:"pct"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.triggerMode==="pct"?(dark?"#555":"#fff"):"transparent",color:form.triggerMode==="pct"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Dopo % superamento")}</button></div></div>{form.triggerMode==="pct"&&<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>% (es. 25 attiva al 125%)</label><input type="number" min={0} max={200} value={form.triggerPct} onChange={function(e){setForm(function(p){return{...p,triggerPct:e.target.value};});}} style={inp} placeholder="25"/></div>}<div style={{display:"flex",gap:8}}><Btn onClick={saveAlert} bg="#E24B4A">{L(editingId?"Salva modifiche":"Crea alert")}</Btn><Btn onClick={cancelForm} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#666"}>{t.cancel}</Btn></div></div></div>}
+    {showAdd&&!alertLimitReached&&<div style={{background:dark?"#252535":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:18}}><div style={{fontSize:15,fontWeight:900,color:tc,marginBottom:12}}>{L(editingId?"Modifica alert":"Nuovo alert")}</div><div style={{display:"flex",flexDirection:"column",gap:10}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Nome alert")}</label><input value={form.name} onChange={function(e){setForm(function(p){return{...p,name:e.target.value};});}} style={inp} placeholder={L("es. Budget ristorante")}/></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Budget")} ({sym})</label><input type="number" value={form.budget} onChange={function(e){setForm(function(p){return{...p,budget:e.target.value};});}} style={inp} placeholder="200"/></div></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Periodo")}</label><div style={{display:"flex",gap:0,background:dark?"#333":"#f0f0f0",borderRadius:10,padding:3}}><button onClick={function(){setForm(function(p){return{...p,period:"monthly"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.period==="monthly"?(dark?"#555":"#fff"):"transparent",color:form.period==="monthly"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Mensile")}</button><button onClick={function(){setForm(function(p){return{...p,period:"annual"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.period==="annual"?(dark?"#555":"#fff"):"transparent",color:form.period==="annual"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Annuale")}</button></div></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Testo personalizzato")}</label><textarea value={form.customText} onChange={function(e){setForm(function(p){return{...p,customText:e.target.value};});}} style={{...inp,height:60,resize:"vertical"}} placeholder={L("es. Troppo al ristorante!")}/></div><div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Tipo soglia")}</label><div style={{display:"flex",gap:0,background:dark?"#333":"#f0f0f0",borderRadius:10,padding:3}}><button onClick={function(){handleTypeChange("cat");}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.type==="cat"?(dark?"#555":"#fff"):"transparent",color:form.type==="cat"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Singola categoria")}</button><button onClick={function(){handleTypeChange("group");}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.type==="group"?(dark?"#555":"#fff"):"transparent",color:form.type==="group"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Area")}</button></div></div>{form.type==="cat"?<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L('Categoria')}</label><select value={form.catId} onChange={function(e){handleCatChange(e.target.value);}} style={inp}>{groups.map(function(g){return <optgroup key={g.id} label={g.name}>{safeCatsForGroup(cats,groups,g).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</optgroup>;})}</select></div>:<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Area")}</label><select value={form.groupId} onChange={function(e){handleGroupChange(e.target.value);}} style={inp}>{groups.map(function(g){return <option key={g.id} value={g.id}>{g.name}</option>;})}</select></div>}<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>{L("Modalità attivazione")}</label><div style={{display:"flex",gap:0,background:dark?"#333":"#f0f0f0",borderRadius:10,padding:3}}><button onClick={function(){setForm(function(p){return{...p,triggerMode:"immediate"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.triggerMode==="immediate"?(dark?"#555":"#fff"):"transparent",color:form.triggerMode==="immediate"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Superamento immediato")}</button><button onClick={function(){setForm(function(p){return{...p,triggerMode:"pct"};});}} style={{flex:1,padding:"7px",border:"none",borderRadius:8,background:form.triggerMode==="pct"?(dark?"#555":"#fff"):"transparent",color:form.triggerMode==="pct"?tc:sc,fontSize:13,cursor:"pointer"}}>{L("Dopo % superamento")}</button></div></div>{form.triggerMode==="pct"&&<div><label style={{fontSize:11,color:sc,display:"block",marginBottom:3}}>% (es. 25 attiva al 125%)</label><input type="number" min={0} max={200} value={form.triggerPct} onChange={function(e){setForm(function(p){return{...p,triggerPct:e.target.value};});}} style={inp} placeholder="25"/></div>}<div style={{display:"flex",gap:8}}><Btn onClick={saveAlert} bg="#E24B4A">{L(editingId?"Salva modifiche":"Crea alert")}</Btn><Btn onClick={cancelForm} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#666"}>{t.cancel}</Btn></div></div></div>}
     {alerts.length===0&&!showAdd&&<div style={{textAlign:"center",color:"#ccc",padding:"40px 0",fontSize:14}}>{L("Nessun alert configurato.")}</div>}
     {alerts.map(function(al){var spent=getSpent(al),p=getPct(al),trig=isTriggered(al),barColor=p>=100?"#E24B4A":p>=75?"#EF9F27":"#1D9E75";var cat2=al.type==="cat"?cats.find(function(c){return c.id===al.catId;}):null;var grp2=al.type==="group"?groups.find(function(g){return g.id===al.groupId;}):null;var label=al.type==="cat"?(cat2?cat2.icon+" "+cat2.name:"?"):("📂 "+(grp2?grp2.name:al.groupId));var tLabel=al.triggerMode==="immediate"?L("al 100%"):L("al ")+(100+(al.triggerPct||0))+"%";return <div key={al.id} style={{background:trig?(dark?"#3a1a1a":"#fff5f5"):(dark?"#252535":"#fff"),borderRadius:12,border:"1px solid "+(trig?"#fcc":borderC),padding:"14px 16px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:10}}><div style={{minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{trig&&<span>⚠️</span>}<div style={{fontSize:14,fontWeight:700,color:trig?"#E24B4A":tc}}>{al.name}</div><span style={{fontSize:10,background:al.period==="annual"?"#EEF":"#EFE",color:al.period==="annual"?"#534AB7":"#1D9E75",borderRadius:10,padding:"1px 6px"}}>{L(al.period==="annual"?"Annuale":"Mensile")}</span></div><div style={{fontSize:11,color:sc,marginTop:2}}>{label} · {L("attiva")} {tLabel}</div>{al.customText&&<div style={{fontSize:12,color:trig?"#E24B4A":sc,marginTop:4,fontStyle:"italic"}}>"{al.customText}"</div>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button title={L("Modifica")} onClick={function(){startEdit(al);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",borderRadius:8,cursor:"pointer",color:"#378ADD",fontSize:14,padding:"5px 8px",fontWeight:700}}>✏️</button><button title={L("Elimina")} onClick={function(){if(!window.confirm(L("Eliminare questo alert?")))return;setAlerts(function(p){return p.filter(function(x){return x.id!==al.id;});});if(setToast)setToast(L("Alert eliminato correttamente"));}} style={{background:"#FFF0F0",border:"1px solid #FFD0D0",borderRadius:8,cursor:"pointer",color:"#E24B4A",fontSize:14,padding:"5px 8px",fontWeight:700}}>🗑️</button></div></div><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600,color:barColor}}>{fmtAmt(spent,sym)}</span><span style={{fontSize:12,color:sc}}>{L("budget")} {fmtAmt(al.budget,sym)}</span></div><div style={{background:dark?"#333":"#f0f0f0",borderRadius:8,height:6}}><div style={{background:barColor,height:6,borderRadius:8,width:Math.min(100,p)+"%"}}/></div><div style={{fontSize:11,color:barColor,marginTop:3,textAlign:"right"}}>{Math.round(p)}%</div></div>;})}
   </div>;
 }
 
 export function BudgetPlanPanel(){
-  var ctx=useApp();var cats=ctx.cats,incomes=ctx.incomes,expenses=ctx.expenses,budgetPlan=ctx.budgetPlan,setBudgetPlan=ctx.setBudgetPlan,sym=ctx.sym,dark=ctx.dark,fmt=ctx.fmt,expenseGroups=ctx.expenseGroups,curMonthKey=ctx.curMonthKey,isMobile=ctx.isMobile;
+  var ctx=useApp();var cats=effectiveExpenseCats(ctx.cats),incomes=ctx.incomes,expenses=ctx.expenses,budgetPlan=ctx.budgetPlan,setBudgetPlan=ctx.setBudgetPlan,sym=ctx.sym,dark=ctx.dark,fmt=ctx.fmt,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups),curMonthKey=ctx.curMonthKey,isMobile=ctx.isMobile;
   var L=ctx.translateUiRuntimeText||function(s){return s;};
-  var groups=expenseGroups||DEFAULT_EXPENSE_GROUPS;
+  var groups=effectiveExpenseGroups(expenseGroups);
   var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";var borderC=dark?"#444":"#eee";var cardBg=dark?"#252535":"#fff";
   var [savingToast,setSavingToast]=useState(false);
   var [showInfoTooltip,setShowInfoTooltip]=useState(false);
@@ -747,7 +813,7 @@ export function BudgetPlanPanel(){
     <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
       <div style={{fontSize:15,fontWeight:600,color:tc,marginBottom:14}}>📊 {L("Suddivisione per categoria")}</div>
       <div style={{display:"grid",gridTemplateColumns:budgetGridCols,gap:budgetGridGap,marginBottom:8}}><div style={{fontSize:11,fontWeight:600,color:sc}}>{L("CATEGORIA")}</div><div style={{fontSize:11,fontWeight:600,color:sc,textAlign:"right"}}>{L("IMPORTO")} ({sym})</div><div style={{fontSize:11,fontWeight:600,color:sc,textAlign:"right"}}>% {L("REDDITO")}</div></div>
-      {groups.map(function(g){var gc=cats.filter(function(c){return c.group===g.id;});if(!gc.length)return null;var gt=gc.reduce(function(a,c){var it=items.find(function(i){return i.catId===c.id;});return a+(it?it.amount:0);},0);return <div key={g.id} style={{marginBottom:12}}><div style={{fontSize:11,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:1,marginBottom:6,paddingBottom:4,borderBottom:"1px solid "+borderC}}>{g.name} — {fmt(gt)}</div>{gc.map(function(c){var item=items.find(function(i){return i.catId===c.id;})||{amount:0,pct:0};var pctVal=item.pct||0;return <div key={c.id} style={{display:"grid",gridTemplateColumns:budgetGridCols,gap:budgetGridGap,alignItems:"center",marginBottom:4}}><div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}><span style={{fontSize:16,flexShrink:0}}>{c.icon}</span><span style={{fontSize:isMobile?12:13,color:tc,overflow:"visible",textOverflow:"clip",whiteSpace:isMobile?"normal":"nowrap",lineHeight:1.15,wordBreak:"break-word"}}>{L(c.name)}</span></div>{hasBudgetIncome?<input type="number" min={0} value={item.amount||""} onChange={function(e){updateAmt(c.id,e.target.value);}} placeholder="0" style={{...inp,textAlign:"right",padding:isMobile?"5px 5px":"5px 8px",width:"100%"}}/>:<div style={{fontSize:isMobile?12:13,color:sc,textAlign:"right",padding:isMobile?"5px 5px":"5px 8px"}}>—</div>}<input type="number" min={0} max={100} step={0.1} value={pctVal||""} onChange={function(e){updatePct(c.id,e.target.value);}} placeholder="0%" style={{...inp,textAlign:"right",padding:isMobile?"5px 5px":"5px 8px",width:"100%"}}/></div>;})}</div>;})}
+      {groups.map(function(g){var gc=safeCatsForGroup(cats,groups,g);if(!gc.length)return null;var gt=gc.reduce(function(a,c){var it=items.find(function(i){return i.catId===c.id;});return a+(it?it.amount:0);},0);return <div key={g.id} style={{marginBottom:12}}><div style={{fontSize:11,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:1,marginBottom:6,paddingBottom:4,borderBottom:"1px solid "+borderC}}>{g.name} — {fmt(gt)}</div>{gc.map(function(c){var item=items.find(function(i){return i.catId===c.id;})||{amount:0,pct:0};var pctVal=item.pct||0;return <div key={c.id} style={{display:"grid",gridTemplateColumns:budgetGridCols,gap:budgetGridGap,alignItems:"center",marginBottom:4}}><div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}><span style={{fontSize:16,flexShrink:0}}>{c.icon}</span><span style={{fontSize:isMobile?12:13,color:tc,overflow:"visible",textOverflow:"clip",whiteSpace:isMobile?"normal":"nowrap",lineHeight:1.15,wordBreak:"break-word"}}>{L(c.name)}</span></div>{hasBudgetIncome?<input type="number" min={0} value={item.amount||""} onChange={function(e){updateAmt(c.id,e.target.value);}} placeholder="0" style={{...inp,textAlign:"right",padding:isMobile?"5px 5px":"5px 8px",width:"100%"}}/>:<div style={{fontSize:isMobile?12:13,color:sc,textAlign:"right",padding:isMobile?"5px 5px":"5px 8px"}}>—</div>}<input type="number" min={0} max={100} step={0.1} value={pctVal||""} onChange={function(e){updatePct(c.id,e.target.value);}} placeholder="0%" style={{...inp,textAlign:"right",padding:isMobile?"5px 5px":"5px 8px",width:"100%"}}/></div>;})}</div>;})}
       <Btn onClick={save} bg="#7F77DD" style={{marginTop:8,padding:"10px 24px",fontSize:14}}>Salva suddivisione</Btn>
     </div>
   </div>;
@@ -767,7 +833,7 @@ export function SettingsList({items,setItems,label,showGroup,showIcon,groupList,
   function onDragEnd(){dragIdx.current=null;dragOverIdx.current=null;}
   var showDrag=sortMode==="custom";
   var activeItems=showDrag?items:items.filter(function(i){return !i.archived;});
-  var grouped=showGroup&&gl.length&&!showDrag?gl.map(function(g){return{...g,items:items.filter(function(c){return c.group===g.id;})};}): [{id:"_",name:"",items:showDrag?items:items}];
+  var grouped=showGroup&&gl.length&&!showDrag?(function(){var base=gl.map(function(g){return{...g,items:items.filter(function(c){return String(c.group||"")===String(g.id);})};});var known={};gl.forEach(function(g){known[String(g.id)]=true;});var orphanItems=items.filter(function(c){return !known[String(c.group||"")];});if(orphanItems.length)base.push({id:"_orphan",name:L("Senza area"),icon:"📂",items:orphanItems});return base;})(): [{id:"_",name:"",items:showDrag?items:items}];
   return <div>
     
     {showDrag?<div style={{marginBottom:12}}><SortableRows items={items} onMove={function(i,dir){var j=i+dir;if(j<0||j>=items.length)return;var arr=items.slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setItems(arr);}} renderItem={function(item){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
@@ -780,7 +846,7 @@ export function SettingsList({items,setItems,label,showGroup,showIcon,groupList,
         <button onClick={function(){del(item.id);}} style={{background:"#FFF0F0",border:"1px solid #FFD0D0",borderRadius:8,cursor:"pointer",color:"#E24B4A",fontSize:14,padding:"5px 8px",fontWeight:700,flexShrink:0}}>🗑️</button>
       </div>;}}/></div>:
     grouped.map(function(g){return <div key={g.id}>
-      {showGroup&&g.name&&g.items.length>0&&<div style={{fontSize:11,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:1,margin:"12px 0 6px"}}>{L(g.name)}</div>}
+      {showGroup&&g.name&&g.items.length>0&&<div style={{fontSize:11,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:1,margin:"12px 0 6px",display:"flex",alignItems:"center",gap:6}}>{g.icon&&<span style={{fontSize:13}}>{g.icon}</span>}<span>{L(g.name)}</span></div>}
       {g.items.map(function(item){return <div key={item.id} style={{background:dark?"#252535":"#fff",borderRadius:10,border:"1px solid "+(dark?"#444":"#eee"),padding:"10px 12px",marginBottom:6,opacity:item.archived?0.55:1}}>
         {editId===item.id?<div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           {showIcon&&<EmojiPicker value={editIcon} onChange={setEditIcon}/>}
@@ -897,7 +963,7 @@ export function PatrimonioSettingsPanel({forcedSection,allowEditing=true,onLocke
 
 export function SortOrderPanel(){
   var ctx=useApp();
-  var cats=ctx.cats,setCats=ctx.setCats,methods=ctx.methods,catOrder=ctx.catOrder,setCatOrder=ctx.setCatOrder,methodOrder=ctx.methodOrder,setMethodOrder=ctx.setMethodOrder,catSortMode=ctx.catSortMode,setCatSortMode=ctx.setCatSortMode,methodSortMode=ctx.methodSortMode,setMethodSortMode=ctx.setMethodSortMode,dark=ctx.dark,expenseGroups=ctx.expenseGroups;
+  var cats=effectiveExpenseCats(ctx.cats),setCats=ctx.setCats,methods=effectiveMethods(ctx.methods),catOrder=ctx.catOrder,setCatOrder=ctx.setCatOrder,methodOrder=ctx.methodOrder,setMethodOrder=ctx.setMethodOrder,catSortMode=ctx.catSortMode,setCatSortMode=ctx.setCatSortMode,methodSortMode=ctx.methodSortMode,setMethodSortMode=ctx.setMethodSortMode,dark=ctx.dark,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups);
   var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";var borderC=dark?"#444":"#eee";var cardBg=dark?"#252535":"#fff";
   var orderedCats=useMemo(function(){return sortedCats(cats,catOrder,"custom",expenseGroups);},[cats,catOrder,expenseGroups]);
   var orderedMethods=useMemo(function(){return sortedMethods(methods,methodOrder,"custom");},[methods,methodOrder]);
@@ -933,8 +999,10 @@ export function SortOrderPanel(){
 }
 export function DeleteDataPanel(){
   var ctx=useApp();
-  var expenses=ctx.expenses,setExpenses=ctx.setExpenses,incomes=ctx.incomes,setIncomes=ctx.setIncomes,cats=ctx.cats,setCats=ctx.setCats,methods=ctx.methods,setMethods=ctx.setMethods,recurring=ctx.recurring,setRecurring=ctx.setRecurring,goals=ctx.goals,setGoals=ctx.setGoals,alerts=ctx.alerts,setAlerts=ctx.setAlerts,budgetPlan=ctx.budgetPlan,setBudgetPlan=ctx.setBudgetPlan,patrimonioValues=ctx.patrimonioValues,setPatrimonioValues=ctx.setPatrimonioValues,patrimonioHistory=ctx.patrimonioHistory,setPatrimonioHistory=ctx.setPatrimonioHistory,patrimonioNotes=ctx.patrimonioNotes,setPatrimonioNotes=ctx.setPatrimonioNotes,patrimonioAreas=ctx.patrimonioAreas,setPatrimonioAreas=ctx.setPatrimonioAreas,patrimonioEntries=ctx.patrimonioEntries,setPatrimonioEntries=ctx.setPatrimonioEntries,expenseGroups=ctx.expenseGroups,setExpenseGroups=ctx.setExpenseGroups,incomeGroups=ctx.incomeGroups,setIncomeGroups=ctx.setIncomeGroups,methodGroups=ctx.methodGroups,setMethodGroups=ctx.setMethodGroups,appuntiDocuments=ctx.appuntiDocuments,setAppuntiDocuments=ctx.setAppuntiDocuments,appuntiNotes=ctx.appuntiNotes,setAppuntiNotes=ctx.setAppuntiNotes,bankCoords=ctx.bankCoords,setBankCoords=ctx.setBankCoords,debtCredits=ctx.debtCredits||[],setDebtCredits=ctx.setDebtCredits,shoppingCards=ctx.shoppingCards||[],setShoppingCards=ctx.setShoppingCards,shoppingItems=ctx.shoppingItems||[],setShoppingItems=ctx.setShoppingItems,shoppingAreas=ctx.shoppingAreas||[],setShoppingAreas=ctx.setShoppingAreas,shoppingAreaIcons=ctx.shoppingAreaIcons||{},setShoppingAreaIcons=ctx.setShoppingAreaIcons,shoppingBoughtColor=ctx.shoppingBoughtColor,setShoppingBoughtColor=ctx.setShoppingBoughtColor,dark=ctx.dark,dateFmt=ctx.dateFmt,fmt=ctx.fmt;
-  var groups=expenseGroups||DEFAULT_EXPENSE_GROUPS;
+  var expenses=ctx.expenses,setExpenses=ctx.setExpenses,incomes=ctx.incomes,setIncomes=ctx.setIncomes,cats=effectiveExpenseCats(ctx.cats),setCats=ctx.setCats,methods=effectiveMethods(ctx.methods),setMethods=ctx.setMethods,recurring=ctx.recurring,setRecurring=ctx.setRecurring,goals=ctx.goals,setGoals=ctx.setGoals,alerts=ctx.alerts,setAlerts=ctx.setAlerts,budgetPlan=ctx.budgetPlan,setBudgetPlan=ctx.setBudgetPlan,patrimonioValues=ctx.patrimonioValues,setPatrimonioValues=ctx.setPatrimonioValues,patrimonioHistory=ctx.patrimonioHistory,setPatrimonioHistory=ctx.setPatrimonioHistory,patrimonioNotes=ctx.patrimonioNotes,setPatrimonioNotes=ctx.setPatrimonioNotes,patrimonioAreas=ctx.patrimonioAreas,setPatrimonioAreas=ctx.setPatrimonioAreas,patrimonioEntries=ctx.patrimonioEntries,setPatrimonioEntries=ctx.setPatrimonioEntries,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups),setExpenseGroups=ctx.setExpenseGroups,incomeGroups=ctx.incomeGroups,setIncomeGroups=ctx.setIncomeGroups,customIncomeTypes=ctx.customIncomeTypes||[],setCustomIncomeTypes=ctx.setCustomIncomeTypes,incomeTypeOverrides=ctx.incomeTypeOverrides||{},setIncomeTypeOverrides=ctx.setIncomeTypeOverrides,methodGroups=ctx.methodGroups,setMethodGroups=ctx.setMethodGroups,appuntiDocuments=ctx.appuntiDocuments,setAppuntiDocuments=ctx.setAppuntiDocuments,appuntiNotes=ctx.appuntiNotes,setAppuntiNotes=ctx.setAppuntiNotes,bankCoords=ctx.bankCoords,setBankCoords=ctx.setBankCoords,debtCredits=ctx.debtCredits||[],setDebtCredits=ctx.setDebtCredits,shoppingCards=ctx.shoppingCards||[],setShoppingCards=ctx.setShoppingCards,shoppingItems=ctx.shoppingItems||[],setShoppingItems=ctx.setShoppingItems,shoppingAreas=ctx.shoppingAreas||[],setShoppingAreas=ctx.setShoppingAreas,shoppingAreaIcons=ctx.shoppingAreaIcons||{},setShoppingAreaIcons=ctx.setShoppingAreaIcons,shoppingBoughtColor=ctx.shoppingBoughtColor,setShoppingBoughtColor=ctx.setShoppingBoughtColor,dark=ctx.dark,dateFmt=ctx.dateFmt,fmt=ctx.fmt;
+  var groups=effectiveExpenseGroups(expenseGroups);
+  var incomeGroupList=(incomeGroups&&incomeGroups.length)?incomeGroups:DEFAULT_INCOME_GROUPS;
+  var incomeTypeList=ctx.incomeTypes||getAllIncomeTypes(customIncomeTypes,incomeTypeOverrides);
   var [tab,setTab]=useState("sections");
   var [movType,setMovType]=useState("expense");
   var [mode,setMode]=useState("category");
@@ -964,7 +1032,8 @@ export function DeleteDataPanel(){
     {id:"appuntiDocs",icon:"📎",label:L("Documenti"),count:(appuntiDocuments||[]).length,clear:function(){setAppuntiDocuments([]);}},
     {id:"appuntiNotes",icon:"📝",label:L("Appunti"),count:(appuntiNotes||[]).length,clear:function(){setAppuntiNotes([]);}},
     {id:"bank",icon:"🏦",label:L("Coordinate bancarie"),count:(bankCoords||[]).length,clear:function(){setBankCoords([]);}},
-    {id:"categories",icon:"🏷",label:L("Categorie uscite"),count:cats.length,clear:function(){setCats([]);if(setExpenseGroups)setExpenseGroups([]);}},
+    {id:"expenseCategories",icon:"🏷",label:L("Aree / Categorie Uscite"),count:(groups||[]).length+(cats||[]).length,clear:function(){setCats([]);if(setExpenseGroups)setExpenseGroups([]);}},
+    {id:"incomeCategories",icon:"🏷",label:L("Aree / Categorie Entrate"),count:(incomeGroupList||[]).length+(incomeTypeList||[]).length,clear:function(){if(setIncomeGroups)setIncomeGroups([]);if(setCustomIncomeTypes)setCustomIncomeTypes([]);if(setIncomeTypeOverrides)setIncomeTypeOverrides({});}},
     {id:"methods",icon:"💳",label:L("Metodi pagamento"),count:methods.length,clear:function(){setMethods([]);if(setMethodGroups)setMethodGroups([]);}},
     {id:"patrimonioConfig",icon:"⚙️",label:L("Config. patrimonio"),count:(patrimonioAreas||[]).length+(patrimonioEntries||[]).length,clear:function(){setPatrimonioAreas([]);setPatrimonioEntries([]);}},
     {id:"debtCredits",icon:"💳",label:L("Debiti / Crediti"),count:(debtCredits||[]).length,clear:function(){setDebtCredits&&setDebtCredits([]);}},
@@ -977,7 +1046,7 @@ export function DeleteDataPanel(){
   function getMovementsToDelete(){
     var list=baseMovements();
     if(mode==="all")return list.map(function(e){return e.id;});
-    if(mode==="category"&&movType==="expense")return list.filter(function(e){return selCats.includes(e.catId);}).map(function(e){return e.id;});
+    if(mode==="category"&&movType==="expense")return list.filter(function(e){return selCats.map(String).includes(String(e.catId));}).map(function(e){return e.id;});
     if(mode==="category"&&movType==="income")return list.filter(function(e){return selIncomeTypes.includes(e.type);}).map(function(e){return e.id;});
     if(mode==="date")return list.filter(function(e){return(!delFrom||e.date>=delFrom)&&(!delTo||e.date<=delTo);}).map(function(e){return e.id;});
     if(mode==="search")return selIds;
@@ -999,8 +1068,8 @@ export function DeleteDataPanel(){
     </div>}
     {tab==="movements"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",gap:0,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3}}><button onClick={function(){setMovType("expense");setSelIds([]);}} style={{flex:1,padding:"8px",border:"none",borderRadius:10,background:movType==="expense"?"#E24B4A":"transparent",color:movType==="expense"?"#fff":sc,fontSize:13,cursor:"pointer"}}>{L("Uscite")}</button><button onClick={function(){setMovType("income");setSelIds([]);}} style={{flex:1,padding:"8px",border:"none",borderRadius:10,background:movType==="income"?"#1D9E75":"transparent",color:movType==="income"?"#fff":sc,fontSize:13,cursor:"pointer"}}>{L("Entrate")}</button></div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{[{id:"all",label:"Tutto",icon:"🗑"},{id:"category",label:"Per categoria",icon:"🏷"},{id:"date",label:"Per date",icon:"📅"},{id:"search",label:"Per testo",icon:"🔍"}].map(function(m){return <button key={m.id} onClick={function(){setMode(m.id);setConfirmDel(false);setShowPreview(false);}} style={{padding:"10px",border:"1px solid "+(mode===m.id?"#E24B4A":borderC),borderRadius:10,background:mode===m.id?"#fde8e8":cardBg,color:mode===m.id?"#E24B4A":tc,cursor:"pointer",textAlign:"left",fontSize:13}}><span style={{fontSize:18,marginRight:6}}>{m.icon}</span>{m.label}</button>;})}</div>
-      {mode==="category"&&movType==="expense"&&<div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:14}}>{groups.map(function(g){var gc=cats.filter(function(c){return c.group===g.id;});return gc.length>0&&<div key={g.id}><div style={{fontSize:11,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:1,margin:"10px 0 6px"}}>{g.name}</div>{gc.map(function(c){var n=expenses.filter(function(e){return e.catId===c.id;}).length;return <label key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",background:selCats.includes(c.id)?"#fde8e8":"transparent",marginBottom:4}}><input type="checkbox" checked={selCats.includes(c.id)} onChange={function(){toggleCat(c.id);}} style={{accentColor:"#E24B4A",width:16,height:16}}/><span style={{fontSize:16}}>{c.icon}</span><span style={{fontSize:14,color:tc}}>{c.name}</span><span style={{marginLeft:"auto",fontSize:12,color:sc}}>{n+" "+L("voci")}</span></label>;})}</div>;})}</div>}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{[{id:"all",label:"Tutto",icon:""},{id:"category",label:"Per categoria",icon:"🏷"},{id:"date",label:"Per date",icon:"📅"},{id:"search",label:"Per testo",icon:"🔍"}].map(function(m){return <button key={m.id} onClick={function(){setMode(m.id);setConfirmDel(false);setShowPreview(false);}} style={{padding:"10px",border:"1px solid "+(mode===m.id?"#E24B4A":borderC),borderRadius:10,background:mode===m.id?"#fde8e8":cardBg,color:mode===m.id?"#E24B4A":tc,cursor:"pointer",textAlign:"left",fontSize:13}}><span style={{fontSize:18,marginRight:6}}>{m.icon}</span>{m.label}</button>;})}</div>
+      {mode==="category"&&movType==="expense"&&<div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:14}}>{groups.map(function(g){var gc=safeCatsForGroup(cats,groups,g);return gc.length>0&&<div key={g.id}><div style={{fontSize:11,fontWeight:600,color:"#aaa",textTransform:"uppercase",letterSpacing:1,margin:"10px 0 6px"}}>{g.name}</div>{gc.map(function(c){var n=expenses.filter(function(e){return String(e.catId)===String(c.id);}).length;return <label key={c.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",background:selCats.includes(c.id)?"#fde8e8":"transparent",marginBottom:4}}><input type="checkbox" checked={selCats.map(String).includes(String(c.id))} onChange={function(){toggleCat(c.id);}} style={{accentColor:"#E24B4A",width:16,height:16}}/><span style={{fontSize:16}}>{c.icon}</span><span style={{fontSize:14,color:tc}}>{c.name}</span><span style={{marginLeft:"auto",fontSize:12,color:sc}}>{n+" "+L("voci")}</span></label>;})}</div>;})}</div>}
       {mode==="category"&&movType==="income"&&<div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:14}}>{getAllIncomeTypes().map(function(ti){var n=incomes.filter(function(e){return e.type===ti.id;}).length;return <label key={ti.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",background:selIncomeTypes.includes(ti.id)?"#e8f8f0":"transparent",marginBottom:4}}><input type="checkbox" checked={selIncomeTypes.includes(ti.id)} onChange={function(){toggleIncomeType(ti.id);}} style={{accentColor:"#1D9E75",width:16,height:16}}/><span style={{fontSize:16}}>{ti.icon}</span><span style={{fontSize:14,color:tc}}>{ti.name}</span><span style={{marginLeft:"auto",fontSize:12,color:sc}}>{n+" "+L("voci")}</span></label>;})}</div>}
       {mode==="date"&&<div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:14,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{L("Da")}</label><input type="date" value={delFrom} onChange={function(e){setDelFrom(e.target.value);}} style={inp}/></div><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{L("A")}</label><input type="date" value={delTo} onChange={function(e){setDelTo(e.target.value);}} style={inp}/></div></div>}
       {mode==="search"&&<div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:14}}><div style={{display:"flex",gap:8}}><input placeholder="Cerca descrizione o categoria..." value={delSearch} onChange={function(e){setDelSearch(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")runSearch();}} style={{...inp,flex:1}}/><Btn onClick={runSearch}>Cerca</Btn></div><div style={{fontSize:12,color:sc,marginTop:8}}>La ricerca seleziona automaticamente i risultati trovati.</div></div>}
@@ -1011,21 +1080,269 @@ export function DeleteDataPanel(){
     {count===0&&<div style={{fontSize:13,color:"#aaa",textAlign:"center",padding:"8px 0"}}>{L("Nessun dato selezionato")}</div>}
   </div>;
 }
-export function EditModal({item,isExp,onSave,onClose}){var ctx=useApp();var t=ctx.t,cats=ctx.cats,methods=ctx.methods,sym=ctx.sym,dark=ctx.dark,btnRadius=ctx.btnRadius,expenseGroups=ctx.expenseGroups;var groups=expenseGroups||DEFAULT_EXPENSE_GROUPS;var [f,setF]=useState({...item});var inp={width:"100%",borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"8px 10px",fontSize:14,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333",boxSizing:"border-box",minWidth:0};var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";function save(){var amount=parseMoney(f.amount);if(!amount||amount<=0)return;onSave({...f,amount:amount,catId:Number(f.catId),methodId:Number(f.methodId)});}return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}><div style={{background:dark?"#1e1e30":"#fff",borderRadius:16,padding:20,width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{fontSize:15,fontWeight:600,color:tc}}>Modifica {isExp?t.expenses:t.incomes}</div><button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#aaa"}}>x</button></div><div style={{display:"flex",flexDirection:"column",gap:12}}><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.amount} ({sym})</label><input type="number" value={f.amount} onChange={function(e){setF(function(p){return{...p,amount:e.target.value};});}} style={{...inp,fontSize:20,fontWeight:500}}/></div><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.description}</label><input type="text" value={f.desc||""} onChange={function(e){setF(function(p){return{...p,desc:e.target.value};});}} style={inp}/></div>{isExp&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.category}</label><select value={f.catId} onChange={function(e){setF(function(p){return{...p,catId:e.target.value};});}} style={inp}>{groups.map(function(g){return <optgroup key={g.id} label={g.name}>{cats.filter(function(c){return c.group===g.id;}).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</optgroup>;})}</select></div><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.method}</label><select value={f.methodId} onChange={function(e){setF(function(p){return{...p,methodId:e.target.value};});}} style={inp}>{methods.map(function(m){return <option key={m.id} value={m.id}>{m.archived?"[Arch] ":""}{m.icon} {m.name}</option>;})}</select></div></div>}<div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.date}</label><DatePickerField value={f.date} onChange={function(v){setF(function(p){return{...p,date:v};});}}/></div><div style={{background:f.rateizzato?(dark?"#2a2a3e":"#EEEDFE"):(dark?"#252535":"#f5f5f5"),borderRadius:12,padding:12,border:f.rateizzato?"1px solid #AFA9EC":"1px solid "+(dark?"#444":"#eee")}}><Toggle label={t.instalment} checked={!!f.rateizzato} onChange={function(){setF(function(p){return{...p,rateizzato:!p.rateizzato};});}}/>{f.rateizzato&&<div style={{marginTop:8}}><div style={{fontSize:12,color:"#534AB7",marginBottom:4}}>{f.rate} {t.months} - {fmtAmt(parseMoney(f.amount)?parseMoney(f.amount)/f.rate:0,sym)}{t.perMonth}</div><RatePicker value={f.rate||12} direction={f.rateDirection||"forward"} onChange={function(n){setF(function(p){return{...p,rate:n};});}} onDirectionChange={function(d){setF(function(p){return{...p,rateDirection:d};});}}/></div>}</div><div style={{display:"flex",gap:10,marginTop:4}}><Btn onClick={save} bg={isExp?"#E24B4A":"#1D9E75"} style={{flex:1,padding:12,fontSize:14,fontWeight:600}}>{t.save}</Btn><Btn onClick={onClose} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#555"} style={{flex:1,padding:12,fontSize:14}}>{t.cancel}</Btn></div></div></div></div>;}
+export function EditModal({item,isExp,onSave,onClose}){var ctx=useApp();var t=ctx.t,cats=effectiveExpenseCats(ctx.cats),methods=effectiveMethods(ctx.methods),incomeTypes=ctx.incomeTypes||getAllIncomeTypes(ctx.customIncomeTypes,ctx.incomeTypeOverrides),sym=ctx.sym,dark=ctx.dark,btnRadius=ctx.btnRadius,expenseGroups=effectiveExpenseGroups(ctx.expenseGroups);var groups=expenseGroups;var groupIds=(groups||[]).map(function(g){return String(g.id);});function catsForGroup(g){return (cats||[]).filter(function(c){var cg=String(c.group||"");return cg===String(g.id)||((!cg||groupIds.indexOf(cg)<0)&&String(g.id)==="altro");});}var [f,setF]=useState({...item});var inp={width:"100%",borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"8px 10px",fontSize:14,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333",boxSizing:"border-box",minWidth:0};var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";function L(s){return ctx.translateUiRuntimeText?ctx.translateUiRuntimeText(s):s;}function save(){var amount=parseMoney(f.amount);if(!amount||amount<=0)return;var payload={...f,amount:amount};if(isExp){payload.catId=f.catId;payload.methodId=f.methodId;}else{payload.type=f.type||((incomeTypes&&incomeTypes[0])?incomeTypes[0].id:"salario");}onSave(payload);}return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}><div style={{background:dark?"#1e1e30":"#fff",borderRadius:16,padding:20,width:"100%",maxWidth:440,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><div style={{fontSize:15,fontWeight:600,color:tc}}>Modifica {isExp?t.expenses:t.incomes}</div><button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#aaa"}}>x</button></div><div style={{display:"flex",flexDirection:"column",gap:12}}><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.amount} ({sym})</label><input type="number" value={f.amount} onChange={function(e){setF(function(p){return{...p,amount:e.target.value};});}} style={{...inp,fontSize:20,fontWeight:500}}/></div><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.description}</label><input type="text" value={f.desc||""} onChange={function(e){setF(function(p){return{...p,desc:e.target.value};});}} style={inp}/></div>{isExp&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.category}</label><select value={f.catId} onChange={function(e){setF(function(p){return{...p,catId:e.target.value};});}} style={inp}>{groups.map(function(g){return <optgroup key={g.id} label={g.name}>{catsForGroup(g).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {c.name}</option>;})}</optgroup>;})}</select></div><div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.method}</label><select value={f.methodId} onChange={function(e){setF(function(p){return{...p,methodId:e.target.value};});}} style={inp}>{methods.map(function(m){return <option key={m.id} value={m.id}>{m.archived?"[Arch] ":""}{m.icon} {m.name}</option>;})}</select></div></div>}{!isExp&&<div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{L("Categoria entrata")}</label><select value={f.type||""} onChange={function(e){setF(function(p){return{...p,type:e.target.value};});}} style={inp}>{(incomeTypes||[]).filter(function(it){return !it.deleted&&!it.archived;}).map(function(it){return <option key={it.id} value={it.id}>{it.icon} {L(it.name)}</option>;})}</select></div>}<div><label style={{fontSize:12,color:sc,display:"block",marginBottom:4}}>{t.date}</label><DatePickerField value={f.date} onChange={function(v){setF(function(p){return{...p,date:v};});}}/></div><div style={{background:f.rateizzato?(dark?"#2a2a3e":"#EEEDFE"):(dark?"#252535":"#f5f5f5"),borderRadius:12,padding:12,border:f.rateizzato?"1px solid #AFA9EC":"1px solid "+(dark?"#444":"#eee")}}><Toggle label={t.instalment} checked={!!f.rateizzato} onChange={function(){setF(function(p){return{...p,rateizzato:!p.rateizzato};});}}/>{f.rateizzato&&<div style={{marginTop:8}}><div style={{fontSize:12,color:"#534AB7",marginBottom:4}}>{f.rate} {t.months} - {fmtAmt(parseMoney(f.amount)?parseMoney(f.amount)/f.rate:0,sym)}{t.perMonth}</div><RatePicker value={f.rate||12} direction={f.rateDirection||"forward"} onChange={function(n){setF(function(p){return{...p,rate:n};});}} onDirectionChange={function(d){setF(function(p){return{...p,rateDirection:d};});}}/></div>}</div><div style={{display:"flex",gap:10,marginTop:4}}><Btn onClick={save} bg={isExp?"#E24B4A":"#1D9E75"} style={{flex:1,padding:12,fontSize:14,fontWeight:600}}>{t.save}</Btn><Btn onClick={onClose} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#555"} style={{flex:1,padding:12,fontSize:14}}>{t.cancel}</Btn></div></div></div></div>;}
 
 // ── IMPORT DATA ───────────────────────────────────────────────────────────────
 export function ImportData(){
-  var ctx=useApp();var cats=ctx.cats,methods=ctx.methods,addExpenses=ctx.addExpenses,addIncomes=ctx.addIncomes,dark=ctx.dark,sym=ctx.sym,patrimonioEntries=ctx.patrimonioEntries,patrimonioHistory=ctx.patrimonioHistory,setPatrimonioHistory=ctx.setPatrimonioHistory,setPatrimonioNotes=ctx.setPatrimonioNotes;
+  var ctx=useApp();
+  var cats=effectiveExpenseCats(ctx.cats),setCats=ctx.setCats,methods=effectiveMethods(ctx.methods),setMethods=ctx.setMethods,addExpenses=ctx.addExpenses,addIncomes=ctx.addIncomes,dark=ctx.dark,sym=ctx.sym,setToast=ctx.setToast;
+  var patrimonioEntries=ctx.patrimonioEntries,patrimonioHistory=ctx.patrimonioHistory,setPatrimonioHistory=ctx.setPatrimonioHistory,setPatrimonioNotes=ctx.setPatrimonioNotes,setPatrimonioEntries=ctx.setPatrimonioEntries;
+  var incomeTypes=ctx.incomeTypes||getAllIncomeTypes(ctx.customIncomeTypes,ctx.incomeTypeOverrides),setCustomIncomeTypes=ctx.setCustomIncomeTypes;
   var pEntries=patrimonioEntries||DEFAULT_PATRIMONIO_ENTRIES;
-  var [importType,setImportType]=useState("expense");var [step,setStep]=useState(0);var [rows,setRows]=useState([]);var [cols,setCols]=useState([]);var [map,setMap]=useState({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});var [importDateFmt,setImportDateFmt]=useState("auto");var [preview,setPreview]=useState([]);var [msg,setMsg]=useState("");var [importSuccess,setImportSuccess]=useState(null);
-  var fileRef=useRef();
+  var [importType,setImportType]=useState("expense");var [step,setStep]=useState(0);var [rows,setRows]=useState<any[]>([]);var [cols,setCols]=useState<any[]>([]);var [map,setMap]=useState<any>({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});var [importDateFmt,setImportDateFmt]=useState("auto");var [preview,setPreview]=useState<any[]>([]);var [msg,setMsg]=useState("");var [importSuccess,setImportSuccess]=useState<any>(null);var [importLoading,setImportLoading]=useState<any>(null);
+  var [unknowns,setUnknowns]=useState<any>({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});
+  var [unknownDecision,setUnknownDecision]=useState("create");
+  var [replacementMap,setReplacementMap]=useState<any>({});
+  var fileRef=useRef<any>();
+  useEffect(function(){
+    try{
+      loadFainanceExternalScript("https://apis.google.com/js/api.js","fainance-google-api-client").then(function(){
+        try{var gapi=(window as any).gapi;if(gapi&&gapi.load)gapi.load("picker",{callback:function(){}});}
+        catch(e){}
+      }).catch(function(){});
+    }catch(e){}
+  },[]);
   var sinp={borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"6px 10px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333"};
   var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";
-  function resetAll(){setStep(0);setRows([]);setCols([]);setPreview([]);setMap({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});setMsg("");}
+  function L(s){return ctx.translateUiRuntimeText?ctx.translateUiRuntimeText(s):s;}
+  function resetAll(){setStep(0);setRows([]);setCols([]);setPreview([]);setUnknowns({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});setReplacementMap({});setUnknownDecision("create");setMap({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});setImportLoading(null);setMsg("");}
+  function setImportProgress(file,stage,pct){setImportLoading({file:file||"",stage:L(stage),pct:Math.max(0,Math.min(100,Math.round(pct||0)))});}
+  function finishImportLoad(file){setImportProgress(file||"", "File caricato", 100);setTimeout(function(){setImportLoading(null);},250);}
+  function applyImportedRows(data,fileName){
+    var clean=(data||[]).map(function(r){return Array.isArray(r)?r.map(function(c){return c==null?"":String(c);}) : [];}).filter(function(r){return r.some(function(c){return String(c||"").trim()!=="";});});
+    if(!clean||clean.length<2){setImportLoading(null);setMsg(L("Nessun dato trovato nel foglio selezionato."));return false;}
+    var header=(clean[0]||[]).map(function(h,i){var v=String(h||"").trim();return v||(L("Colonna")+" "+(i+1));});
+    var body=clean.slice(1).filter(function(r){return r.some(function(c){return c!==undefined&&c!==null&&String(c).trim()!=="";});});
+    if(!body.length){setImportLoading(null);setMsg(L("Nessuna riga dati trovata nel foglio selezionato."));return false;}
+    setImportProgress(fileName||"Drive","Preparazione colonne",92);
+    setCols(header);setRows(body);setPreview([]);setUnknowns({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});setReplacementMap({});setUnknownDecision("create");setMap({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});setStep(1);setMsg("");finishImportLoad(fileName||"Drive");return true;
+  }
+  function base64ToArrayBuffer(b64){var bin=atob(String(b64||""));var len=bin.length;var bytes=new Uint8Array(len);for(var i=0;i<len;i++)bytes[i]=bin.charCodeAt(i);return bytes.buffer;}
+  function base64ToText(b64){try{return new TextDecoder("utf-8").decode(new Uint8Array(base64ToArrayBuffer(b64)));}catch(e){return atob(String(b64||""));}}
+  function parseImportedDelimitedText(text){var raw=String(text||"").replace(/^\uFEFF/,"");var first=(raw.split(/\r?\n/).find(function(l){return l.trim();})||"");if(first.indexOf("\t")>=0&&first.indexOf(",")<0&&first.indexOf(";")<0)raw=raw.replace(/\t/g,";");return parseCSVText(raw);}
+  function parseImportMoney(value){
+    if(typeof value==="number"&&isFinite(value))return value;
+    var raw=String(value==null?"":value).trim();
+    if(!raw)return NaN;
+    var neg=/^\s*-|\(.*\)/.test(raw);
+    var s=raw.replace(/[^0-9,.'\-]/g,"").replace(/'/g,"").replace(/-/g,"");
+    if(!s)return NaN;
+    var lastComma=s.lastIndexOf(",");
+    var lastDot=s.lastIndexOf(".");
+    function onlyDigits(x){return String(x||"").replace(/\D/g,"");}
+    var out="";
+    if(lastComma>=0&&lastDot>=0){
+      var decSep=lastComma>lastDot?",":".";
+      var thouSep=decSep===","?".":",";
+      out=s.split(thouSep).join("").replace(decSep,".");
+    }else if(lastComma>=0){
+      var parts=s.split(",");
+      var tail=parts[parts.length-1]||"";
+      if(parts.length>2){out=parts.join("");}
+      else if(tail.length===3&&(parts[0]||"").length<=3){out=parts.join("");}
+      else {out=parts[0]+"."+tail;}
+    }else if(lastDot>=0){
+      var parts2=s.split(".");
+      var tail2=parts2[parts2.length-1]||"";
+      if(parts2.length>2){out=parts2.join("");}
+      else if(tail2.length===3&&(parts2[0]||"").length<=3){out=parts2.join("");}
+      else {out=parts2[0]+"."+tail2;}
+    }else{out=onlyDigits(s);}
+    var n=parseFloat(out);
+    if(isNaN(n))return NaN;
+    return neg?-Math.abs(n):n;
+  }
+  function parseImportedHtmlTable(text){
+    try{
+      var html=String(text||"");
+      var doc2=null;
+      if(typeof DOMParser!=="undefined")doc2=new DOMParser().parseFromString(html,"text/html");
+      var table=doc2?doc2.querySelector("table"):null;
+      if(table){
+        var trs=Array.prototype.slice.call(table.querySelectorAll("tr"));
+        var rows2=trs.map(function(tr){return Array.prototype.slice.call(tr.querySelectorAll("th,td")).map(function(td){return String((td.textContent||"")).replace(/\s+/g," ").trim();});}).filter(function(r){return r.some(function(c){return String(c||"").trim()!=="";});});
+        return rows2;
+      }
+      var cleaned=html.replace(/<\/tr>/ig,"\n").replace(/<\/(td|th)>/ig,";").replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">");
+      return parseImportedDelimitedText(cleaned);
+    }catch(e){return null;}
+  }
+  async function handleNativePickedSpreadsheet(res){
+    if(!res||res.cancelled){setImportLoading(null);return;}
+    var name=String(res.name||res.fileName||"Foglio Drive");
+    var originalMime=String(res.mimeType||"");
+    var exportMime=String(res.exportMimeType||"");
+    var mime=(exportMime||originalMime||"");
+    var b64=String(res.dataBase64||res.base64||"");
+    if(!b64){setImportLoading(null);setMsg(L("Non riesco a leggere il file selezionato da Drive."));return;}
+    setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);setImportProgress(name,"Analisi file",70);
+    var ab=base64ToArrayBuffer(b64);
+    var u8=new Uint8Array(ab);
+    var looksZip=u8.length>=2&&u8[0]===0x50&&u8[1]===0x4B;
+    var looksPdf=u8.length>=4&&u8[0]===0x25&&u8[1]===0x50&&u8[2]===0x44&&u8[3]===0x46;
+    var isNativeGoogleSheet=/google-apps\.spreadsheet/i.test(originalMime)||/google-apps\.spreadsheet/i.test(exportMime)||!!res.isGoogleSheetNative;
+    if(looksPdf){setImportLoading(null);setMsg(L("Drive ha consegnato il Foglio Google come PDF, non come tabella. Riprova selezionando il Foglio Google dall’elenco Drive oppure esportalo come .xlsx/.csv."));return;}
+    var decodedText="";
+    var isHtml=/html/i.test(mime)||/\.html?$/i.test(name);
+    if(!looksZip){try{decodedText=base64ToText(b64);}catch(_e){decodedText="";}}
+    if(!isHtml&&decodedText&&/^\s*(<!doctype\s+html|<html|<table)/i.test(decodedText))isHtml=true;
+    if(isHtml){
+      var parsedHtml=parseImportedHtmlTable(decodedText);
+      if(!parsedHtml||parsedHtml.length<2){setImportLoading(null);setMsg(L("Il Foglio Google selezionato non ha fornito una tabella leggibile."));return;}
+      applyImportedRows(parsedHtml,name);return;
+    }
+    var isCsv=/csv|comma-separated|text\/plain|text\/|tab-separated/i.test(mime)||/\.csv$/i.test(name)||(isNativeGoogleSheet&&!looksZip&&!looksPdf);
+    if(isCsv){
+      var parsed=parseImportedDelimitedText(decodedText||base64ToText(b64));
+      if(!parsed||parsed.length<2){setImportLoading(null);setMsg(L("File CSV vuoto o non valido."));return;}
+      applyImportedRows(parsed,name);return;
+    }
+    if(!looksZip){setImportLoading(null);setMsg(L("Formato file non supportato. Usa un file .xlsx, .xls o .csv."));return;}
+    var data=await parseXLSXBuffer(ab);
+    if(data&&data.__unsupported){setImportLoading(null);setMsg(L("Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."));return;}
+    if(!data||data.length<2){setImportLoading(null);setMsg(L("Nessun dato nel file Excel."));return;}
+    applyImportedRows(data,name);
+  }
+  function openImportPicker(){
+    setMsg("");setImportLoading(null);
+    if(fileRef.current)fileRef.current.click();
+  }
+  async function ensureGooglePickerLibraries(){
+    await loadFainanceExternalScript("https://apis.google.com/js/api.js","fainance-google-api-client");
+    var gapi=(window as any).gapi;
+    if(!gapi)throw new Error("Google API non disponibile.");
+    await new Promise(function(resolve,reject){
+      try{gapi.load("picker",{callback:function(){resolve(true);},onerror:function(){reject(new Error("Google Picker non disponibile."));},timeout:12000,ontimeout:function(){reject(new Error("Timeout Google Picker."));}});}catch(e){reject(e);}
+    });
+    var google=(window as any).google;
+    if(!google||!google.picker)throw new Error("Google Picker non disponibile.");
+    return google;
+  }
+  async function requestNativeGoogleDriveFileToken(forceConsent?:boolean){
+    try{
+      var mod:any=await import("@capacitor-firebase/authentication");
+      var FirebaseAuthentication=mod&&mod.FirebaseAuthentication;
+      if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithGoogle)throw new Error("Autenticazione Google nativa non disponibile.");
+      var promptValue=forceConsent?"consent select_account":"select_account";
+      var result=await FirebaseAuthentication.signInWithGoogle({
+        scopes:["email","profile",GOOGLE_PICKER_SCOPE],
+        customParameters:[{key:"prompt",value:promptValue}]
+      });
+      var credData=result&&result.credential?result.credential:(result&&result.user?result.user:(result||{}));
+      var token=credData.accessToken||credData.access_token||(result&&result.accessToken)||(result&&result.access_token)||"";
+      if(!token)throw new Error("Token Google nativo non disponibile.");
+      FAINANCE_GOOGLE_PICKER_TOKEN=token;
+      return token;
+    }catch(e){
+      throw e;
+    }
+  }
+  async function requestGooglePickerToken(google:any,forceConsent?:boolean){
+    if(FAINANCE_GOOGLE_PICKER_TOKEN&&!forceConsent)return FAINANCE_GOOGLE_PICKER_TOKEN;
+    try{
+      return await requestNativeGoogleDriveFileToken(forceConsent);
+    }catch(nativeErr){
+      try{
+        await loadFainanceExternalScript("https://accounts.google.com/gsi/client","fainance-google-gsi-client");
+        var googleNow=(window as any).google||google;
+        if(!googleNow||!googleNow.accounts||!googleNow.accounts.oauth2)throw nativeErr||new Error("Google Identity Services non disponibile.");
+        return await new Promise(function(resolve,reject){
+          try{
+            var client=googleNow.accounts.oauth2.initTokenClient({
+              client_id:GOOGLE_PICKER_CLIENT_ID,
+              scope:GOOGLE_PICKER_SCOPE,
+              prompt:forceConsent?"consent":"",
+              callback:function(resp:any){
+                if(resp&&resp.error){reject(new Error(resp.error_description||resp.error));return;}
+                var token=resp&&resp.access_token;
+                if(!token){reject(new Error("Token Google non disponibile."));return;}
+                FAINANCE_GOOGLE_PICKER_TOKEN=token;
+                resolve(token);
+              }
+            });
+            client.requestAccessToken({prompt:forceConsent?"consent":""});
+          }catch(e){reject(e);}
+        });
+      }catch(webErr){
+        throw webErr||nativeErr;
+      }
+    }
+  }
+  async function getGooglePickerTokenWithConsent(google:any){
+    try{return await requestGooglePickerToken(google,false);}catch(e){FAINANCE_GOOGLE_PICKER_TOKEN="";return await requestGooglePickerToken(google,true);}
+  }
+  async function googleSheetsFetchJson(url:string,token:any,retry?:boolean){
+    var res=await fetch(url,{headers:{Authorization:"Bearer "+token}});
+    if(res.status===401&&!retry){FAINANCE_GOOGLE_PICKER_TOKEN="";var google=(window as any).google;var tk=await requestGooglePickerToken(google,true);return await googleSheetsFetchJson(url,tk,true);}
+    if(!res.ok){var txt="";try{txt=await res.text();}catch(e){}throw new Error(txt||("HTTP "+res.status));}
+    return await res.json();
+  }
+  async function importGoogleSheetById(fileId:string,fileName:string,token:any){
+    setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
+    setImportProgress(fileName||"Google Sheets","Lettura Foglio Google",45);
+    var base="https://sheets.googleapis.com/v4/spreadsheets/"+encodeURIComponent(fileId);
+    var meta=await googleSheetsFetchJson(base+"?fields="+encodeURIComponent("sheets(properties(title,index,hidden))"),token,false);
+    var sheets=((meta&&meta.sheets)||[]).map(function(s:any){return s&&s.properties?s.properties:null;}).filter(function(p:any){return p&&p.title&&!p.hidden;}).sort(function(a:any,b:any){return Number(a.index||0)-Number(b.index||0);});
+    if(!sheets.length)throw new Error("Nessun foglio interno trovato.");
+    var values:any=null;
+    for(var i=0;i<sheets.length;i++){
+      var title=String(sheets[i].title||"");
+      setImportProgress(fileName||"Google Sheets","Lettura dati",55+i*8);
+      var range="'"+title.replace(/'/g,"''")+"'!A1:ZZ10000";
+      var data=await googleSheetsFetchJson(base+"/values/"+encodeURIComponent(range)+"?majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING",token,false);
+      if(data&&data.values&&data.values.length>1){values=data.values;break;}
+    }
+    if(!values||values.length<2){setImportLoading(null);setMsg(L("Il Foglio Google selezionato non contiene righe dati leggibili."));return;}
+    applyImportedRows(values,fileName||"Google Sheets");
+  }
+  async function openGoogleSheetsPicker(){
+    setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
+    setImportProgress("Google Sheets","Preparazione Google Picker",5);
+    try{
+      var google:any=await ensureGooglePickerLibraries();
+      setImportProgress("Google Sheets","Autorizzazione Google",18);
+      var token:any=await getGooglePickerTokenWithConsent(google);
+      setImportProgress("Google Sheets","Apertura Google Drive",30);
+      await new Promise(function(resolve){
+        var view=new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
+        try{view.setIncludeFolders(false);view.setSelectFolderEnabled(false);}catch(e){}
+        var builder=new google.picker.PickerBuilder()
+          .setDeveloperKey(GOOGLE_PICKER_API_KEY)
+          .setOAuthToken(token)
+          .setAppId(GOOGLE_PICKER_APP_ID)
+          .addView(view)
+          .setCallback(async function(data:any){
+            try{
+              if(data&&data.action===google.picker.Action.CANCEL){setImportLoading(null);resolve(true);return;}
+              if(data&&data.action===google.picker.Action.PICKED&&data.docs&&data.docs[0]){
+                var doc=data.docs[0];
+                await importGoogleSheetById(String(doc.id||""),String(doc.name||doc.title||"Google Sheets"),token);
+                resolve(true);return;
+              }
+            }catch(e){setImportLoading(null);setMsg(L("Non riesco a leggere il Foglio Google selezionato. Controlla che il file non sia vuoto e che l'autorizzazione Google sia attiva."));resolve(true);}
+          });
+        try{builder.enableFeature(google.picker.Feature.SUPPORT_DRIVES);}catch(e){}
+        var picker=builder.build();
+        picker.setVisible(true);
+      });
+    }catch(e){setImportLoading(null);var m=String((e&&e.message)||e||"");setMsg(L("Non riesco ad aprire Google Sheets. Verifica che Google Picker API, Drive API e Sheets API siano abilitate, che il dominio sia autorizzato e che l’account Google abbia concesso l’accesso al file selezionato.")+(m?"\n"+m:""));}
+  }
+  function normName(v){return String(v==null?"":v).trim().toLowerCase();}
+  function findByName(list,name){var n=normName(name);if(!n)return null;return (list||[]).find(function(x){return normName(x.name)===n||normName(x.id)===n;})||null;}
+  function uniquePush(arr,val){var v=String(val||"").trim();if(v&&!arr.some(function(x){return normName(x)===normName(v);}))arr.push(v);}
+  function cleanId(prefix,name){return prefix+"_"+String(name||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,42)+"_"+Date.now();}
+  function collectUnknowns(list){var out={expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]};(list||[]).forEach(function(r){var u=r&&r.unknowns?r.unknowns:{};if(u.expenseCategory)uniquePush(out.expenseCategory,u.expenseCategory);if(u.paymentMethod)uniquePush(out.paymentMethod,u.paymentMethod);if(u.incomeType)uniquePush(out.incomeType,u.incomeType);if(u.patrimonioEntry)uniquePush(out.patrimonioEntry,u.patrimonioEntry);});return out;}
+  function unknownTotal(u=unknowns){return (u.expenseCategory||[]).length+(u.paymentMethod||[]).length+(u.incomeType||[]).length+(u.patrimonioEntry||[]).length;}
+  function rowHasUnknown(r){return r&&r.unknowns&&Object.keys(r.unknowns).some(function(k){return !!r.unknowns[k];});}
+  function optionList(kind){if(kind==="expenseCategory")return cats;if(kind==="paymentMethod")return methods;if(kind==="incomeType")return incomeTypes;return pEntries;}
+  function replacementKey(kind,name){return kind+"::"+normName(name);}
+  function selectedReplacement(kind,name){var opts=optionList(kind)||[];if(!opts.length)return null;var key=replacementKey(kind,name);var raw=replacementMap[key];return opts.find(function(x){return String(x.id)===String(raw);})||opts[0];}
   function parseXLSXBuffer(ab){
     return new Promise(function(resolve){
       try{
-        var u8=new Uint8Array(ab),dv=new DataView(ab),entries={},idx=0;
+        var u8=new Uint8Array(ab);
+        if(!u8.length||u8[0]!==0x50||u8[1]!==0x4B){resolve({__unsupported:true});return;}
+        var dv=new DataView(ab),entries={},idx=0;
         while(idx<u8.length-4){if(u8[idx]===0x50&&u8[idx+1]===0x4B&&u8[idx+2]===0x03&&u8[idx+3]===0x04){var cm=dv.getUint16(idx+8,true),cs=dv.getUint32(idx+18,true),fl=dv.getUint16(idx+26,true),el=dv.getUint16(idx+28,true);var fn=String.fromCharCode.apply(null,u8.slice(idx+30,idx+30+fl));var ds2=idx+30+fl+el;entries[fn]={cm:cm,data:u8.slice(ds2,ds2+cs)};idx=ds2+cs;}else idx++;}
         function decomp(data,cb){if(typeof DecompressionStream!=="undefined"){var ds3=new DecompressionStream("deflate-raw"),w=ds3.writable.getWriter(),r=ds3.readable.getReader(),chunks=[];function pump(res){if(res.done){cb(chunks.reduce(function(a,c){var n=new Uint8Array(a.length+c.length);n.set(a);n.set(c,a.length);return n;},new Uint8Array()));return;}chunks.push(res.value);r.read().then(pump);}r.read().then(pump);w.write(data);w.close();}else cb(data);}
         function u8ToStr(u82){return new TextDecoder("utf-8").decode(u82);}
@@ -1035,197 +1352,83 @@ export function ImportData(){
           while((rm=rowRe.exec(xml))!==null){
             var cells={},cRe=/<c r="([A-Z]+)(\d+)"([^>]*)>([\s\S]*?)<\/c>/g,cm2;
             while((cm2=cRe.exec(rm[1]))!==null){
-              var col=cm2[1],attrs=cm2[3],inner=cm2[4];
-              var vm=inner.match(/<v>([^<]*)<\/v>/);
-              var rawVal=vm?vm[1]:"";
-              var val;
-              if(attrs.indexOf('t="s"')>=0){val=ss[parseInt(rawVal,10)]||"";}
-              else if(attrs.indexOf('t="inlineStr"')>=0){var tm2=inner.match(/<t>([^<]*)<\/t>/);val=tm2?tm2[1]:"";}
-              else if(rawVal!==""){var num=parseFloat(rawVal);val=isNaN(num)?rawVal:num;}
-              else{val="";}
+              var col=cm2[1],attrs=cm2[3],inner=cm2[4];var vm=inner.match(/<v>([^<]*)<\/v>/);var rawVal=vm?vm[1]:"";var val;
+              if(attrs.indexOf('t="s"')>=0){val=ss[parseInt(rawVal,10)]||"";}else if(attrs.indexOf('t="inlineStr"')>=0){var tm2=inner.match(/<t[^>]*>([^<]*)<\/t>/);val=tm2?tm2[1]:"";}else if(rawVal!==""){var num=parseFloat(rawVal);val=isNaN(num)?rawVal:num;}else{val="";}
               var ci3=0;for(var ci4=0;ci4<col.length;ci4++)ci3=ci3*26+(col.charCodeAt(ci4)-64);cells[ci3]=val;
             }
             if(Object.keys(cells).length){var mx=Math.max.apply(null,Object.keys(cells).map(Number));var arr2=[];for(var jj=1;jj<=mx;jj++)arr2.push(cells[jj]!==undefined?cells[jj]:"");rows2.push(arr2);}
           }
           return rows2;
         }
-        var ssKey=Object.keys(entries).find(function(k){return k.indexOf("sharedStrings")>=0;});
-        var shKey=Object.keys(entries).find(function(k){return /xl\/worksheets\/[Ss]heet1/.test(k);})||Object.keys(entries).find(function(k){return /xl\/worksheets\/sheet/.test(k);});
-        if(!shKey){resolve(null);return;}
-        function withSS(cb){if(!ssKey){cb([]);return;}var e=entries[ssKey];if(e.cm===0){cb(getSS(u8ToStr(e.data)));return;}decomp(e.data,function(raw){cb(getSS(u8ToStr(raw)));});}
+        var ssKey=Object.keys(entries).find(function(k){return k.indexOf("sharedStrings")>=0;});var shKey=Object.keys(entries).find(function(k){return /xl\/worksheets\/[Ss]heet1/.test(k);})||Object.keys(entries).find(function(k){return /xl\/worksheets\/sheet/.test(k);});
+        if(!shKey){resolve(null);return;}function withSS(cb){if(!ssKey){cb([]);return;}var e=entries[ssKey];if(e.cm===0){cb(getSS(u8ToStr(e.data)));return;}decomp(e.data,function(raw){cb(getSS(u8ToStr(raw)));});}
         withSS(function(ss){var e2=entries[shKey];if(e2.cm===0){resolve(parseSheet(u8ToStr(e2.data),ss));return;}decomp(e2.data,function(raw){resolve(parseSheet(u8ToStr(raw),ss));});});
       }catch(err){resolve(null);}
     });
   }
   function handleFile(e){
-    var file=e.target.files[0];if(!file)return;e.target.value="";
-    var isExcel=/\.(xlsx|xls)$/i.test(file.name);
-    if(isExcel){var reader=new FileReader();reader.onload=function(ev){parseXLSXBuffer(ev.target.result).then(function(data){if(!data||data.length<2){setMsg("Nessun dato nel file Excel.");return;}setCols(data[0].map(function(h){return String(h||"").trim();}));setRows(data.slice(1).filter(function(r){return r.some(function(c){return c;});}));setStep(1);setMsg("");});};reader.readAsArrayBuffer(file);}
-    else{var reader2=new FileReader();reader2.onload=function(ev){var text=ev.target.result;var parsed=parseCSVText(text);if(!parsed||parsed.length<2){setMsg("File CSV vuoto o non valido.");return;}setCols(parsed[0]);setRows(parsed.slice(1).filter(function(r){return r.some(function(c){return c;});}));setStep(1);setMsg("");};reader2.readAsText(file,"UTF-8");}
+    var file=e&&e.target&&e.target.files?e.target.files[0]:null;if(!file)return;
+    try{e.target.value="";}catch(_e){}
+    setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
+    setImportProgress(file.name,"Caricamento file",0);
+    var fileName=String(file.name||"");var fileType=String(file.type||"");
+    var isGoogleSheetNative=/\.gsheet$/i.test(fileName)||fileType==="application/vnd.google-apps.spreadsheet";
+    if(isGoogleSheetNative)setImportProgress(file.name,"Apertura Foglio Google",8);
+    var isExcel=isGoogleSheetNative||/\.(xlsx|xls)$/i.test(fileName)||/spreadsheetml\.sheet|vnd\.ms-excel/i.test(fileType);
+    if(isExcel){
+      var reader=new FileReader();
+      reader.onprogress=function(ev){if(ev.lengthComputable)setImportProgress(file.name,"Lettura file",Math.min(70,(ev.loaded/ev.total)*70));else setImportProgress(file.name,"Lettura file",25);};
+      reader.onerror=function(){setImportLoading(null);setMsg(L("Errore durante la lettura del file."));};
+      reader.onload=function(ev){
+        setImportProgress(file.name,"Analisi file",78);
+        setTimeout(function(){parseXLSXBuffer(ev.target.result).then(function(data){
+          if(data&&data.__unsupported){setImportLoading(null);setMsg(isGoogleSheetNative?L("Il Foglio Google nativo non ha fornito dati leggibili all’app. Da Drive apri il menu del file e scegli Scarica/Esporta come .xlsx oppure .csv, poi importalo qui."):L("Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."));return;}
+          if(!data||data.length<2){setImportLoading(null);setMsg(isGoogleSheetNative?L("Il Foglio Google nativo non ha fornito dati leggibili all’app. Da Drive apri il menu del file e scegli Scarica/Esporta come .xlsx oppure .csv, poi importalo qui."):L("Nessun dato nel file Excel."));return;}
+          applyImportedRows(data,file.name);
+        }).catch(function(){setImportLoading(null);setMsg(L("Errore durante l'analisi del file Excel."));});},0);
+      };
+      reader.readAsArrayBuffer(file);
+    }else{
+      var reader2=new FileReader();
+      reader2.onprogress=function(ev){if(ev.lengthComputable)setImportProgress(file.name,"Lettura file",Math.min(85,(ev.loaded/ev.total)*85));else setImportProgress(file.name,"Lettura file",35);};
+      reader2.onerror=function(){setImportLoading(null);setMsg(L("Errore durante la lettura del file."));};
+      reader2.onload=function(ev){
+        setImportProgress(file.name,"Analisi file",90);
+        var text=ev.target.result;var parsed=parseImportedDelimitedText(text);
+        if(!parsed||parsed.length<2){setImportLoading(null);setMsg(L("File CSV vuoto o non valido."));return;}
+        applyImportedRows(parsed,file.name);
+      };
+      reader2.readAsText(file,"UTF-8");
+    }
   }
   function buildPreview(){
-    if(importType==="patrimonio"){if(!map.monthKey||!map.entryId){setMsg("Mappa almeno Data/Mese e Categoria/Voce");return;}}
-    else if(!map.date||!map.amount){setMsg("Mappa almeno Data e Importo");return;}
-    var di=cols.indexOf(map.date),ai=cols.indexOf(map.amount),dsi=cols.indexOf(map.desc),ci2=cols.indexOf(map.cat),mi=cols.indexOf(map.method),ri=cols.indexOf(map.rate||"");
-    var failCount=0;
-    var p=rows.map(function(r){
-      var rawA=r[ai]||"";
-      var amt=parseMoney(rawA);
-      var rawD=r[di];
-      var iso=parseDateWithFormat(rawD,importDateFmt)||todayStr();
-      var rateVal=0;if(ri>=0){var rv=parseInt(r[ri]);if(!isNaN(rv)&&rv>1&&rv<=60)rateVal=rv;}
-      if(importType==="expense"){var catN=ci2>=0?String(r[ci2]||""):"";var methN=mi>=0?String(r[mi]||""):"";var mc=cats.find(function(c){return c.name.toLowerCase()===catN.toLowerCase();});var mm=methods.find(function(m2){return m2.name.toLowerCase()===methN.toLowerCase();});return{date:iso,amount:isNaN(amt)?0:Math.abs(amt),desc:dsi>=0?String(r[dsi]||""):"",catName:catN,methodName:methN,catId:mc?mc.id:(cats[0]?cats[0].id:1),methodId:mm?mm.id:(methods[0]?methods[0].id:1),rateizzato:rateVal>0,rate:rateVal||12};}
-      if(importType==="income"){return{date:iso,amount:isNaN(amt)?0:Math.abs(amt),desc:dsi>=0?String(r[dsi]||""):"",itype:"salario",rateizzato:rateVal>0,rate:rateVal||12};}
-      // patrimonio: colonna mese (YYYY-MM) + colonna voce + valore
-      if(importType==="patrimonio"){
-        var mkIdx=cols.indexOf(map.monthKey);var eiIdx=cols.indexOf(map.entryId);var noteIdx=cols.indexOf(map.patNote||"");
-        var rawDate=mkIdx>=0?r[mkIdx]:"";
-        var rawEntry=eiIdx>=0?String(r[eiIdx]||"").trim():"";
-        // Converti data in YYYY-MM: se è già YYYY-MM usala; altrimenti parsala come data intera e prendi solo anno-mese
-        var mk="";
-        if(typeof rawDate==="string"&&/^\d{4}-\d{2}$/.test(rawDate.trim())){mk=rawDate.trim();}
-        else{var isoFull=parseDateWithFormat(rawDate,importDateFmt);if(isoFull&&isoFull.length>=7)mk=isoFull.slice(0,7);}
-        // Pulizia importo (rimuovi €, spazi, punti migliaia)
-        var rawAmt=r[ai]||"";var cleanAmt=parseMoney(rawAmt);
-        var noteVal=noteIdx>=0?String(r[noteIdx]||"").trim():"";
-        var pEntry=pEntries.find(function(pe){return pe.name.toLowerCase()===rawEntry.toLowerCase();});
-        return{monthKey:mk,entryId:pEntry?pEntry.id:rawEntry,entryName:rawEntry,amount:isNaN(cleanAmt)?0:Math.abs(cleanAmt),note:noteVal};
-      }
-      return null;
-    }).filter(function(r){return r&&(importType==="patrimonio"?r.monthKey&&r.entryId:r.amount>0);});
-    if(failCount>0)setMsg("⚠️ "+failCount+" date non riconosciute. Verifica il formato selezionato.");
-    else setMsg("");
-    setPreview(p);setStep(2);
+    if(importType==="patrimonio"){if(!map.monthKey||!map.entryId||!map.amount){setMsg(L("Mappa almeno Data/Mese, Categoria/Voce e Importo"));return;}}else if(!map.date||!map.amount){setMsg(L("Mappa almeno Data e Importo"));return;}
+    var di=cols.indexOf(map.date),ai=cols.indexOf(map.amount),dsi=cols.indexOf(map.desc),ci2=cols.indexOf(map.cat),mi=cols.indexOf(map.method),ri=cols.indexOf(map.rate||"");var failCount=0;
+    var p=rows.map(function(r){var rawA=r[ai]||"";var amt=parseImportMoney(rawA);var rateVal=0;if(ri>=0){var rv=parseInt(r[ri]);if(!isNaN(rv)&&rv>1&&rv<=60)rateVal=rv;}
+      if(importType==="expense"){var rawD=r[di];var parsedDate=parseDateWithFormat(rawD,importDateFmt);if(!parsedDate)failCount++;var iso=parsedDate||todayStr();var catN=ci2>=0?String(r[ci2]||"").trim():"";var methN=mi>=0?String(r[mi]||"").trim():"";var mc=findByName(cats,catN);var mm=findByName(methods,methN);var unknown={};if(catN&&!mc)unknown.expenseCategory=catN;if(methN&&!mm)unknown.paymentMethod=methN;return{date:iso,amount:isNaN(amt)?0:Math.abs(amt),desc:dsi>=0?String(r[dsi]||""):"",catName:catN,methodName:methN,catId:mc?mc.id:(cats[0]?cats[0].id:1),methodId:mm?mm.id:(methods[0]?methods[0].id:1),rateizzato:rateVal>0,rate:rateVal||12,unknowns:unknown};}
+      if(importType==="income"){var rawD2=r[di];var parsedDate2=parseDateWithFormat(rawD2,importDateFmt);if(!parsedDate2)failCount++;var iso2=parsedDate2||todayStr();var typeN=ci2>=0?String(r[ci2]||"").trim():"";var it=findByName(incomeTypes,typeN);var unknown2={};if(typeN&&!it)unknown2.incomeType=typeN;return{date:iso2,amount:isNaN(amt)?0:Math.abs(amt),desc:dsi>=0?String(r[dsi]||""):"",typeName:typeN,itype:it?it.id:"salario",rateizzato:rateVal>0,rate:rateVal||12,unknowns:unknown2};}
+      if(importType==="patrimonio"){var mkIdx=cols.indexOf(map.monthKey);var eiIdx=cols.indexOf(map.entryId);var noteIdx=cols.indexOf(map.patNote||"");var rawDate=mkIdx>=0?r[mkIdx]:"";var rawEntry=eiIdx>=0?String(r[eiIdx]||"").trim():"";var mk="";if(typeof rawDate==="string"&&/^\d{4}-\d{2}$/.test(rawDate.trim())){mk=rawDate.trim();}else{var isoFull=parseDateWithFormat(rawDate,importDateFmt);if(isoFull&&isoFull.length>=7)mk=isoFull.slice(0,7);else failCount++;}var rawAmt=r[ai]||"";var cleanAmt=parseImportMoney(rawAmt);var noteVal=noteIdx>=0?String(r[noteIdx]||"").trim():"";var pEntry=findByName(pEntries,rawEntry);var unknown3={};if(rawEntry&&!pEntry)unknown3.patrimonioEntry=rawEntry;return{monthKey:mk,entryId:pEntry?pEntry.id:(pEntries[0]?pEntries[0].id:"altro"),entryName:rawEntry,amount:isNaN(cleanAmt)?0:Math.abs(cleanAmt),note:noteVal,unknowns:unknown3};}
+      return null;}).filter(function(r){return r&&(importType==="patrimonio"?r.monthKey&&r.entryName&&r.amount>=0:r.amount>0);});
+    var u=collectUnknowns(p);if(failCount>0)setMsg("⚠️ "+failCount+" "+L("date non riconosciute. Verifica il formato selezionato."));else setMsg("");setPreview(p);setUnknowns(u);setUnknownDecision("create");setStep(2);
   }
-  function doImport(){
-    var importedOk=true;
-    if(importType==="expense")importedOk=addExpenses(preview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,catId:p.catId,methodId:p.methodId,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");
-    else if(importType==="income")importedOk=addIncomes(preview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,type:p.itype,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");
-    else if(importType==="patrimonio"){
-      var byMonth={};var byMonthNotes={};
-      preview.forEach(function(row){
-        if(!row.monthKey)return;
-        if(!byMonth[row.monthKey])byMonth[row.monthKey]={};
-        if(!byMonthNotes[row.monthKey])byMonthNotes[row.monthKey]={};
-        byMonth[row.monthKey][row.entryId]=row.amount;
-        if(row.note)byMonthNotes[row.monthKey][row.entryId]=row.note;
-      });
-      var newHist={...(patrimonioHistory||{})};
-      Object.keys(byMonth).forEach(function(mk){
-        var snap={...(newHist[mk]||{}),...byMonth[mk]};
-        snap._total=Object.keys(snap).filter(function(k){return !k.startsWith("_");}).reduce(function(a,k){return a+(parseFloat(snap[k])||0);},0);
-        snap._savedAt=new Date().toISOString();
-        newHist[mk]=snap;
-      });
-      setPatrimonioHistory(newHist);
-      if(Object.keys(byMonthNotes).length>0){
-        var allNotes={};
-        Object.keys(byMonthNotes).forEach(function(mk){Object.assign(allNotes,byMonthNotes[mk]);});
-        setPatrimonioNotes(function(n){return{...(n||{}),...allNotes};});
-      }
-    }
-    if(!importedOk)return;
-    var typeLabel=importType==="expense"?"uscite":importType==="income"?"entrate":"voci patrimonio";
-    setImportSuccess({count:preview.length,type:typeLabel});
-    resetAll();
-  }
+  function resolvePreviewRows(){var mode=unknownTotal()>0?unknownDecision:"create";if(mode==="skip")return preview.filter(function(r){return !rowHasUnknown(r);});var catMap={},methodMap={},incomeMap={},patMap={};if(mode==="create"){var now=Date.now();var newCats=(unknowns.expenseCategory||[]).filter(function(n){return !findByName(cats,n);}).map(function(n,i){return{id:now+i+11,name:n,icon:"📦",color:"#D3D1C7",group:"altro"};});var newMethods=(unknowns.paymentMethod||[]).filter(function(n){return !findByName(methods,n);}).map(function(n,i){return{id:now+i+1011,name:n,icon:"💳",color:"#D3D1C7",group:"altri"};});var newIncome=(unknowns.incomeType||[]).filter(function(n){return !findByName(incomeTypes,n);}).map(function(n,i){return{id:cleanId("income",n),name:n,icon:"💰",color:"#9FE1CB",group:"extra_inc",custom:true};});var newPat=(unknowns.patrimonioEntry||[]).filter(function(n){return !findByName(pEntries,n);}).map(function(n,i){return{id:cleanId("pat",n),name:n,icon:"📦",areaId:"altro"};});newCats.forEach(function(x){catMap[normName(x.name)]=x.id;});newMethods.forEach(function(x){methodMap[normName(x.name)]=x.id;});newIncome.forEach(function(x){incomeMap[normName(x.name)]=x.id;});newPat.forEach(function(x){patMap[normName(x.name)]=x.id;});if(newCats.length&&setCats)setCats(function(list){return (list||[]).concat(newCats);});if(newMethods.length&&setMethods)setMethods(function(list){return (list||[]).concat(newMethods);});if(newIncome.length&&setCustomIncomeTypes)setCustomIncomeTypes(function(list){return (list||[]).concat(newIncome);});if(newPat.length&&setPatrimonioEntries)setPatrimonioEntries(function(list){return (list||DEFAULT_PATRIMONIO_ENTRIES).concat(newPat);});}
+    return preview.map(function(r){var out={...r,unknowns:{}};if(rowHasUnknown(r)){if(mode==="replace"){if(r.unknowns.expenseCategory){var c=selectedReplacement("expenseCategory",r.unknowns.expenseCategory);if(c)out.catId=c.id;}if(r.unknowns.paymentMethod){var m=selectedReplacement("paymentMethod",r.unknowns.paymentMethod);if(m)out.methodId=m.id;}if(r.unknowns.incomeType){var it=selectedReplacement("incomeType",r.unknowns.incomeType);if(it)out.itype=it.id;}if(r.unknowns.patrimonioEntry){var pe=selectedReplacement("patrimonioEntry",r.unknowns.patrimonioEntry);if(pe)out.entryId=pe.id;}}else{if(r.unknowns.expenseCategory)out.catId=catMap[normName(r.unknowns.expenseCategory)]||out.catId;if(r.unknowns.paymentMethod)out.methodId=methodMap[normName(r.unknowns.paymentMethod)]||out.methodId;if(r.unknowns.incomeType)out.itype=incomeMap[normName(r.unknowns.incomeType)]||out.itype;if(r.unknowns.patrimonioEntry)out.entryId=patMap[normName(r.unknowns.patrimonioEntry)]||out.entryId;}}return out;});}
+  function doImport(){var finalPreview=resolvePreviewRows();if(!finalPreview.length){setMsg(L("Nessuna voce valida da importare."));return;}var importedOk=true;if(importType==="expense")importedOk=addExpenses(finalPreview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,catId:p.catId,methodId:p.methodId,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");else if(importType==="income")importedOk=addIncomes(finalPreview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,type:p.itype,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");else if(importType==="patrimonio"){var byMonth={};var byMonthNotes={};finalPreview.forEach(function(row){if(!row.monthKey)return;if(!byMonth[row.monthKey])byMonth[row.monthKey]={};if(!byMonthNotes[row.monthKey])byMonthNotes[row.monthKey]={};byMonth[row.monthKey][row.entryId]=row.amount;if(row.note)byMonthNotes[row.monthKey][row.entryId]=row.note;});var newHist={...(patrimonioHistory||{})};Object.keys(byMonth).forEach(function(mk){var snap={...(newHist[mk]||{}),...byMonth[mk]};snap._total=Object.keys(snap).filter(function(k){return !String(k).startsWith("_");}).reduce(function(a,k){return a+(parseFloat(snap[k])||0);},0);snap._savedAt=new Date().toISOString();newHist[mk]=snap;});setPatrimonioHistory(newHist);if(Object.keys(byMonthNotes).length>0){var allNotes={};Object.keys(byMonthNotes).forEach(function(mk){Object.assign(allNotes,byMonthNotes[mk]);});setPatrimonioNotes(function(n){return{...(n||{}),...allNotes};});}}if(!importedOk)return;var typeLabel=importType==="expense"?"uscite":importType==="income"?"entrate":"voci patrimonio";setImportSuccess({count:finalPreview.length,type:typeLabel});if(unknownTotal()>0&&setToast)setToast({text:L("Importazione completata con gestione dei valori sconosciuti"),type:"success",icon:"✅"});resetAll();}
+  function unknownSection(kind,title,items){if(!items||!items.length)return null;var opts=optionList(kind)||[];return <div style={{background:dark?"#202033":"#fff",border:"1px solid "+(dark?"#444":"#eee"),borderRadius:10,padding:10,marginTop:8}}><div style={{fontSize:12,fontWeight:700,color:tc,marginBottom:6}}>{L(title)} ({items.length})</div>{items.map(function(name){var key=replacementKey(kind,name);return <div key={key} style={{display:"grid",gridTemplateColumns:unknownDecision==="replace"?"1fr 1fr":"1fr",gap:8,alignItems:"center",padding:"5px 0",borderTop:"1px solid "+(dark?"#333":"#f0f0f0")}}><div style={{fontSize:12,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>• {name}</div>{unknownDecision==="replace"&&<select value={String((replacementMap[key]!==undefined?replacementMap[key]:(opts[0]?opts[0].id:"")))} onChange={function(e){var v=e.target.value;setReplacementMap(function(m){return{...m,[key]:v};});}} style={{...sinp,width:"100%"}}>{opts.map(function(o){return <option key={String(o.id)} value={String(o.id)}>{o.icon?o.icon+" ":""}{o.name}</option>;})}</select>}</div>;})}</div>;}
+  function unknownResolutionBox(){var total=unknownTotal();if(!total)return null;return <div style={{background:dark?"#2a2414":"#FFF8E1",border:"1px solid "+(dark?"#6a5520":"#FFD54F"),borderRadius:12,padding:14,marginBottom:12}}><div style={{fontSize:14,fontWeight:800,color:dark?"#FFD54F":"#856404",marginBottom:5}}>⚠️ {L("Valori non presenti in fAInance")}</div><div style={{fontSize:12,color:dark?"#f5d98a":"#856404",lineHeight:1.45,marginBottom:12}}>{L("Prima di importare scegli come gestire categorie, metodi o voci sconosciute trovate nel file.")}</div><div style={{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:10}}>{[{id:"create",label:"Creiamo queste nuove categorie"},{id:"replace",label:"Sostituiamo queste categorie sconosciute con una già esistente"},{id:"skip",label:"Non importiamo queste transazioni e importiamo solo quelle corrette"}].map(function(o){var active=unknownDecision===o.id;return <button key={o.id} onClick={function(){setUnknownDecision(o.id);}} style={{background:active?(ctx.confirmButtonColor||"#7F77DD"):(dark?"#252535":"#fff"),color:active?"#fff":tc,border:"1px solid "+(active?(ctx.confirmButtonColor||"#7F77DD"):(dark?"#555":"#ddd")),borderRadius:10,padding:"10px 12px",fontSize:12,fontWeight:700,textAlign:"left",cursor:"pointer"}}>{L(o.label)}</button>;})}</div>{unknownDecision==="skip"&&<div style={{fontSize:12,color:dark?"#f5d98a":"#856404",marginBottom:8}}>{L("Le righe con valori sconosciuti saranno escluse dall'importazione.")}</div>}{unknownSection("expenseCategory","Categorie di Uscita sconosciute",unknowns.expenseCategory)}{unknownSection("paymentMethod","Metodi di Pagamento sconosciuti",unknowns.paymentMethod)}{unknownSection("incomeType","Categorie di Entrata sconosciute",unknowns.incomeType)}{unknownSection("patrimonioEntry","Categorie del Patrimonio sconosciute",unknowns.patrimonioEntry)}</div>;}
   var tabColor=importType==="expense"?"#E24B4A":importType==="income"?"#1D9E75":"#7F77DD";
-  var IMPORT_GUIDELINES={
-    expense:{title:"📋 Formato file Uscite",body:"Il file deve avere le colonne:\n• Data (es. 31/12/2025)\n• Importo (es. 150,00 oppure € 150)\n• Categoria (nome della categoria, es. Supermercato)\n• Metodo (es. Revolut)\n• Descrizione (testo libero, opzionale)\n• Rate (numero di mesi, opzionale)"},
-    income:{title:"📋 Formato file Entrate",body:"Il file deve avere le colonne:\n• Data (es. 31/12/2025)\n• Importo (es. 1500,00)\n• Tipo entrata (es. Busta paga / Salario)\n• Descrizione (testo libero, opzionale)\n• Rate (numero di mesi, opzionale)"},
-    patrimonio:{title:"📋 Formato file Patrimonio",body:"Il file deve avere le colonne:\n• Data (es. 01/04/2026) — verrà convertita in mese YYYY-MM\n• Importo (es. € 20.000)\n• Categoria (nome voce patrimonio, es. Conto corrente)\n• Note (testo libero, opzionale)\n\nOgni riga = valore di una voce per un determinato mese."},
-  };
-  return <div style={{display:"flex",flexDirection:"column",gap:14}}>
-    {/* Success popup */}
-    {importSuccess&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(){setImportSuccess(null);}}>
-      <div style={{background:dark?"#1e1e30":"#fff",borderRadius:20,padding:32,textAlign:"center",maxWidth:320,width:"100%",boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}>
-        <div style={{fontSize:56,marginBottom:12}}>✅</div>
-        <div style={{fontSize:20,fontWeight:700,color:dark?"#eee":"#333",marginBottom:8}}>{L("Importazione completata!")}</div>
-        <div style={{fontSize:15,color:dark?"#aaa":"#666",marginBottom:6}}>
-          <span style={{fontSize:28,fontWeight:700,color:importType==="expense"?"#E24B4A":importType==="income"?"#1D9E75":"#7F77DD",display:"block",marginBottom:4}}>{importSuccess.count}</span>
-          {L(importSuccess.type)} {L("importate con successo")}
-        </div>
-        <button onClick={function(){setImportSuccess(null);}} style={{marginTop:16,background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:12,padding:"12px 32px",fontSize:14,fontWeight:600,cursor:"pointer"}}>OK</button>
-      </div>
-    </div>}
-
-    <div style={{display:"flex",gap:0,background:dark?"#333":"#f5f5f5",borderRadius:12,padding:3}}>
-      <button onClick={function(){setImportType("expense");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="expense"?"#E24B4A":"transparent",color:importType==="expense"?"#fff":(dark?"#aaa":"#888"),fontSize:14,cursor:"pointer",fontWeight:importType==="expense"?500:400}}>{"💸 "+L("Uscite")}</button>
-      <button onClick={function(){setImportType("income");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="income"?"#1D9E75":"transparent",color:importType==="income"?"#fff":(dark?"#aaa":"#888"),fontSize:14,cursor:"pointer",fontWeight:importType==="income"?500:400}}>{"💰 "+L("Entrate")}</button>
-      <button onClick={function(){setImportType("patrimonio");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="patrimonio"?"#7F77DD":"transparent",color:importType==="patrimonio"?"#fff":(dark?"#aaa":"#888"),fontSize:14,cursor:"pointer",fontWeight:importType==="patrimonio"?500:400}}>{"💎 "+L("Patrimonio")}</button>
-    </div>
-
-    {/* Linee guida sempre visibili allo step 0 */}
-    {step===0&&<div style={{background:importType==="patrimonio"?(dark?"#252535":"#f0edff"):importType==="expense"?(dark?"#2a1e1e":"#fff5f5"):(dark?"#1e2a1e":"#f0faf5"),borderRadius:10,border:"1px solid "+(importType==="patrimonio"?(dark?"#44408a":"#c8c0f8"):importType==="expense"?(dark?"#5a2a2a":"#fcc"):( dark?"#2a5a2a":"#a8e6c8")),padding:"12px 16px"}}>
-      <div style={{fontSize:12,fontWeight:700,color:importType==="patrimonio"?"#534AB7":importType==="expense"?"#E24B4A":"#1D9E75",marginBottom:6}}>{L(IMPORT_GUIDELINES[importType].title)}</div>
-      <div style={{fontSize:12,color:dark?"#aaa":"#555",lineHeight:1.7,whiteSpace:"pre-line"}}>{L(IMPORT_GUIDELINES[importType].body)}</div>
-    </div>}
+  var IMPORT_GUIDELINES={expense:{title:"Formato file Uscite",body:"Il file deve avere le colonne:\n• Data (es. 31/12/2025)\n• Importo (es. 150,00 oppure € 150)\n• Categoria (nome della categoria, es. Supermercato)\n• Metodo (es. Revolut)\n• Descrizione (testo libero, opzionale)\n• Rate (numero di mesi, opzionale)"},income:{title:"Formato file Entrate",body:"Il file deve avere le colonne:\n• Data (es. 31/12/2025)\n• Importo (es. 1500,00)\n• Tipo entrata (es. Busta paga / Salario)\n• Descrizione (testo libero, opzionale)\n• Rate (numero di mesi, opzionale)"},patrimonio:{title:"Formato file Patrimonio",body:"Il file deve avere le colonne:\n• Data (es. 01/04/2026) — verrà convertita in mese YYYY-MM\n• Importo (es. € 20.000)\n• Categoria (nome voce patrimonio, es. Conto corrente)\n• Note (testo libero, opzionale)\n\nOgni riga = valore di una voce per un determinato mese."}};
+  return <div style={{display:"flex",flexDirection:"column",gap:14}}>{importSuccess&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(){setImportSuccess(null);}}><div style={{background:dark?"#1e1e30":"#fff",borderRadius:20,padding:32,textAlign:"center",maxWidth:320,width:"100%",boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}><div style={{fontSize:56,marginBottom:12}}>✅</div><div style={{fontSize:20,fontWeight:700,color:tc,marginBottom:8}}>{L("Importazione completata!")}</div><div style={{fontSize:15,color:sc,marginBottom:6}}><span style={{fontSize:28,fontWeight:700,color:tabColor,display:"block",marginBottom:4}}>{importSuccess.count}</span>{L(importSuccess.type)} {L("importate con successo")}</div><button onClick={function(){setImportSuccess(null);}} style={{marginTop:16,background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:12,padding:"12px 32px",fontSize:14,fontWeight:600,cursor:"pointer"}}>OK</button></div></div>}
+    {importLoading&&<div style={{background:dark?"#202033":"#EEF4FF",border:"1px solid "+(dark?"#3d376a":"#BFD7FF"),borderRadius:12,padding:"12px 14px"}}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",marginBottom:8}}><div style={{fontSize:13,fontWeight:800,color:tc}}>📥 {importLoading.stage||L("Caricamento file")}</div><div style={{fontSize:12,fontWeight:900,color:tabColor}}>{importLoading.pct||0}%</div></div><div style={{fontSize:11,color:sc,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{importLoading.file}</div><div style={{height:7,borderRadius:99,background:dark?"#333":"#DDE8FF",overflow:"hidden"}}><div style={{height:"100%",width:(importLoading.pct||0)+"%",background:tabColor,borderRadius:99,transition:"width .15s linear"}}/></div></div>}
+    <div style={{display:"flex",gap:0,background:dark?"#333":"#f5f5f5",borderRadius:12,padding:3}}><button onClick={function(){setImportType("expense");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="expense"?"#E24B4A":"transparent",color:importType==="expense"?"#fff":sc,fontSize:14,cursor:"pointer",fontWeight:importType==="expense"?500:400}}>{"💸 "+L("Uscite")}</button><button onClick={function(){setImportType("income");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="income"?"#1D9E75":"transparent",color:importType==="income"?"#fff":sc,fontSize:14,cursor:"pointer",fontWeight:importType==="income"?500:400}}>{"💰 "+L("Entrate")}</button><button onClick={function(){setImportType("patrimonio");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="patrimonio"?"#7F77DD":"transparent",color:importType==="patrimonio"?"#fff":sc,fontSize:14,cursor:"pointer",fontWeight:importType==="patrimonio"?500:400}}>{"💎 "+L("Patrimonio")}</button></div>
+    {step===0&&<div style={{background:importType==="patrimonio"?(dark?"#252535":"#f0edff"):importType==="expense"?(dark?"#2a1e1e":"#fff5f5"):(dark?"#1e2a1e":"#f0faf5"),borderRadius:10,border:"1px solid "+(importType==="patrimonio"?(dark?"#44408a":"#c8c0f8"):importType==="expense"?(dark?"#5a2a2a":"#fcc"):( dark?"#2a5a2a":"#a8e6c8")),padding:"12px 16px"}}><div style={{fontSize:12,fontWeight:700,color:importType==="patrimonio"?"#534AB7":importType==="expense"?"#E24B4A":"#1D9E75",marginBottom:6}}>{L(IMPORT_GUIDELINES[importType].title)}</div><div style={{fontSize:12,color:sc,lineHeight:1.7,whiteSpace:"pre-line"}}>{L(IMPORT_GUIDELINES[importType].body)}</div></div>}
     {msg&&<div style={{background:msg.startsWith("Import")?"#e8f8f0":msg.startsWith("⚠")?"#fff8e1":"#fff3cd",borderRadius:8,padding:"10px 14px",fontSize:13,color:msg.startsWith("Import")?"#1D9E75":"#856404"}}>{msg}</div>}
-    {step===0&&<div
-      style={{background:dark?"#252535":"#f9f9f9",borderRadius:12,border:"2px dashed "+(dark?"#555":"#ddd"),padding:"36px 24px",textAlign:"center",cursor:"pointer"}}
-      onClick={function(){fileRef.current.click();}}
-      onDragOver={function(e){e.preventDefault();}}
-      onDrop={function(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f){var fake={target:{files:[f],value:""}};handleFile(fake);}}}
-    >
-      <div style={{fontSize:36,marginBottom:8}}>📂</div>
-      <div style={{fontSize:14,fontWeight:500,color:tc,marginBottom:4}}>Trascina qui un file Excel o CSV</div>
-      <div style={{fontSize:12,color:sc,marginBottom:12}}>oppure clicca per sfogliare</div>
-      <div style={{display:"flex",justifyContent:"center",gap:8}}>
-        <span style={{background:dark?"#333":"#eee",borderRadius:8,padding:"3px 10px",fontSize:12,color:sc}}>.xlsx</span>
-        <span style={{background:dark?"#333":"#eee",borderRadius:8,padding:"3px 10px",fontSize:12,color:sc}}>.xls</span>
-        <span style={{background:dark?"#333":"#eee",borderRadius:8,padding:"3px 10px",fontSize:12,color:sc}}>.csv</span>
-      </div>
-    </div>}
-    <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.txt" style={{display:"none"}} onChange={handleFile}/>
-    {step===1&&<div style={{background:dark?"#252535":"#f9f9f9",borderRadius:12,border:"1px solid "+(dark?"#444":"#eee"),padding:16}}>
-      <div style={{fontSize:13,fontWeight:500,marginBottom:12,color:tc}}>Mappa colonne ({rows.length} righe)</div>
-      {importType!=="patrimonio"&&<div style={{marginBottom:14,background:dark?"#1e1e30":"#f0f8ff",borderRadius:10,padding:"12px 14px",border:"1px solid "+(dark?"#334":"#c8e0ff")}}>
-        <label style={{fontSize:12,fontWeight:600,color:dark?"#8bf":"#1a5fa8",display:"block",marginBottom:6}}>📅 Formato delle date nel file</label>
-        <select value={importDateFmt} onChange={function(e){setImportDateFmt(e.target.value);}} style={{...sinp,width:"100%"}}>
-          <option value="dmy">GG/MM/AAAA (europeo)</option>
-          <option value="mdy">MM/GG/AAAA (americano)</option>
-          <option value="ymd">{L("AAAA-MM-GG (ISO)")}</option>
-          <option value="auto">{L("Rilevamento automatico")}</option>
-        </select>
-      </div>}
-      {importType==="patrimonio"&&<div style={{marginBottom:14,background:dark?"#1e1e30":"#f0edff",borderRadius:10,padding:"12px 14px",border:"1px solid "+(dark?"#44408a":"#c8c0f8")}}>
-        <label style={{fontSize:12,fontWeight:600,color:"#534AB7",display:"block",marginBottom:6}}>📅 Formato della colonna Data nel file</label>
-        <select value={importDateFmt} onChange={function(e){setImportDateFmt(e.target.value);}} style={{...sinp,width:"100%"}}>
-          <option value="dmy">GG/MM/AAAA (europeo — es. 01/04/2026)</option>
-          <option value="mdy">MM/GG/AAAA (americano)</option>
-          <option value="ymd">{L("AAAA-MM-GG (ISO)")}</option>
-          <option value="ym">{L("AAAA-MM (già nel formato corretto)")}</option>
-          <option value="auto">{L("Rilevamento automatico")}</option>
-        </select>
-      </div>}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-        {importType==="patrimonio"
-          ?[["monthKey","Data / Mese *"],["entryId","Categoria / Voce *"],["amount","Importo / Valore *"],["patNote","Note (opzionale)"]].map(function(pair){var k=pair[0],l=pair[1];return <div key={k}><label style={{fontSize:12,color:sc,display:"block",marginBottom:3}}>{L(l)}</label><select value={map[k]||""} onChange={function(e){var v=e.target.value;setMap(function(p){return{...p,[k]:v};});}} style={{...sinp,width:"100%"}}><option value="">{L("-- nessuna --")}</option>{cols.map(function(c,ci5){return <option key={ci5} value={c}>{c||"(col. "+(ci5+1)+")"}</option>;})}</select></div>;})
-          :(importType==="expense"?[["date","Data *"],["amount","Importo *"],["desc","Descrizione"],["cat","Categoria"],["method","Metodo di pagamento"],["rate","Rate (mesi)"]]:
-            [["date","Data *"],["amount","Importo *"],["desc","Descrizione"],["cat","Tipo entrata"],["rate","Rate (mesi)"]]).map(function(pair){var k=pair[0],l=pair[1];return <div key={k}><label style={{fontSize:12,color:sc,display:"block",marginBottom:3}}>{L(l)}</label><select value={map[k]||""} onChange={function(e){var v=e.target.value;setMap(function(p){return{...p,[k]:v};});}} style={{...sinp,width:"100%"}}><option value="">{L("-- nessuna --")}</option>{cols.map(function(c,ci5){return <option key={ci5} value={c}>{c||"(col. "+(ci5+1)+")"}</option>;})}</select></div>;})}
-      </div>
-      <div style={{display:"flex",gap:8}}><Btn onClick={buildPreview}>{L("Anteprima")}</Btn><Btn onClick={function(){setStep(0);}} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#666"}>{L("Indietro")}</Btn></div>
-    </div>}
-    {step===2&&<div>
-      <div style={{fontSize:13,color:sc,marginBottom:10}}>{preview.length} voci trovate</div>
-      <div style={{overflowX:"auto",maxHeight:240,overflowY:"auto",border:"1px solid "+(dark?"#444":"#eee"),borderRadius:8}}>
-        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-          <thead style={{background:dark?"#252535":"#f5f5f5",position:"sticky",top:0}}><tr>
-            {importType==="patrimonio"
-              ?["Mese","Categoria","Valore","Note"].map(function(h){return <th key={h} style={{padding:"8px 10px",textAlign:"left",fontWeight:500,color:sc}}>{h}</th>;})
-              :["Data","Importo","Descrizione","Cat/Tipo"].map(function(h){return <th key={h} style={{padding:"8px 10px",textAlign:"left",fontWeight:500,color:sc}}>{h}</th>;})}
-          </tr></thead>
-          <tbody>
-            {preview.map(function(r,i){return <tr key={i} style={{borderBottom:"1px solid "+(dark?"#333":"#f5f5f5")}}>
-              {importType==="patrimonio"
-                ?<><td style={{padding:"6px 10px",color:tc}}>{r.monthKey}</td><td style={{padding:"6px 10px",color:tc}}>{r.entryName}</td><td style={{padding:"6px 10px",color:"#7F77DD",fontWeight:500}}>{fmtAmt(r.amount,sym)}</td><td style={{padding:"6px 10px",color:sc,fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.note||"—"}</td></>
-                :<><td style={{padding:"6px 10px",color:tc}}>{fmtDate(r.date,ctx.dateFmt)}</td><td style={{padding:"6px 10px",color:tabColor,fontWeight:500}}>{fmtAmt(r.amount,sym)}</td><td style={{padding:"6px 10px",color:tc}}>{r.desc}</td><td style={{padding:"6px 10px",fontSize:11,color:sc}}>{importType==="expense"?(r.catName||"-"):r.itype}</td></>}
-            </tr>;})}
-          </tbody>
-        </table>
-      </div>
-      <div style={{display:"flex",gap:8,marginTop:12}}><Btn onClick={doImport} bg={tabColor} style={{padding:"10px 20px",fontSize:14,fontWeight:500}}>Importa {preview.length} voci</Btn><Btn onClick={function(){setStep(1);}} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#666"}>{L("Indietro")}</Btn></div>
-    </div>}
+    {step===0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignItems:"stretch"}} onDragOver={function(e){e.preventDefault();}} onDrop={function(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f){var fake={target:{files:[f],value:""}};handleFile(fake);}}}>
+      <button type="button" onClick={openImportPicker} style={{width:"100%",border:"1px solid "+(dark?"#444":"#d7d7d7"),background:dark?"#252535":"#f7f7f7",borderRadius:12,padding:"13px 10px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:tc,fontSize:13,fontWeight:800,cursor:"pointer",minHeight:54,boxShadow:"none"}}><span style={{fontSize:18}}>📁</span><span>{L("Importa dal Telefono")}</span></button>
+      <button type="button" onClick={openGoogleSheetsPicker} style={{width:"100%",border:"1px solid "+(dark?"#444":"#d7d7d7"),background:dark?"#252535":"#f7f7f7",borderRadius:12,padding:"13px 10px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:tc,fontSize:13,fontWeight:800,cursor:"pointer",minHeight:54,boxShadow:"none"}}><span style={{fontSize:18}}>☁️</span><span>{L("Importa da Google Drive")}</span></button>
+    </div>}<input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={handleFile}/>
+    {step===1&&<div style={{background:dark?"#252535":"#f9f9f9",borderRadius:12,border:"1px solid "+(dark?"#444":"#eee"),padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:12,color:tc}}>{L("Mappa colonne")} ({rows.length} {L("righe")})</div><div style={{marginBottom:14,background:dark?"#1e1e30":"#f0f8ff",borderRadius:10,padding:"12px 14px",border:"1px solid "+(dark?"#334":"#c8e0ff")}}><label style={{fontSize:12,fontWeight:600,color:dark?"#8bf":"#1a5fa8",display:"block",marginBottom:6}}>📅 {L("Formato delle date nel file")}</label><select value={importDateFmt} onChange={function(e){setImportDateFmt(e.target.value);}} style={{...sinp,width:"100%"}}><option value="dmy">GG/MM/AAAA (europeo)</option><option value="mdy">MM/GG/AAAA (americano)</option><option value="ymd">{L("AAAA-MM-GG (ISO)")}</option><option value="ym">{L("AAAA-MM (già nel formato corretto)")}</option><option value="auto">{L("Rilevamento automatico")}</option></select></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>{(importType==="patrimonio"?[["monthKey","Data / Mese *"],["entryId","Categoria / Voce *"],["amount","Importo / Valore *"],["patNote","Note (opzionale)"]]:(importType==="expense"?[["date","Data *"],["amount","Importo *"],["desc","Descrizione"],["cat","Categoria"],["method","Metodo di pagamento"],["rate","Rate (mesi)"]]:[["date","Data *"],["amount","Importo *"],["desc","Descrizione"],["cat","Tipo entrata"],["rate","Rate (mesi)"]])).map(function(pair){var k=pair[0],l=pair[1];return <div key={k}><label style={{fontSize:12,color:sc,display:"block",marginBottom:3}}>{L(l)}</label><select value={map[k]||""} onChange={function(e){var v=e.target.value;setMap(function(p){return{...p,[k]:v};});}} style={{...sinp,width:"100%"}}><option value="">{L("-- nessuna --")}</option>{cols.map(function(c,ci5){return <option key={ci5} value={c}>{c||("(col. "+(ci5+1)+")")}</option>;})}</select></div>;})}</div><div style={{display:"flex",gap:8}}><Btn onClick={buildPreview}>{L("Anteprima")}</Btn><Btn onClick={function(){setStep(0);}} bg={dark?"#333":"#f0f0f0"} color={tc}>{L("Indietro")}</Btn></div></div>}
+    {step===2&&<div>{unknownResolutionBox()}<div style={{fontSize:13,color:sc,marginBottom:10}}>{preview.length} {L("voci trovate")}{unknownTotal()>0?" · "+unknownTotal()+" "+L("valori sconosciuti"):""}</div><div style={{overflowX:"auto",maxHeight:260,overflowY:"auto",border:"1px solid "+(dark?"#444":"#eee"),borderRadius:8}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead style={{background:dark?"#252535":"#f5f5f5",position:"sticky",top:0}}><tr>{(importType==="patrimonio"?["Mese","Categoria","Valore","Note","Stato"]:["Data","Importo","Descrizione","Cat/Tipo","Stato"]).map(function(h){return <th key={h} style={{padding:"8px 10px",textAlign:"left",fontWeight:500,color:sc}}>{L(h)}</th>;})}</tr></thead><tbody>{preview.map(function(r,i){var warn=rowHasUnknown(r);return <tr key={i} style={{borderBottom:"1px solid "+(dark?"#333":"#f5f5f5"),background:warn?(dark?"#2a2414":"#fffaf0"):"transparent"}}>{importType==="patrimonio"?<><td style={{padding:"6px 10px",color:tc}}>{r.monthKey}</td><td style={{padding:"6px 10px",color:tc}}>{r.entryName}</td><td style={{padding:"6px 10px",color:"#7F77DD",fontWeight:500}}>{fmtAmt(r.amount,sym)}</td><td style={{padding:"6px 10px",color:sc,fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.note||"—"}</td><td style={{padding:"6px 10px",color:warn?"#EF9F27":sc,fontSize:11}}>{warn?L("Da gestire"):L("OK")}</td></>:<><td style={{padding:"6px 10px",color:tc}}>{fmtDate(r.date,ctx.dateFmt)}</td><td style={{padding:"6px 10px",color:tabColor,fontWeight:500}}>{fmtAmt(r.amount,sym)}</td><td style={{padding:"6px 10px",color:tc}}>{r.desc}</td><td style={{padding:"6px 10px",fontSize:11,color:sc}}>{importType==="expense"?(r.catName||"-"):(r.typeName||r.itype)}</td><td style={{padding:"6px 10px",color:warn?"#EF9F27":sc,fontSize:11}}>{warn?L("Da gestire"):L("OK")}</td></>}</tr>;})}</tbody></table></div><div style={{display:"flex",gap:8,marginTop:12}}><Btn onClick={doImport} bg={tabColor} style={{padding:"10px 20px",fontSize:14,fontWeight:500}}>{L("Importa")} {unknownDecision==="skip"?preview.filter(function(r){return !rowHasUnknown(r);}).length:preview.length} {L("voci")}</Btn><Btn onClick={function(){setStep(1);}} bg={dark?"#333":"#f0f0f0"} color={tc}>{L("Indietro")}</Btn></div></div>}
   </div>;
 }
 

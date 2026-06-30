@@ -1196,6 +1196,19 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     ensureArrayValue(local,[]).forEach(add);
     return out;
   }
+  function mergeArrayByStableIdPreferLocal(cloud,local,fallback){
+    var map={};var order=[];
+    function put(item,prefer){
+      if(item==null)return;
+      var id=item&&item.id!=null?String(item.id):JSON.stringify(item);
+      if(order.indexOf(id)<0)order.push(id);
+      if(prefer||!map[id])map[id]=item;
+    }
+    ensureArrayValue(fallback,[]).forEach(function(x){put(x,false);});
+    ensureArrayValue(cloud,[]).forEach(function(x){put(x,false);});
+    ensureArrayValue(local,[]).forEach(function(x){put(x,true);});
+    return order.map(function(id){return map[id];}).filter(Boolean);
+  }
   function chooseCloudLocalArray(cloud,local,fallback,merge){
     var c=Array.isArray(cloud)?cloud:null;
     var l=Array.isArray(local)?local:null;
@@ -1210,6 +1223,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return fallback||{};
   }
   var firestoreHydratedRef=useRef(false);
+  var firestoreLoadSeqRef=useRef(0);
 
   var [lang,setLang]=useStorage("pref_lang_v2",getDefaultLang());
   var [expenses,setExpenses]=useStorage(userKey("exp_v10"),[]);
@@ -1501,77 +1515,108 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [isOffline,setIsOffline]=useState(!navigator.onLine);
   useEffect(function(){function goOnline(){setIsOffline(false);}function goOffline(){setIsOffline(true);}window.addEventListener("online",goOnline);window.addEventListener("offline",goOffline);return function(){window.removeEventListener("online",goOnline);window.removeEventListener("offline",goOffline);};},[]);
   useEffect(function(){
-    if(!userId){setFirestoreReady(true);return;}
+    if(!userId){firestoreHydratedRef.current=true;setFirestoreReady(true);return;}
+    var cancelled=false;
+    var loadSeq=firestoreLoadSeqRef.current+1;
+    firestoreLoadSeqRef.current=loadSeq;
     firestoreHydratedRef.current=false;
     setFirestoreReady(false);
-    // Reset immediato dei dati sensibili quando cambia account: evita che il nuovo account erediti
-    // in memoria alert, movimenti, chat o appunti del profilo usato prima mentre Firestore sta caricando.
-    setExpenses([]);setIncomes([]);setRecurring([]);setGoals(DEFAULT_GOALS);setAlerts([]);setBudgetPlan(DEFAULT_BUDGET_PLAN);
-    setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShareReceiptUploads([]);setCustomNotifs([]);setPlanUsage({});setShownAlertIds([]);
-    // Load data from Firestore before enabling the UI, so one account can never inherit local data from another account.
+    function finishLoad(){
+      if(cancelled||firestoreLoadSeqRef.current!==loadSeq)return;
+      firestoreHydratedRef.current=true;
+      setFirestoreReady(true);
+    }
+    var fallbackTimer=setTimeout(function(){
+      if(cancelled||firestoreLoadSeqRef.current!==loadSeq)return;
+      console.warn("Firestore load timeout: apro l'app con i dati locali e salvo in cloud appena possibile.");
+      finishLoad();
+    },6500);
+    function finishLoadAndClear(){clearTimeout(fallbackTimer);finishLoad();}
+    // Non svuotare più gli stati locali all'ingresso: useStorage ora ricarica i dati del singolo account quando cambia userId.
+    // Così un documento Firestore mancante, lento o temporaneamente non leggibile non cancella categorie, aree, patrimonio o liste.
     var docRef=doc(fbDb,"userData",userId);
     getDoc(docRef).then(function(snap){
+      if(cancelled||firestoreLoadSeqRef.current!==loadSeq)return;
       if(snap.exists()){
         var d=snap.data();
-        setExpenses(Array.isArray(d.expenses)?d.expenses:[]);
-        setIncomes(Array.isArray(d.incomes)?d.incomes:[]);
-        (function(){var cloudTs=Number(d.catsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}var cloudCats=Array.isArray(d.cats)?d.cats:null;if(localTs>cloudTs&&Array.isArray(cats)&&cats.length>0){setCats(cats);}else{setCats(chooseCloudLocalArray(cloudCats,cats,DEFAULT_CATS,false));}})();
-        (function(){var cloudTs=Number(d.methodsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}var cloudMethods=Array.isArray(d.methods)?d.methods:null;if(localTs>cloudTs&&Array.isArray(methods)&&methods.length>0){setMethods(methods);}else{setMethods(chooseCloudLocalArray(cloudMethods,methods,DEFAULT_METHODS,false));}})();
-        setRecurring(Array.isArray(d.recurring)?d.recurring:[]);
-        setGoals(Array.isArray(d.goals)?d.goals:DEFAULT_GOALS);
-        setAlerts(Array.isArray(d.alerts)?d.alerts:[]);
+        setExpenses(chooseCloudLocalArray(d.expenses,expenses,[],true));
+        setIncomes(chooseCloudLocalArray(d.incomes,incomes,[],true));
+        (function(){var cloudTs=Number(d.catsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}var cloudCats=Array.isArray(d.cats)?d.cats:null;if(localTs>cloudTs&&Array.isArray(cats)&&cats.length>0){setCats(cats);}else{setCats(chooseCloudLocalArray(cloudCats,cats,DEFAULT_CATS,true));}})();
+        (function(){var cloudTs=Number(d.methodsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("methods_updated_at"))||localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}var cloudMethods=Array.isArray(d.methods)?d.methods:null;if(localTs>cloudTs&&Array.isArray(methods)&&methods.length>0){setMethods(methods);}else{setMethods(chooseCloudLocalArray(cloudMethods,methods,DEFAULT_METHODS,true));}})();
+        setRecurring(chooseCloudLocalArray(d.recurring,recurring,[],true));
+        setGoals(chooseCloudLocalArray(d.goals,goals,DEFAULT_GOALS,true));
+        setAlerts(chooseCloudLocalArray(d.alerts,alerts,[],true));
         setBudgetPlan(d.budgetPlan!==undefined?d.budgetPlan:(budgetPlan||DEFAULT_BUDGET_PLAN));
         setPatrimonioValues(chooseCloudLocalObject(d.patrimonioValues,patrimonioValues,{}));
-        setPatrimonioAreas(chooseCloudLocalArray(d.patrimonioAreas,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS,false));
-        setPatrimonioEntries(chooseCloudLocalArray(d.patrimonioEntries,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES,false));
+        setPatrimonioAreas(mergeArrayByStableIdPreferLocal(d.patrimonioAreas,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS));
+        setPatrimonioEntries(mergeArrayByStableIdPreferLocal(d.patrimonioEntries,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES));
         setPatrimonioHistory(chooseCloudLocalObject(d.patrimonioHistory,patrimonioHistory,{}));
         setPatrimonioNotes(chooseCloudLocalObject(d.patrimonioNotes,patrimonioNotes,{}));
-        setExpenseGroups(chooseCloudLocalArray(d.expenseGroups,expenseGroups,DEFAULT_EXPENSE_GROUPS,false));
-        setMethodGroups(chooseCloudLocalArray(d.methodGroups,methodGroups,DEFAULT_METHOD_GROUPS,false));
-        setIncomeGroups(chooseCloudLocalArray(d.incomeGroups,incomeGroups,DEFAULT_INCOME_GROUPS,false));
+        setExpenseGroups(mergeArrayByStableIdPreferLocal(d.expenseGroups,expenseGroups,DEFAULT_EXPENSE_GROUPS));
+        setMethodGroups(mergeArrayByStableIdPreferLocal(d.methodGroups,methodGroups,DEFAULT_METHOD_GROUPS));
+        setIncomeGroups(mergeArrayByStableIdPreferLocal(d.incomeGroups,incomeGroups,DEFAULT_INCOME_GROUPS));
         setCustomIncomeTypes(chooseCloudLocalArray(d.customIncomeTypes,customIncomeTypes,[],true));
         setIncomeTypeOverrides(chooseCloudLocalObject(d.incomeTypeOverrides,incomeTypeOverrides,{}));
-        if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.shoppingAreaIcons)setShoppingAreaIcons(d.shoppingAreaIcons);if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);restoreLocalJson("shopping_lists_v2",d.shoppingLists);restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId);restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
-        if(d.historySortDate)setHistorySortDate(d.historySortDate);
-        if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
-        if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);
-        if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
-        setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
-        setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
-        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
-        setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);
-        setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);
-        if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
-        if(d.aiFloatingEnabled!==undefined)setAiFloatingEnabled(!!d.aiFloatingEnabled);
-        if(d.notifPrefs)setNotifPrefs(d.notifPrefs);
-        setCustomNotifs(Array.isArray(d.customNotifs)?d.customNotifs:[]);
-        if(d.termsAccepted!==undefined)setTermsAccepted(!!d.termsAccepted);
-        if(d.privacyAccepted!==undefined)setPrivacyAccepted(!!d.privacyAccepted);
-        if(d.legalAcceptanceDate)setLegalAcceptanceDate(d.legalAcceptanceDate);
+        if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);
         setShareProjects(chooseCloudLocalArray(d.shareProjects,shareProjects,[],true));
         setDebtCredits(chooseCloudLocalArray(d.debtCredits,debtCredits,[],true));
         setShoppingCards(chooseCloudLocalArray(d.shoppingCards,shoppingCards,[],true));
         setShoppingItems(chooseCloudLocalArray(d.shoppingItems,shoppingItems,[],true));
         setShoppingAreas(chooseCloudLocalArray(d.shoppingAreas,shoppingAreas,DEFAULT_SHOPPING_AREAS,false));
         setShareReceiptUploads(chooseCloudLocalArray(d.shareReceiptUploads,shareReceiptUploads,[],true));
+        if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);
+        if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);
+        if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);
+        if(d.shoppingAreaIcons)setShoppingAreaIcons(d.shoppingAreaIcons);
+        if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);
+        restoreLocalJson("shopping_lists_v2",d.shoppingLists);
+        restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId);
+        restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort);
         if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);
-        if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
+        if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);
+        if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
+        if(d.historySortDate)setHistorySortDate(d.historySortDate);
+        if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);
+        if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);
+        if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
+        setAppuntiDocuments(chooseCloudLocalArray(d.appuntiDocuments,appuntiDocuments,[],true));
+        setAppuntiNotes(chooseCloudLocalArray(d.appuntiNotes,appuntiNotes,[],true));
+        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);if(!cancelled)setBankCoords(Array.isArray(dec)?dec:bankCoords);}else{setBankCoords(chooseCloudLocalArray(raw,bankCoords,[],true));}})();
+        setAiDismissed(chooseCloudLocalArray(d.aiDismissed,aiDismissed,[],true));
+        setAiChat(chooseCloudLocalArray(d.aiChat,aiChat,[],true));
+        if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
+        if(d.aiFloatingEnabled!==undefined)setAiFloatingEnabled(!!d.aiFloatingEnabled);
+        if(d.notifPrefs)setNotifPrefs(d.notifPrefs);
+        setCustomNotifs(chooseCloudLocalArray(d.customNotifs,customNotifs,[],true));
+        if(d.termsAccepted!==undefined)setTermsAccepted(!!d.termsAccepted);
+        if(d.privacyAccepted!==undefined)setPrivacyAccepted(!!d.privacyAccepted);
+        if(d.legalAcceptanceDate)setLegalAcceptanceDate(d.legalAcceptanceDate);
+        if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);
+        if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);
+        if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
         var cloudPlan=d.currentPlan||d.plan||d.subscriptionPlan;if(cloudPlan&&PLAN_LIMITS[cloudPlan])setCurrentPlan(cloudPlan,false);
         setPlanUsage(chooseCloudLocalObject(d.planUsage,planUsage,{}));
-        setShownAlertIds(Array.isArray(d.shownAlertIds)?d.shownAlertIds:[]);
+        setShownAlertIds(chooseCloudLocalArray(d.shownAlertIds,shownAlertIds,[],true));
       } else {
-        // Nuovo account o documento cloud mancante: non cancellare mai dati locali già presenti.
-        // Questo evita che un rientro con Firestore vuoto sovrascriva movimenti salvati sul dispositivo.
-        setExpenses([]);setIncomes([]);setRecurring([]);setGoals(DEFAULT_GOALS);setAlerts([]);setBudgetPlan(DEFAULT_BUDGET_PLAN);
-        setCats(chooseCloudLocalArray(null,cats,DEFAULT_CATS,false));setMethods(chooseCloudLocalArray(null,methods,DEFAULT_METHODS,false));setExpenseGroups(chooseCloudLocalArray(null,expenseGroups,DEFAULT_EXPENSE_GROUPS,false));setIncomeGroups(chooseCloudLocalArray(null,incomeGroups,DEFAULT_INCOME_GROUPS,false));setMethodGroups(chooseCloudLocalArray(null,methodGroups,DEFAULT_METHOD_GROUPS,false));
-        setPatrimonioAreas(chooseCloudLocalArray(null,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS,false));setPatrimonioEntries(chooseCloudLocalArray(null,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES,false));setPatrimonioValues(chooseCloudLocalObject(null,patrimonioValues,{}));setPatrimonioHistory(chooseCloudLocalObject(null,patrimonioHistory,{}));setPatrimonioNotes(chooseCloudLocalObject(null,patrimonioNotes,{}));
-        setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShoppingAreas(DEFAULT_SHOPPING_AREAS);setShareReceiptUploads([]);setShowShareInHistory(true);setCustomNotifs([]);setNotifPrefs({remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free",false);setPlanUsage({});setShownAlertIds([]);
+        setCats(chooseCloudLocalArray(null,cats,DEFAULT_CATS,true));
+        setMethods(chooseCloudLocalArray(null,methods,DEFAULT_METHODS,true));
+        setExpenseGroups(mergeArrayByStableIdPreferLocal(null,expenseGroups,DEFAULT_EXPENSE_GROUPS));
+        setIncomeGroups(mergeArrayByStableIdPreferLocal(null,incomeGroups,DEFAULT_INCOME_GROUPS));
+        setMethodGroups(mergeArrayByStableIdPreferLocal(null,methodGroups,DEFAULT_METHOD_GROUPS));
+        setPatrimonioAreas(mergeArrayByStableIdPreferLocal(null,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS));
+        setPatrimonioEntries(mergeArrayByStableIdPreferLocal(null,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES));
+        setShoppingAreas(chooseCloudLocalArray(null,shoppingAreas,DEFAULT_SHOPPING_AREAS,false));
+        if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free",false);
       }
-      firestoreHydratedRef.current=true;
-      setFirestoreReady(true);
-    }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
+      finishLoadAndClear();
+    }).catch(function(err){
+      console.error("Firestore load error",(err&&err.code)||"unknown");
+      finishLoadAndClear();
+    });
+    return function(){cancelled=true;clearTimeout(fallbackTimer);};
   },[userId]);
 
+  
   async function saveToFirestore(){
     if(!userId||!firestoreHydratedRef.current)return;
     if(!navigator.onLine)return;
@@ -1580,7 +1625,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var bankCoordsToSave=bankCoords;
     try{var encBank=await encryptBankCoords(bankCoords,userId);if(encBank)bankCoordsToSave=encBank;}catch(e){}
     var catsTs=Date.now();
-    try{localStorage.setItem(userKey("cats_updated_at"),String(catsTs));}catch(e){}
+    try{localStorage.setItem(userKey("cats_updated_at"),String(catsTs));localStorage.setItem(userKey("methods_updated_at"),String(catsTs));}catch(e){}
     setDoc(docRef,{expenses,incomes,cats,methods,catsUpdatedAt:catsTs,methodsUpdatedAt:catsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,updatedAt:new Date().toISOString()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
   }
 
@@ -4296,9 +4341,9 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       {id:"sections_expense_methods",icon:"💳",label:"Metodi di pagamento",desc:"Lista, riordino e default dei metodi"}
     ]}/></div>;
 
-    if(settingsPage==="sections_income_areas")return <GroupSettingsPanel title="Entrate / Aree" desc="Gestisci le aree delle entrate: lista, riordino e area default." items={incomeGroups||DEFAULT_INCOME_GROUPS} setItems={setIncomeGroups} defaultValue={defaultIncomeArea} setDefaultValue={setDefaultIncomeArea}/>;
+    if(settingsPage==="sections_income_areas")return <GroupSettingsPanel title="Entrate / Aree" desc="Gestisci le aree delle entrate: lista, riordino e area default." items={incomeGroups||DEFAULT_INCOME_GROUPS} setItems={setIncomeGroups} defaultValue={defaultIncomeArea} setDefaultValue={setDefaultIncomeArea} withIcon/>;
     if(settingsPage==="sections_income_categories")return <IncomeCategoriesSettings/>;
-    if(settingsPage==="sections_expense_areas")return <GroupSettingsPanel title="Uscite / Aree" desc="Gestisci le aree delle uscite: lista, riordino e area default." items={expenseGroups||DEFAULT_EXPENSE_GROUPS} setItems={setExpenseGroups} defaultValue={defaultExpenseArea} setDefaultValue={setDefaultExpenseArea}/>;
+    if(settingsPage==="sections_expense_areas")return <GroupSettingsPanel title="Uscite / Aree" desc="Gestisci le aree delle uscite: lista, riordino e area default." items={expenseGroups||DEFAULT_EXPENSE_GROUPS} setItems={setExpenseGroups} defaultValue={defaultExpenseArea} setDefaultValue={setDefaultExpenseArea} withIcon/>;
     if(settingsPage==="sections_expense_categories")return <ExpenseCategoriesSettings/>;
     if(settingsPage==="sections_expense_methods")return <ExpenseMethodsSettings/>;
     if(settingsPage==="values")return <div><PageHeader title="Categorie & Metodi"/>
