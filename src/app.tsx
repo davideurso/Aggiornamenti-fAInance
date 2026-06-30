@@ -2209,10 +2209,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
   async function getNativeBiometric(){
     try{
-      var pkg:any=await import("@aparajita/capacitor-biometric-auth");
-      if(pkg&&pkg.BiometricAuth)return {BiometricAuth:pkg.BiometricAuth,AndroidBiometryStrength:pkg.AndroidBiometryStrength||{weak:0,strong:1}};
-    }catch(e){}
-    try{
       var cap=(typeof window!=="undefined"?(window as any).Capacitor:null);
       var legacy=cap&&cap.Plugins&&cap.Plugins.BiometricAuth;
       if(legacy)return {BiometricAuth:legacy,AndroidBiometryStrength:{weak:0,strong:1}};
