@@ -10,8 +10,8 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion 35
 
-        versionCode 148
-        versionName "1.2.11"
+        versionCode 150
+        versionName "1.2.13"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -51,6 +51,7 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     implementation project(':capacitor-cordova-android-plugins')
+    implementation project(':aparajita-capacitor-biometric-auth')
     implementation 'com.android.billingclient:billing:9.0.0'
     implementation 'com.google.android.gms:play-services-ads:24.4.0'
     implementation 'com.google.android.ump:user-messaging-platform:3.2.0'
