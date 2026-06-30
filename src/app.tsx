@@ -790,18 +790,19 @@ function AppWithLogin(){
   useEffect(function(){
     var unsub=onAuthStateChanged(fbAuth,function(user){
       if(user){
-        var normalizedEmail=String(user.email||"").toLowerCase();
-        var minimal={id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};
-        setFbUser(user);
-        setUserData(function(prev){return prev&&prev.id===user.uid?{...minimal,...prev,id:user.uid,email:prev.email||normalizedEmail,name:prev.name||minimal.name}:minimal;});
+        // Load user profile from Firestore
         getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
           var profile=snap.exists()?snap.data():{};
           var displayName=profile.name||user.displayName||"Utente";
-          var email2=String(user.email||profile.email||"").toLowerCase();
-          setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:email2,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-          setUserData({id:user.uid,email:email2,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+          var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
+          setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+          setFbUser(user);
         }).catch(function(){
+          var normalizedEmail=String(user.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+          setFbUser(user);
         });
       } else {
         setFbUser(null);
@@ -831,11 +832,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){
-    var safe={id:u&&u.id?u.id:"",email:String((u&&u.email)||"").toLowerCase(),name:(u&&u.name)||"Utente"};
-    setUserData({...safe,phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
-    if(safe.id)setFbUser({uid:safe.id,email:safe.email,displayName:safe.name});
-  }}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1102,26 +1099,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShareReceiptUploads([]);setCustomNotifs([]);setPlanUsage({});setShownAlertIds([]);
     // Load data from Firestore before enabling the UI, so one account can never inherit local data from another account.
     var docRef=doc(fbDb,"userData",userId);
-    getDoc(docRef).then(async function(snap){
-      if(!snap.exists()){
-        try{
-          var emailForMigration=normalizeEmail(currentUser&&currentUser.email);
-          if(emailForMigration){
-            var userMatches=await getDocs(query(collection(fbDb,"users"),where("email","==",emailForMigration),limit(10)));
-            for(var mi=0;mi<userMatches.docs.length;mi++){
-              var oldUid=userMatches.docs[mi].id;
-              if(!oldUid||String(oldUid)===String(userId))continue;
-              var oldDataSnap=await getDoc(doc(fbDb,"userData",oldUid));
-              if(oldDataSnap.exists()){
-                var migratedData=oldDataSnap.data()||{};
-                await setDoc(docRef,{...migratedData,migratedFromUid:oldUid,migratedAt:new Date().toISOString(),accountEmail:emailForMigration,updatedAt:new Date().toISOString()},{merge:true});
-                snap={exists:function(){return true;},data:function(){return migratedData;}};
-                break;
-              }
-            }
-          }
-        }catch(migrationErr){console.error("Firestore email migration error",(migrationErr&&migrationErr.code)||"unknown");}
-      }
+    getDoc(docRef).then(function(snap){
       if(snap.exists()){
         var d=snap.data();
         setExpenses(Array.isArray(d.expenses)?d.expenses:[]);
@@ -1147,7 +1125,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
         setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
-        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
+        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,user.uid);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
         setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);
         setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);
         if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
@@ -1190,7 +1168,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     try{var encBank=await encryptBankCoords(bankCoords,userId);if(encBank)bankCoordsToSave=encBank;}catch(e){}
     var catsTs=Date.now();
     try{localStorage.setItem(userKey("cats_updated_at"),String(catsTs));}catch(e){}
-    setDoc(docRef,{accountEmail:normalizeEmail(currentUser&&currentUser.email),accountName:(currentUser&&currentUser.name)||"",expenses,incomes,cats,methods,catsUpdatedAt:catsTs,methodsUpdatedAt:catsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,planUsage,shownAlertIds,updatedAt:new Date().toISOString()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
+    setDoc(docRef,{expenses,incomes,cats,methods,catsUpdatedAt:catsTs,methodsUpdatedAt:catsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,planUsage,shownAlertIds,updatedAt:new Date().toISOString()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
   }
 
   async function deleteCurrentAccount(){
@@ -1758,7 +1736,18 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
 
   function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
-  async function getNativeBiometric(){try{var mod=await import("@aparajita/capacitor-biometric-auth");return mod&&mod.BiometricAuth?mod:null;}catch(e){return null;}}
+  async function getNativeBiometric(){
+    // Non usare import dinamico del pacchetto biometrico qui: la compilazione iOS/Web
+    // deve riuscire anche quando il pacchetto JS non è installato nel ramo usato da Codemagic.
+    // In app nativa il plugin viene esposto dal bridge Capacitor in window.Capacitor.Plugins.
+    try{
+      var cap=(window as any).Capacitor;
+      var plugins=(cap&&cap.Plugins)||{};
+      var plugin=plugins.BiometricAuth||plugins.BiometricAuthNative||plugins.NativeBiometric||plugins.Biometrics||null;
+      if(plugin)return {BiometricAuth:plugin,AndroidBiometryStrength:{weak:0,strong:1}};
+    }catch(e){}
+    return null;
+  }
 
   function biometricErrorText(errorCode,details){
     var code=String(errorCode||"");var raw=String(details||"");
@@ -1875,16 +1864,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var now=new Date(),curYear=now.getFullYear();
   var curMonthKey=curYear+"-"+String(now.getMonth()+1).padStart(2,"0");
 
-  function getCat(id){
-    var raw=String(id==null?"":id);
-    var n=Number(id);
-    return cats.find(function(c){
-      if(!c)return false;
-      if(String(c.id)===raw)return true;
-      if(!isNaN(n)&&String(c.id)===String(n))return true;
-      return false;
-    });
-  }
+  function getCat(id){return cats.find(function(c){return c.id===Number(id);});}
   function getMethod(id){return methods.find(function(m){return m.id===Number(id);});}
   function getIT(id){return incomeTypes.find(function(x){return x.id===id;});}
   function bulkMovementRowLimit(plan){
