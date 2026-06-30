@@ -200,8 +200,10 @@ workflows:
             <string>Apple Distribution</string>
             <key>provisioningProfiles</key>
             <dict>
-              <key>${BUNDLE_ID}</key>
-              <string>${PROFILE_NAME}</string>
+              <key>it.fainanceapp.app</key>
+              <string>fainance-appstore-profile</string>
+              <key>it.fainanceapp.app.widgets</key>
+              <string>fainance-widgets-appstore-profile</string>
             </dict>
             <key>stripSwiftSymbols</key>
             <true/>
