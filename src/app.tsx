@@ -363,14 +363,25 @@ function LoginScreen({onLogin}){
 
   var inp={width:"100%",borderRadius:10,border:"1px solid #e0e0e0",padding:"12px 14px",fontSize:15,background:"#fff",color:"#333",boxSizing:"border-box",outline:"none"};
 
+  function withLoginTimeout(promise,ms,label){
+    return Promise.race([promise,new Promise(function(_,reject){setTimeout(function(){reject(new Error(label||"Operazione scaduta."));},ms||18000);})]);
+  }
+  function completeLoginFromFirebaseUser(user,fallbackName){
+    if(!user||!user.uid)throw new Error("Login completato, ma utente non disponibile.");
+    setLoading(false);
+    onLogin({id:user.uid,email:user.email||"",name:user.displayName||fallbackName||"Utente"});
+  }
+
   function doLogin(){
     setError("");setLoading(true);
-    signInWithEmailAndPassword(fbAuth,email,password)
+    withLoginTimeout(signInWithEmailAndPassword(fbAuth,email,password),18000,"Login completato, ma Firebase non ha risposto in tempo.")
       .then(function(cred){
-        onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"});
+        completeLoginFromFirebaseUser(cred.user,name||"Utente");
       })
       .catch(function(err){
-        setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+err.message);
+        var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
+        if(cur&&cur.uid){try{completeLoginFromFirebaseUser(cur,name||"Utente");return;}catch(e){}}
+        setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+((err&&err.message)||err));
         setLoading(false);
       });
   }
@@ -382,16 +393,15 @@ function LoginScreen({onLogin}){
     if(password.length<6){setError(L("Password: minimo 6 caratteri."));return;}
     if(password!==confirmPwd){setError(L("Le password non coincidono."));return;}
     setLoading(true);
-    createUserWithEmailAndPassword(fbAuth,email,password)
+    withLoginTimeout(createUserWithEmailAndPassword(fbAuth,email,password),18000,"Account creato, ma Firebase non ha risposto in tempo.")
       .then(function(cred){
-        // Save name to Firestore
-        return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
-          .then(function(){
-            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
-          });
+        setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
+        completeLoginFromFirebaseUser(cred.user,name.trim());
       })
       .catch(function(err){
-        setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
+        var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
+        if(cur&&cur.uid){try{completeLoginFromFirebaseUser(cur,name.trim()||"Utente");return;}catch(e){}}
+        setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+((err&&err.message)||err));
         setLoading(false);
       });
   }
@@ -422,16 +432,24 @@ function LoginScreen({onLogin}){
         const idToken=credData.idToken||credData.id_token||"";
         const accessToken=credData.accessToken||credData.access_token||"";
         if(!idToken&&!accessToken) throw new Error("Google login non ha restituito token utilizzabili.");
+        var pluginUser=(result&&result.user)?result.user:null;
+        if(pluginUser&&pluginUser.uid&&(!idToken&&!accessToken)){
+          setLoading(false);
+          onLogin({id:pluginUser.uid,email:pluginUser.email||"",name:pluginUser.displayName||"Utente"});
+          return;
+        }
         const credential = GoogleAuthProvider.credential(idToken||null, accessToken||null);
-        const cred = await signInWithCredential(fbAuth, credential);
-        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
+        const cred = await withLoginTimeout(signInWithCredential(fbAuth, credential),18000,"Google login completato, ma Firebase non ha risposto in tempo.");
+        completeLoginFromFirebaseUser(cred.user,"Utente");
         return;
       }
       googleProvider.setCustomParameters({prompt:"select_account"});
-      const cred = await signInWithPopup(fbAuth, googleProvider);
-      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
+      const cred = await withLoginTimeout(signInWithPopup(fbAuth, googleProvider),18000,"Google login web scaduto.");
+      completeLoginFromFirebaseUser(cred.user,"Utente");
     } catch(err){
       console.error("Google login error",(err&&err.code)||"unknown");
+      var cur=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
+      if(cur&&cur.uid){try{completeLoginFromFirebaseUser(cur,"Utente");return;}catch(e){}}
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
       if(msg.toLowerCase().indexOf("no credentials")>=0){
@@ -1151,14 +1169,17 @@ function AppWithLogin(){
   </div>;
 
   async function forceLogout(){
+    setFbUser(null);
+    setUserData(null);
+    function withTimeout(promise,ms){return Promise.race([promise,new Promise(function(resolve){setTimeout(resolve,ms||2500);})]);}
     try{
       if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
         try{
           var mod=await import("@capacitor-firebase/authentication");
-          if(mod&&mod.FirebaseAuthentication&&mod.FirebaseAuthentication.signOut)await mod.FirebaseAuthentication.signOut();
+          if(mod&&mod.FirebaseAuthentication&&mod.FirebaseAuthentication.signOut)await withTimeout(mod.FirebaseAuthentication.signOut(),2500);
         }catch(nativeErr){}
       }
-      await signOut(fbAuth).catch(function(){});
+      await withTimeout(signOut(fbAuth).catch(function(){}),2500);
     }finally{
       setFbUser(null);
       setUserData(null);
@@ -1562,7 +1583,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setDebtCredits(chooseCloudLocalArray(d.debtCredits,debtCredits,[],true));
         setShoppingCards(chooseCloudLocalArray(d.shoppingCards,shoppingCards,[],true));
         setShoppingItems(chooseCloudLocalArray(d.shoppingItems,shoppingItems,[],true));
-        setShoppingAreas(chooseCloudLocalArray(d.shoppingAreas,shoppingAreas,DEFAULT_SHOPPING_AREAS,false));
+        setShoppingAreas(chooseCloudLocalArray(d.shoppingAreas,shoppingAreas,DEFAULT_SHOPPING_AREAS,true));
         setShareReceiptUploads(chooseCloudLocalArray(d.shareReceiptUploads,shareReceiptUploads,[],true));
         if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);
         if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);
@@ -1605,7 +1626,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setMethodGroups(mergeArrayByStableIdPreferLocal(null,methodGroups,DEFAULT_METHOD_GROUPS));
         setPatrimonioAreas(mergeArrayByStableIdPreferLocal(null,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS));
         setPatrimonioEntries(mergeArrayByStableIdPreferLocal(null,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES));
-        setShoppingAreas(chooseCloudLocalArray(null,shoppingAreas,DEFAULT_SHOPPING_AREAS,false));
+        setShoppingAreas(chooseCloudLocalArray(null,shoppingAreas,DEFAULT_SHOPPING_AREAS,true));
         if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free",false);
       }
       finishLoadAndClear();
@@ -4135,14 +4156,16 @@ var row=D[raw]||D[raw.trim()];
       var [view,setView]=useStorage(_gspKey,"list");
       var [edit,setEdit]=useState(null);
       var [form,setForm]=useState({name:"",icon:"📂",color:COLORS[0]});
-      function add(){if(blockSetting("base"))return;if(!form.name.trim())return;setItems([...(items||[]),{id:"area_"+Date.now(),name:form.name.trim(),icon:withIcon?form.icon:undefined,color:form.color}]);setForm({name:"",icon:"📂",color:COLORS[0]});}
-      function save(){if(blockSetting("base"))return;if(!edit||!edit.name.trim())return;setItems(items.map(function(x){return x.id===edit.id?{...x,name:edit.name.trim(),icon:withIcon?edit.icon:x.icon,color:edit.color||COLORS[0]}:x;}));setEdit(null);}
-      function del(id){if(blockSetting("base"))return;setItems(items.filter(function(x){return x.id!==id;}));if(String(defaultValue)===String(id))setDefaultValue("");}
-      function archive(id){if(blockSetting("base"))return;setItems(items.map(function(x){return x.id===id?{...x,archived:!x.archived}:x;}));}
-      return <div><PageHeader title={title}/><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}><div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>{L(title)}</div><SettingHint>{desc}</SettingHint><Segmented items={[{id:"list",label:"Lista"},{id:"order",label:"Riordina",disabled:!baseSettingsAllowed,lockedMessage:settingLockedMessage("base")},{id:"default",label:"Default"}]} value={view} onChange={setView}/>
-      {view==="list"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{items.map(function(a){return edit&&edit.id===a.id?<div key={a.id} style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:12,display:"flex",flexDirection:"column",gap:10,...baseDisabledStyle()}}>{withIcon&&<EmojiPicker value={edit.icon||"📂"} onChange={function(v){if(blockSetting("base"))return;setEdit(function(p){return{...p,icon:v};});}}/>}<input disabled={!baseSettingsAllowed} type="color" value={edit.color||COLORS[0]} onChange={function(e){if(blockSetting("base"))return;setEdit(function(p){return{...p,color:e.target.value};});}} style={{width:34,height:34,border:"none",borderRadius:8,padding:0}}/><input disabled={!baseSettingsAllowed} value={edit.name} onChange={function(e){if(blockSetting("base"))return;setEdit(function(p){return{...p,name:e.target.value};});}} style={{...sinp,width:"100%",boxSizing:"border-box"}}/><div style={{display:"flex",gap:8}}><Btn onClick={save} bg="#7F77DD" style={{flex:1}}>{V.save}</Btn><Btn onClick={function(){setEdit(null);}} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn></div></div>:<div key={a.id} style={{background:cardBg,borderRadius:12,border:"1px solid "+borderC,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,opacity:a.archived?0.55:1}}>{withIcon&&<span style={{fontSize:20}}>{a.icon||"📂"}</span>}<span style={{width:12,height:12,borderRadius:"50%",background:a.color||COLORS[0],flexShrink:0}}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(a.name)}</div>{a.archived&&<div style={{fontSize:11,color:subC}}>{L("Archiviata")}</div>}</div><button disabled={!baseSettingsAllowed} onClick={function(){if(blockSetting("base"))return;setEdit({...a});}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:subC,opacity:baseSettingsAllowed?1:.45}}>✏️</button><button disabled={!baseSettingsAllowed} onClick={function(){archive(a.id);}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:subC,opacity:baseSettingsAllowed?1:.45}}>{a.archived?"📂":"🗂"}</button><button disabled={!baseSettingsAllowed} onClick={function(){del(a.id);}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:"#E24B4A",opacity:baseSettingsAllowed?1:.45}}>🗑</button></div>;})}{baseLockHint("Modifica, archiviazione, eliminazione e aggiunta disponibili dal piano Base")}<div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px dashed "+borderC,padding:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",...baseDisabledStyle()}}>{withIcon&&<EmojiPicker value={form.icon} onChange={function(v){if(blockSetting("base"))return;setForm(function(p){return{...p,icon:v};});}}/>}<input disabled={!baseSettingsAllowed} type="color" value={form.color} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,color:e.target.value};});}} style={{width:34,height:34,border:"none",borderRadius:8,padding:0}}/><input disabled={!baseSettingsAllowed} placeholder={L("Nuova area")} value={form.name} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,name:e.target.value};});}} onKeyDown={function(e){if(e.key==="Enter")add();}} style={{...sinp,flex:1,minWidth:140}}/><Btn onClick={add}>+</Btn></div></div>}
-      {view==="order"&&<SortableRows items={items} onMove={function(i,dir){if(blockSetting("base"))return;var j=i+dir;if(j<0||j>=items.length)return;var arr=items.slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setItems(arr);}} renderItem={function(a){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>{withIcon&&<span style={{fontSize:20}}>{a.icon||"📂"}</span>}<span style={{width:12,height:12,borderRadius:"50%",background:a.color||COLORS[0],flexShrink:0}}/><div style={{fontSize:14,fontWeight:600,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(a.name)}</div></div>;}}/>}
-      {view==="default"&&<div><SettingHint>Valore preselezionato quando apri il form relativo a questa sezione.</SettingHint><select value={defaultValue||""} onChange={function(e){setDefaultValue(e.target.value);}} style={{...sinp,width:"100%"}}><option value="">{L("Nessun default")}</option>{items.map(function(a){return <option key={a.id} value={a.id}>{withIcon?(a.icon||"📂")+" ":""}{L(a.name)}</option>;})}</select></div>}
+      var entityLabel="Area";
+      function resetForm(){setForm({name:"",icon:"📂",color:COLORS[0]});}
+      function add(){if(blockSetting("base"))return;if(!form.name.trim())return;setItems([...(items||[]),{id:"area_"+Date.now(),name:form.name.trim(),icon:withIcon?form.icon:"📂",color:form.color||COLORS[0]}]);resetForm();if(setToast)setToast({text:L("Area aggiunta correttamente."),type:"success",icon:"✅"});}
+      function save(){if(blockSetting("base"))return;if(!edit||!edit.name.trim())return;setItems((items||[]).map(function(x){return String(x.id)===String(edit.id)?{...x,name:edit.name.trim(),icon:withIcon?(edit.icon||"📂"):x.icon,color:edit.color||COLORS[0]}:x;}));setEdit(null);}
+      function del(id){if(blockSetting("base"))return;if(!window.confirm(L("Sei sicuro di voler eliminare l'Area?")))return;setItems((items||[]).filter(function(x){return String(x.id)!==String(id);}));if(String(defaultValue)===String(id))setDefaultValue("");if(setToast)setToast({text:L("Area eliminata correttamente."),type:"success",icon:"🗑️"});}
+      function archive(id){if(blockSetting("base"))return;setItems((items||[]).map(function(x){return String(x.id)===String(id)?{...x,archived:!x.archived}:x;}));}
+      return <div><PageHeader title={title}/><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}><div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>{L(title)}</div><SettingHint>{L(desc)}</SettingHint><Segmented items={[{id:"list",label:"Lista"},{id:"order",label:"Riordina",disabled:!baseSettingsAllowed,lockedMessage:settingLockedMessage("base")},{id:"default",label:"Default"}]} value={view} onChange={setView}/>
+      {view==="list"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{(items||[]).map(function(a){return edit&&String(edit.id)===String(a.id)?<div key={a.id} style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:12,display:"flex",flexDirection:"column",gap:10,...baseDisabledStyle()}}>{withIcon&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:subC,minWidth:52}}>{L("Icona")}</span><EmojiPicker value={edit.icon||"📂"} onChange={function(v){if(blockSetting("base"))return;setEdit(function(p){return{...p,icon:v};});}}/></div>}<input disabled={!baseSettingsAllowed} type="color" value={edit.color||COLORS[0]} onChange={function(e){if(blockSetting("base"))return;setEdit(function(p){return{...p,color:e.target.value};});}} style={{width:42,height:34,border:"none",borderRadius:8,padding:0,background:"transparent"}}/><input disabled={!baseSettingsAllowed} value={edit.name} onChange={function(e){if(blockSetting("base"))return;setEdit(function(p){return{...p,name:e.target.value};});}} style={{...sinp,width:"100%",boxSizing:"border-box"}}/><div style={{display:"flex",gap:8}}><Btn onClick={save} bg="#7F77DD" style={{flex:1}}>{V.save}</Btn><Btn onClick={function(){setEdit(null);}} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn></div></div>:<div key={a.id} style={{background:cardBg,borderRadius:12,border:"1px solid "+borderC,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,opacity:a.archived?0.55:1}}>{withIcon&&<span style={{fontSize:20}}>{a.icon||"📂"}</span>}<span style={{width:12,height:12,borderRadius:"50%",background:a.color||COLORS[0],flexShrink:0}}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(a.name)}</div>{a.archived&&<div style={{fontSize:11,color:subC}}>{L("Archiviata")}</div>}</div><button disabled={!baseSettingsAllowed} onClick={function(){if(blockSetting("base"))return;setEdit({...a});}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:subC,opacity:baseSettingsAllowed?1:.45}}>✏️</button><button disabled={!baseSettingsAllowed} onClick={function(){archive(a.id);}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:subC,opacity:baseSettingsAllowed?1:.45}}>{a.archived?"📂":"🗂"}</button><button disabled={!baseSettingsAllowed} onClick={function(){del(a.id);}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:"#E24B4A",opacity:baseSettingsAllowed?1:.45}}>🗑</button></div>;})}{baseLockHint("Modifica, archiviazione, eliminazione e aggiunta disponibili dal piano Base")}<div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px dashed "+borderC,padding:12,display:"flex",flexDirection:"column",gap:10,...baseDisabledStyle()}}><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"auto auto minmax(0,1fr)",gap:8,alignItems:"center"}}>{withIcon&&<div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:11,color:subC,minWidth:52}}>{L("Icona")}</span><EmojiPicker value={form.icon} onChange={function(v){if(blockSetting("base"))return;setForm(function(p){return{...p,icon:v};});}}/></div>}<input disabled={!baseSettingsAllowed} type="color" value={form.color} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,color:e.target.value};});}} style={{width:42,height:42,border:"none",borderRadius:8,padding:0,background:"transparent"}}/><input disabled={!baseSettingsAllowed} placeholder={L("Nuova area")} value={form.name} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,name:e.target.value};});}} onKeyDown={function(e){if(e.key==="Enter")add();}} style={{...sinp,flex:1,minWidth:140,height:42}}/></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><Btn onClick={add} bg="#7F77DD" style={{padding:11,fontWeight:900}}>{L("Aggiungi Area")}</Btn><Btn onClick={resetForm} bg={dark?"#333":"#f0f0f0"} color={textC} style={{padding:11,fontWeight:800}}>{L("Cancella")}</Btn></div></div></div>}
+      {view==="order"&&<SortableRows items={items||[]} onMove={function(i,dir){if(blockSetting("base"))return;var j=i+dir;if(j<0||j>=(items||[]).length)return;var arr=(items||[]).slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setItems(arr);}} renderItem={function(a){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>{withIcon&&<span style={{fontSize:20}}>{a.icon||"📂"}</span>}<span style={{width:12,height:12,borderRadius:"50%",background:a.color||COLORS[0],flexShrink:0}}/><div style={{fontSize:14,fontWeight:600,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(a.name)}</div></div>;}}/>}
+      {view==="default"&&<div><SettingHint>{L("Valore preselezionato quando apri il form relativo a questa sezione.")}</SettingHint><select value={defaultValue||""} onChange={function(e){setDefaultValue(e.target.value);}} style={{...sinp,width:"100%"}}><option value="">{L("Nessun default")}</option>{(items||[]).map(function(a){return <option key={a.id} value={a.id}>{withIcon?(a.icon||"📂")+" ":""}{L(a.name)}</option>;})}</select></div>}
       </div></div>;}
     function ExpenseCategoriesSettings(){var [view,setView]=useStorage(userKey("expense_cats_settings_view_v1"),"list");var validCatIds=cats.map(function(c){return String(c.id);});
 var cleanCatOrder=(catOrder||[]).filter(function(id){return validCatIds.indexOf(String(id))>=0;});
@@ -6024,6 +6047,15 @@ export default AppWithLogin;
   add('Distribuzione uscite',{it:'Distribuzione uscite',en:'Expense distribution',es:'Distribución de gastos',fr:'Répartition des dépenses',de:'Ausgabenverteilung',pt:'Distribuição de despesas',pl:'Rozkład wydatków',nl:'Uitgavenverdeling',ro:'Distribuția cheltuielilor',el:'Κατανομή εξόδων'});
   add('Aree / Categorie Uscite',{it:'Aree / Categorie Uscite',en:'Areas / Expense Categories',es:'Áreas / Categorías de gastos',fr:'Zones / Catégories de dépenses',de:'Bereiche / Ausgabenkategorien',pt:'Áreas / Categorias de despesas',pl:'Obszary / Kategorie wydatków',nl:'Gebieden / Uitgavencategorieën',ro:'Zone / Categorii cheltuieli',el:'Περιοχές / Κατηγορίες εξόδων'});
   add('Aree / Categorie Entrate',{it:'Aree / Categorie Entrate',en:'Areas / Income Categories',es:'Áreas / Categorías de ingresos',fr:'Zones / Catégories de revenus',de:'Bereiche / Einnahmenkategorien',pt:'Áreas / Categorias de receitas',pl:'Obszary / Kategorie przychodów',nl:'Gebieden / Inkomstencategorieën',ro:'Zone / Categorii venituri',el:'Περιοχές / Κατηγορίες εσόδων'});
+  add('Aggiungi Area',{it:'Aggiungi Area',en:'Add Area',es:'Añadir área',fr:'Ajouter une zone',de:'Bereich hinzufügen',pt:'Adicionar área',pl:'Dodaj obszar',nl:'Gebied toevoegen',ro:'Adaugă zonă',el:'Προσθήκη περιοχής'});
+  add('Cancella',{it:'Cancella',en:'Clear',es:'Borrar',fr:'Effacer',de:'Leeren',pt:'Limpar',pl:'Wyczyść',nl:'Wissen',ro:'Șterge',el:'Καθαρισμός'});
+  add('Sei sicuro di voler eliminare l\'Area?',{it:'Sei sicuro di voler eliminare l\'Area?',en:'Are you sure you want to delete the Area?',es:'¿Seguro que quieres eliminar el área?',fr:'Voulez-vous vraiment supprimer la zone ?',de:'Möchtest du den Bereich wirklich löschen?',pt:'Tens a certeza de que queres eliminar a área?',pl:'Czy na pewno chcesz usunąć obszar?',nl:'Weet je zeker dat je het gebied wilt verwijderen?',ro:'Sigur vrei să ștergi zona?',el:'Είστε σίγουροι ότι θέλετε να διαγράψετε την περιοχή;'});
+  add('Area aggiunta correttamente.',{it:'Area aggiunta correttamente.',en:'Area added successfully.',es:'Área añadida correctamente.',fr:'Zone ajoutée correctement.',de:'Bereich erfolgreich hinzugefügt.',pt:'Área adicionada corretamente.',pl:'Obszar został poprawnie dodany.',nl:'Gebied succesvol toegevoegd.',ro:'Zona a fost adăugată corect.',el:'Η περιοχή προστέθηκε επιτυχώς.'});
+  add('Area eliminata correttamente.',{it:'Area eliminata correttamente.',en:'Area deleted successfully.',es:'Área eliminada correctamente.',fr:'Zone supprimée correctement.',de:'Bereich erfolgreich gelöscht.',pt:'Área eliminada corretamente.',pl:'Obszar został poprawnie usunięty.',nl:'Gebied succesvol verwijderd.',ro:'Zona a fost ștearsă corect.',el:'Η περιοχή διαγράφηκε επιτυχώς.'});
+  add('Categoria eliminata correttamente.',{it:'Categoria eliminata correttamente.',en:'Category deleted successfully.',es:'Categoría eliminada correctamente.',fr:'Catégorie supprimée correctement.',de:'Kategorie erfolgreich gelöscht.',pt:'Categoria eliminada corretamente.',pl:'Kategoria została poprawnie usunięta.',nl:'Categorie succesvol verwijderd.',ro:'Categoria a fost ștearsă corect.',el:'Η κατηγορία διαγράφηκε επιτυχώς.'});
+  add('Metodo eliminato correttamente.',{it:'Metodo eliminato correttamente.',en:'Method deleted successfully.',es:'Método eliminado correctamente.',fr:'Mode supprimé correctement.',de:'Methode erfolgreich gelöscht.',pt:'Método eliminado corretamente.',pl:'Metoda została poprawnie usunięta.',nl:'Methode succesvol verwijderd.',ro:'Metoda a fost ștearsă corect.',el:'Η μέθοδος διαγράφηκε επιτυχώς.'});
+  add('Sei sicuro di voler eliminare la Categoria?',{it:'Sei sicuro di voler eliminare la Categoria?',en:'Are you sure you want to delete the Category?',es:'¿Seguro que quieres eliminar la categoría?',fr:'Voulez-vous vraiment supprimer la catégorie ?',de:'Möchtest du die Kategorie wirklich löschen?',pt:'Tens a certeza de que queres eliminar a categoria?',pl:'Czy na pewno chcesz usunąć kategorię?',nl:'Weet je zeker dat je de categorie wilt verwijderen?',ro:'Sigur vrei să ștergi categoria?',el:'Είστε σίγουροι ότι θέλετε να διαγράψετε την κατηγορία;'});
+  add('Sei sicuro di voler eliminare il Metodo?',{it:'Sei sicuro di voler eliminare il Metodo?',en:'Are you sure you want to delete the Method?',es:'¿Seguro que quieres eliminar el método?',fr:'Voulez-vous vraiment supprimer le mode ?',de:'Möchtest du die Methode wirklich löschen?',pt:'Tens a certeza de que queres eliminar o método?',pl:'Czy na pewno chcesz usunąć metodę?',nl:'Weet je zeker dat je de methode wilt verwijderen?',ro:'Sigur vrei să ștergi metoda?',el:'Είστε σίγουροι ότι θέλετε να διαγράψετε τη μέθοδο;'});
   add('Categoria entrata',{it:'Categoria entrata',en:'Income category',es:'Categoría de ingreso',fr:'Catégorie de revenu',de:'Einnahmenkategorie',pt:'Categoria de receita',pl:'Kategoria przychodu',nl:'Inkomstencategorie',ro:'Categorie venit',el:'Κατηγορία εσόδου'});
   add('Ultimi 30 giorni',{it:'Ultimi 30 giorni',en:'Last 30 days',es:'Últimos 30 días',fr:'30 derniers jours',de:'Letzte 30 Tage',pt:'Últimos 30 dias',pl:'Ostatnie 30 dni',nl:'Laatste 30 dagen',ro:'Ultimele 30 de zile',el:'Τελευταίες 30 ημέρες'});
   try{fainanceTranslationCache={};}catch(e){}
