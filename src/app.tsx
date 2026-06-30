@@ -61,10 +61,11 @@ async function getFainanceContactsPlugin(){
     var p=plugins.FainanceContacts||plugins.CapacitorContacts||plugins.Contacts||plugins.CapgoCapacitorContacts;
     if(p)return p;
   }catch(e){}
-  try{
-    var mod:any=await import("@capgo/capacitor-contacts");
-    return mod&&((mod.CapacitorContacts)||(mod.Contacts)||(mod.default));
-  }catch(e){return null;}
+  // Non importare pacchetti non dichiarati nel progetto: Vite fallisce la compilazione iOS
+  // se prova a risolvere @capgo/capacitor-contacts. I contatti nativi vengono letti
+  // dai plugin Capacitor già registrati in window.Capacitor.Plugins; altrimenti si passa
+  // al fallback Web Contacts API più sotto.
+  return null;
 }
 function firstContactValue(v:any){
   if(!v)return "";
