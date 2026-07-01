@@ -193,57 +193,74 @@ object WidgetUtils {
         return null
     }
 
+    private fun code128Bits(raw: String): String {
+        val value = raw.trim().filter { it.code in 32..126 }
+        if (value.isBlank()) return ""
+        val patterns = arrayOf(
+            "212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"
+        )
+        val vals = mutableListOf<Int>()
+        if (Regex("^\\d{2,}$").matches(value)) {
+            if (value.length % 2 == 0) {
+                vals.add(105) // Code 128 Set C: compact numeric pairs, same data, wider/scanner-friendly bars.
+                var i = 0
+                while (i < value.length) {
+                    vals.add(value.substring(i, i + 2).toIntOrNull() ?: 0)
+                    i += 2
+                }
+            } else {
+                vals.add(104) // first digit in Set B, then switch to Set C for pairs
+                vals.add((value[0].code - 32).coerceIn(0, 94))
+                vals.add(99)
+                var i = 1
+                while (i + 1 < value.length) {
+                    vals.add(value.substring(i, i + 2).toIntOrNull() ?: 0)
+                    i += 2
+                }
+            }
+        } else {
+            vals.add(104) // Code 128 Set B
+            value.forEach { ch -> vals.add((ch.code - 32).coerceIn(0, 94)) }
+        }
+        var checksum = vals.firstOrNull() ?: 104
+        for (i in 1 until vals.size) checksum += vals[i] * i
+        vals.add(checksum % 103)
+        vals.add(106)
+        val bits = StringBuilder()
+        vals.forEach { v ->
+            val pat = patterns.getOrElse(v) { patterns[0] }
+            for (i in pat.indices) {
+                val run = pat[i].digitToIntOrNull() ?: 1
+                repeat(run) { bits.append(if (i % 2 == 0) '1' else '0') }
+            }
+        }
+        return bits.toString()
+    }
+
     fun barcodeBitmap(code: String, width: Int = 900, height: Int = 300): Bitmap {
-        val bitmap = Bitmap.createBitmap(width.coerceAtLeast(320), height.coerceAtLeast(160), Bitmap.Config.ARGB_8888)
+        val safeWidth = width.coerceAtLeast(420)
+        val safeHeight = height.coerceAtLeast(190)
+        val bitmap = Bitmap.createBitmap(safeWidth, safeHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; style = Paint.Style.FILL }
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 28f; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.MONOSPACE }
-        val ean = ean13Digits(code)
-        if (ean != null) {
-            val l = arrayOf("0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011")
-            val g = arrayOf("0100111","0110011","0011011","0100001","0011101","0111001","0000101","0010001","0001001","0010111")
-            val r = arrayOf("1110010","1100110","1101100","1000010","1011100","1001110","1010000","1000100","1001000","1110100")
-            val parity = arrayOf("LLLLLL","LLGLGG","LLGGLG","LLGGGL","LGLLGG","LGGLLG","LGGGLL","LGLGLG","LGLGGL","LGGLGL")
-            val first = ean[0].digitToInt()
-            val bits = StringBuilder("101")
-            val p = parity[first]
-            for (i in 1..6) bits.append(if (p[i-1] == 'L') l[ean[i].digitToInt()] else g[ean[i].digitToInt()])
-            bits.append("01010")
-            for (i in 7..12) bits.append(r[ean[i].digitToInt()])
-            bits.append("101")
-            val quiet = 12
-            val total = bits.length + quiet * 2
-            val barTop = 18f
-            val barBottom = height - 42f
-            val module = width.toFloat() / total.toFloat()
-            var x = quiet * module
-            bits.forEachIndexed { idx, bit ->
-                if (bit == '1') {
-                    val guard = idx < 3 || idx in 45..49 || idx >= 92
-                    canvas.drawRect(x, barTop, x + module.coerceAtLeast(1f), if (guard) barBottom + 18f else barBottom, paint)
-                }
-                x += module
-            }
-            canvas.drawText(ean, width / 2f, height - 10f, textPaint)
-            return bitmap
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 26f; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.MONOSPACE }
+        val raw = code.filter { it.isDigit() || it.isLetter() || it == ' ' || it == '-' || it == '.' || it == '_' || it == '$' || it == '%' || it == '/' || it == '+' }.trim()
+        val bits = code128Bits(raw.ifBlank { code.trim() })
+        if (bits.isBlank()) return bitmap
+        val quietModules = 16
+        val totalModules = bits.length + quietModules * 2
+        val sidePad = 16f
+        val availableWidth = (safeWidth - sidePad * 2).coerceAtLeast(1f)
+        val module = availableWidth / totalModules.toFloat()
+        val barTop = 18f
+        val barBottom = safeHeight - 46f
+        var x = sidePad + quietModules * module
+        bits.forEach { bit ->
+            if (bit == '1') canvas.drawRect(x, barTop, x + module.coerceAtLeast(1f), barBottom, paint)
+            x += module
         }
-        val clean = code.ifBlank { "0000000000000" }
-        val bars = clean.flatMapIndexed { idx, ch ->
-            val v = (ch.code + idx * 7) % 9 + 1
-            listOf(v % 3 + 1, 1, v % 4 + 1, 2)
-        }
-        val total = bars.sum() + 24
-        val module = width.toFloat() / total
-        var x = 12 * module
-        var black = true
-        bars.forEach { w ->
-            val ww = w * module
-            if (black) canvas.drawRect(x, 18f, x + ww, height - 42f, paint)
-            x += ww
-            black = !black
-        }
-        canvas.drawText(clean.take(32), width / 2f, height - 10f, textPaint)
+        canvas.drawText(raw.ifBlank { code }.take(32), safeWidth / 2f, safeHeight - 12f, textPaint)
         return bitmap
     }
 

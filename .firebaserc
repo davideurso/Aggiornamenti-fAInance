@@ -7,6 +7,9 @@
       "hosting": {
         "fainance-test": [
           "test-fainanceapp-it"
+        ],
+        "fainance-prod": [
+          "fainance-a7794"
         ]
       }
     }

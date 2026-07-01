@@ -48,7 +48,7 @@ export function monthlyTotalsForYear(expenses,incomes,year,mode,monthLabels){
     var key=String(year)+"-"+String(i+1).padStart(2,"0");
     var exp=totalForMonth(expenses,key,mode);
     var inc=totalForMonth(incomes,key,mode);
-    return {label:labels[i]||key.slice(5),exp:exp,inc:inc,value:Math.max(0,inc-exp)};
+    return {label:labels[i]||key.slice(5),exp:exp,inc:inc,value:inc-exp};
   });
 }
 

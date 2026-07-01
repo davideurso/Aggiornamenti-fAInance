@@ -9,7 +9,6 @@ android {
 
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
-    implementation project(':aparajita-capacitor-biometric-auth')
     implementation project(':capacitor-community-speech-recognition')
     implementation project(':capacitor-firebase-authentication')
     implementation project(':capacitor-app')
@@ -17,6 +16,8 @@ dependencies {
     implementation project(':capacitor-filesystem')
     implementation project(':capacitor-preferences')
     implementation project(':capacitor-share')
+    implementation project(':aparajita-capacitor-biometric-auth')
+    implementation project(':capgo-capacitor-contacts')
 
 }
 

@@ -39,7 +39,7 @@ export function monthlyTotalsForYear(expenses: ExpenseItem[], incomes: ExpenseIt
   return Array.from({length:12}, (_,i) => {
     const key = String(year)+"-"+String(i+1).padStart(2,"0");
     const exp = totalForMonth(expenses,key,mode); const inc = totalForMonth(incomes,key,mode);
-    return {label:(monthLabels||[])[i]||key.slice(5), exp, inc, value:Math.max(0,inc-exp)};
+    return {label:(monthLabels||[])[i]||key.slice(5), exp, inc, value:inc-exp};
   });
 }
 export function patrimonioSnapshotTotal(entries: PatrimonioEntry[], snapshot: Record<string,any>): number {

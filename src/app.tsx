@@ -59,7 +59,11 @@ async function getFainanceContactsPlugin(){
     var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
     var plugins=cap&&cap.Plugins?cap.Plugins:{};
     var p=plugins.FainanceContacts||plugins.CapacitorContacts||plugins.Contacts||plugins.CapgoCapacitorContacts;
-    return p||null;
+    if(p)return p;
+  }catch(e){}
+  try{
+    var mod:any=await import("@capgo/capacitor-contacts");
+    return mod&&((mod.CapacitorContacts)||(mod.Contacts)||(mod.default));
   }catch(e){return null;}
 }
 function firstContactValue(v:any){
@@ -391,6 +395,28 @@ function LoginScreen({onLogin}){
       });
   }
 
+  function withLoginTimeout(promise:any, ms:number, message:string){
+    return new Promise(function(resolve,reject){
+      var done=false;
+      var timer=setTimeout(function(){
+        if(done)return;
+        done=true;
+        reject(new Error(message));
+      },ms);
+      Promise.resolve(promise).then(function(value){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        resolve(value);
+      }).catch(function(err){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
   async function doGoogle(){
     setError(""); setLoading(true);
     try {
@@ -440,79 +466,63 @@ function LoginScreen({onLogin}){
 
   async function doApple(){
     setError(""); setLoading(true);
-
-    function timeoutPromise(promise,ms,label){
-      return Promise.race([
-        promise,
-        new Promise(function(_,reject){
-          setTimeout(function(){reject(new Error(label||"Operazione scaduta."));},ms);
-        })
-      ]);
-    }
-
-    function normalizeNativeUser(nativeUser, fallbackCredential){
-      var email=String((nativeUser&&nativeUser.email)||"").toLowerCase();
-      var name=String((nativeUser&&nativeUser.displayName)||"").trim();
-      var uid=String((nativeUser&&nativeUser.uid)||"").trim();
-      if(!uid && fallbackCredential && fallbackCredential.idToken){
-        try{
-          var payload=JSON.parse(atob(String(fallbackCredential.idToken).split(".")[1]||""));
-          uid=payload.sub?String(payload.sub):"";
-          if(!email && payload.email)email=String(payload.email).toLowerCase();
-        }catch(parseErr){}
-      }
-      if(!uid)throw new Error("Apple login completato, ma non e' stato restituito un utente valido.");
-      return {id:uid,email:email,name:name||"Utente"};
-    }
-
     try {
-      var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+      var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
       if(isNative){
         const mod = await import("@capacitor-firebase/authentication");
         const FirebaseAuthentication = mod.FirebaseAuthentication;
         if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithApple){
           throw new Error("Sign in with Apple non disponibile nel plugin di autenticazione installato.");
         }
-
-        const nativeResult = await timeoutPromise(
-          FirebaseAuthentication.signInWithApple({skipNativeAuth:false}),
-          45000,
-          "Apple login completato, ma Firebase nativo non ha risposto entro 45 secondi."
-        );
-        const nativeUser = nativeResult && nativeResult.user ? nativeResult.user : null;
-        const nativeCredential = nativeResult && nativeResult.credential ? nativeResult.credential : null;
-        const normalizedUser = normalizeNativeUser(nativeUser,nativeCredential);
-
-        setLoading(false);
+        const result:any = await withLoginTimeout(FirebaseAuthentication.signInWithApple({
+          scopes:["email","name"],
+          customParameters:[{key:"locale",value:loginLang()}],
+          skipNativeAuth:true
+        }),45000,"Timeout durante l'accesso Apple. Riprova tra qualche secondo.");
+        const credData=(result&&result.credential)||{};
+        const idToken=credData.idToken||credData.id_token||credData.identityToken||credData.identity_token||"";
+        const accessToken=credData.accessToken||credData.access_token||"";
+        const rawNonce=credData.rawNonce||credData.raw_nonce||credData.nonce||"";
+        if(!idToken) throw new Error("Apple login non ha restituito identity token utilizzabile per Firebase JS. Verifica provider Apple in Firebase Authentication.");
+        const provider = new OAuthProvider("apple.com");
+        const credential = provider.credential(rawNonce?{idToken:idToken,rawNonce:rawNonce,accessToken:accessToken||undefined}:{idToken:idToken,accessToken:accessToken||undefined});
+        const cred = await withLoginTimeout(signInWithCredential(fbAuth, credential),45000,"Timeout durante l'autenticazione Firebase dopo Apple login.") as any;
         try{
-          if(normalizedUser.id){
-            setDoc(doc(fbDb,"users",normalizedUser.id),{name:normalizedUser.name,email:normalizedUser.email,provider:"apple",updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          var appleName=(cred.user.displayName||"").trim();
+          if(cred.user.uid){
+            var ref=doc(fbDb,"users",cred.user.uid);
+            var snap:any=await withLoginTimeout(getDoc(ref),8000,"Timeout lettura profilo Apple.").catch(function(){return null;});
+            if(!snap||!snap.exists||!snap.exists()){
+              await setDoc(ref,{name:appleName||"Utente",email:(cred.user.email||"").toLowerCase(),provider:"apple",createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
+            }
           }
-        }catch(profileErr){}
-        onLogin(normalizedUser);
+        }catch(saveErr){}
+        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
         return;
       }
-
       const provider = new OAuthProvider("apple.com");
       provider.addScope("email");
       provider.addScope("name");
       provider.setCustomParameters({locale:loginLang()});
-      const cred = await timeoutPromise(signInWithPopup(fbAuth, provider),45000,"Apple login web scaduto.");
+      const cred = await signInWithPopup(fbAuth, provider);
       try{
         if(cred.user&&cred.user.uid){
-          setDoc(doc(fbDb,"users",cred.user.uid),{name:cred.user.displayName||"Utente",email:String(cred.user.email||"").toLowerCase(),provider:"apple",updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          var refWeb=doc(fbDb,"users",cred.user.uid);
+          var snapWeb=await getDoc(refWeb);
+          if(!snapWeb.exists()){
+            await setDoc(refWeb,{name:cred.user.displayName||"Utente",email:(cred.user.email||"").toLowerCase(),provider:"apple",createdAt:new Date().toISOString()});
+          }
         }
       }catch(saveWebErr){}
-      setLoading(false);
       onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
     } catch(err){
-      console.error("Apple login error",(err&&err.code)||"unknown",err);
+      console.error("Apple login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
-      if(code==="auth/operation-not-allowed"){
-        setError(L("Errore Apple: abilita il provider Apple in Firebase Authentication e riprova."));
+      if(code==="auth/operation-not-allowed"||msg.toLowerCase().indexOf("apple")>=0&&msg.toLowerCase().indexOf("provider")>=0&&msg.toLowerCase().indexOf("enable")>=0){
+        setError(L("Errore Apple: il provider Apple non è abilitato in Firebase Authentication."));
       }else if(code==="auth/account-exists-with-different-credential"){
-        setError(L("Esiste gia' un account con questa email. Accedi con il metodo usato in precedenza."));
+        setError(L("Esiste già un account con questa email. Accedi con il metodo usato in precedenza."));
       }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
         setError(L("Accesso Apple annullato."));
       }else{
@@ -1031,113 +1041,62 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
   </div>;
 }
 
-
-async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
-async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
-async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
-
 function AppWithLogin(){
+  async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
+  async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
+  async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
 
+  function withAuthStateTimeout(promise:any, ms:number){
+    return new Promise(function(resolve,reject){
+      var done=false;
+      var timer=setTimeout(function(){
+        if(done)return;
+        done=true;
+        reject(new Error("Timeout caricamento profilo."));
+      },ms);
+      Promise.resolve(promise).then(function(value){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        resolve(value);
+      }).catch(function(err){
+        if(done)return;
+        done=true;
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  function setFallbackAuthenticatedUser(user:any){
+    var normalizedEmail=String(user.email||"").toLowerCase();
+    setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+    setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+    setFbUser(user);
+  }
+
   useEffect(function(){
-    var active=true;
-    var authFallbackTimer=setTimeout(function(){
-      // iOS/TestFlight safety: Firebase Auth can remain pending during WebView persistence restore.
-      // Do not block the whole app forever on "Caricamento...".
-      if(active){
-        setFbUser(function(prev){return prev===undefined?null:prev;});
-      }
-    },5000);
-
-    function applyMinimalUser(user){
-      var normalizedEmail=String((user&&user.email)||"").toLowerCase();
-      setUserData(function(prev){
-        return {
-          ...(prev||{}),
-          id:user.uid,
-          email:normalizedEmail,
-          name:(user.displayName||((prev&&prev.name)||"Utente")),
-          phonePrefix:(prev&&prev.phonePrefix)||"+39",
-          phone:(prev&&prev.phone)||"",
-          birthDate:(prev&&prev.birthDate)||"",
-          gender:(prev&&prev.gender)||"",
-          nationality:(prev&&prev.nationality)||"",
-          country:(prev&&prev.country)||"",
-          province:(prev&&prev.province)||"",
-          city:(prev&&prev.city)||"",
-          address:(prev&&prev.address)||"",
-          jobType:(prev&&prev.jobType)||"",
-          appUseReason:(prev&&prev.appUseReason)||""
-        };
-      });
-      setFbUser(user);
-    }
-
-    function loadProfileInBackground(user){
-      getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
-        if(!active)return;
-        var profile=snap.exists()?snap.data():{};
-        var displayName=profile.name||user.displayName||"Utente";
-        var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
-        setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-        setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
-      }).catch(function(){
-        if(!active)return;
-        var normalizedEmail=String(user.email||"").toLowerCase();
-        setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-        setUserData(function(prev){
-          return {
-            ...(prev||{}),
-            id:user.uid,
-            email:normalizedEmail,
-            name:user.displayName||((prev&&prev.name)||"Utente"),
-            phonePrefix:(prev&&prev.phonePrefix)||"+39",
-            phone:(prev&&prev.phone)||"",
-            nationality:(prev&&prev.nationality)||"",
-            country:(prev&&prev.country)||"",
-            province:(prev&&prev.province)||"",
-            city:(prev&&prev.city)||"",
-            address:(prev&&prev.address)||"",
-            jobType:(prev&&prev.jobType)||"",
-            appUseReason:(prev&&prev.appUseReason)||""
-          };
+    var unsub=onAuthStateChanged(fbAuth,function(user){
+      if(user){
+        // Load user profile from Firestore, but never keep the login screen blocked if Firestore is slow on iOS.
+        withAuthStateTimeout(getDoc(doc(fbDb,"users",user.uid)),8000).then(function(snap:any){
+          var profile=snap&&snap.exists&&snap.exists()?snap.data():{};
+          var displayName=profile.name||user.displayName||"Utente";
+          var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
+          setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+          setFbUser(user);
+        }).catch(function(){
+          setFallbackAuthenticatedUser(user);
         });
-      });
-    }
-
-    var unsub=function(){};
-    try{
-      unsub=onAuthStateChanged(fbAuth,function(user){
-        if(!active)return;
-        clearTimeout(authFallbackTimer);
-        if(user){
-          // Important: never wait for Firestore before leaving the login/loading screen.
-          applyMinimalUser(user);
-          loadProfileInBackground(user);
-        } else {
-          setFbUser(null);
-          setUserData(null);
-        }
-      },function(err){
-        if(!active)return;
-        clearTimeout(authFallbackTimer);
-        console.error("Firebase auth state error",err);
+      } else {
         setFbUser(null);
         setUserData(null);
-      });
-    }catch(err){
-      clearTimeout(authFallbackTimer);
-      console.error("Firebase auth listener setup error",err);
-      setFbUser(null);
-      setUserData(null);
-    }
-
-    return function(){
-      active=false;
-      clearTimeout(authFallbackTimer);
-      try{if(typeof unsub==="function")unsub();}catch(e){}
-    };
+      }
+    });
+    return unsub;
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
@@ -1160,15 +1119,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){
-    if(u&&u.id){
-      var syntheticUser={uid:u.id,email:u.email||"",displayName:u.name||"Utente"};
-      setUserData(u);
-      setFbUser(syntheticUser);
-    }else{
-      setUserData(u);
-    }
-  }}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1533,7 +1484,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
         setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
-        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
+        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,user.uid);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
         setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);
         setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);
         if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
@@ -2203,14 +2154,20 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
   async function getNativeBiometric(){
-    // Non importare pacchetto biometrico nel bundle web/iOS:
-    // Codemagic può compilare anche senza il modulo JS installato.
-    // In app nativa il plugin deve arrivare dal bridge Capacitor già sincronizzato.
+    try{
+      var pkg:any=await import("@aparajita/capacitor-biometric-auth");
+      if(pkg&&pkg.BiometricAuth)return {BiometricAuth:pkg.BiometricAuth,AndroidBiometryStrength:pkg.AndroidBiometryStrength||{weak:0,strong:1}};
+    }catch(e){}
     try{
       var cap=(typeof window!=="undefined"?(window as any).Capacitor:null);
-      var plugins=(cap&&cap.Plugins)||{};
-      var plugin=plugins.BiometricAuth||plugins.BiometricAuthNative||plugins.NativeBiometric||plugins.Biometrics||null;
-      if(plugin)return {BiometricAuth:plugin,AndroidBiometryStrength:{weak:0,strong:1}};
+      var legacy=cap&&cap.Plugins&&cap.Plugins.BiometricAuth;
+      if(legacy)return {BiometricAuth:legacy,AndroidBiometryStrength:{weak:0,strong:1}};
+      var core=await import("@capacitor/core");
+      var registerPlugin=(core&&core.registerPlugin)||null;
+      if(registerPlugin){
+        var proxy=registerPlugin("BiometricAuth");
+        return {BiometricAuth:proxy,AndroidBiometryStrength:{weak:0,strong:1}};
+      }
     }catch(e){}
     return null;
   }

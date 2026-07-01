@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import org.json.JSONArray
@@ -87,8 +89,11 @@ class ShoppingListWidgetProvider : AppWidgetProvider() {
             val settingsId = context.resources.getIdentifier("settingsButton", "id", context.packageName)
 
             if (!WidgetUtils.isWidgetAllowed(context, "shoppingList")) {
+                views.setInt(rootId, "setBackgroundResource", WidgetUtils.bgDrawableRes(context, 35))
                 views.setTextViewText(titleId, "🔒 Lista spesa")
                 views.setTextViewText(subtitleId, WidgetUtils.lockedWidgetMessage("shoppingList"))
+                views.setTextColor(titleId, Color.WHITE)
+                views.setTextColor(subtitleId, Color.rgb(255, 214, 102))
                 views.setViewVisibility(listId, View.GONE)
                 views.setViewVisibility(emptyId, View.GONE)
                 views.setOnClickPendingIntent(rootId, WidgetUtils.openIntent(context, "fainance://open-plan-info"))
@@ -97,6 +102,18 @@ class ShoppingListWidgetProvider : AppWidgetProvider() {
             }
 
             val cfg = WidgetUtils.json(context, "widget_shopping_list_settings")
+            val bgAlpha = cfg.optInt("bgAlpha", 65).coerceIn(0, 100)
+            val bgDrawableAlpha = (100 - bgAlpha).coerceIn(0, 100)
+            val titleColor = WidgetUtils.parseColor(cfg.optString("titleColor", "#FFFFFF"), Color.WHITE)
+            val textColor = WidgetUtils.parseColor(cfg.optString("textColor", "#EDEDF7"), Color.rgb(237, 237, 247))
+            val iconColor = WidgetUtils.parseColor(cfg.optString("iconColor", cfg.optString("accentColor", "#EF9F27")), Color.rgb(239, 159, 39))
+            val textSize = cfg.optDouble("textSize", 13.0).toFloat()
+            views.setInt(rootId, "setBackgroundResource", WidgetUtils.bgDrawableRes(context, bgDrawableAlpha))
+            views.setTextColor(titleId, titleColor)
+            views.setTextColor(subtitleId, textColor)
+            if (settingsId != 0) views.setTextColor(settingsId, iconColor)
+            views.setTextViewTextSize(titleId, TypedValue.COMPLEX_UNIT_SP, textSize + 3f)
+            views.setTextViewTextSize(subtitleId, TypedValue.COMPLEX_UNIT_SP, (textSize - 2f).coerceAtLeast(9f))
             val instance = WidgetUtils.instanceJson(context, "widget_shopping_list_instance", widgetId)
             val chosenListId = instance.optString("selectedListId", cfg.optString("selectedListId", "main"))
             val listTitle = instance.optString("selectedListTitle", cfg.optString("title", "Lista spesa"))
