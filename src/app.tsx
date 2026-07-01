@@ -53,6 +53,27 @@ function FAI_TRANSLATE(value:any){
 }
 function L(value:any){return FAI_TRANSLATE(value);}
 function PL(value:any){return FAI_TRANSLATE(value);}
+function fainanceWithTimeout(promise:any, ms:number, message:string){
+  return new Promise(function(resolve,reject){
+    var done=false;
+    var timer=setTimeout(function(){
+      if(done)return;
+      done=true;
+      reject(new Error(message));
+    },ms);
+    Promise.resolve(promise).then(function(value){
+      if(done)return;
+      done=true;
+      clearTimeout(timer);
+      resolve(value);
+    }).catch(function(err){
+      if(done)return;
+      done=true;
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
 
 async function getFainanceContactsPlugin(){
   try{
@@ -366,7 +387,7 @@ function LoginScreen({onLogin}){
     setError("");setLoading(true);
     signInWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
-        onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"});
+        onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"},cred.user);
       })
       .catch(function(err){
         setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+err.message);
@@ -386,35 +407,13 @@ function LoginScreen({onLogin}){
         // Save name to Firestore
         return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
           .then(function(){
-            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
+            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()},cred.user);
           });
       })
       .catch(function(err){
         setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
         setLoading(false);
       });
-  }
-
-  function withLoginTimeout(promise:any, ms:number, message:string){
-    return new Promise(function(resolve,reject){
-      var done=false;
-      var timer=setTimeout(function(){
-        if(done)return;
-        done=true;
-        reject(new Error(message));
-      },ms);
-      Promise.resolve(promise).then(function(value){
-        if(done)return;
-        done=true;
-        clearTimeout(timer);
-        resolve(value);
-      }).catch(function(err){
-        if(done)return;
-        done=true;
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
   }
 
   async function doGoogle(){
@@ -445,12 +444,12 @@ function LoginScreen({onLogin}){
         if(!idToken&&!accessToken) throw new Error("Google login non ha restituito token utilizzabili.");
         const credential = GoogleAuthProvider.credential(idToken||null, accessToken||null);
         const cred = await signInWithCredential(fbAuth, credential);
-        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
+        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
         return;
       }
       googleProvider.setCustomParameters({prompt:"select_account"});
       const cred = await signInWithPopup(fbAuth, googleProvider);
-      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
+      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
     } catch(err){
       console.error("Google login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
@@ -474,7 +473,7 @@ function LoginScreen({onLogin}){
         if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithApple){
           throw new Error("Sign in with Apple non disponibile nel plugin di autenticazione installato.");
         }
-        const result:any = await withLoginTimeout(FirebaseAuthentication.signInWithApple({
+        const result:any = await fainanceWithTimeout(FirebaseAuthentication.signInWithApple({
           scopes:["email","name"],
           customParameters:[{key:"locale",value:loginLang()}],
           skipNativeAuth:true
@@ -486,18 +485,18 @@ function LoginScreen({onLogin}){
         if(!idToken) throw new Error("Apple login non ha restituito identity token utilizzabile per Firebase JS. Verifica provider Apple in Firebase Authentication.");
         const provider = new OAuthProvider("apple.com");
         const credential = provider.credential(rawNonce?{idToken:idToken,rawNonce:rawNonce,accessToken:accessToken||undefined}:{idToken:idToken,accessToken:accessToken||undefined});
-        const cred = await withLoginTimeout(signInWithCredential(fbAuth, credential),45000,"Timeout durante l'autenticazione Firebase dopo Apple login.") as any;
+        const cred:any = await fainanceWithTimeout(signInWithCredential(fbAuth, credential),45000,"Timeout durante l'autenticazione Firebase dopo Apple login.");
         try{
           var appleName=(cred.user.displayName||"").trim();
           if(cred.user.uid){
             var ref=doc(fbDb,"users",cred.user.uid);
-            var snap:any=await withLoginTimeout(getDoc(ref),8000,"Timeout lettura profilo Apple.").catch(function(){return null;});
+            var snap:any=await fainanceWithTimeout(getDoc(ref),8000,"Timeout lettura profilo Apple.").catch(function(){return null;});
             if(!snap||!snap.exists||!snap.exists()){
               await setDoc(ref,{name:appleName||"Utente",email:(cred.user.email||"").toLowerCase(),provider:"apple",createdAt:new Date().toISOString()},{merge:true}).catch(function(){});
             }
           }
         }catch(saveErr){}
-        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
+        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
         return;
       }
       const provider = new OAuthProvider("apple.com");
@@ -514,7 +513,7 @@ function LoginScreen({onLogin}){
           }
         }
       }catch(saveWebErr){}
-      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
+      onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
     } catch(err){
       console.error("Apple login error",(err&&err.code)||"unknown");
       var msg=String((err&&err.message)||err||"");
@@ -1047,28 +1046,7 @@ function AppWithLogin(){
   async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
-
-  function withAuthStateTimeout(promise:any, ms:number){
-    return new Promise(function(resolve,reject){
-      var done=false;
-      var timer=setTimeout(function(){
-        if(done)return;
-        done=true;
-        reject(new Error("Timeout caricamento profilo."));
-      },ms);
-      Promise.resolve(promise).then(function(value){
-        if(done)return;
-        done=true;
-        clearTimeout(timer);
-        resolve(value);
-      }).catch(function(err){
-        if(done)return;
-        done=true;
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
-  }
+  var manualLoginRef=useRef(false);
 
   function setFallbackAuthenticatedUser(user:any){
     var normalizedEmail=String(user.email||"").toLowerCase();
@@ -1078,10 +1056,21 @@ function AppWithLogin(){
   }
 
   useEffect(function(){
+    var authResolved=false;
+    var bootTimer=setTimeout(function(){
+      if(authResolved||manualLoginRef.current)return;
+      authResolved=true;
+      setUserData(null);
+      setFbUser(null);
+    },6000);
     var unsub=onAuthStateChanged(fbAuth,function(user){
+      if(manualLoginRef.current&&!user)return;
+      authResolved=true;
+      clearTimeout(bootTimer);
       if(user){
-        // Load user profile from Firestore, but never keep the login screen blocked if Firestore is slow on iOS.
-        withAuthStateTimeout(getDoc(doc(fbDb,"users",user.uid)),8000).then(function(snap:any){
+        manualLoginRef.current=false;
+        // Load user profile from Firestore, but never keep the initial iOS screen blocked if Firestore is slow.
+        fainanceWithTimeout(getDoc(doc(fbDb,"users",user.uid)),8000,"Timeout caricamento profilo.").then(function(snap:any){
           var profile=snap&&snap.exists&&snap.exists()?snap.data():{};
           var displayName=profile.name||user.displayName||"Utente";
           var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
@@ -1096,7 +1085,7 @@ function AppWithLogin(){
         setUserData(null);
       }
     });
-    return unsub;
+    return function(){clearTimeout(bootTimer);unsub();};
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
@@ -1119,7 +1108,15 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u,firebaseUser){
+    manualLoginRef.current=true;
+    setUserData(u);
+    if(firebaseUser){
+      setFbUser(firebaseUser);
+    }else if(u&&u.id){
+      setFbUser({uid:u.id,email:u.email||"",displayName:u.name||"Utente"});
+    }
+  }}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
