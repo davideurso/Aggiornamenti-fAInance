@@ -91,9 +91,9 @@ export function planLimitLabel(v){return v===Infinity?"∞":String(v);}
 export function todayUsageKey(){return new Date().toISOString().slice(0,10);}
 export function monthUsageKey(){return new Date().toISOString().slice(0,7);}
 
-export const DEFAULT_EXPENSE_GROUPS=[{id:"casa",name:"Casa",icon:"🏠",color:"#B5D4F4"},{id:"vita",name:"Vita quotidiana",icon:"🛒",color:"#9FE1CB"},{id:"trasporti",name:"Trasporti",icon:"🚗",color:"#F5C4B3"},{id:"tempo",name:"Tempo libero",icon:"🎟️",color:"#D4A8F0"},{id:"altro",name:"Altro",icon:"📦",color:"#D3D1C7"}];
-export const DEFAULT_INCOME_GROUPS=[{id:"lavoro",name:"Lavoro",icon:"💼",color:"#5DCAA5"},{id:"investimenti",name:"Investimenti",icon:"📈",color:"#378ADD"},{id:"extra_inc",name:"Extra",icon:"⭐",color:"#D4A8F0"}];
-export const DEFAULT_METHOD_GROUPS=[{id:"conti_carte",name:"Conti e carte",icon:"🏦",color:"#378ADD"},{id:"altri",name:"Altri metodi",icon:"💳",color:"#EF9F27"}];
+export const DEFAULT_EXPENSE_GROUPS=[{id:"casa",name:"Casa",color:"#B5D4F4"},{id:"vita",name:"Vita quotidiana",color:"#9FE1CB"},{id:"trasporti",name:"Trasporti",color:"#F5C4B3"},{id:"tempo",name:"Tempo libero",color:"#D4A8F0"},{id:"altro",name:"Altro",color:"#D3D1C7"}];
+export const DEFAULT_INCOME_GROUPS=[{id:"lavoro",name:"Lavoro",color:"#5DCAA5"},{id:"investimenti",name:"Investimenti",color:"#378ADD"},{id:"extra_inc",name:"Extra",color:"#D4A8F0"}];
+export const DEFAULT_METHOD_GROUPS=[{id:"conti_carte",name:"Conti e carte",color:"#378ADD"},{id:"altri",name:"Altri metodi",color:"#EF9F27"}];
 export const DEFAULT_CATS=[{id:1,name:"Mutuo / Affitto",icon:"🏠",color:"#B5D4F4",group:"casa"},{id:2,name:"Utenze",icon:"💡",color:"#FAC775",group:"casa"},{id:3,name:"Manutenzione",icon:"🔧",color:"#D3D1C7",group:"casa"},{id:4,name:"Spesa",icon:"🛒",color:"#9FE1CB",group:"vita"},{id:5,name:"Salute",icon:"💊",color:"#B5D4F4",group:"vita"},{id:6,name:"Moda",icon:"👗",color:"#D4A8F0",group:"vita"},{id:7,name:"Carburante",icon:"⛽",color:"#F5C4B3",group:"trasporti"},{id:8,name:"Trasporti",icon:"🚌",color:"#F5C4B3",group:"trasporti"},{id:9,name:"Meccanico",icon:"🔧",color:"#D85A30",group:"trasporti"},{id:10,name:"Ristoranti",icon:"🍽",color:"#9FE1CB",group:"tempo"},{id:11,name:"Bar",icon:"☕",color:"#FAC775",group:"tempo"},{id:12,name:"Hobby",icon:"🎱",color:"#9F77DD",group:"tempo"},{id:13,name:"Esperienze",icon:"🎟",color:"#D4A8F0",group:"tempo"},{id:14,name:"Viaggi",icon:"✈",color:"#378ADD",group:"tempo"},{id:15,name:"Regali",icon:"🎁",color:"#EF9F27",group:"tempo"},{id:16,name:"Imprevisti",icon:"⚠️",color:"#E24B4A",group:"altro"},{id:17,name:"Altro",icon:"📦",color:"#D3D1C7",group:"altro"}];
 export const DEFAULT_EXPENSE_CATEGORY_NAMES={
   1:{it:"Mutuo / Affitto",en:"Mortgage / Rent",es:"Hipoteca / Alquiler",fr:"Crédit / Loyer",de:"Hypothek / Miete",pt:"Hipoteca / Aluguel",pl:"Kredyt / Czynsz",nl:"Hypotheek / Huur",ro:"Credit / Chirie",el:"Στεγαστικό / Ενοίκιο"},
@@ -180,7 +180,7 @@ export function getAllIncomeTypes(extra,overrides){
   }));
 }
 
-export const EMOJI_LIST=["💳", "🏦", "🏧", "💵", "💶", "💷", "💴", "🪙", "💰", "💸", "🧾", "📄", "📑", "📊", "📈", "📉", "💹", "🧮", "🏛️", "💼", "🧳", "🪪", "🔐", "🔒", "🔓", "🛡️", "📲", "📤", "📥", "🔁", "🔄", "💱", "🌐", "🧿", "🎯", "⭐", "✅", "❌", "➕", "➖", "🔔", "🚨", "📅", "⏳", "⌛", "⏰", "🏠", "🏘️", "🏢", "🏭", "🏬", "🏪", "🛒", "🛍️", "🧺", "🍽️", "☕", "🍕", "🍷", "🍱", "🥩", "🐟", "🥬", "🍎", "🥕", "🧀", "🥛", "🥚", "🍞", "🥐", "🍝", "🍚", "🥫", "🧃", "🧴", "🧼", "🪥", "🧻", "🧽", "🧹", "🪣", "💡", "🔌", "🔋", "🔥", "❄️", "🛋️", "🛏️", "🚿", "🛁", "🚽", "🪑", "🚪", "🪟", "🪴", "🔧", "🛠️", "🪛", "🔩", "⚙️", "🧰", "🏗️", "🚗", "🚌", "🚖", "🛵", "🏍️", "🚲", "🛴", "⛽", "🚆", "🚇", "🛫", "✈️", "🛳️", "🧭", "🗺️", "🏖️", "🏕️", "🏔️", "🏝️", "👗", "👟", "👓", "🧢", "💍", "⌚", "💆", "💊", "🩺", "🩹", "🦷", "🏥", "⚖️", "📜", "🎟️", "🎬", "🎮", "🎵", "🎧", "📚", "🎓", "🎭", "🎨", "🎤", "🎹", "🥁", "🎲", "♟️", "🧩", "🎁", "❤️", "👶", "🐶", "🐱", "🌱", "🌿", "🌸", "🍀", "⚽", "🎾", "🏋️", "🧘", "🏊", "🚴", "🥾", "🏆", "🥇", "🌍", "🎄", "💻", "📱", "🖥️", "🖨️", "🖱️", "⌨️", "📷", "🔎", "🔍", "📌", "📍", "🧷", "🗃️", "🗄️", "📁", "📂", "📝", "🖊️", "🖌️", "✍️", "🔖", "💬", "📞", "☎️", "📧", "📨", "📩", "₿", "Ξ", "🇪🇺", "🇺🇸", "🇬🇧", "🇨🇭", "🇯🇵", "🇨🇦", "🇦🇺", "🇧🇷", "🇨🇳", "🇮🇳", "🇵🇱", "🇳🇱", "🇬🇷", "🇵🇹", "🇪🇸", "🇫🇷", "🇩🇪"];
+export const EMOJI_LIST=["🏠","💡","🛋","🔧","🛒","💆","💊","🎱","🍽","☕","👗","🎟","🏋","🎁","❤","✈","🅿","🚖","⛽","📦","💳","💵","🏦","💰","🍱","📈","💼","🎯","⭐","💠","🏛","🎮","🎵","📚","🏖","🚗","🚌","🛵","🎬","🍕","🍷","💻","📱","🎓","👶","🐶","🌱","🔑","🏥","⚽","🎾","🌍","🎄","📦","🧾","🧮","📑","📌","📍","🧷","🗃️","🗄️","🧺","🛍️","🥩","🐟","🥬","🍎","🥕","🧀","🥛","🥚","🍞","🥐","🍝","🍚","🥫","🧃","🧴","🧼","🪥","🧻","🧽","🧹","🪣","🧊","🔥","❄️","☂️","👓","🧢","👟","💍","⌚","📷","🎧","🖨️","🖥️","🖱️","⌨️","🔌","🔋","🧯","🛠️","🪛","🔩","⚙️","🧰","🏗️","🏡","🏢","🏬","🏪","🏫","🏟️","🛏️","🚿","🛁","🚽","🪑","🚪","🪟","🪴","🌵","🌿","🌸","🍀","🐱","🐭","🐠","🦜","🐢","🚲","🛴","🚆","🚇","🚁","🛫","🛳️","🏕️","🧭","🗺️","🏔️","🏝️","🎭","🎨","🎤","🎹","🥁","🎲","♟️","🧩","🎯","🏆","🥇","🧘","🏊","🚴","🥾","🩺","🩹","🦷","👨‍⚕️","⚖️","📜","🧾","💹","📉","📊","🪙","💶","💷","💴","💲","🔐","🔔","🚨","✅","❌","➕","➖","🔄","📅","⏳","🅽","🅷","🤖","🧠","🅿️","▶️","🏰","🎞️","🟢","🟣","☁️","🅰️","📺","🛰️","📶","📞","🌐","📡","☎️","AMZ","𝙉","SPOT","D+","HBO","YT","GPT","CLA","PAY","","SAM","G","MS","ADB","CNV","DBX","REV","WISE","N26","SKY","DAZN","TIM","VOD","ILIAD","W3"];
 export const COLORS=["#9FE1CB","#5DCAA5","#B5D4F4","#378ADD","#F5C4B3","#D85A30","#FAC775","#EF9F27","#D4A8F0","#9F77DD","#F4C0D1","#D4537E","#C0DD97","#639922","#D3D1C7","#888780","#E24B4A","#1D9E75"];
 export const GOAL_ICONS=["🎯","🏖","🚗","🏠","✈","🎓","💰","🏋","🎮","📱","💻","👶","🌍","🎄","🏆","🌱","🔑","❤"];
 export const BG_THEMES=[{id:"default",label:"Default",bg:"#f7f7f7",dark:false},{id:"slate",label:"Slate",bg:"#e8ecf0",dark:false},{id:"warm",label:"Warm",bg:"#f5f0ea",dark:false},{id:"ocean",label:"Ocean",bg:"#e6f0f5",dark:false},{id:"forest",label:"Forest",bg:"#e8f2ec",dark:false},{id:"viola",label:"Viola",bg:"#f0ecf8",dark:false},{id:"dark",label:"Dark",bg:"#1a1a2e",dark:true},{id:"darkslate",label:"Dark Slate",bg:"#16213e",dark:true}];
@@ -240,9 +240,7 @@ export function getDefaultDateFormat(){var loc=getDeviceLocale().toUpperCase();v
 
 
 export function useStorage(key,dv){
-  function readValue(k){try{var s=localStorage.getItem(k);return s?JSON.parse(s):dv;}catch(e){return dv;}}
-  var [v,setV]=useState(function(){return readValue(key);});
-  useEffect(function(){setV(readValue(key));},[key]);
+  var [v,setV]=useState(function(){try{var s=localStorage.getItem(key);return s?JSON.parse(s):dv;}catch(e){return dv;}});
   var save=useCallback(function(val){
     setV(function(prev){
       var next=typeof val==="function"?val(prev):val;
