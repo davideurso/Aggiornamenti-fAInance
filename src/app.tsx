@@ -2594,6 +2594,27 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
   var GOOGLE_PLAY_SUBSCRIPTION_IDS={base:{productId:"base",monthly:"base-monthly",yearly:"base-yearly"},premium:{productId:"complete",monthly:"complete-monthly",yearly:"complete-yearly"}};
   var APPLE_SUBSCRIPTION_IDS={base:{monthly:"base_monthly",yearly:"base_yearly"},premium:{monthly:"complete_monthly",yearly:"complete_yearly"}};
+  function uniqueList(list){var seen={};return (list||[]).map(function(x){return String(x||"").trim();}).filter(function(x){if(!x||seen[x])return false;seen[x]=true;return true;});}
+  function appleProductIdOptions(pid,period){
+    var p=period==="yearly"?"yearly":"monthly";
+    var p2=period==="yearly"?"annual":"monthly";
+    var p3=period==="yearly"?"annuale":"mensile";
+    var basePrefix="it.fainanceapp.app.";
+    if(pid==="base")return uniqueList([
+      "base_"+p,"base-"+p,"base_"+p2,"base-"+p2,"base_"+p3,"base-"+p3,
+      "plus_"+p,"plus-"+p,"plus_"+p2,"plus-"+p2,"plus_"+p3,"plus-"+p3,
+      basePrefix+"base_"+p,basePrefix+"base-"+p,basePrefix+"plus_"+p,basePrefix+"plus-"+p,
+      "base","plus"
+    ]);
+    if(pid==="premium")return uniqueList([
+      "complete_"+p,"complete-"+p,"complete_"+p2,"complete-"+p2,"complete_"+p3,"complete-"+p3,
+      "premium_"+p,"premium-"+p,"premium_"+p2,"premium-"+p2,"premium_"+p3,"premium-"+p3,
+      "completo_"+p,"completo-"+p,"completo_"+p2,"completo-"+p2,"completo_"+p3,"completo-"+p3,
+      basePrefix+"complete_"+p,basePrefix+"complete-"+p,basePrefix+"premium_"+p,basePrefix+"premium-"+p,basePrefix+"completo_"+p,basePrefix+"completo-"+p,
+      "complete","premium","completo"
+    ]);
+    return [];
+  }
   function billingPeriodLabel(period){return period==="yearly"?L("Annuale"):L("Mensile");}
   function nativePlugin(name){try{return window&&window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins[name];}catch(e){return null;}}
   function nativePlatform(){try{var c=window&&window.Capacitor;if(c&&c.getPlatform)return c.getPlatform();if(c&&c.isNativePlatform&&c.isNativePlatform())return "native";}catch(e){}return "web";}
@@ -2629,13 +2650,17 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var period=planBillingPeriod==="yearly"?"yearly":"monthly";
     var productId="";
     var basePlanId="";
+    var productIds=[];
     if(isNativeIOSApp()){
+      productIds=appleProductIdOptions(pid,period);
       var iosCfg=APPLE_SUBSCRIPTION_IDS[pid];
-      productId=iosCfg&&iosCfg[period]?iosCfg[period]:"";
+      productId=iosCfg&&iosCfg[period]?iosCfg[period]:(productIds[0]||"");
+      if(productId&&productIds.indexOf(productId)<0)productIds=[productId].concat(productIds);
     }else{
       var cfg=GOOGLE_PLAY_SUBSCRIPTION_IDS[pid];
       productId=cfg?cfg.productId:"";
       basePlanId=cfg&&cfg[period]?cfg[period]:"";
+      productIds=productId?[productId]:[];
     }
     if(!productId){
       setToast({text:L("Configurazione acquisto non disponibile."),type:"warning",color:"#EF9F27",icon:"⚠️"});
@@ -2643,7 +2668,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
     var loadingKey=pid+":"+period;
     setPlanPurchaseLoading(loadingKey);
-    billing.purchase({productId:productId,basePlanId:basePlanId,plan:pid,billingPeriod:period,platform:nativePlatform()})
+    billing.purchase({productId:productId,productIdsCsv:productIds.join("|"),basePlanId:basePlanId,plan:pid,billingPeriod:period,platform:nativePlatform()})
       .then(function(res){
         if(res&&res.success){
           setCurrentPlan(res.plan||pid,true);
@@ -2655,7 +2680,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         }else if(res&&res.pending){
           setToast({text:L("Acquisto in attesa di conferma dallo store."),type:"warning",color:"#EF9F27",icon:"⏳"});
         }else{
-          setToast({text:L("Acquisto non completato. Il piano resta invariato."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+          var detail=res&&res.message?String(res.message):"";
+          if(!detail&&res&&res.productIdsTried)detail="Prodotti provati: "+String(res.productIdsTried);
+          setToast({text:L("Acquisto non completato. Il piano resta invariato.")+(detail?" "+detail:""),type:"warning",color:"#EF9F27",icon:"⚠️"});
         }
       })
       .catch(function(err){
@@ -2679,7 +2706,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           setToast({text:L("Acquisti ripristinati")+": "+planLabel(res.plan,lang),type:"success",color:"#1D9E75",icon:"✅"});
           setTimeout(function(){try{saveWidgetSettingsToNative(false,enforceWidgetPlanPayload(widgetSettingsPayload()));}catch(e){}},50);
         }else{
-          setToast({text:L("Nessun abbonamento attivo trovato."),type:"warning",color:"#EF9F27",icon:"⚠️"});
+          var detail=res&&res.message?String(res.message):"";
+          setToast({text:L("Nessun abbonamento attivo trovato.")+(detail?" "+detail:""),type:"warning",color:"#EF9F27",icon:"⚠️"});
         }
       })
       .catch(function(err){var msg=err&&err.message?err.message:String(err||"");setToast({text:L("Errore ripristino acquisti")+(msg?": "+msg:""),type:"error",color:"#E24B4A",icon:"❌"});})

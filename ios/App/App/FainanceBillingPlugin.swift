@@ -13,19 +13,64 @@ public class FainanceBillingPlugin: CAPPlugin, CAPBridgedPlugin {
 
     private let productToPlan: [String: (plan: String, period: String)] = [
         "base_monthly": ("base", "monthly"),
+        "base-monthly": ("base", "monthly"),
+        "plus_monthly": ("base", "monthly"),
+        "plus-monthly": ("base", "monthly"),
         "base_yearly": ("base", "yearly"),
+        "base-yearly": ("base", "yearly"),
+        "plus_yearly": ("base", "yearly"),
+        "plus-yearly": ("base", "yearly"),
+        "base": ("base", "monthly"),
+        "plus": ("base", "monthly"),
         "complete_monthly": ("premium", "monthly"),
-        "complete_yearly": ("premium", "yearly"),
+        "complete-monthly": ("premium", "monthly"),
         "premium_monthly": ("premium", "monthly"),
-        "premium_yearly": ("premium", "yearly")
+        "premium-monthly": ("premium", "monthly"),
+        "completo_monthly": ("premium", "monthly"),
+        "completo-monthly": ("premium", "monthly"),
+        "complete_yearly": ("premium", "yearly"),
+        "complete-yearly": ("premium", "yearly"),
+        "premium_yearly": ("premium", "yearly"),
+        "premium-yearly": ("premium", "yearly"),
+        "completo_yearly": ("premium", "yearly"),
+        "completo-yearly": ("premium", "yearly"),
+        "complete": ("premium", "monthly"),
+        "premium": ("premium", "monthly"),
+        "completo": ("premium", "monthly")
     ]
+
+    private func mappedProduct(productID: String, requestedPlan: String = "", requestedPeriod: String = "monthly") -> (plan: String, period: String)? {
+        if let mapped = productToPlan[productID] { return mapped }
+        let id = productID.lowercased()
+        var plan = ""
+        if id.contains("base") || id.contains("plus") { plan = "base" }
+        else if id.contains("complete") || id.contains("premium") || id.contains("completo") { plan = "premium" }
+        else if !requestedPlan.isEmpty { plan = requestedPlan }
+        if plan.isEmpty { return nil }
+        let period = (id.contains("year") || id.contains("annual") || id.contains("annuale")) ? "yearly" : (requestedPeriod.isEmpty ? "monthly" : requestedPeriod)
+        return (plan, period)
+    }
 
     @objc func purchase(_ call: CAPPluginCall) {
         let productId = call.getString("productId") ?? ""
+        let productIdsCsv = call.getString("productIdsCsv") ?? ""
         let requestedPlan = call.getString("plan") ?? ""
         let requestedPeriod = call.getString("billingPeriod") ?? "monthly"
 
-        if productId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        var productIds = productIdsCsv
+            .split(separator: "|")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        let cleanProductId = productId.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !cleanProductId.isEmpty && !productIds.contains(cleanProductId) {
+            productIds.insert(cleanProductId, at: 0)
+        }
+
+        var seen = Set<String>()
+        productIds = productIds.filter { seen.insert($0).inserted }
+
+        if productIds.isEmpty {
             call.reject("Prodotto App Store mancante.")
             return
         }
@@ -33,7 +78,7 @@ public class FainanceBillingPlugin: CAPPlugin, CAPBridgedPlugin {
         if #available(iOS 15.0, *) {
             Task {
                 do {
-                    let response = try await purchaseProduct(productId: productId, requestedPlan: requestedPlan, requestedPeriod: requestedPeriod)
+                    let response = try await purchaseProduct(productIds: productIds, preferredProductId: cleanProductId, requestedPlan: requestedPlan, requestedPeriod: requestedPeriod)
                     await MainActor.run { call.resolve(response) }
                 } catch {
                     await MainActor.run { call.reject(error.localizedDescription) }
@@ -61,22 +106,25 @@ public class FainanceBillingPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @available(iOS 15.0, *)
-    private func purchaseProduct(productId: String, requestedPlan: String, requestedPeriod: String) async throws -> [String: Any] {
-        let products = try await Product.products(for: [productId])
-        guard let product = products.first else {
+    private func purchaseProduct(productIds: [String], preferredProductId: String, requestedPlan: String, requestedPeriod: String) async throws -> [String: Any] {
+        let products = try await Product.products(for: productIds)
+        guard !products.isEmpty else {
             return [
                 "success": false,
-                "message": "Prodotto App Store non trovato: \(productId)",
-                "productId": productId
+                "code": "PRODUCT_NOT_FOUND",
+                "message": "Prodotto App Store non trovato. Verifica Product ID, Paid Apps Agreement e stato degli abbonamenti in App Store Connect.",
+                "productId": preferredProductId,
+                "productIdsTried": productIds.joined(separator: ", ")
             ]
         }
 
+        let product = products.first(where: { $0.id == preferredProductId }) ?? products[0]
         let result = try await product.purchase()
         switch result {
         case .success(let verification):
             let transaction = try checkVerified(verification)
             await transaction.finish()
-            let mapped = productToPlan[transaction.productID] ?? productToPlan[productId]
+            let mapped = mappedProduct(productID: transaction.productID, requestedPlan: requestedPlan, requestedPeriod: requestedPeriod) ?? mappedProduct(productID: product.id, requestedPlan: requestedPlan, requestedPeriod: requestedPeriod)
             let resolvedPlan = mapped?.plan ?? (requestedPlan.isEmpty ? "premium" : requestedPlan)
             let resolvedPeriod = mapped?.period ?? (requestedPeriod.isEmpty ? "monthly" : requestedPeriod)
             return [
@@ -107,7 +155,7 @@ public class FainanceBillingPlugin: CAPPlugin, CAPBridgedPlugin {
         for await result in Transaction.currentEntitlements {
             let transaction = try checkVerified(result)
             guard transaction.revocationDate == nil else { continue }
-            guard let mapped = productToPlan[transaction.productID] else { continue }
+            guard let mapped = mappedProduct(productID: transaction.productID) else { continue }
             let rank = mapped.plan == "premium" ? 2 : mapped.plan == "base" ? 1 : 0
             if rank > bestRank {
                 bestRank = rank
