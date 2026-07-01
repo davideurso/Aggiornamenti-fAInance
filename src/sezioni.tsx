@@ -36,10 +36,8 @@ async function getFainanceContactsPlugin(){
     var p=plugins.FainanceContacts||plugins.CapacitorContacts||plugins.Contacts||plugins.CapgoCapacitorContacts;
     if(p)return p;
   }catch(e){}
-  try{
-    var mod:any=await import("@capgo/capacitor-contacts");
-    return mod&&((mod.CapacitorContacts)||(mod.Contacts)||(mod.default));
-  }catch(e){return null;}
+  // Do not import @capgo/capacitor-contacts here: Vite must be able to build the web bundle even when the native package is not installed in the iOS build environment.
+  return null;
 }
 function firstContactValue(v:any){
   if(!v)return "";
