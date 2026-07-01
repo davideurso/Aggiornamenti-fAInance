@@ -59,11 +59,7 @@ async function getFainanceContactsPlugin(){
     var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
     var plugins=cap&&cap.Plugins?cap.Plugins:{};
     var p=plugins.FainanceContacts||plugins.CapacitorContacts||plugins.Contacts||plugins.CapgoCapacitorContacts;
-    if(p)return p;
-  }catch(e){}
-  try{
-    var mod:any=await import("@capgo/capacitor-contacts");
-    return mod&&((mod.CapacitorContacts)||(mod.Contacts)||(mod.default));
+    return p||null;
   }catch(e){return null;}
 }
 function firstContactValue(v:any){
