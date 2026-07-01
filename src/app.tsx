@@ -787,45 +787,29 @@ function AppWithLogin(){
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
 
-  function minimalProfileFromUser(user){
-    var normalizedEmail=String((user&&user.email)||"").toLowerCase();
-    return {id:user&&user.uid?user.uid:"",email:normalizedEmail,name:(user&&user.displayName)||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};
-  }
-  function syntheticFirebaseUser(u){return {uid:u&&u.id?u.id:"",email:u&&u.email?u.email:"",displayName:u&&u.name?u.name:"Utente"};}
-  function applyAuthenticatedUser(user){
-    if(!user){setFbUser(null);setUserData(null);return;}
-    var minimal=minimalProfileFromUser(user);
-    setFbUser(user);
-    setUserData(function(prev){return {...minimal,...(prev&&prev.id===minimal.id?prev:{}),id:minimal.id,email:minimal.email,name:(prev&&prev.name)||minimal.name};});
-    getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
-      var profile=snap.exists()?snap.data():{};
-      var displayName=profile.name||user.displayName||"Utente";
-      var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
-      setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-      setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
-    }).catch(function(){
-      var normalizedEmail=String(user.email||"").toLowerCase();
-      setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-    });
-  }
-
   useEffect(function(){
-    var settled=false;
-    var fallbackTimer=setTimeout(function(){
-      if(settled)return;
-      settled=true;
-      var current=fbAuth.currentUser;
-      if(current)applyAuthenticatedUser(current);else{setFbUser(null);setUserData(null);}
-    },6000);
     var unsub=onAuthStateChanged(fbAuth,function(user){
-      if(!settled){settled=true;clearTimeout(fallbackTimer);}
-      applyAuthenticatedUser(user);
-    },function(){
-      if(!settled){settled=true;clearTimeout(fallbackTimer);}
-      var current=fbAuth.currentUser;
-      if(current)applyAuthenticatedUser(current);else{setFbUser(null);setUserData(null);}
+      if(user){
+        // Load user profile from Firestore
+        getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
+          var profile=snap.exists()?snap.data():{};
+          var displayName=profile.name||user.displayName||"Utente";
+          var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
+          setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+          setFbUser(user);
+        }).catch(function(){
+          var normalizedEmail=String(user.email||"").toLowerCase();
+          setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
+          setFbUser(user);
+        });
+      } else {
+        setFbUser(null);
+        setUserData(null);
+      }
     });
-    return function(){clearTimeout(fallbackTimer);try{unsub&&unsub();}catch(e){}};
+    return unsub;
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
@@ -848,7 +832,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){var synthetic=syntheticFirebaseUser(u);setUserData({id:synthetic.uid,email:String(synthetic.email||"").toLowerCase(),name:synthetic.displayName||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});setFbUser(synthetic);}}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1109,12 +1093,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!userId){setFirestoreReady(true);return;}
     firestoreHydratedRef.current=false;
     setFirestoreReady(false);
-    var firestoreFallbackTimer=setTimeout(function(){
-      if(!firestoreHydratedRef.current){
-        console.warn("Firestore load timeout: entering without blocking the UI");
-        clearTimeout(firestoreFallbackTimer);setFirestoreReady(true);
-      }
-    },7000);
     // Reset immediato dei dati sensibili quando cambia account: evita che il nuovo account erediti
     // in memoria alert, movimenti, chat o appunti del profilo usato prima mentre Firestore sta caricando.
     setExpenses([]);setIncomes([]);setRecurring([]);setGoals(DEFAULT_GOALS);setAlerts([]);setBudgetPlan(DEFAULT_BUDGET_PLAN);
@@ -1147,7 +1125,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
         setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
-        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
+        (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,user.uid);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
         setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);
         setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);
         if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);
@@ -1177,9 +1155,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShoppingAreas(DEFAULT_SHOPPING_AREAS);setShareReceiptUploads([]);setShowShareInHistory(true);setCustomNotifs([]);setNotifPrefs({remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free",false);setPlanUsage({});setShownAlertIds([]);
       }
       firestoreHydratedRef.current=true;
-      clearTimeout(firestoreFallbackTimer);setFirestoreReady(true);
-    }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;clearTimeout(firestoreFallbackTimer);setFirestoreReady(true);});
-    return function(){clearTimeout(firestoreFallbackTimer);};
+      setFirestoreReady(true);
+    }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
   },[userId]);
 
   async function saveToFirestore(){
@@ -1759,18 +1736,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
 
   function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
-  async function getNativeBiometric(){
-    // Non usare import dinamico del pacchetto biometrico qui: la compilazione iOS/Web
-    // deve riuscire anche quando il pacchetto JS non è installato nel ramo usato da Codemagic.
-    // In app nativa il plugin viene esposto dal bridge Capacitor in window.Capacitor.Plugins.
-    try{
-      var cap=(window as any).Capacitor;
-      var plugins=(cap&&cap.Plugins)||{};
-      var plugin=plugins.BiometricAuth||plugins.BiometricAuthNative||plugins.NativeBiometric||plugins.Biometrics||null;
-      if(plugin)return {BiometricAuth:plugin,AndroidBiometryStrength:{weak:0,strong:1}};
-    }catch(e){}
-    return null;
-  }
+  async function getNativeBiometric(){try{var mod=await import("@aparajita/capacitor-biometric-auth");return mod&&mod.BiometricAuth?mod:null;}catch(e){return null;}}
 
   function biometricErrorText(errorCode,details){
     var code=String(errorCode||"");var raw=String(details||"");
