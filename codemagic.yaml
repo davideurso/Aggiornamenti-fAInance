@@ -55,6 +55,52 @@ workflows:
         script: |
           npx cap sync ios
 
+      - name: Register local iOS native plugins
+        script: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          config_path = Path("ios/App/App/capacitor.config.json")
+          pbxproj_path = Path("ios/App/App.xcodeproj/project.pbxproj")
+          app_dir = Path("ios/App/App")
+
+          required_plugins = ["FainanceBillingPlugin", "FainanceAdsPlugin"]
+          required_files = [
+              "FainanceBillingPlugin.swift",
+              "FainanceBillingPlugin.m",
+              "FainanceAdsPlugin.swift",
+              "FainanceAdsPlugin.m",
+          ]
+
+          if not config_path.exists():
+              raise SystemExit(f"Missing {config_path}")
+
+          data = json.loads(config_path.read_text(encoding="utf-8"))
+          classes = list(data.get("packageClassList") or [])
+          for plugin in required_plugins:
+              if plugin not in classes:
+                  classes.append(plugin)
+          data["packageClassList"] = classes
+          config_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+          missing_files = [name for name in required_files if not (app_dir / name).exists()]
+          if missing_files:
+              raise SystemExit("Missing local iOS plugin files: " + ", ".join(missing_files))
+
+          pbx = pbxproj_path.read_text(encoding="utf-8", errors="ignore")
+          missing_project_refs = [name for name in required_files if name not in pbx]
+          if missing_project_refs:
+              raise SystemExit("Local iOS plugin files are not referenced in the Xcode project: " + ", ".join(missing_project_refs))
+
+          print("Registered local iOS plugins in capacitor.config.json:")
+          for plugin in required_plugins:
+              print("- " + plugin)
+          PY
+
+          python3 -m json.tool ios/App/App/capacitor.config.json | grep -E -n "FainanceBillingPlugin|FainanceAdsPlugin" -C 2
+
+
       - name: Install CocoaPods if Podfile exists
         script: |
           if [ -f "ios/App/Podfile" ]; then
