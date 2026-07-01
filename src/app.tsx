@@ -53,6 +53,251 @@ function FAI_TRANSLATE(value:any){
 }
 function L(value:any){return FAI_TRANSLATE(value);}
 function PL(value:any){return FAI_TRANSLATE(value);}
+
+async function getFainanceContactsPlugin(){
+  try{
+    var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
+    var plugins=cap&&cap.Plugins?cap.Plugins:{};
+    var p=plugins.FainanceContacts||plugins.CapacitorContacts||plugins.Contacts||plugins.CapgoCapacitorContacts;
+    if(p)return p;
+  }catch(e){}
+  try{
+    var mod:any=await import("@capgo/capacitor-contacts");
+    return mod&&((mod.CapacitorContacts)||(mod.Contacts)||(mod.default));
+  }catch(e){return null;}
+}
+function firstContactValue(v:any){
+  if(!v)return "";
+  if(typeof v==="string"||typeof v==="number")return String(v);
+  if(Array.isArray(v)){for(var i=0;i<v.length;i++){var r=firstContactValue(v[i]);if(r)return r;}return "";}
+  return v.value||v.address||v.email||v.number||v.normalizedNumber||v.display||v.formatted||v.formattedName||v.name||v.label||"";
+}
+function normalizeFainanceContact(c:any){
+  if(!c)return null;
+  if(c.contact)c=c.contact;
+  if(c.contacts&&c.contacts[0])c=c.contacts[0];
+  if(c.person)c=c.person;
+  var structuredName=firstContactValue(c.name)||firstContactValue(c.names);
+  var name=firstContactValue(c.displayName)||firstContactValue(c.fullName)||structuredName||[firstContactValue(c.givenName),firstContactValue(c.middleName),firstContactValue(c.familyName)].filter(Boolean).join(" ");
+  var email=firstContactValue(c.emailAddresses)||firstContactValue(c.emails)||firstContactValue(c.email);
+  var phone=firstContactValue(c.phoneNumbers)||firstContactValue(c.phones)||firstContactValue(c.tel)||firstContactValue(c.phone);
+  name=String(name||"").trim();email=String(email||"").trim();phone=String(phone||"").trim();
+  if(!name&&!email&&!phone)return null;
+  return {name:name,email:email,phone:phone};
+}
+function normalizeFainanceContactsResult(res:any){
+  if(!res)return [];
+  var arr:any[]=[];
+  if(Array.isArray(res))arr=res;
+  else if(Array.isArray(res.contacts))arr=res.contacts;
+  else if(res.contact)arr=[res.contact];
+  else arr=[res];
+  return arr.map(normalizeFainanceContact).filter(Boolean);
+}
+function fainanceContactFields(){return ["id","fullName","givenName","middleName","familyName","displayName","emailAddresses","phoneNumbers"] as any;}
+async function tryFainanceContactPicker(plugin:any){
+  if(!plugin)return null;
+  var fields=fainanceContactFields();
+  var attempts=[
+    function(){return plugin.pickContact?plugin.pickContact():null;},
+    function(){return plugin.pickContact?plugin.pickContact({fields:fields,multiple:false}):null;},
+    function(){return plugin.pickContacts?plugin.pickContacts({multiple:false}):null;},
+    function(){return plugin.pickContacts?plugin.pickContacts({fields:fields,multiple:false}):null;}
+  ];
+  for(var i=0;i<attempts.length;i++){
+    try{
+      var res=await attempts[i]();
+      var list=normalizeFainanceContactsResult(res);
+      if(list.length)return list[0];
+    }catch(e){}
+  }
+  return null;
+}
+async function requestFainanceContactsPermission(plugin:any){
+  try{if(plugin&&plugin.checkPermissions){var st=await plugin.checkPermissions();var r=st&&(st.readContacts||st.contacts||st.granted);if(r===true||r==="granted"||r==="limited")return true;}}catch(e){}
+  try{if(plugin&&plugin.requestPermissions){var rp=await plugin.requestPermissions({permissions:["readContacts"]});var rr=rp&&(rp.readContacts||rp.contacts||rp.granted);if(rr===true||rr==="granted"||rr==="limited")return true;}}catch(e){}
+  try{if(plugin&&plugin.requestPermissions){await plugin.requestPermissions();return true;}}catch(e){}
+  return false;
+}
+async function chooseFainanceContactFromList(cleaned:any[]){
+  if(!cleaned||!cleaned.length)return null;
+  if(cleaned.length===1)return cleaned[0];
+  if(typeof document==="undefined")return cleaned[0];
+  return await new Promise(function(resolve){
+    var original=cleaned.slice(0,800);
+    var selected=false;
+    var overlay=document.createElement("div");
+    overlay.setAttribute("role","dialog");
+    overlay.setAttribute("aria-modal","true");
+    overlay.style.position="fixed";
+    overlay.style.inset="0";
+    overlay.style.zIndex="2147483647";
+    overlay.style.background="rgba(0,0,0,.55)";
+    overlay.style.display="flex";
+    overlay.style.alignItems="center";
+    overlay.style.justifyContent="center";
+    overlay.style.padding="14px";
+    var card=document.createElement("div");
+    card.style.width="min(560px,100%)";
+    card.style.maxHeight="86vh";
+    card.style.background="#ffffff";
+    card.style.color="#111827";
+    card.style.borderRadius="22px";
+    card.style.boxShadow="0 22px 60px rgba(0,0,0,.34)";
+    card.style.overflow="hidden";
+    card.style.display="flex";
+    card.style.flexDirection="column";
+    var header=document.createElement("div");
+    header.style.display="flex";
+    header.style.alignItems="center";
+    header.style.justifyContent="space-between";
+    header.style.gap="12px";
+    header.style.padding="14px 14px 10px";
+    header.style.borderBottom="1px solid #e5e7eb";
+    var title=document.createElement("div");
+    title.textContent=L("Seleziona contatto");
+    title.style.fontSize="18px";
+    title.style.fontWeight="900";
+    title.style.lineHeight="1.2";
+    var close=document.createElement("button");
+    close.type="button";
+    close.textContent="×";
+    close.setAttribute("aria-label",L("Chiudi"));
+    close.style.width="38px";
+    close.style.height="38px";
+    close.style.borderRadius="12px";
+    close.style.border="1px solid #fecaca";
+    close.style.background="#fee2e2";
+    close.style.color="#ef4444";
+    close.style.fontSize="26px";
+    close.style.fontWeight="900";
+    close.style.lineHeight="30px";
+    close.style.cursor="pointer";
+    close.onclick=function(){cleanup(null);};
+    header.appendChild(title);header.appendChild(close);
+    var searchWrap=document.createElement("div");
+    searchWrap.style.padding="12px 14px";
+    searchWrap.style.borderBottom="1px solid #e5e7eb";
+    var search=document.createElement("input");
+    search.type="search";
+    search.placeholder=L("Cerca contatto");
+    search.style.width="100%";
+    search.style.boxSizing="border-box";
+    search.style.border="1px solid #d1d5db";
+    search.style.borderRadius="14px";
+    search.style.padding="12px 13px";
+    search.style.fontSize="15px";
+    search.style.outline="none";
+    searchWrap.appendChild(search);
+    var list=document.createElement("div");
+    list.style.overflowY="auto";
+    list.style.maxHeight="calc(86vh - 130px)";
+    list.style.padding="6px 8px 10px";
+    var empty=document.createElement("div");
+    empty.textContent=L("Nessun contatto trovato");
+    empty.style.padding="22px";
+    empty.style.textAlign="center";
+    empty.style.color="#6b7280";
+    empty.style.fontWeight="700";
+    function contactText(c:any){return String([c.name,c.email,c.phone].filter(Boolean).join(" ")).toLowerCase();}
+    function render(){
+      var q=String(search.value||"").trim().toLowerCase();
+      var filtered=q?original.filter(function(c:any){return contactText(c).indexOf(q)>=0;}):original;
+      list.innerHTML="";
+      if(!filtered.length){list.appendChild(empty);return;}
+      filtered.slice(0,250).forEach(function(c:any){
+        var row=document.createElement("button");
+        row.type="button";
+        row.style.width="100%";
+        row.style.display="grid";
+        row.style.gridTemplateColumns="42px 1fr";
+        row.style.gap="10px";
+        row.style.alignItems="center";
+        row.style.textAlign="left";
+        row.style.border="0";
+        row.style.background="transparent";
+        row.style.borderRadius="14px";
+        row.style.padding="10px";
+        row.style.cursor="pointer";
+        row.onmouseenter=function(){row.style.background="#f3f4f6";};
+        row.onmouseleave=function(){row.style.background="transparent";};
+        row.onclick=function(){cleanup(c);};
+        var avatar=document.createElement("div");
+        avatar.textContent=String(c.name||c.email||c.phone||"?").trim().slice(0,1).toUpperCase();
+        avatar.style.width="42px";
+        avatar.style.height="42px";
+        avatar.style.borderRadius="14px";
+        avatar.style.background="#dbeafe";
+        avatar.style.color="#2563eb";
+        avatar.style.display="flex";
+        avatar.style.alignItems="center";
+        avatar.style.justifyContent="center";
+        avatar.style.fontWeight="900";
+        var info=document.createElement("div");
+        info.style.minWidth="0";
+        var name=document.createElement("div");
+        name.textContent=c.name||c.email||c.phone||L("Contatto");
+        name.style.fontSize="14px";
+        name.style.fontWeight="900";
+        name.style.whiteSpace="nowrap";
+        name.style.overflow="hidden";
+        name.style.textOverflow="ellipsis";
+        var meta=document.createElement("div");
+        meta.textContent=[c.email,c.phone].filter(Boolean).join(" · ");
+        meta.style.fontSize="12px";
+        meta.style.color="#6b7280";
+        meta.style.marginTop="2px";
+        meta.style.whiteSpace="nowrap";
+        meta.style.overflow="hidden";
+        meta.style.textOverflow="ellipsis";
+        info.appendChild(name);if(meta.textContent)info.appendChild(meta);
+        row.appendChild(avatar);row.appendChild(info);list.appendChild(row);
+      });
+    }
+    function cleanup(value:any){
+      if(selected)return;
+      selected=true;
+      try{document.removeEventListener("keydown",onKey);}catch(e){}
+      try{overlay.remove();}catch(e){try{document.body.removeChild(overlay);}catch(_e){}}
+      resolve(value);
+    }
+    function onKey(ev:KeyboardEvent){if(ev.key==="Escape")cleanup(null);}
+    search.addEventListener("input",render);
+    document.addEventListener("keydown",onKey);
+    overlay.onclick=function(ev:any){if(ev&&ev.target===overlay)cleanup(null);};
+    card.appendChild(header);card.appendChild(searchWrap);card.appendChild(list);overlay.appendChild(card);document.body.appendChild(overlay);
+    render();
+    setTimeout(function(){try{search.focus();}catch(e){}},60);
+  });
+}
+
+async function pickFainanceContact(){
+  var plugin=await getFainanceContactsPlugin();
+  if(plugin){
+    try{if(plugin.isSupported){var sup=await plugin.isSupported();if(sup&&sup.isSupported===false)throw new Error("CONTACTS_NOT_SUPPORTED");}}catch(e){}
+    try{if(plugin.isAvailable){var av=await plugin.isAvailable();if(av&&av.isAvailable===false)throw new Error("CONTACTS_NOT_AVAILABLE");}}catch(e){}
+    try{
+      if(plugin.getContacts){
+        await requestFainanceContactsPermission(plugin);
+        var fields=fainanceContactFields();
+        var res=await plugin.getContacts({fields:fields,limit:500,offset:0});
+        var cleaned=normalizeFainanceContactsResult(res);
+        var chosen=await chooseFainanceContactFromList(cleaned);
+        if(chosen)return chosen;
+      }
+    }catch(e){}
+    var picked=await tryFainanceContactPicker(plugin);
+    if(picked)return picked;
+  }
+  try{
+    var nav:any=(typeof navigator!=="undefined"?navigator:null);
+    if(nav&&nav.contacts&&nav.contacts.select){var contacts=await nav.contacts.select(["name","email","tel"],{multiple:false});var c=contacts&&contacts[0];if(c)return normalizeFainanceContact(c);}
+  }catch(e){}
+  return null;
+}
+try{if(typeof window!=="undefined"){(window as any).fainancePickContact=pickFainanceContact;}}catch(e){}
+
+
 function numOr(v:any,f:any){var n=Number(v);return Number.isFinite(n)?n:f;}
 function readFainanceStoredLang(){
   try{
@@ -62,7 +307,7 @@ function readFainanceStoredLang(){
       var parsed=JSON.parse(raw);
       return parsed||"it";
     }catch(e){
-      return String(raw).replace(/^\"|\"$/g,"")||"it";
+      return String(raw).replace(/^"|"$/g,"")||"it";
     }
   }catch(e){return "it";}
 }
@@ -102,6 +347,13 @@ function LoginScreen({onLogin}){
 
   function loginLang(){return readFainanceStoredLang();}
   function L(s){return translateFainanceText(s,loginLang());}
+  function isAndroidLoginPlatform(){
+    try{
+      var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
+      var p=cap&&cap.getPlatform?String(cap.getPlatform()).toLowerCase():"";
+      return p==="android";
+    }catch(e){return false;}
+  }
   function authActionSettings(){
     var origin="https://fainanceapp.it";
     try{if(typeof window!=="undefined"&&window.location&&window.location.origin)origin=window.location.origin;}catch(e){}
@@ -192,76 +444,79 @@ function LoginScreen({onLogin}){
 
   async function doApple(){
     setError(""); setLoading(true);
+
+    function timeoutPromise(promise,ms,label){
+      return Promise.race([
+        promise,
+        new Promise(function(_,reject){
+          setTimeout(function(){reject(new Error(label||"Operazione scaduta."));},ms);
+        })
+      ]);
+    }
+
+    function normalizeNativeUser(nativeUser, fallbackCredential){
+      var email=String((nativeUser&&nativeUser.email)||"").toLowerCase();
+      var name=String((nativeUser&&nativeUser.displayName)||"").trim();
+      var uid=String((nativeUser&&nativeUser.uid)||"").trim();
+      if(!uid && fallbackCredential && fallbackCredential.idToken){
+        try{
+          var payload=JSON.parse(atob(String(fallbackCredential.idToken).split(".")[1]||""));
+          uid=payload.sub?String(payload.sub):"";
+          if(!email && payload.email)email=String(payload.email).toLowerCase();
+        }catch(parseErr){}
+      }
+      if(!uid)throw new Error("Apple login completato, ma non e' stato restituito un utente valido.");
+      return {id:uid,email:email,name:name||"Utente"};
+    }
+
     try {
-      var isNative = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+      var isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
       if(isNative){
         const mod = await import("@capacitor-firebase/authentication");
         const FirebaseAuthentication = mod.FirebaseAuthentication;
         if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithApple){
           throw new Error("Sign in with Apple non disponibile nel plugin di autenticazione installato.");
         }
-        const result = await FirebaseAuthentication.signInWithApple({
-          scopes:["email","name"],
-          customParameters:[{key:"locale",value:loginLang()}]
-        });
-        const nativeUser=(result&&result.user)||{};
-        if(nativeUser&&nativeUser.uid){
-          try{
-            var appleNameNative=(nativeUser.displayName||nativeUser.name||"").trim();
-            var appleEmailNative=(nativeUser.email||"").toLowerCase();
-            var refNative=doc(fbDb,"users",nativeUser.uid);
-            var snapNative=await getDoc(refNative);
-            if(!snapNative.exists()){
-              await setDoc(refNative,{name:appleNameNative||"Utente",email:appleEmailNative,provider:"apple",createdAt:new Date().toISOString()});
-            }
-          }catch(saveNativeErr){}
-          onLogin({id:nativeUser.uid, email:nativeUser.email||"", name:nativeUser.displayName||nativeUser.name||"Utente"});
-          return;
-        }
-        const credData=(result&&result.credential)||{};
-        const idToken=credData.idToken||credData.id_token||credData.identityToken||credData.identity_token||"";
-        const accessToken=credData.accessToken||credData.access_token||"";
-        const rawNonce=credData.rawNonce||credData.raw_nonce||credData.nonce||"";
-        if(!idToken) throw new Error("Apple login non ha restituito né utente Firebase né identity token utilizzabile. Verifica provider Apple in Firebase Authentication.");
-        const provider = new OAuthProvider("apple.com");
-        const credential = provider.credential(rawNonce?{idToken:idToken,rawNonce:rawNonce,accessToken:accessToken||undefined}:{idToken:idToken,accessToken:accessToken||undefined});
-        const cred = await signInWithCredential(fbAuth, credential);
+
+        const nativeResult = await timeoutPromise(
+          FirebaseAuthentication.signInWithApple({skipNativeAuth:false}),
+          45000,
+          "Apple login completato, ma Firebase nativo non ha risposto entro 45 secondi."
+        );
+        const nativeUser = nativeResult && nativeResult.user ? nativeResult.user : null;
+        const nativeCredential = nativeResult && nativeResult.credential ? nativeResult.credential : null;
+        const normalizedUser = normalizeNativeUser(nativeUser,nativeCredential);
+
+        setLoading(false);
         try{
-          var appleName=(cred.user.displayName||"").trim();
-          if(cred.user.uid){
-            var ref=doc(fbDb,"users",cred.user.uid);
-            var snap=await getDoc(ref);
-            if(!snap.exists()){
-              await setDoc(ref,{name:appleName||"Utente",email:(cred.user.email||"").toLowerCase(),provider:"apple",createdAt:new Date().toISOString()});
-            }
+          if(normalizedUser.id){
+            setDoc(doc(fbDb,"users",normalizedUser.id),{name:normalizedUser.name,email:normalizedUser.email,provider:"apple",updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
           }
-        }catch(saveErr){}
-        onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
+        }catch(profileErr){}
+        onLogin(normalizedUser);
         return;
       }
+
       const provider = new OAuthProvider("apple.com");
       provider.addScope("email");
       provider.addScope("name");
       provider.setCustomParameters({locale:loginLang()});
-      const cred = await signInWithPopup(fbAuth, provider);
+      const cred = await timeoutPromise(signInWithPopup(fbAuth, provider),45000,"Apple login web scaduto.");
       try{
         if(cred.user&&cred.user.uid){
-          var refWeb=doc(fbDb,"users",cred.user.uid);
-          var snapWeb=await getDoc(refWeb);
-          if(!snapWeb.exists()){
-            await setDoc(refWeb,{name:cred.user.displayName||"Utente",email:(cred.user.email||"").toLowerCase(),provider:"apple",createdAt:new Date().toISOString()});
-          }
+          setDoc(doc(fbDb,"users",cred.user.uid),{name:cred.user.displayName||"Utente",email:String(cred.user.email||"").toLowerCase(),provider:"apple",updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
         }
       }catch(saveWebErr){}
+      setLoading(false);
       onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"});
     } catch(err){
-      console.error("Apple login error",(err&&err.code)||"unknown");
+      console.error("Apple login error",(err&&err.code)||"unknown",err);
       var msg=String((err&&err.message)||err||"");
       var code=(err&&err.code)||"unknown";
-      if(code==="auth/operation-not-allowed"||msg.toLowerCase().indexOf("apple")>=0&&msg.toLowerCase().indexOf("provider")>=0&&msg.toLowerCase().indexOf("enable")>=0){
-        setError(L("Errore Apple: il provider Apple non è abilitato in Firebase Authentication."));
+      if(code==="auth/operation-not-allowed"){
+        setError(L("Errore Apple: abilita il provider Apple in Firebase Authentication e riprova."));
       }else if(code==="auth/account-exists-with-different-credential"){
-        setError(L("Esiste già un account con questa email. Accedi con il metodo usato in precedenza."));
+        setError(L("Esiste gia' un account con questa email. Accedi con il metodo usato in precedenza."));
       }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
         setError(L("Accesso Apple annullato."));
       }else{
@@ -328,10 +583,10 @@ function LoginScreen({onLogin}){
             <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M47.5 24.6c0-1.6-.1-3.1-.4-4.6H24v8.7h13.1c-.6 3-2.3 5.5-4.9 7.2v6h7.9c4.6-4.3 7.4-10.6 7.4-17.3z"/><path fill="#34A853" d="M24 48c6.5 0 12-2.2 16-5.9l-7.9-6c-2.2 1.5-5 2.3-8.1 2.3-6.2 0-11.5-4.2-13.4-9.9H2.5v6.2C6.5 42.6 14.7 48 24 48z"/><path fill="#FBBC05" d="M10.6 28.5c-.5-1.5-.8-3-.8-4.5s.3-3 .8-4.5v-6.2H2.5C.9 16.8 0 20.3 0 24s.9 7.2 2.5 10.7l8.1-6.2z"/><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.2 30.5 0 24 0 14.7 0 6.5 5.4 2.5 13.3l8.1 6.2C12.5 13.7 17.8 9.5 24 9.5z"/></svg>
             {L("Accedi con Google")}
           </button>
-          <button onClick={doApple} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#000",color:"#fff",border:"1.5px solid #000",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>
+          {!isAndroidLoginPlatform()&&<button onClick={doApple} disabled={loading} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,background:"#000",color:"#fff",border:"1.5px solid #000",borderRadius:12,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" focusable="false" style={{display:"block",flexShrink:0}}><path fill="currentColor" d="M16.365 1.43c0 1.14-.423 2.145-1.27 3.014-.91.93-1.91 1.466-3.013 1.384-.13-1.091.383-2.255 1.168-3.058.862-.888 2.23-1.526 3.115-1.34zM20.5 17.34c-.55 1.27-.813 1.837-1.52 2.963-.987 1.526-2.38 3.43-4.104 3.443-1.535.014-1.93-.997-4.014-.986-2.085.01-2.52 1.004-4.055.99-1.724-.015-3.04-1.733-4.027-3.26-2.757-4.265-3.047-9.268-1.344-11.927 1.21-1.89 3.12-2.997 4.916-2.997 1.83 0 2.98 1.004 4.49 1.004 1.464 0 2.354-1.006 4.465-1.006 1.596 0 3.287.87 4.493 2.373-3.95 2.166-3.31 7.804.7 9.403z"/></svg>
             {L("Accedi con Apple")}
-          </button>
+          </button>}
         </div>
       </div>
       <div style={{textAlign:"center",marginTop:14,fontSize:11,color:"#aaa"}}>© 2026 fAInance</div>
@@ -655,7 +910,7 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
     var upd={name:pName.trim(),phone:cleanPhone,phonePrefix:pPhonePrefix,birthDate:pBirth,gender:pGender,nationality:pNationality.trim(),country:pCountry.trim(),province:pProvince.trim(),city:pCity.trim(),address:pAddress.trim(),jobType:pJobType,appUseReason:pAppUseReason};
     function done(){setSaved(upd);if(onProfileUpdate)onProfileUpdate(upd);setEdit(false);if(setToast)setToast(PL("Profilo aggiornato"));}
     if(currentUser.id&&fbDbProp){
-      setDoc(doc(fbDbProp,"users",currentUser.id),upd,{merge:true}).then(done).catch(function(err){console.error("profile save error",(err&&err.code)||"unknown");if(setToast)setToast(PL("Errore salvataggio profilo"));});
+      setDoc(doc(fbDbProp,"users",currentUser.id),upd,{merge:true}).then(function(){try{var em=String(currentUser.email||"").trim().toLowerCase();if(em)setDoc(doc(fbDbProp,"userLookup","email:"+em.replace(/\//g,"_")),{uid:currentUser.id,email:em,phone:cleanPhone,name:pName.trim()||currentUser.name||"Utente",active:true,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});if(cleanPhone)setDoc(doc(fbDbProp,"userLookup","phone:"+cleanPhone),{uid:currentUser.id,email:em,phone:cleanPhone,name:pName.trim()||currentUser.name||"Utente",active:true,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});}catch(e){}done();}).catch(function(err){console.error("profile save error",(err&&err.code)||"unknown");if(setToast)setToast(PL("Errore salvataggio profilo"));});
     } else {
       done();
     }
@@ -780,106 +1035,113 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
   </div>;
 }
 
+
+async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
+async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
+async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
+
 function AppWithLogin(){
-  async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
-  async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
-  async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
-  var manualLoginRef=useRef(null);
-
-  function minimalProfileFromUser(user){
-    var normalizedEmail=String((user&&user.email)||"").toLowerCase();
-    return {id:user&&user.uid?user.uid:"",email:normalizedEmail,name:(user&&user.displayName)||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};
-  }
-  function syntheticFirebaseUser(u){return {uid:u&&u.id?u.id:"",email:u&&u.email?u.email:"",displayName:u&&u.name?u.name:"Utente"};}
-  function hasMeaningfulUserDataDoc(d){
-    if(!d||typeof d!=="object")return false;
-    var arrayKeys=["expenses","incomes","recurring","goals","alerts","shareProjects","debtCredits","shoppingCards","shoppingItems","appuntiDocuments","appuntiNotes","bankCoords"];
-    for(var i=0;i<arrayKeys.length;i++){var v=d[arrayKeys[i]];if(Array.isArray(v)&&v.length>0)return true;}
-    var objectKeys=["patrimonioValues","patrimonioHistory","patrimonioNotes","budgetPlan"];
-    for(var j=0;j<objectKeys.length;j++){var o=d[objectKeys[j]];if(o&&typeof o==="object"&&!Array.isArray(o)&&Object.keys(o).length>0)return true;}
-    return false;
-  }
-  async function findLegacyUserDataByEmail(email,currentUid){
-    var cleanEmail=String(email||"").trim().toLowerCase();
-    if(!cleanEmail)return null;
-    try{
-      var found=await getDocs(query(collection(fbDb,"users"),where("email","==",cleanEmail),limit(10)));
-      if(!found||!found.docs||!found.docs.length)return null;
-      for(var i=0;i<found.docs.length;i++){
-        var oldUid=found.docs[i].id;
-        if(!oldUid||String(oldUid)===String(currentUid))continue;
-        try{
-          var oldSnap=await getDoc(doc(fbDb,"userData",oldUid));
-          if(oldSnap.exists()){
-            var oldData=oldSnap.data();
-            if(hasMeaningfulUserDataDoc(oldData))return {uid:oldUid,data:oldData};
-          }
-        }catch(readErr){}
-      }
-    }catch(err){console.warn("Legacy user data lookup failed",(err&&err.code)||"unknown");}
-    return null;
-  }
-  function acceptLoginPayload(u){
-    var synthetic=syntheticFirebaseUser(u);
-    var profile={id:synthetic.uid,email:String(synthetic.email||"").toLowerCase(),name:synthetic.displayName||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};
-    manualLoginRef.current={uid:synthetic.uid,email:profile.email,name:profile.name,ts:Date.now()};
-    setUserData(profile);
-    setFbUser(synthetic);
-    setTimeout(function(){
-      var pending=manualLoginRef.current;
-      if(pending&&String(pending.uid)===String(synthetic.uid))manualLoginRef.current=null;
-    },15000);
-  }
-  function applyAuthenticatedUser(user){
-    if(!user){setFbUser(null);setUserData(null);return;}
-    var minimal=minimalProfileFromUser(user);
-    setFbUser(user);
-    setUserData(function(prev){return {...minimal,...(prev&&prev.id===minimal.id?prev:{}),id:minimal.id,email:minimal.email,name:(prev&&prev.name)||minimal.name};});
-    getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
-      var profile=snap.exists()?snap.data():{};
-      var displayName=profile.name||user.displayName||"Utente";
-      var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
-      setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-      setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
-    }).catch(function(){
-      var normalizedEmail=String(user.email||"").toLowerCase();
-      setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-    });
-  }
 
   useEffect(function(){
-    var settled=false;
-    function pendingManualLogin(){
-      var pending=manualLoginRef.current;
-      return pending&&Date.now()-Number(pending.ts||0)<15000?pending:null;
-    }
-    function resolveAuthState(user){
-      if(user){manualLoginRef.current=null;applyAuthenticatedUser(user);return;}
-      var current=fbAuth.currentUser;
-      if(current){manualLoginRef.current=null;applyAuthenticatedUser(current);return;}
-      var pending=pendingManualLogin();
-      if(pending){
-        setFbUser({uid:pending.uid,email:pending.email,displayName:pending.name||"Utente"});
-        setUserData(function(prev){return prev||{id:pending.uid,email:pending.email,name:pending.name||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};});
-        return;
+    var active=true;
+    var authFallbackTimer=setTimeout(function(){
+      // iOS/TestFlight safety: Firebase Auth can remain pending during WebView persistence restore.
+      // Do not block the whole app forever on "Caricamento...".
+      if(active){
+        setFbUser(function(prev){return prev===undefined?null:prev;});
       }
-      setFbUser(null);setUserData(null);
+    },5000);
+
+    function applyMinimalUser(user){
+      var normalizedEmail=String((user&&user.email)||"").toLowerCase();
+      setUserData(function(prev){
+        return {
+          ...(prev||{}),
+          id:user.uid,
+          email:normalizedEmail,
+          name:(user.displayName||((prev&&prev.name)||"Utente")),
+          phonePrefix:(prev&&prev.phonePrefix)||"+39",
+          phone:(prev&&prev.phone)||"",
+          birthDate:(prev&&prev.birthDate)||"",
+          gender:(prev&&prev.gender)||"",
+          nationality:(prev&&prev.nationality)||"",
+          country:(prev&&prev.country)||"",
+          province:(prev&&prev.province)||"",
+          city:(prev&&prev.city)||"",
+          address:(prev&&prev.address)||"",
+          jobType:(prev&&prev.jobType)||"",
+          appUseReason:(prev&&prev.appUseReason)||""
+        };
+      });
+      setFbUser(user);
     }
-    var fallbackTimer=setTimeout(function(){
-      if(settled)return;
-      settled=true;
-      resolveAuthState(fbAuth.currentUser);
-    },6000);
-    var unsub=onAuthStateChanged(fbAuth,function(user){
-      if(!settled){settled=true;clearTimeout(fallbackTimer);}
-      resolveAuthState(user);
-    },function(){
-      if(!settled){settled=true;clearTimeout(fallbackTimer);}
-      resolveAuthState(fbAuth.currentUser);
-    });
-    return function(){clearTimeout(fallbackTimer);try{unsub&&unsub();}catch(e){}};
+
+    function loadProfileInBackground(user){
+      getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
+        if(!active)return;
+        var profile=snap.exists()?snap.data():{};
+        var displayName=profile.name||user.displayName||"Utente";
+        var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
+        setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+        setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
+      }).catch(function(){
+        if(!active)return;
+        var normalizedEmail=String(user.email||"").toLowerCase();
+        setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
+        setUserData(function(prev){
+          return {
+            ...(prev||{}),
+            id:user.uid,
+            email:normalizedEmail,
+            name:user.displayName||((prev&&prev.name)||"Utente"),
+            phonePrefix:(prev&&prev.phonePrefix)||"+39",
+            phone:(prev&&prev.phone)||"",
+            nationality:(prev&&prev.nationality)||"",
+            country:(prev&&prev.country)||"",
+            province:(prev&&prev.province)||"",
+            city:(prev&&prev.city)||"",
+            address:(prev&&prev.address)||"",
+            jobType:(prev&&prev.jobType)||"",
+            appUseReason:(prev&&prev.appUseReason)||""
+          };
+        });
+      });
+    }
+
+    var unsub=function(){};
+    try{
+      unsub=onAuthStateChanged(fbAuth,function(user){
+        if(!active)return;
+        clearTimeout(authFallbackTimer);
+        if(user){
+          // Important: never wait for Firestore before leaving the login/loading screen.
+          applyMinimalUser(user);
+          loadProfileInBackground(user);
+        } else {
+          setFbUser(null);
+          setUserData(null);
+        }
+      },function(err){
+        if(!active)return;
+        clearTimeout(authFallbackTimer);
+        console.error("Firebase auth state error",err);
+        setFbUser(null);
+        setUserData(null);
+      });
+    }catch(err){
+      clearTimeout(authFallbackTimer);
+      console.error("Firebase auth listener setup error",err);
+      setFbUser(null);
+      setUserData(null);
+    }
+
+    return function(){
+      active=false;
+      clearTimeout(authFallbackTimer);
+      try{if(typeof unsub==="function")unsub();}catch(e){}
+    };
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
@@ -902,7 +1164,15 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={acceptLoginPayload}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){
+    if(u&&u.id){
+      var syntheticUser={uid:u.id,email:u.email||"",displayName:u.name||"Utente"};
+      setUserData(u);
+      setFbUser(syntheticUser);
+    }else{
+      setUserData(u);
+    }
+  }}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1012,6 +1282,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [mobileMenuOrder,setMobileMenuOrder]=useStorage(userKey("pref_mobile_menu_order_v1"),["consulenteAI","patrimonio","budget","share","debtCredits","shopping","goals","alerts","appunti","settings"]);
   var [biometricLockEnabled,setBiometricLockEnabled]=useStorage(userKey("pref_biometric_lock_enabled_v1"),false);
   var [biometricLockTimeout,setBiometricLockTimeout]=useStorage(userKey("pref_biometric_lock_timeout_v1"),1);
+  var [localLockMethod,setLocalLockMethod]=useStorage(userKey("pref_local_lock_method_v1"),"biometric");
+  var [localLockPin,setLocalLockPin]=useStorage(userKey("pref_local_lock_pin_v1"),"");
+  var [securityPinDraft,setSecurityPinDraft]=useState("");
+  var securityPinDraftRef=useRef("");
+  var [unlockPin,setUnlockPin]=useState("");
+  var unlockPinRef=useRef("");
+  var [unlockPassword,setUnlockPassword]=useState("");
+  var [unlockMethod,setUnlockMethod]=useState("");
   var [appLocked,setAppLocked]=useState(false);
   var [biometricChecking,setBiometricChecking]=useState(false);
   var [biometricLockMessage,setBiometricLockMessage]=useState("");
@@ -1110,8 +1388,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [patrimonioHistory,setPatrimonioHistory]=useStorage(userKey("patrimonio_history_v1"),{});
   var [patrimonioNotes,setPatrimonioNotes]=useStorage(userKey("patrimonio_notes_v1"),{});
   var [historyFutureMode,setHistoryFutureMode]=useStorage(userKey("history_future_mode_v1"),"untilToday");
-  var [historySortDate,setHistorySortDate]=useStorage(userKey("history_sort_date_v1"),"operation");
+  var [historySortDate,setHistorySortDate]=useStorage(userKey("history_sort_date_v1"),"date");
   var [historySortDirection,setHistorySortDirection]=useStorage(userKey("history_sort_direction_v1"),"desc");
+  var [historySortSecondary,setHistorySortSecondary]=useStorage(userKey("history_sort_secondary_v1"),"amount");
+  var [historySortSecondaryDirection,setHistorySortSecondaryDirection]=useStorage(userKey("history_sort_secondary_direction_v1"),"desc");
   var [appuntiDocuments,setAppuntiDocuments]=useStorage(userKey("appunti_documents_v1"),[]);
   var [appuntiNotes,setAppuntiNotes]=useStorage(userKey("appunti_notes_v1"),[]);
   var [bankCoords,setBankCoords]=useStorage(userKey("bank_coords_v1"),[]);
@@ -1136,11 +1416,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [showDebtCreditsInExpenses,setShowDebtCreditsInExpenses]=useStorage(userKey("debt_credits_show_expenses_v1"),false);
   var [shoppingDefaultArea,setShoppingDefaultArea]=useStorage(userKey("shopping_default_area_v1"),"Alimenti");
   var [shareReceiptUploads,setShareReceiptUploads]=useStorage(userKey("share_receipt_uploads_v1"),[]);
-  var [confirmButtonColor,setConfirmButtonColor]=useStorage(userKey("pref_confirm_color"),"#7F77DD");
+  var [confirmButtonColor,setConfirmButtonColor]=useStorage(userKey("pref_confirm_color"),"#378ADD");
+  var [secondaryButtonColor,setSecondaryButtonColor]=useStorage(userKey("pref_secondary_button_color_v1"),"#7FC8F8");
   var [currentPlan,setCurrentPlanRaw]=useStorage(userKey("plan_v1"),"free");
+  var [manualFullGrant,setManualFullGrant]=useState(false);
   var [planBillingPeriod,setPlanBillingPeriod]=useStorage(userKey("plan_billing_period_v1"),"monthly");
   var [planPurchaseLoading,setPlanPurchaseLoading]=useState("");
   var [topAdDismissedAt,setTopAdDismissedAt]=useStorage(userKey("top_ad_dismissed_at_v1"),0);
+  if(manualFullGrant&&currentPlan!=="premium"){currentPlan="premium";}
   var currentPlanRef=useRef(currentPlan||"free");
   // persistAccountPlan rimossa: Firestore Security Rules bloccano scrittura piano dal client
   function setCurrentPlan(nextPlan){
@@ -1155,6 +1438,63 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [shareReceivedNotifications,setShareReceivedNotifications]=useState([]);
   var [shareInviteLoading,setShareInviteLoading]=useState(false);
 
+  function isActiveManualGrant(data){
+    if(!data||data.active===false||data.enabled===false)return false;
+    var plan=String(data.plan||data.level||data.tier||data.access||"").toLowerCase();
+    var full=(plan==="premium"||plan==="complete"||plan==="completo"||plan==="full"||data.fullAccess===true||data.premium===true);
+    if(!full)return false;
+    var exp=data.expiresAt||data.expiry||data.validUntil||null;
+    if(!exp)return true;
+    var ms=0;
+    try{if(exp&&typeof exp.toDate==="function")ms=exp.toDate().getTime();else ms=new Date(exp).getTime();}catch(e){ms=0;}
+    return !ms||ms>Date.now();
+  }
+  function manualGrantEmailDocId(email){return encodeURIComponent(normalizeEmail(email));}
+  useEffect(function(){
+    var cancelled=false;
+    async function loadManualGrant(){
+      var authUser=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
+      var grantUid=userId||(authUser&&authUser.uid)||"";
+      if(!grantUid){setManualFullGrant(false);return;}
+      try{if(authUser&&authUser.getIdToken)await authUser.getIdToken(true);}catch(e){}
+      var email=normalizeEmail((currentUser&&currentUser.email)||(authUser&&authUser.email)||"");
+      var emailId=email?manualGrantEmailDocId(email):"";
+      var candidates=[];
+      candidates.push(["manualGrants",grantUid]);
+      if(email)candidates.push(["manualGrants",email]); // metodo semplice: manualGrants/email@dominio.it
+      if(emailId&&emailId!==email)candidates.push(["manualGrants",emailId]); // compatibilità con email URL-encoded
+      candidates.push(["manual_grants",grantUid]);
+      if(email)candidates.push(["manual_grants",email]);
+      if(emailId&&emailId!==email)candidates.push(["manual_grants",emailId]);
+      candidates.push(["fullAccessGrants",grantUid]);
+      if(email)candidates.push(["fullAccessGrants",email]);
+      if(emailId&&emailId!==email)candidates.push(["fullAccessGrants",emailId]);
+      var active=false;
+      for(var i=0;i<candidates.length&&!active;i++){
+        try{
+          var snap=await getDoc(doc(fbDb,candidates[i][0],candidates[i][1]));
+          if(snap.exists()&&isActiveManualGrant(snap.data()))active=true;
+        }catch(e){console.warn("manual grant read failed",candidates[i][0]+"/"+candidates[i][1],(e&&e.code)||e);}
+      }
+      if(!active&&email){
+        try{
+          var qs=await getDocs(query(collection(fbDb,"manualGrants"),where("email","==",email),limit(1)));
+          if(qs&&qs.docs&&qs.docs.length)active=isActiveManualGrant(qs.docs[0].data());
+        }catch(e){console.warn("manual grant email query failed",(e&&e.code)||e);}
+      }
+      if(cancelled)return;
+      setManualFullGrant(!!active);
+      if(active){
+        currentPlanRef.current="premium";
+        setCurrentPlanRaw("premium");
+        try{localStorage.setItem(userKey("plan_v1"),JSON.stringify("premium"));}catch(e){}
+      }
+    }
+    loadManualGrant();
+    var t=setTimeout(loadManualGrant,1500);
+    return function(){cancelled=true;clearTimeout(t);};
+  },[userId,currentUser&&currentUser.email]);
+
   // ── FIRESTORE SYNC ──────────────────────────────────────────────────────────
   var [firestoreReady,setFirestoreReady]=useState(false);
   var [isOffline,setIsOffline]=useState(!navigator.onLine);
@@ -1163,28 +1503,15 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!userId){setFirestoreReady(true);return;}
     firestoreHydratedRef.current=false;
     setFirestoreReady(false);
-    var firestoreFallbackTimer=setTimeout(function(){
-      if(!firestoreHydratedRef.current){
-        console.warn("Firestore load timeout: entering without blocking the UI");
-        clearTimeout(firestoreFallbackTimer);setFirestoreReady(true);
-      }
-    },7000);
     // Reset immediato dei dati sensibili quando cambia account: evita che il nuovo account erediti
     // in memoria alert, movimenti, chat o appunti del profilo usato prima mentre Firestore sta caricando.
     setExpenses([]);setIncomes([]);setRecurring([]);setGoals(DEFAULT_GOALS);setAlerts([]);setBudgetPlan(DEFAULT_BUDGET_PLAN);
     setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShareReceiptUploads([]);setCustomNotifs([]);setPlanUsage({});setShownAlertIds([]);
     // Load data from Firestore before enabling the UI, so one account can never inherit local data from another account.
     var docRef=doc(fbDb,"userData",userId);
-    getDoc(docRef).then(async function(snap){
-      var d=snap.exists()?snap.data():null;
-      if(!hasMeaningfulUserDataDoc(d)){
-        var legacy=await findLegacyUserDataByEmail(currentUser&&currentUser.email,userId);
-        if(legacy&&legacy.data){
-          d={...legacy.data,migratedFromUid:legacy.uid,migratedAt:new Date().toISOString()};
-          try{await setDoc(docRef,d,{merge:true});}catch(copyErr){console.warn("Legacy user data copy failed",(copyErr&&copyErr.code)||"unknown");}
-        }
-      }
-      if(d){
+    getDoc(docRef).then(function(snap){
+      if(snap.exists()){
+        var d=snap.data();
         setExpenses(Array.isArray(d.expenses)?d.expenses:[]);
         setIncomes(Array.isArray(d.incomes)?d.incomes:[]);
         (function(){var cloudTs=Number(d.catsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}var cloudCats=Array.isArray(d.cats)?d.cats:null;if(localTs>cloudTs&&Array.isArray(cats)&&cats.length>0){setCats(cats);}else{setCats(chooseCloudLocalArray(cloudCats,cats,DEFAULT_CATS,false));}})();
@@ -1203,9 +1530,11 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setIncomeGroups(chooseCloudLocalArray(d.incomeGroups,incomeGroups,DEFAULT_INCOME_GROUPS,false));
         setCustomIncomeTypes(chooseCloudLocalArray(d.customIncomeTypes,customIncomeTypes,[],true));
         setIncomeTypeOverrides(chooseCloudLocalObject(d.incomeTypeOverrides,incomeTypeOverrides,{}));
-        if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.shoppingAreaIcons)setShoppingAreaIcons(d.shoppingAreaIcons);if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);restoreLocalJson("shopping_lists_v2",d.shoppingLists);restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId);restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);
+        if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.shoppingAreaIcons)setShoppingAreaIcons(d.shoppingAreaIcons);if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);restoreLocalJson("shopping_lists_v2",d.shoppingLists);restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId);restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
         if(d.historySortDate)setHistorySortDate(d.historySortDate);
-        if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);
+        if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
+        if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);
+        if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
         setAppuntiNotes(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[]);
         (async function(){var raw=d.bankCoords;if(typeof raw==="string"&&raw.length>0){var dec=await decryptBankCoords(raw,userId);setBankCoords(Array.isArray(dec)?dec:[]);}else{setBankCoords(Array.isArray(raw)?raw:[]);}})();
@@ -1225,7 +1554,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setShoppingAreas(chooseCloudLocalArray(d.shoppingAreas,shoppingAreas,DEFAULT_SHOPPING_AREAS,false));
         setShareReceiptUploads(chooseCloudLocalArray(d.shareReceiptUploads,shareReceiptUploads,[],true));
         if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);
-        if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);
+        if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
         var cloudPlan=d.currentPlan||d.plan||d.subscriptionPlan;if(cloudPlan&&PLAN_LIMITS[cloudPlan])setCurrentPlan(cloudPlan,false);
         setPlanUsage(chooseCloudLocalObject(d.planUsage,planUsage,{}));
         setShownAlertIds(Array.isArray(d.shownAlertIds)?d.shownAlertIds:[]);
@@ -1238,9 +1567,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShoppingAreas(DEFAULT_SHOPPING_AREAS);setShareReceiptUploads([]);setShowShareInHistory(true);setCustomNotifs([]);setNotifPrefs({remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free",false);setPlanUsage({});setShownAlertIds([]);
       }
       firestoreHydratedRef.current=true;
-      clearTimeout(firestoreFallbackTimer);setFirestoreReady(true);
-    }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;clearTimeout(firestoreFallbackTimer);setFirestoreReady(true);});
-    return function(){clearTimeout(firestoreFallbackTimer);};
+      setFirestoreReady(true);
+    }).catch(function(err){console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
   },[userId]);
 
   async function saveToFirestore(){
@@ -1252,7 +1580,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     try{var encBank=await encryptBankCoords(bankCoords,userId);if(encBank)bankCoordsToSave=encBank;}catch(e){}
     var catsTs=Date.now();
     try{localStorage.setItem(userKey("cats_updated_at"),String(catsTs));}catch(e){}
-    setDoc(docRef,{expenses,incomes,cats,methods,catsUpdatedAt:catsTs,methodsUpdatedAt:catsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,planUsage,shownAlertIds,updatedAt:new Date().toISOString()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
+    setDoc(docRef,{expenses,incomes,cats,methods,catsUpdatedAt:catsTs,methodsUpdatedAt:catsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,updatedAt:new Date().toISOString()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
   }
 
   async function deleteCurrentAccount(){
@@ -1286,8 +1614,50 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
 
   function normalizeEmail(v){return String(v||"").trim().toLowerCase();}
+  function normalizePhoneForLookup(v){return String(v||"").replace(/[^0-9]/g,"");}
+  function safeLookupDocId(prefix,value){return prefix+":"+String(value||"").trim().toLowerCase().replace(/\//g,"_");}
+  function userLookupPayload(uid,email,phone,name){return {uid:uid||"",email:normalizeEmail(email||""),phone:normalizePhoneForLookup(phone||""),name:name||"",active:true,updatedAt:new Date().toISOString()};}
+  async function publishCurrentUserLookup(email,phone,name){
+    try{
+      var uid=(fbAuth&&fbAuth.currentUser&&fbAuth.currentUser.uid)||userId||"";
+      if(!uid||!fbDb)return;
+      var em=normalizeEmail(email||(currentUser&&currentUser.email)||"");
+      var ph=normalizePhoneForLookup(phone||"");
+      var nm=name||(currentUser&&currentUser.name)||"Utente";
+      if(em)await setDoc(doc(fbDb,"userLookup",safeLookupDocId("email",em)),userLookupPayload(uid,em,ph,nm),{merge:true}).catch(function(){});
+      if(ph)await setDoc(doc(fbDb,"userLookup",safeLookupDocId("phone",ph)),userLookupPayload(uid,em,ph,nm),{merge:true}).catch(function(){});
+    }catch(e){}
+  }
+  async function findRegisteredUserForShare(email,phone){
+    var em=normalizeEmail(email||"");
+    var ph=normalizePhoneForLookup(phone||"");
+    try{
+      if(em){
+        var lookupEmail=await getDoc(doc(fbDb,"userLookup",safeLookupDocId("email",em))).catch(function(){return null;});
+        if(lookupEmail&&lookupEmail.exists&&lookupEmail.exists()){var le=lookupEmail.data();if(le&&le.uid)return {uid:le.uid,...le,matchType:"email"};}
+      }
+      if(ph){
+        var lookupPhone=await getDoc(doc(fbDb,"userLookup",safeLookupDocId("phone",ph))).catch(function(){return null;});
+        if(lookupPhone&&lookupPhone.exists&&lookupPhone.exists()){var lp=lookupPhone.data();if(lp&&lp.uid)return {uid:lp.uid,...lp,matchType:"phone"};}
+      }
+    }catch(e){}
+    try{
+      if(em){
+        var byEmail=await getDocs(query(collection(fbDb,"users"),where("email","==",em),limit(1))).catch(function(){return null;});
+        if(byEmail&&byEmail.docs&&byEmail.docs.length){var de=byEmail.docs[0];return {uid:de.id,...de.data(),matchType:"email"};}
+      }
+    }catch(e){}
+    try{
+      if(ph){
+        var byPhone=await getDocs(query(collection(fbDb,"users"),where("phone","==",ph),limit(1))).catch(function(){return null;});
+        if(byPhone&&byPhone.docs&&byPhone.docs.length){var dp=byPhone.docs[0];return {uid:dp.id,...dp.data(),matchType:"phone"};}
+      }
+    }catch(e){}
+    return null;
+  }
   function currentUserShareName(){return currentUser&&currentUser.name?currentUser.name:"Utente";}
   var SHARE_WEB_APP_URL="https://test-fainanceapp-it.web.app";
+  useEffect(function(){try{if(currentUser&&currentUser.email)publishCurrentUserLookup(currentUser.email,currentUser.phone,currentUser.name);}catch(e){}},[currentUser&&currentUser.id,currentUser&&currentUser.email,currentUser&&currentUser.phone,currentUser&&currentUser.name]);
   function escapeShareHtml(v){return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
   function buildShareInviteUrl(inviteId,projectId){
     var base=SHARE_WEB_APP_URL.replace(/\/$/,"");
@@ -1408,33 +1778,37 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }catch(e){console.error(e);setToast("Errore durante il rifiuto dell'invito");}
   }
   async function createShareInvite(project,participant,email,name,foundUser){
-    if(!project||!email||!userId)return null;
+    if(!project||!userId)return null;
+    var invitedUid=foundUser&&foundUser.uid?foundUser.uid:(participant&&participant.uid?participant.uid:null);
+    var invitedEmail=normalizeEmail(email||(participant&&participant.email)||"");
+    var invitedPhone=normalizePhoneForLookup((participant&&participant.phone)||(foundUser&&foundUser.phone)||"");
+    if(!invitedEmail&&!invitedUid&&!invitedPhone)return null;
     var inviteId="invite_"+Date.now()+"_"+Math.floor(Math.random()*10000);
-    var invitedUid=foundUser&&foundUser.uid?foundUser.uid:null;
     var projectId=String(project.id);
     var projectName=project.name||"Progetto Share";
     var inviteLink=buildShareInviteUrl(inviteId,projectId);
-    var invitedEmail=normalizeEmail(email);
-    var invite={id:inviteId,projectId:projectId,projectName:projectName,participantId:participant.id,invitedEmail:invitedEmail,invitedUid:invitedUid,invitedName:name||invitedEmail.split("@")[0],invitedByUid:userId,invitedByName:currentUserShareName(),status:"pending",inviteLink:inviteLink,createdAt:new Date().toISOString()};
+    var inviteName=name||(foundUser&&(foundUser.name||foundUser.displayName))||(participant&&participant.name)||invitedEmail.split("@")[0]||invitedPhone||"Utente";
+    var invite={id:inviteId,projectId:projectId,projectName:projectName,participantId:participant.id,invitedEmail:invitedEmail,invitedPhone:invitedPhone,invitedUid:invitedUid,invitedName:inviteName,invitedByUid:userId,invitedByName:currentUserShareName(),status:"pending",inviteLink:inviteLink,createdAt:new Date().toISOString()};
     await setDoc(doc(fbDb,"shareInvites",inviteId),invite,{merge:true});
     if(invitedUid){await addDoc(collection(fbDb,"shareNotifications"),{userUid:invitedUid,type:"share_invite",title:"Invito Share",message:currentUserShareName()+" ti ha invitato nel progetto "+projectName,projectId:projectId,inviteId:inviteId,inviteLink:inviteLink,read:false,createdAt:new Date().toISOString()}).catch(function(){});}
+    if(!invitedEmail)return inviteId;
     var safeInviter=escapeShareHtml(currentUserShareName());
     var safeProject=escapeShareHtml(projectName);
     var safeLink=escapeShareHtml(inviteLink);
     var mailHtml=""
-      +"<div style=\"font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222;line-height:1.5;\">"
-      +"<div style=\"font-size:22px;font-weight:800;margin-bottom:6px;\">Invito Share su fAInance</div>"
-      +"<div style=\"font-size:14px;color:#666;margin-bottom:22px;\">Gestisci spese condivise, saldi e rimborsi in un unico progetto.</div>"
-      +"<div style=\"background:#f4f1ff;border:1px solid #ddd8ff;border-radius:14px;padding:18px;margin-bottom:22px;\">"
-      +"<p style=\"margin:0 0 10px 0;\"><strong>"+safeInviter+"</strong> ti ha invitato a partecipare al progetto:</p>"
-      +"<p style=\"margin:0;font-size:20px;font-weight:800;color:#5f55d8;\">"+safeProject+"</p>"
-      +"</div>"
-      +"<a href=\""+safeLink+"\" style=\"display:inline-block;background:#7F77DD;color:#fff;text-decoration:none;border-radius:12px;padding:13px 20px;font-weight:800;margin-bottom:18px;\">Apri invito Share</a>"
-      +"<p style=\"font-size:13px;color:#777;margin-top:18px;\">Se il pulsante non funziona, copia e incolla questo link nel browser:</p>"
-      +"<p style=\"font-size:12px;word-break:break-all;color:#555;\">"+safeLink+"</p>"
-      +"<hr style=\"border:none;border-top:1px solid #eee;margin:22px 0;\"/>"
-      +"<p style=\"font-size:12px;color:#999;margin:0;\">Hai ricevuto questa email perché qualcuno ti ha invitato a un progetto Share su fAInance.</p>"
-      +"</div>";
+      +'<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#222;line-height:1.5;">'
+      +'<div style="font-size:22px;font-weight:800;margin-bottom:6px;">Invito Share su fAInance</div>'
+      +'<div style="font-size:14px;color:#666;margin-bottom:22px;">Gestisci spese condivise, saldi e rimborsi in un unico progetto.</div>'
+      +'<div style="background:#f4f1ff;border:1px solid #ddd8ff;border-radius:14px;padding:18px;margin-bottom:22px;">'
+      +'<p style="margin:0 0 10px 0;"><strong>'+safeInviter+'</strong> ti ha invitato a partecipare al progetto:</p>'
+      +'<p style="margin:0;font-size:20px;font-weight:800;color:#5f55d8;">'+safeProject+'</p>'
+      +'</div>'
+      +'<a href="'+safeLink+'" style="display:inline-block;background:#7F77DD;color:#fff;text-decoration:none;border-radius:12px;padding:13px 20px;font-weight:800;margin-bottom:18px;">Apri invito Share</a>'
+      +'<p style="font-size:13px;color:#777;margin-top:18px;">Se il pulsante non funziona, copia e incolla questo link nel browser:</p>'
+      +'<p style="font-size:12px;word-break:break-all;color:#555;">'+safeLink+'</p>'
+      +'<hr style="border:none;border-top:1px solid #eee;margin:22px 0;"/>'
+      +'<p style="font-size:12px;color:#999;margin:0;">Hai ricevuto questa email perché qualcuno ti ha invitato a un progetto Share su fAInance.</p>'
+      +'</div>';
     var mailText=currentUserShareName()+" ti ha invitato a partecipare al progetto "+projectName+" su fAInance. Apri l'invito da questo link: "+inviteLink;
     await addDoc(collection(fbDb,"mail"),{to:[invitedEmail],message:{subject:"Invito a "+projectName+" su fAInance",text:mailText,html:mailHtml},shareInviteId:inviteId,shareProjectId:projectId,shareInviteLink:inviteLink,createdAt:new Date().toISOString()}).catch(function(e){console.error("Mail queue error",(e&&e.code)||"unknown");});
     return inviteId;
@@ -1445,14 +1819,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!firestoreReady)return;
     var timer=setTimeout(saveToFirestore,700); // debounce rapido per non perdere dati se l'app viene chiusa
     return function(){clearTimeout(timer);};
-  },[expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,currentPlan,planUsage,shownAlertIds]);
+  },[expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,currentPlan,planUsage,shownAlertIds]);
   useEffect(function(){
     function flush(){if(firestoreReady&&firestoreHydratedRef.current)saveToFirestore();}
     function onVisibility(){if(document.visibilityState==="hidden")flush();}
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("pagehide",flush);
     return function(){document.removeEventListener("visibilitychange",onVisibility);window.removeEventListener("pagehide",flush);};
-  },[firestoreReady,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,planUsage,shownAlertIds]);
+  },[firestoreReady,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds]);
 
   var [speseSubTab,setSpeseSubTab]=useState("add");
   var [addType,setAddType]=useState("expense");
@@ -1594,13 +1968,20 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       if(removeListener&&removeListener.remove)removeListener.remove();
     };
   },[]);
-  var [historyTab,setHistoryTab]=useState("expenses");
+  var [historyTab,setHistoryTab]=useState("all");
   var [filterYear,setFilterYear]=useState("all");
   var [filterMonth,setFilterMonth]=useState("");
   var [shareSelectedProjectId,setShareSelectedProjectId]=useState(null);
   var [shareProjectTab,setShareProjectTab]=useState("attivita");
   var [mergeFrom,setMergeFrom]=useState("");var [mergeTo,setMergeTo]=useState("");
   var [mobileMenu,setMobileMenu]=useState(false);
+  var [nativeBannerSuppressed,setNativeBannerSuppressed]=useState(false);
+  useEffect(function(){
+    if(!mobileMenu)return;
+    setNativeBannerSuppressed(true);
+    try{var ads=nativePlugin("FainanceAds");if(ads&&ads.hideBanner)ads.hideBanner({});}catch(e){}
+    return function(){setNativeBannerSuppressed(false);};
+  },[mobileMenu]);
   var [settingsValuesTab,setSettingsValuesTab]=useState("cats");
   var [defaultExpenseArea,setDefaultExpenseArea]=useStorage(userKey("default_expense_area_v1"),"vita");
   var [defaultExpenseCat,setDefaultExpenseCat]=useStorage(userKey("default_expense_cat_v1"),"4");
@@ -1615,6 +1996,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [filterCat,setFilterCat]=useState("all");
   var [filterCats,setFilterCats]=useState([]);
   var [filterCatExclude,setFilterCatExclude]=useState(false);
+  var [filterMethods,setFilterMethods]=useState([]);
+  var [filterAreaPersonal,setFilterAreaPersonal]=useState(true);
+  var [filterAreaShare,setFilterAreaShare]=useState(false);
   var [filterMonths,setFilterMonths]=useState([]);
   var [filterGroup,setFilterGroup]=useState("all");
   var [filterDateFrom,setFilterDateFrom]=useState("");
@@ -1630,6 +2014,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   function buildRuntimeTranslationMap(){
     var current=(TRANSLATIONS[lang]||TRANSLATIONS.it||{});
     var map={...(current||{})};
+    var runtimeAliasBlock={"Gen":1,"Jan":1,"Ene":1,"Janv.":1,"Feb":1,"Févr.":1,"Mar":1,"Mars":1,"März":1,"Apr":1,"Abr":1,"Avr.":1,"Mag":1,"May":1,"Mai":1,"Giu":1,"Jun":1,"Juin":1,"Lug":1,"Jul":1,"Juil.":1,"Ago":1,"Aug":1,"Août":1,"Set":1,"Sep":1,"Sept.":1,"Ott":1,"Oct":1,"Okt":1,"Out":1,"Nov":1,"Dic":1,"Dec":1,"Dez":1,"Sty":1,"Lut":1,"Kwi":1,"Maj":1,"Cze":1,"Lip":1,"Sie":1,"Wrz":1,"Paź":1,"Paz":1,"Lis":1,"Gru":1,"Mrt":1,"Mei":1,"Ian":1,"Iun":1,"Iul":1,"Ιαν":1,"Φεβ":1,"Μαρ":1,"Απρ":1,"Μαι":1,"Ιουν":1,"Ιουλ":1,"Αυγ":1,"Σεπ":1,"Οκτ":1,"Νοε":1,"Δεκ":1,"Android":1,"iOS":1,"Web":1,"localStorage":1};
     try{
       Object.keys(TRANSLATIONS||{}).forEach(function(code){
         var src=TRANSLATIONS[code]||{};
@@ -1637,6 +2022,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           var target=current[k];
           var sourceVal=src[k];
           if(typeof target==="string"&&typeof sourceVal==="string"&&sourceVal){
+            if(runtimeAliasBlock[sourceVal]||runtimeAliasBlock[k])return;
             map[sourceVal]=target;
           }
         });
@@ -1821,11 +2207,11 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
   async function getNativeBiometric(){
-    // Non usare import dinamico del pacchetto biometrico qui: la compilazione iOS/Web
-    // deve riuscire anche quando il pacchetto JS non è installato nel ramo usato da Codemagic.
-    // In app nativa il plugin viene esposto dal bridge Capacitor in window.Capacitor.Plugins.
+    // Non importare pacchetto biometrico nel bundle web/iOS:
+    // Codemagic può compilare anche senza il modulo JS installato.
+    // In app nativa il plugin deve arrivare dal bridge Capacitor già sincronizzato.
     try{
-      var cap=(window as any).Capacitor;
+      var cap=(typeof window!=="undefined"?(window as any).Capacitor:null);
       var plugins=(cap&&cap.Plugins)||{};
       var plugin=plugins.BiometricAuth||plugins.BiometricAuthNative||plugins.NativeBiometric||plugins.Biometrics||null;
       if(plugin)return {BiometricAuth:plugin,AndroidBiometryStrength:{weak:0,strong:1}};
@@ -1842,7 +2228,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(code==="authenticationFailed")return "Autenticazione biometrica non riuscita.";
     if(code==="systemCancel")return "Controllo biometrico annullato dal sistema.";
     if(code==="userCancel")return "Controllo biometrico annullato.";
-    if(raw)return raw;
+    if(/not implemented|not available|plugin/i.test(raw))return "Plugin biometrico non disponibile in questa build Android. Installa il pacchetto, esegui npx cap sync android e ricompila l’app.";
     return "Controllo biometrico non completato.";
   }
   function withBiometricTimeout(promise,ms){return new Promise(function(resolve,reject){var done=false;var timer=setTimeout(function(){if(done)return;done=true;reject(new Error("TIMEOUT_BIOMETRIC_PROMPT"));},ms||25000);Promise.resolve(promise).then(function(v){if(done)return;done=true;clearTimeout(timer);resolve(v);}).catch(function(e){if(done)return;done=true;clearTimeout(timer);reject(e);});});}
@@ -1893,14 +2279,48 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       biometricPromptRef.current=false;setBiometricChecking(false);
     }
   }
-  async function unlockBiometricApp(reason){if(biometricPromptRef.current)return null;var ok=await requestBiometricUnlock(reason);if(ok===true)setAppLocked(false);else if(ok===false)setAppLocked(true);return ok;}
+  async function unlockBiometricApp(reason){
+    if(biometricPromptRef.current)return null;
+    var ok=await requestBiometricUnlock(reason);
+    if(ok===true){setUnlockMethod("");setAppLocked(false);}else if(ok===false)setAppLocked(true);
+    return ok;
+  }
+  function validateLocalPin(pin){return /^\d{4}$/.test(String(pin||""));}
+  function unlockWithPin(pin){
+    if(!validateLocalPin(localLockPin)){setBiometricLockMessage(L("PIN non configurato. Puoi sbloccare con biometria o password account e poi impostare un nuovo PIN."));setUnlockMethod("biometric");return false;}
+    if(String(pin||"")===String(localLockPin||"")){setUnlockPin("");unlockPinRef.current="";setUnlockMethod("");setBiometricLockMessage("");setAppLocked(false);biometricSkipAutoLockUntilRef.current=Date.now()+3000;return true;}
+    setBiometricLockMessage(L("PIN errato."));return false;
+  }
+  async function unlockWithAccountPassword(password){
+    setBiometricChecking(true);setBiometricLockMessage("");
+    try{
+      var user=fbAuth.currentUser;
+      var email=user&&user.email?String(user.email):String(currentUser&&currentUser.email||"");
+      if(!user||!email){setBiometricLockMessage(L("Account non disponibile. Effettua di nuovo il login."));return false;}
+      var mod:any=await import("firebase/auth");
+      if(!mod.EmailAuthProvider||!mod.reauthenticateWithCredential){setBiometricLockMessage(L("Verifica password non disponibile in questa build."));return false;}
+      var cred=mod.EmailAuthProvider.credential(email,String(password||""));
+      await mod.reauthenticateWithCredential(user,cred);
+      setUnlockPassword("");setUnlockMethod("");setBiometricLockMessage("");setAppLocked(false);biometricSkipAutoLockUntilRef.current=Date.now()+3000;return true;
+    }catch(e){setBiometricLockMessage(L("Password account non corretta o account non compatibile con accesso tramite password."));return false;}
+    finally{setBiometricChecking(false);}
+  }
   async function handleBiometricToggle(next){
     if(biometricChecking||biometricPromptRef.current)return;
-    if(next){var ok=await requestBiometricUnlock("Conferma l’attivazione del blocco biometrico");if(ok){biometricInitialCheckRef.current=true;biometricBackgroundAtRef.current=null;biometricSkipAutoLockUntilRef.current=Date.now()+5000;setBiometricLockEnabled(true);setAppLocked(false);setToast({text:"Protezione biometrica attivata",type:"success",icon:"🔐"});}else if(ok===false)setToast({text:biometricLockMessage||"Controllo biometrico non completato.",type:"error",icon:"🚫",color:"#E24B4A"});return;}
-    var confirmed=isNativePlatform()?await requestBiometricUnlock("Conferma la disattivazione del blocco biometrico"):true;if(confirmed){biometricInitialCheckRef.current=false;biometricBackgroundAtRef.current=null;biometricSkipAutoLockUntilRef.current=0;setBiometricLockEnabled(false);setAppLocked(false);setToast({text:"Protezione biometrica disattivata",type:"success",icon:"🔓"});}else if(confirmed===false)setToast({text:biometricLockMessage||"Controllo biometrico non completato.",type:"error",icon:"🚫",color:"#E24B4A"});
+    if(next){
+      if(localLockMethod==="pin"&&!validateLocalPin(localLockPin)){setToast({text:L("Imposta prima un PIN di 4 numeri."),type:"error",icon:"🚫",color:"#E24B4A"});return;}
+      if(localLockMethod==="biometric"){
+        var ok=await requestBiometricUnlock("Conferma l’attivazione del blocco biometrico");
+        if(!ok){setToast({text:L(biometricLockMessage||"Controllo biometrico non completato."),type:"error",icon:"🚫",color:"#E24B4A"});return;}
+      }
+      biometricInitialCheckRef.current=true;biometricBackgroundAtRef.current=null;biometricSkipAutoLockUntilRef.current=Date.now()+5000;setBiometricLockEnabled(true);setAppLocked(false);setToast({text:L("Protezione app attivata"),type:"success",icon:"🔐"});return;
+    }
+    var confirmed=localLockMethod==="biometric"&&isNativePlatform()?await requestBiometricUnlock("Conferma la disattivazione del blocco dell’app"):true;
+    if(confirmed){biometricInitialCheckRef.current=false;biometricBackgroundAtRef.current=null;biometricSkipAutoLockUntilRef.current=0;setBiometricLockEnabled(false);setAppLocked(false);setToast({text:L("Protezione app disattivata"),type:"success",icon:"🔓"});}
+    else if(confirmed===false)setToast({text:L(biometricLockMessage||"Controllo non completato."),type:"error",icon:"🚫",color:"#E24B4A"});
   }
-  useEffect(function(){if(!biometricLockEnabled){setAppLocked(false);biometricInitialCheckRef.current=false;return;}if(!firestoreReady||biometricInitialCheckRef.current)return;biometricInitialCheckRef.current=true;if(!isNativePlatform())return;if(Date.now()<Number(biometricSkipAutoLockUntilRef.current||0))return;if(biometricPromptRef.current)return;setAppLocked(true);unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");},[biometricLockEnabled,firestoreReady]);
-  useEffect(function(){var removed=false;var listenerHandle=null;async function attach(){if(!isNativePlatform())return;try{var mod=await import("@capacitor/app");if(removed||!mod||!mod.App||!mod.App.addListener)return;listenerHandle=await mod.App.addListener("appStateChange",function(state){var active=!!(state&&state.isActive);if(!active){biometricBackgroundAtRef.current=Date.now();return;}if(!biometricLockEnabled)return;if(biometricPromptRef.current||Date.now()<Number(biometricSkipAutoLockUntilRef.current||0))return;var bgAt=Number(biometricBackgroundAtRef.current||0);biometricBackgroundAtRef.current=null;if(!bgAt)return;var minutes=Number(biometricLockTimeout);var elapsed=Date.now()-bgAt;if(minutes<=0||elapsed>=minutes*60*1000){setAppLocked(true);unlockBiometricApp("Sblocca fAInance per continuare");}});}catch(e){}}attach();return function(){removed=true;try{if(listenerHandle&&listenerHandle.remove)listenerHandle.remove();}catch(e){}};},[biometricLockEnabled,biometricLockTimeout,firestoreReady]);
+  useEffect(function(){if(!biometricLockEnabled){setAppLocked(false);biometricInitialCheckRef.current=false;return;}if(localLockMethod==="pin"&&!validateLocalPin(localLockPin)){setAppLocked(false);setBiometricLockMessage("");return;}if(!firestoreReady||biometricInitialCheckRef.current)return;biometricInitialCheckRef.current=true;if(Date.now()<Number(biometricSkipAutoLockUntilRef.current||0))return;if(biometricPromptRef.current)return;setUnlockMethod("");setAppLocked(true);if(localLockMethod==="biometric"&&isNativePlatform())unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");},[biometricLockEnabled,firestoreReady,localLockMethod,localLockPin]);
+  useEffect(function(){var removed=false;var listenerHandle=null;async function attach(){if(!isNativePlatform())return;try{var mod=await import("@capacitor/app");if(removed||!mod||!mod.App||!mod.App.addListener)return;listenerHandle=await mod.App.addListener("appStateChange",function(state){var active=!!(state&&state.isActive);if(!active){biometricBackgroundAtRef.current=Date.now();return;}if(!biometricLockEnabled)return;if(biometricPromptRef.current||Date.now()<Number(biometricSkipAutoLockUntilRef.current||0))return;var bgAt=Number(biometricBackgroundAtRef.current||0);biometricBackgroundAtRef.current=null;if(!bgAt)return;var minutes=Number(biometricLockTimeout);var elapsed=Date.now()-bgAt;if(minutes<=0||elapsed>=minutes*60*1000){if(localLockMethod==="pin"&&!validateLocalPin(localLockPin)){setAppLocked(false);return;}setUnlockMethod("");setAppLocked(true);if(localLockMethod==="biometric")unlockBiometricApp("Sblocca fAInance per continuare");}});}catch(e){}}attach();return function(){removed=true;try{if(listenerHandle&&listenerHandle.remove)listenerHandle.remove();}catch(e){}};},[biometricLockEnabled,biometricLockTimeout,firestoreReady,localLockMethod,localLockPin]);
   var [voiceModal,setVoiceModal]=useState(false);
   var [voiceListening,setVoiceListening]=useState(false);
   var [voiceText,setVoiceText]=useState("");
@@ -1948,9 +2368,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var now=new Date(),curYear=now.getFullYear();
   var curMonthKey=curYear+"-"+String(now.getMonth()+1).padStart(2,"0");
 
-  function getCat(id){return cats.find(function(c){return c.id===Number(id);});}
-  function getMethod(id){return methods.find(function(m){return m.id===Number(id);});}
-  function getIT(id){return incomeTypes.find(function(x){return x.id===id;});}
+  function getCat(id){return (cats||[]).find(function(c){return String(c.id)===String(id);});}
+  function getMethod(id){return (methods||[]).find(function(m){return String(m.id)===String(id);});}
+  function getIT(id){return (incomeTypes||[]).find(function(x){return String(x.id)===String(id);});}
   function bulkMovementRowLimit(plan){
     if(plan==="free")return 10;
     if(plan==="base")return 15;
@@ -2523,18 +2943,40 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(tab==="alerts"&&triggeredAlertsData.length>0)markAlertsSeen(triggeredAlertsData);
   },[tab,JSON.stringify(triggeredAlertsData.map(alertSeenKey))]);
 
-  function historySortValue(item){
-    if(historySortDate==="created")return item.createdAt?String(item.createdAt):(item.id?String(item.id):"");
+  function normalizeHistorySortField(field){
+    if(field==="operation")return "date";
+    if(field==="immission")return "created";
+    if(field==="created")return "created";
+    if(field==="amount")return "amount";
+    if(field==="category")return "category";
+    return "date";
+  }
+  function historySortValue(item,field){
+    var f=normalizeHistorySortField(field);
+    if(f==="amount")return Number(item.amount)||0;
+    if(f==="created")return item.createdAt?String(item.createdAt):(item.id?String(item.id):"");
+    if(f==="category"){
+      var c=item&&item.catId!==undefined?getCat(item.catId):null;
+      var it=item&&item.type!==undefined?getIT(item.type):null;
+      return String((c&&c.name)||(it&&it.name)||item.catName||item.type||item.catId||"").toLowerCase();
+    }
     return item.date||"";
+  }
+  function compareHistorySort(a,b,field,dir){
+    var f=normalizeHistorySortField(field);
+    var av=historySortValue(a,f),bv=historySortValue(b,f),res=0;
+    if(f==="amount")res=av===bv?0:(av>bv?1:-1);
+    else res=av===bv?0:(String(av)>String(bv)?1:-1);
+    return (dir||"desc")==="asc"?res:-res;
   }
   function sortHistoryItems(list){
     return list.slice().sort(function(a,b){
-      var av=historySortValue(a),bv=historySortValue(b);
-      if(av===bv)return 0;
-      var res=av>bv?1:-1;
-      return historySortDirection==="asc"?res:-res;
+      var first=compareHistorySort(a,b,historySortDate,historySortDirection);
+      if(first!==0)return first;
+      return compareHistorySort(a,b,historySortSecondary||"amount",historySortSecondaryDirection||"desc");
     });
   }
+
   var shareHistoryExpenses=useMemo(function(){
     if(!showShareInHistory)return [];
     return (shareProjects||[]).flatMap(function(project){return (project.activities||[]).filter(function(a){return a.kind!=="settlement";}).map(function(a){
@@ -2543,8 +2985,74 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       return{id:"share_"+project.id+"_"+a.id,amount:myShare,catId:"share",methodId:null,desc:(project.name||"Share")+" · "+(a.desc||"Spesa condivisa")+(paidBy?" · pagata da "+paidBy.name:""),date:a.date,createdAt:a.createdAt||a.date,rateizzato:false,rate:1,_share:true,_shareProjectId:project.id,_shareProjectName:project.name,_sharePaidBy:paidBy?paidBy.name:""};
     });});
   },[shareProjects,showShareInHistory]);
-  var filteredExpenses=useMemo(function(){var q=searchQuery.toLowerCase();var minAmt=filterAmtMin?parseMoney(filterAmtMin):null;var maxAmt=filterAmtMax?parseMoney(filterAmtMax):null;var source=expenses.concat(shareHistoryExpenses);return sortHistoryItems(source.filter(function(e){var c=e._share?{id:"share",name:"Share",group:"share",icon:"🤝",color:confirmButtonColor}:getCat(e.catId);if(historyFutureMode==="untilToday"&&e.date>todayStr())return false;if(filterYear&&filterYear!=="all"&&!e.date.startsWith(filterYear))return false;if(filterMonth&&!e.date.startsWith(filterMonth))return false;if(filterMonths&&filterMonths.length&&!filterMonths.some(function(mk){return e.date.startsWith(mk);}))return false;var txt=((e.desc||"")+" "+(c?c.name:"")+" "+(e._shareProjectName||"")+" "+(e._sharePaidBy||"")).toLowerCase();if(q&&!txt.includes(q))return false;if(filterCats&&filterCats.length){var isSelected=filterCats.includes(String(e.catId));if(filterCatExclude?isSelected:!isSelected)return false;}else if(filterCat!=="all"&&String(e.catId)!==filterCat)return false;if(filterGroup!=="all"&&(c?c.group:"")!==filterGroup)return false;if(filterDateFrom&&e.date<filterDateFrom)return false;if(filterDateTo&&e.date>filterDateTo)return false;if(minAmt!==null&&e.amount<minAmt)return false;if(maxAmt!==null&&e.amount>maxAmt)return false;return true;}));},[expenses,shareHistoryExpenses,filterYear,filterMonth,filterMonths,searchQuery,filterCat,filterCats,filterCatExclude,filterGroup,filterDateFrom,filterDateTo,filterAmtMin,filterAmtMax,historyFutureMode,historySortDate,historySortDirection,confirmButtonColor,planUsage,shownAlertIds]);
-  var filteredIncomes=useMemo(function(){var q=searchQuery.toLowerCase();var minAmt=filterAmtMin?parseMoney(filterAmtMin):null;var maxAmt=filterAmtMax?parseMoney(filterAmtMax):null;return sortHistoryItems(incomes.filter(function(i){var it=getIT(i.type);var txt=((i.desc||"")+" "+(it?it.name:"")+" "+(i.type||"")).toLowerCase();if(historyFutureMode==="untilToday"&&i.date>todayStr())return false;if(filterYear&&filterYear!=="all"&&!i.date.startsWith(filterYear))return false;if(filterMonth&&!i.date.startsWith(filterMonth))return false;if(q&&!txt.includes(q))return false;if(filterDateFrom&&i.date<filterDateFrom)return false;if(filterDateTo&&i.date>filterDateTo)return false;if(minAmt!==null&&i.amount<minAmt)return false;if(maxAmt!==null&&i.amount>maxAmt)return false;return true;}));},[incomes,filterYear,filterMonth,searchQuery,filterDateFrom,filterDateTo,filterAmtMin,filterAmtMax,historyFutureMode,historySortDate,historySortDirection,incomeTypes]);
+  function filterCatMatchesExpenseId(catId){
+    var ids=(filterCats||[]).map(function(x){return String(x);});
+    if(!ids.length)return null;
+    var sid=String(catId||"");
+    return ids.includes("expense:"+sid)||ids.includes(sid);
+  }
+  function filterCatMatchesIncomeId(typeId){
+    var ids=(filterCats||[]).map(function(x){return String(x);});
+    if(!ids.length)return null;
+    var sid=String(typeId||"");
+    return ids.includes("income:"+sid)||ids.includes(sid);
+  }
+  var filteredExpenses=useMemo(function(){
+    var q=searchQuery.toLowerCase();
+    var minAmt=filterAmtMin?parseMoney(filterAmtMin):null;
+    var maxAmt=filterAmtMax?parseMoney(filterAmtMax):null;
+    var personalSource=filterAreaPersonal?expenses:[];
+    var shareSource=(filterAreaShare&&showShareInHistory)?shareHistoryExpenses:[];
+    var source=personalSource.concat(shareSource);
+    return sortHistoryItems(source.filter(function(e){
+      var isShare=!!e._share;
+      var c=isShare?{id:"share",name:"Share",group:"share",icon:"🤝",color:confirmButtonColor}:getCat(e.catId);
+      if(historyFutureMode==="untilToday"&&e.date>todayStr())return false;
+      if(filterYear&&filterYear!=="all"&&!e.date.startsWith(filterYear))return false;
+      if(filterMonth&&!e.date.startsWith(filterMonth))return false;
+      if(filterMonths&&filterMonths.length&&!filterMonths.some(function(mk){return e.date.startsWith(mk);}))return false;
+      var m=isShare?null:getMethod(e.methodId);
+      var txt=((e.desc||"")+" "+(c?c.name:"")+" "+(m?m.name:"")+" "+(e._shareProjectName||"")+" "+(e._sharePaidBy||"")).toLowerCase();
+      if(q&&!txt.includes(q))return false;
+      if(filterCats&&filterCats.length){
+        var selected=isShare?(filterCats||[]).map(String).includes("share"):filterCatMatchesExpenseId(e.catId);
+        if(filterCatExclude?selected:!selected)return false;
+      }else if(filterCat!=="all"&&String(e.catId)!==filterCat&&!isShare)return false;
+      if(filterGroup&&filterGroup!=="all"&&!isShare&&(c?c.group:"")!==filterGroup)return false;
+      if(filterMethods&&filterMethods.length&&!isShare&&!(filterMethods||[]).map(String).includes(String(e.methodId||"")))return false;
+      if(filterMethods&&filterMethods.length&&isShare)return false;
+      if(filterDateFrom&&e.date<filterDateFrom)return false;
+      if(filterDateTo&&e.date>filterDateTo)return false;
+      if(minAmt!==null&&e.amount<minAmt)return false;
+      if(maxAmt!==null&&e.amount>maxAmt)return false;
+      return true;
+    }));
+  },[expenses,shareHistoryExpenses,filterAreaPersonal,filterAreaShare,showShareInHistory,filterYear,filterMonth,filterMonths,searchQuery,filterCat,filterCats,filterCatExclude,filterGroup,filterMethods,filterDateFrom,filterDateTo,filterAmtMin,filterAmtMax,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,confirmButtonColor,planUsage,shownAlertIds]);
+  var filteredIncomes=useMemo(function(){
+    var q=searchQuery.toLowerCase();
+    var minAmt=filterAmtMin?parseMoney(filterAmtMin):null;
+    var maxAmt=filterAmtMax?parseMoney(filterAmtMax):null;
+    return sortHistoryItems(incomes.filter(function(i){
+      var it=getIT(i.type);
+      var txt=((i.desc||"")+" "+(it?it.name:"")+" "+(i.type||"")).toLowerCase();
+      if(historyFutureMode==="untilToday"&&i.date>todayStr())return false;
+      if(filterYear&&filterYear!=="all"&&!i.date.startsWith(filterYear))return false;
+      if(filterMonth&&!i.date.startsWith(filterMonth))return false;
+      if(filterMonths&&filterMonths.length&&!filterMonths.some(function(mk){return i.date.startsWith(mk);}))return false;
+      if(q&&!txt.includes(q))return false;
+      if(filterMethods&&filterMethods.length)return false;
+      if(filterCats&&filterCats.length){
+        var selected=filterCatMatchesIncomeId(i.type);
+        if(filterCatExclude?selected:!selected)return false;
+      }
+      if(filterDateFrom&&i.date<filterDateFrom)return false;
+      if(filterDateTo&&i.date>filterDateTo)return false;
+      if(minAmt!==null&&i.amount<minAmt)return false;
+      if(maxAmt!==null&&i.amount>maxAmt)return false;
+      return true;
+    }));
+  },[incomes,filterYear,filterMonth,filterMonths,searchQuery,filterMethods,filterCats,filterCatExclude,filterDateFrom,filterDateTo,filterAmtMin,filterAmtMax,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,incomeTypes]);
+
 
   var inp={borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"7px 10px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333"};
   var sb={padding:"8px 14px",border:"none",borderRadius:btnRadius,fontSize:13,cursor:"pointer",fontWeight:500};
@@ -2556,7 +3064,13 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
   },[currentPlan]);
 
+  useEffect(function(){
+    if(!nativeBannerSuppressed)return;
+    try{var ads=nativePlugin("FainanceAds");if(ads&&ads.hideBanner)ads.hideBanner({});}catch(e){}
+  },[nativeBannerSuppressed]);
+
   function shouldShowTopAdBox(){
+    if(nativeBannerSuppressed)return false;
     if(currentPlan!=="free")return false;
     if(!planLimits||!planLimits.ads)return false;
     if(!isMobile)return false;
@@ -2605,7 +3119,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       try{window.addEventListener("resize",showAtMeasuredSlot);}catch(e){}
       try{window.addEventListener("scroll",showAtMeasuredSlot,{passive:true});}catch(e){}
       return function(){clearTimeout(t1);clearTimeout(t2);clearTimeout(t3);try{window.removeEventListener("resize",showAtMeasuredSlot);}catch(e){}try{window.removeEventListener("scroll",showAtMeasuredSlot);}catch(e){}try{if(ads&&ads.hideBanner)ads.hideBanner({});}catch(e){}};
-    },[visible,tab,currentPlan,nativeBanner,showAppSummaryHeader,slotHeight]);
+    },[visible,tab,currentPlan,nativeBanner,showAppSummaryHeader,slotHeight,nativeBannerSuppressed]);
     if(!visible)return null;
     return <div ref={adBoxRef} style={{position:"relative",height:slotHeight,margin:showAppSummaryHeader?"8px 0 12px":"16px 0 12px",background:nativeBanner?(dark?"#171725":"#fff"):(dark?"#202033":"#F8FAFF"),border:nativeBanner?"1px solid transparent":"1px solid "+borderC,borderRadius:nativeBanner?0:10,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden",boxSizing:"border-box",pointerEvents:nativeBanner?"none":"auto"}}>
       {!nativeBanner&&<div style={{fontSize:12,color:subC,textAlign:"center",fontWeight:700}}>📢 {L("Spazio annuncio")}</div>}
@@ -2628,7 +3142,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     patrimonioAreas,setPatrimonioAreas,patrimonioEntries,setPatrimonioEntries,
     patrimonioValues,setPatrimonioValues,patrimonioMode,setPatrimonioMode,
     patrimonioHistory,setPatrimonioHistory,patrimonioNotes,setPatrimonioNotes,
-    historyFutureMode,setHistoryFutureMode,historySortDate,setHistorySortDate,historySortDirection,setHistorySortDirection,
+    historyFutureMode,setHistoryFutureMode,historySortDate,setHistorySortDate,historySortDirection,setHistorySortDirection,historySortSecondary,setHistorySortSecondary,historySortSecondaryDirection,setHistorySortSecondaryDirection,
     appuntiDocuments,setAppuntiDocuments,appuntiNotes,setAppuntiNotes,bankCoords,setBankCoords,
     notifPrefs,setNotifPrefs,customNotifs,setCustomNotifs,
     aiDismissed,setAiDismissed,aiChat,setAiChat,aiDataAccess,setAiDataAccess,aiFloatingEnabled,setAiFloatingEnabled,
@@ -2636,7 +3150,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     showSecInHistory,setShowSecInHistory,showSecInStats,setShowSecInStats,
     showSecInBudget,setShowSecInBudget,showSecInPatrimonio,setShowSecInPatrimonio,
     
-    currentPlan,setCurrentPlan,planUsage,setPlanUsage,planLimits,canUsePlanFeature,consumePlanFeature,handleRewardedFeature,canAddPlanItem,planRemaining,upgradeMessage,remainingMessage,singleMovementSuccessToast,bulkMovementSuccessToast,limitedFeatureSuccessToast,planFeatureGateState,singleMovementGateState,unlockRewardedMovement,manualMovementUsage,bulkMovementRowLimit,bulkMovementCooldownMonths,bulkMovementLocked,bulkMovementCooldownText,PLAN_IDS,PLAN_LABELS,PLAN_PRICES,PLAN_LIMITS,planLabel,planLimitLabel,
+    currentPlan,setCurrentPlan,manualFullGrant,planUsage,setPlanUsage,planLimits,canUsePlanFeature,consumePlanFeature,handleRewardedFeature,canAddPlanItem,planRemaining,upgradeMessage,remainingMessage,singleMovementSuccessToast,bulkMovementSuccessToast,limitedFeatureSuccessToast,planFeatureGateState,singleMovementGateState,unlockRewardedMovement,manualMovementUsage,bulkMovementRowLimit,bulkMovementCooldownMonths,bulkMovementLocked,bulkMovementCooldownText,PLAN_IDS,PLAN_LABELS,PLAN_PRICES,PLAN_LIMITS,planLabel,planLimitLabel,
     // ── Tema / stile (usati dai pannelli) ─────────────────────────────────
     textC,subC,borderC,cardBg,inp,sb,bgColor,
     // ── Navigazione e stato UI ─────────────────────────────────────────────
@@ -2652,6 +3166,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     searchQuery,setSearchQuery,showFilters,setShowFilters,
     filterYear,setFilterYear,filterMonth,setFilterMonth,filterMonths,setFilterMonths,
     filterCat,setFilterCat,filterCats,setFilterCats,filterCatExclude,setFilterCatExclude,
+    filterMethods,setFilterMethods,filterAreaPersonal,setFilterAreaPersonal,filterAreaShare,setFilterAreaShare,
     filterGroup,setFilterGroup,
     filterDateFrom,setFilterDateFrom,filterDateTo,setFilterDateTo,
     filterAmtMin,setFilterAmtMin,filterAmtMax,setFilterAmtMax,
@@ -2662,7 +3177,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     showShareInHistory,setShowShareInHistory,
     debtCredits,setDebtCredits,shoppingCards,setShoppingCards,shoppingItems,setShoppingItems,shoppingAreas,setShoppingAreas,shoppingAreaIcons,setShoppingAreaIcons,shoppingBoughtColor,setShoppingBoughtColor,
     showDebtCreditsInPatrimonio,setShowDebtCreditsInPatrimonio,showDebtCreditsInExpenses,setShowDebtCreditsInExpenses,shoppingDefaultArea,setShoppingDefaultArea,shareReceiptUploads,setShareReceiptUploads,
-    confirmButtonColor,setConfirmButtonColor,
+    confirmButtonColor,setConfirmButtonColor,secondaryButtonColor,setSecondaryButtonColor,nativeBannerSuppressed,setNativeBannerSuppressed,
     // ── Firestore / auth ────────────────────────────────────────────────────
     firestoreReady,isOffline,userKey,userId,currentUser,
     // ── Funzioni e ref condivisi usati dai pannelli estratti ────────────────
@@ -3633,7 +4148,24 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       <ProfileCard currentUser={currentUser} onLogout={onLogout} dark={dark} textC={textC} subC={subC} borderC={borderC} cardBg={cardBg} btnRadius={btnRadius} dateFmt={dateFmt} setToast={setToast} fbDb={fbDb} onProfileUpdate={onProfileUpdate} onDeleteAccount={deleteCurrentAccount}/>
     </div>;
 
-    function SecuritySettingsPage(){var timeoutItems=[{id:"0",label:"Subito"},{id:"1",label:"1 minuto"},{id:"5",label:"5 minuti"},{id:"15",label:"15 minuti"}];return <div><PageHeader title="Sicurezza"/><div style={{display:"flex",flexDirection:"column",gap:14}}><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:900,color:textC,marginBottom:4}}>🔐 {L("Proteggi l’app con biometria")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45}}>{L("Richiede impronta, Face ID o codice dispositivo per aprire fAInance dopo il login.")}</div></div><button type="button" onClick={function(){handleBiometricToggle(!biometricLockEnabled);}} disabled={biometricChecking} aria-label={L("Proteggi l’app con biometria")} style={{width:44,height:26,borderRadius:999,border:"none",padding:3,background:biometricLockEnabled?"linear-gradient(135deg,#7F77DD,#378ADD)":(dark?"#4b4b5f":"#d4d4d8"),cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.65:1,display:"flex",alignItems:"center",justifyContent:biometricLockEnabled?"flex-end":"flex-start",transition:"all .2s ease",flexShrink:0}}><span style={{width:20,height:20,borderRadius:"50%",background:"#fff",display:"block",boxShadow:"0 2px 6px rgba(0,0,0,.18)"}}/></button></div>{biometricChecking&&<div style={{fontSize:12,color:subC,marginTop:10}}>⏳ {L("Controllo biometrico in corso...")}</div>}</div><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20,opacity:biometricLockEnabled?1:.55}}><div style={{fontSize:14,fontWeight:800,color:textC,marginBottom:4}}>⏱️ {L("Richiedi biometria al ritorno nell’app")}</div><div style={{fontSize:12,color:subC,marginBottom:12,lineHeight:1.4}}>{L("Dopo quanto tempo in background fAInance deve bloccarsi di nuovo.")}</div><Segmented items={timeoutItems} value={String(biometricLockTimeout)} onChange={function(v){setBiometricLockTimeout(Number(v));setToast("Impostazioni aggiornate");}}/></div><div style={{background:dark?"#24213a":"#F0EDFF",border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),borderRadius:14,padding:14,fontSize:12,color:dark?"#D8D2FF":"#534AB7",lineHeight:1.45}}>{L("La biometria non sostituisce il login Google, Apple o email: protegge solo l’accesso locale ai dati già disponibili sul dispositivo.")}</div></div></div>;}
+    function SecuritySettingsPage(){
+      var timeoutItems=[{id:"0",label:"Subito"},{id:"1",label:"1 minuto"},{id:"5",label:"5 minuti"},{id:"15",label:"15 minuti"}];
+      var methods=[{id:"biometric",icon:"👆",label:"Biometria",desc:"Impronta, Face ID o codice dispositivo"},{id:"password",icon:"🔑",label:"Password account",desc:"Usa la stessa password dell’account email"},{id:"pin",icon:"🔢",label:"PIN 4 numeri",desc:"Codice locale di 4 cifre"}];
+      function methodBtn(m){var active=localLockMethod===m.id;return <button key={m.id} type="button" onClick={function(){setLocalLockMethod(m.id);setBiometricLockMessage("");}} style={{textAlign:"left",border:"1px solid "+(active?confirmButtonColor:borderC),background:active?(confirmButtonColor+"18"):(dark?"#252535":"#fff"),color:textC,borderRadius:14,padding:"12px 13px",cursor:"pointer"}}><div style={{fontSize:14,fontWeight:900,marginBottom:3}}>{m.icon} {L(m.label)}</div><div style={{fontSize:11,color:subC,lineHeight:1.35}}>{L(m.desc)}</div></button>;}
+      function savePin(){var clean=String((securityPinDraftRef&&securityPinDraftRef.current)||securityPinDraft||"").replace(/\D/g,"").slice(0,4);if(!/^\d{4}$/.test(clean)){setToast({text:L("Il PIN deve contenere 4 numeri."),type:"error",icon:"🚫",color:"#E24B4A"});return;}setLocalLockPin(clean);securityPinDraftRef.current="";setSecurityPinDraft("");setToast({text:L("PIN salvato"),type:"success",icon:"🔢"});}
+      return <div><PageHeader title="Sicurezza"/><div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:14}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:900,color:textC,marginBottom:4}}>🔐 {L("Proteggi l’app")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45}}>{L("Scegli se sbloccare fAInance con biometria, password dell’account o PIN di 4 numeri.")}</div></div><button type="button" onClick={function(){handleBiometricToggle(!biometricLockEnabled);}} disabled={biometricChecking} aria-label={L("Proteggi l’app")} style={{width:44,height:26,borderRadius:999,border:"none",padding:3,background:biometricLockEnabled?"linear-gradient(135deg,#7F77DD,#378ADD)":(dark?"#4b4b5f":"#d4d4d8"),cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.65:1,display:"flex",alignItems:"center",justifyContent:biometricLockEnabled?"flex-end":"flex-start",transition:"all .2s ease",flexShrink:0}}><span style={{width:20,height:20,borderRadius:"50%",background:"#fff",display:"block",boxShadow:"0 2px 6px rgba(0,0,0,.18)"}}/></button></div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10}}>{methods.map(methodBtn)}</div>
+          {localLockMethod==="pin"&&<div style={{marginTop:12,background:dark?"#1e1e30":"#F8FAFF",border:"1px solid "+borderC,borderRadius:14,padding:12}}><label style={{fontSize:12,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("PIN di 4 numeri")}</label><div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8}}><input defaultValue="" onChange={function(e){securityPinDraftRef.current=String(e.currentTarget.value||"").replace(/\D/g,"").slice(0,4);}} inputMode="numeric" type="text" maxLength={4} autoComplete="off" placeholder={localLockPin?"••••":"1234"} style={{...sinp,width:"100%"}}/><Btn onClick={savePin} bg={confirmButtonColor}>{L("Salva PIN")}</Btn></div>{localLockPin&&<div style={{fontSize:11,color:"#1D9E75",fontWeight:800,marginTop:7}}>✅ {L("PIN configurato")}</div>}</div>}
+          {localLockMethod==="password"&&<div style={{fontSize:12,color:subC,lineHeight:1.4,marginTop:12}}>{L("La password dell’account funziona per gli account creati con email e password. Gli account Google o Apple possono non avere una password fAInance verificabile localmente.")}</div>}
+          {biometricChecking&&<div style={{fontSize:12,color:subC,marginTop:10}}>⏳ {L("Controllo in corso...")}</div>}
+          {biometricLockMessage&&<div style={{fontSize:12,color:"#E24B4A",marginTop:10,lineHeight:1.35}}>{L(biometricLockMessage)}</div>}
+        </div>
+        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20,opacity:biometricLockEnabled?1:.55}}><div style={{fontSize:14,fontWeight:800,color:textC,marginBottom:4}}>⏱️ {L("Richiedi blocco al ritorno nell’app")}</div><div style={{fontSize:12,color:subC,marginBottom:12,lineHeight:1.4}}>{L("Dopo quanto tempo in background fAInance deve bloccarsi di nuovo.")}</div><Segmented items={timeoutItems} value={String(biometricLockTimeout)} onChange={function(v){setBiometricLockTimeout(Number(v));setToast(L("Impostazioni aggiornate"));}}/></div>
+        <div style={{background:dark?"#24213a":"#F0EDFF",border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),borderRadius:14,padding:14,fontSize:12,color:dark?"#D8D2FF":"#534AB7",lineHeight:1.45}}>{L("Il blocco locale non sostituisce il login Google, Apple o email: protegge solo l’accesso ai dati già disponibili sul dispositivo.")}</div>
+      </div></div>;
+    }
 
     if(settingsPage==="security")return <SecuritySettingsPage/>;
 
@@ -4020,8 +4552,12 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><input type="color" value={incomeColor} onChange={function(e){setIncomeColor(e.target.value);}} style={{width:48,height:40,padding:0,border:"none",borderRadius:8,cursor:"pointer"}}/><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{["#1D9E75","#27AE60","#16A085","#2ECC71","#3498DB","#0D6EFD"].map(function(c){return <button key={c} onClick={function(){setIncomeColor(c);}} style={{width:28,height:28,background:c,border:incomeColor===c?"3px solid #333":"2px solid transparent",borderRadius:"50%",cursor:"pointer",padding:0}}/>;}) }</div><div style={{background:incomeColor,color:"#fff",borderRadius:btnRadius,padding:"8px 16px",fontSize:13,fontWeight:500}}>{L("Anteprima")}</div></div>
         </div>
         <div onClick={function(){if(!baseSettingsAllowed)blockSetting("base");}} style={{background:baseSettingsAllowed?cardBg:(dark?"#342b16":"#FFF8E1"),padding:"16px 20px",borderTop:"1px solid "+(baseSettingsAllowed?borderC:(dark?"#6a5520":"#FFD54F"))}}>
-          <div style={{fontSize:13,fontWeight:600,color:baseSettingsAllowed?textC:(dark?"#ffd58a":"#856404"),marginBottom:12}}>{"✅ "+L("Colore bottoni di conferma")}</div>
-          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><input disabled={!baseSettingsAllowed} type="color" value={confirmButtonColor} onChange={function(e){if(blockSetting("base"))return;setConfirmButtonColor(e.target.value);}} style={{width:48,height:40,padding:0,border:"none",borderRadius:8,cursor:baseSettingsAllowed?"pointer":"not-allowed",opacity:baseSettingsAllowed?1:.45}}/><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{["#7F77DD","#378ADD","#1D9E75","#EF9F27","#8E44AD","#222222"].map(function(c){return <button key={c} disabled={!baseSettingsAllowed} onClick={function(){if(blockSetting("base"))return;setConfirmButtonColor(c);}} style={{width:28,height:28,background:c,border:confirmButtonColor===c?"3px solid #333":"2px solid transparent",borderRadius:"50%",cursor:baseSettingsAllowed?"pointer":"not-allowed",padding:0,opacity:baseSettingsAllowed?1:.45}}/>;}) }</div><div style={{background:baseSettingsAllowed?confirmButtonColor:"#EF9F27",color:"#fff",borderRadius:btnRadius,padding:"8px 16px",fontSize:13,fontWeight:500}}>{L("Anteprima conferma")}</div></div>{baseLockHint("Colore bottoni di conferma disponibile dal piano Base")}
+          <div style={{fontSize:13,fontWeight:600,color:baseSettingsAllowed?textC:(dark?"#ffd58a":"#856404"),marginBottom:12}}>{"✅ "+L("Bottoni Principali")}</div>
+          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><input disabled={!baseSettingsAllowed} type="color" value={confirmButtonColor} onChange={function(e){if(blockSetting("base"))return;setConfirmButtonColor(e.target.value);}} style={{width:48,height:40,padding:0,border:"none",borderRadius:8,cursor:baseSettingsAllowed?"pointer":"not-allowed",opacity:baseSettingsAllowed?1:.45}}/><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{["#7F77DD","#378ADD","#1D9E75","#EF9F27","#8E44AD","#222222"].map(function(c){return <button key={c} disabled={!baseSettingsAllowed} onClick={function(){if(blockSetting("base"))return;setConfirmButtonColor(c);}} style={{width:28,height:28,background:c,border:confirmButtonColor===c?"3px solid #333":"2px solid transparent",borderRadius:"50%",cursor:baseSettingsAllowed?"pointer":"not-allowed",padding:0,opacity:baseSettingsAllowed?1:.45}}/>;}) }</div><div style={{background:baseSettingsAllowed?confirmButtonColor:"#EF9F27",color:"#fff",borderRadius:btnRadius,padding:"8px 16px",fontSize:13,fontWeight:500}}>{L("Anteprima bottone principale")}</div></div>{baseLockHint("Bottoni Principali disponibili dal piano Base")}
+        </div>
+        <div onClick={function(){if(!baseSettingsAllowed)blockSetting("base");}} style={{background:baseSettingsAllowed?cardBg:(dark?"#342b16":"#FFF8E1"),padding:"16px 20px",borderTop:"1px solid "+(baseSettingsAllowed?borderC:(dark?"#6a5520":"#FFD54F"))}}>
+          <div style={{fontSize:13,fontWeight:600,color:baseSettingsAllowed?textC:(dark?"#ffd58a":"#856404"),marginBottom:12}}>{"🟦 "+L("Bottoni Secondari")}</div>
+          <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}><input disabled={!baseSettingsAllowed} type="color" value={secondaryButtonColor||"#378ADD"} onChange={function(e){if(blockSetting("base"))return;setSecondaryButtonColor(e.target.value);}} style={{width:48,height:40,padding:0,border:"none",borderRadius:8,cursor:baseSettingsAllowed?"pointer":"not-allowed",opacity:baseSettingsAllowed?1:.45}}/><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{["#378ADD","#7F77DD","#1D9E75","#EF9F27","#8E44AD","#555555"].map(function(c){return <button key={c} disabled={!baseSettingsAllowed} onClick={function(){if(blockSetting("base"))return;setSecondaryButtonColor(c);}} style={{width:28,height:28,background:c,border:(secondaryButtonColor||"#378ADD")===c?"3px solid #333":"2px solid transparent",borderRadius:"50%",cursor:baseSettingsAllowed?"pointer":"not-allowed",padding:0,opacity:baseSettingsAllowed?1:.45}}/>;}) }</div><div style={{border:"1px solid "+(secondaryButtonColor||"#378ADD"),background:baseSettingsAllowed?((secondaryButtonColor||"#378ADD")+"22"):(dark?"#4a3c12":"#FFF8E1"),color:baseSettingsAllowed?(secondaryButtonColor||"#378ADD"):(dark?"#ffd54f":"#856404"),borderRadius:btnRadius,padding:"8px 16px",fontSize:13,fontWeight:700}}>{L("Anteprima bottone secondario")}</div></div>{baseLockHint("Bottoni Secondari disponibili dal piano Base")}
         </div>
       </div>
     </div>;
@@ -4079,24 +4615,26 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
 
     function backupLocalJson(key,fallback){try{var raw=localStorage.getItem(userKey(key));return raw?JSON.parse(raw):fallback;}catch(e){return fallback;}}
     function restoreLocalJson(key,value){try{if(value!==undefined)localStorage.setItem(userKey(key),JSON.stringify(value));}catch(e){}}
-    function buildBackupPayload(){return {expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,historyFutureMode,historySortDate,historySortDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,aiDataAccess,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists:backupLocalJson("shopping_lists_v2",[]),activeShoppingListId:backupLocalJson("shopping_active_list_id_v2","main"),shoppingProductSort:backupLocalJson("shopping_product_sort_v1","custom"),showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor};}
+    function buildBackupPayload(){return {expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,aiDataAccess,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists:backupLocalJson("shopping_lists_v2",[]),activeShoppingListId:backupLocalJson("shopping_active_list_id_v2","main"),shoppingProductSort:backupLocalJson("shopping_product_sort_v1","custom"),showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor,secondaryButtonColor};}
     function countBackupItems(d){d=d||{};var parts=[];function add(label,n){n=Number(n||0);if(n>0)parts.push(n+" "+label);}add("uscite",(d.expenses||[]).length);add("entrate",(d.incomes||[]).length);add("ricorrenti",(d.recurring||[]).length);add("obiettivi",(d.goals||[]).length);add("alert",(d.alerts||[]).length);add("voci patrimonio",(d.patrimonioEntries||[]).length);add("mesi patrimonio",Object.keys(d.patrimonioHistory||{}).length);add("documenti",(d.appuntiDocuments||[]).length);add("appunti",(d.appuntiNotes||[]).length);add("coordinate",(d.bankCoords||[]).length);add("progetti Share",(d.shareProjects||[]).length);add(L("debiti/crediti"),(d.debtCredits||[]).length);add(L("carte fidelity"),(d.shoppingCards||[]).length);add(L("prodotti spesa"),(d.shoppingItems||[]).length);add(L("aree spesa"),(d.shoppingAreas||[]).length);add(L("liste spesa"),(d.shoppingLists||[]).length);return parts.length?parts.join(" · "):"0 voci";}
-    function applyBackupData(d){if(d.expenses)setExpenses(d.expenses);if(d.incomes)setIncomes(d.incomes);if(d.cats)setCats(d.cats);if(d.methods)setMethods(d.methods);if(d.recurring)setRecurring(d.recurring);if(d.goals)setGoals(d.goals);if(d.alerts)setAlerts(d.alerts);if(d.budgetPlan!==undefined)setBudgetPlan(d.budgetPlan);if(d.patrimonioValues)setPatrimonioValues(d.patrimonioValues);if(d.patrimonioAreas)setPatrimonioAreas(d.patrimonioAreas);if(d.patrimonioEntries)setPatrimonioEntries(d.patrimonioEntries);if(d.patrimonioHistory)setPatrimonioHistory(d.patrimonioHistory);if(d.patrimonioNotes)setPatrimonioNotes(d.patrimonioNotes);if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.historySortDate)setHistorySortDate(d.historySortDate);if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.appuntiDocuments)setAppuntiDocuments(d.appuntiDocuments);if(d.appuntiNotes)setAppuntiNotes(d.appuntiNotes);if(d.bankCoords)setBankCoords(d.bankCoords);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);setToast("Backup ripristinato");}
+    function applyBackupData(d){if(d.expenses)setExpenses(d.expenses);if(d.incomes)setIncomes(d.incomes);if(d.cats)setCats(d.cats);if(d.methods)setMethods(d.methods);if(d.recurring)setRecurring(d.recurring);if(d.goals)setGoals(d.goals);if(d.alerts)setAlerts(d.alerts);if(d.budgetPlan!==undefined)setBudgetPlan(d.budgetPlan);if(d.patrimonioValues)setPatrimonioValues(d.patrimonioValues);if(d.patrimonioAreas)setPatrimonioAreas(d.patrimonioAreas);if(d.patrimonioEntries)setPatrimonioEntries(d.patrimonioEntries);if(d.patrimonioHistory)setPatrimonioHistory(d.patrimonioHistory);if(d.patrimonioNotes)setPatrimonioNotes(d.patrimonioNotes);if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);if(d.historySortDate)setHistorySortDate(d.historySortDate);if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);if(d.appuntiDocuments)setAppuntiDocuments(d.appuntiDocuments);if(d.appuntiNotes)setAppuntiNotes(d.appuntiNotes);if(d.bankCoords)setBankCoords(d.bankCoords);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);setToast("Backup ripristinato");}
     function handleBackupJsonFile(e){var f=e.target.files&&e.target.files[0];if(!f)return;e.target.value="";var r=new FileReader();r.onload=function(ev){try{var d=JSON.parse(String(ev.target.result||"{}"));var summary=countBackupItems(d);var ok=window.confirm(L("Stai per ripristinare questo backup.\nVoci che verranno importate: ")+summary+L(".\n\nContinuare?"));if(!ok)return;applyBackupData(d);}catch(err){setToast({text:"File JSON non valido",type:"error",icon:"🚫",color:"#E24B4A"});}};r.readAsText(f);} 
+
+    function dataTitle(label){var s=String(L(label)||label||"").trim();function strip(v){var out=String(v||"").trim();try{while(out.length){var cp=out.codePointAt(0)||0;var ch=String.fromCodePoint(cp);var isIcon=(cp>=0x1F000&&cp<=0x1FAFF)||(cp>=0x2600&&cp<=0x27BF)||cp===0xFE0F||cp===0xFE0E||cp===0x200D||/\s/.test(ch);if(!isIcon)break;out=out.slice(ch.length).trimStart();}}catch(e){}return out.replace(/^[^A-Za-z0-9À-ÖØ-öø-ÿΑ-ωΆ-ώ]+/g,"").trim();}return strip(s)||String(label||"");}
 
     if(settingsPage==="delete")return <div><PageHeader title="Dati"/>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:15,fontWeight:600,color:textC,marginBottom:4}}>📥 {L("Importa dati")}</div>
+          <div style={{fontSize:15,fontWeight:600,color:textC,marginBottom:4}}>{dataTitle("Importa dati")}</div>
           <div style={{fontSize:13,color:subC,marginBottom:14}}>{L("CSV o Excel (.xlsx)")}</div>
           <ImportData/>
         </div>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:15,fontWeight:600,color:"#E24B4A",marginBottom:4}}>🗑 {L("Elimina dati")}</div>
+          <div style={{fontSize:15,fontWeight:600,color:"#E24B4A",marginBottom:4}}>{dataTitle("Elimina dati")}</div>
           <DeleteDataPanel/>
         </div>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:15,fontWeight:600,color:textC,marginBottom:4}}>📤 {L("Esporta dati")}</div>
+          <div style={{fontSize:15,fontWeight:600,color:textC,marginBottom:4}}>{dataTitle("Esporta dati")}</div>
           <div style={{fontSize:13,color:subC,marginBottom:14}}>{L("Esporta separatamente uscite ed entrate in CSV o Excel")}</div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(2, minmax(0, 1fr))",gap:10,alignItems:"center"}}>
             <Btn onClick={function(){exportToCSV(expenses,[],cats,methods,dateFmt,function(){setToast("File CSV uscite pronto");},"fainance_uscite.csv");}} bg={expenseColor} style={{padding:"10px 12px",fontSize:13,fontWeight:700,width:"100%"}}>{L("CSV Uscite")}</Btn>
@@ -4111,12 +4649,12 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           </div>
         </div>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:15,fontWeight:600,color:textC,marginBottom:4}}>💾 {L("Backup JSON completo")}</div>
+          <div style={{fontSize:15,fontWeight:600,color:textC,marginBottom:4}}>{dataTitle("Backup JSON completo")}</div>
           <div style={{fontSize:13,color:subC,marginBottom:14}}>{L("Esporta tutto il contenuto dell’app in un file JSON")}</div>
           <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-            <Btn onClick={function(){var data=buildBackupPayload();androidDownload("fainance_backup_"+todayStr()+".json",new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),function(){setToast("Backup pronto");});}} bg="#7F77DD" style={{padding:"10px 18px",fontSize:14,fontWeight:500}}>⬇️ {L("Scarica backup")}</Btn>
+            <Btn onClick={function(){var data=buildBackupPayload();androidDownload("fainance_backup_"+todayStr()+".json",new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),function(){setToast("Backup pronto");});}} bg="#7F77DD" style={{padding:"10px 18px",fontSize:14,fontWeight:500}}>{dataTitle("Scarica backup")}</Btn>
             <label style={{display:"inline-flex",alignItems:"center",background:dark?"#333":"#f0f0f0",color:dark?"#eee":"#444",borderRadius:btnRadius,padding:"10px 18px",fontSize:14,fontWeight:500,cursor:"pointer"}}>
-              ⬆️ {L("Ripristina JSON")}
+              {dataTitle("Ripristina JSON")}
               <input type="file" accept=".json" style={{display:"none"}} onChange={handleBackupJsonFile}/>
             </label>
           </div>
@@ -4279,7 +4817,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           {/* Build info */}
           <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
             <div style={{fontSize:12,color:subC,marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Informazioni tecniche</div>
-            {[["Versione",APP_VERSION],["Build","2026.05"],["Piattaforma","Android"],["Storage","localStorage"]].map(function(row){return <div key={row[0]} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:subC}}>{row[0]}</span><span style={{fontSize:13,color:textC,fontWeight:500}}>{row[1]}</span></div>;})}
+            {[["Versione",APP_VERSION],["Build","2026.05"],["Piattaforma","Android"],["Storage","localStorage"]].map(function(row){return <div key={row[0]} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:subC}}>{L(row[0])}</span><span data-no-translate="true" style={{fontSize:13,color:textC,fontWeight:500}}>{row[1]}</span></div>;})}
           </div>
           <div style={{fontSize:11,color:subC,textAlign:"center",padding:"8px 0"}}>© 2026 fAInance · Tutti i diritti riservati</div>
         </div>
@@ -4311,6 +4849,9 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     var [showTxForm,setShowTxForm]=useState(false);
     var [showDebtForm,setShowDebtForm]=useState(false);
     var [editingTxId,setEditingTxId]=useState("");
+    var [debtContactBusy,setDebtContactBusy]=useState(false);
+    var debtContactDraftRef=useRef<any>(null);
+    var debtAppliedContactRef=useRef<string>("");
     var sinp={...inp,width:"100%",boxSizing:"border-box"};
     var labelStyle={fontSize:11,fontWeight:900,color:subC,margin:"0 0 5px 2px",textTransform:"uppercase",letterSpacing:.3};
     function field(label,child){return <div style={{display:"flex",flexDirection:"column",gap:0}}><label style={labelStyle}>{L(label)}</label>{child}</div>;}
@@ -4318,37 +4859,102 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     function selected(){return (debtCredits||[]).find(function(x){return String(x.id)===String(selectedId);})||null;}
     function resetForm(){setEditingId(null);setKind("debt");setHolder("");setAmount("");setStartDate(todayStr());setEndDate("");setNote("");setShowDebtForm(false);}
     function openItem(item){setSelectedId(item.id);setShowTxForm(false);setEditingTxId("");setTxType("reduction");setTxDate(todayStr());setTxStart(item.startDate||todayStr());setTxEnd(item.estimatedEndDate||"");setTxAmount("");setTxNote("");}
-    async function pickContact(){
+    function debtContactName(c:any){return String((c&&(c.name||c.email||c.phone))||"").trim();}
+    function debtDraftSnapshot(){return {kind:kind,holder:holder,amount:amount,startDate:startDate,endDate:endDate,note:note,editingId:editingId,showDebtForm:true};}
+    function applyDebtDraft(d:any){if(!d)return;if(d.kind)setKind(d.kind);if(typeof d.amount!=="undefined")setAmount(String(d.amount||""));if(typeof d.startDate!=="undefined")setStartDate(d.startDate||todayStr());if(typeof d.endDate!=="undefined")setEndDate(d.endDate||"");if(typeof d.note!=="undefined")setNote(d.note||"");if(typeof d.editingId!=="undefined")setEditingId(d.editingId||null);}
+    function keepDebtFormOpen(){setSelectedId(null);setShowTxForm(false);setEditingTxId("");setShowDebtForm(true);}
+    function applyDebtContact(c:any,draft?:any){
+    var contactName=debtContactName(c);if(!contactName)return false;
+    var safeDraft=draft||debtContactDraftRef.current||{};
+    var applyKey=String(contactName)+"|"+String((safeDraft&&safeDraft.__contactTs)||"");
+    debtAppliedContactRef.current=applyKey;
+    try{
+      if(typeof sessionStorage!=="undefined")sessionStorage.setItem("fainance_debt_holder_last",contactName);
+      if(typeof localStorage!=="undefined")localStorage.setItem("fainance_debt_holder_last",contactName);
+    }catch(e){}
+    function forceApply(){
+      applyDebtDraft(safeDraft);
+      setSelectedId(null);
+      setShowTxForm(false);
+      setEditingTxId("");
+      setShowDebtForm(true);
+      setHolder(contactName);
+    }
+    forceApply();
+    try{requestAnimationFrame(function(){forceApply();});}catch(e){}
+    setTimeout(forceApply,0);
+    setTimeout(forceApply,120);
+    setTimeout(forceApply,450);
+    setTimeout(forceApply,900);
+    return true;
+  }
+  function consumePendingDebtContact(){
+    try{
+      var raw="";
+      if(typeof sessionStorage!=="undefined")raw=sessionStorage.getItem("fainance_pending_debt_contact")||"";
+      if(!raw&&typeof localStorage!=="undefined")raw=localStorage.getItem("fainance_pending_debt_contact")||"";
+      if(!raw)return false;
+      var payload=JSON.parse(raw);
+      if(!payload||!payload.contact)return false;
+      if(payload.ts&&Date.now()-Number(payload.ts)>30000){
+        try{if(typeof sessionStorage!=="undefined")sessionStorage.removeItem("fainance_pending_debt_contact");}catch(_a){}
+        try{if(typeof localStorage!=="undefined")localStorage.removeItem("fainance_pending_debt_contact");}catch(_b){}
+        return false;
+      }
+      var contactName=debtContactName(payload.contact);
+      var key=String(contactName)+"|"+String(payload.ts||"");
+      if(!contactName||debtAppliedContactRef.current===key)return false;
+      var d=payload.draft||{};d.__contactTs=payload.ts||Date.now();
+      var ok=applyDebtContact(payload.contact,d);
+      setTimeout(function(){try{if(typeof sessionStorage!=="undefined")sessionStorage.removeItem("fainance_pending_debt_contact");}catch(_c){}},5000);
+      return ok;
+    }catch(e){}
+    return false;
+  }
+  useEffect(function(){
+      consumePendingDebtContact();
+      function h(){consumePendingDebtContact();}
+      var ticks=0;
+      var timer:any=null;
+      try{timer=setInterval(function(){ticks++;consumePendingDebtContact();if(ticks>=25&&timer)clearInterval(timer);},200);}catch(e){}
+      try{window.addEventListener("fainanceDebtContactSelected",h);window.addEventListener("focus",h);document.addEventListener("visibilitychange",h);}catch(e){}
+      return function(){try{if(timer)clearInterval(timer);window.removeEventListener("fainanceDebtContactSelected",h);window.removeEventListener("focus",h);document.removeEventListener("visibilitychange",h);}catch(e){}};
+    },[]);
+    useEffect(function(){consumePendingDebtContact();});
+    async function pickContact(ev?:any){
+      try{if(ev&&ev.preventDefault)ev.preventDefault();if(ev&&ev.stopPropagation)ev.stopPropagation();}catch(_e){}
+      if(debtContactBusy)return;
+      var draft=debtDraftSnapshot();
+      (draft as any).__contactTs=Date.now();
+      debtContactDraftRef.current=draft;
+      keepDebtFormOpen();
+      try{if(typeof sessionStorage!=="undefined")sessionStorage.setItem("fainance_pending_debt_draft",JSON.stringify(draft));if(typeof localStorage!=="undefined")localStorage.setItem("fainance_pending_debt_draft",JSON.stringify(draft));}catch(_s){}
+      setDebtContactBusy(true);
       try{
-        var cap=(window as any).Capacitor;
-        var contacts=cap&&cap.Plugins&&cap.Plugins.Contacts;
-        if(contacts&&contacts.pickContact){
-          var picked=await contacts.pickContact({projection:{name:true,phones:true,emails:true}});
-          var pc=picked&&((picked.contact)||(picked.contacts&&picked.contacts[0])||picked);
-          var name=(pc&&pc.name&&((pc.name.display)||(Array.isArray(pc.name)?pc.name[0]:pc.name)))||(pc&&pc.displayName)||(pc&&pc.fullName)||"";
-          if(name){setHolder(name);setToast({text:L("Contatto importato dalla rubrica"),type:"success",icon:"📇"});return;}
-        }
-        if(contacts&&contacts.getContacts){
-          var list=await contacts.getContacts({projection:{name:true,phones:true,emails:true}});
-          var arr=(list&&list.contacts)||[];
-          if(arr.length){
-            var names=arr.map(function(c){return (c.name&&c.name.display)||c.displayName||c.fullName||(c.emails&&c.emails[0]&&c.emails[0].address)||(c.phones&&c.phones[0]&&c.phones[0].number)||"";}).filter(Boolean);
-            var chosen=names.length===1?names[0]:window.prompt(L("Scrivi il nome del contatto da usare"),names[0]||"");
-            if(chosen){setHolder(chosen);setToast({text:L("Contatto importato dalla rubrica"),type:"success",icon:"📇"});return;}
+        var fn=(typeof window!=="undefined"?(window as any).fainancePickContact:null)||pickFainanceContact;
+        var c=await fn();
+        if(c&&(c.name||c.email||c.phone)){
+          try{var pendingDebtContactPayload=JSON.stringify({contact:c,draft:draft,ts:(draft as any).__contactTs||Date.now()});if(typeof sessionStorage!=="undefined")sessionStorage.setItem("fainance_pending_debt_contact",pendingDebtContactPayload);if(typeof localStorage!=="undefined")localStorage.setItem("fainance_pending_debt_contact",pendingDebtContactPayload);}catch(_s2){}
+          if(applyDebtContact(c,draft)){
+            try{window.dispatchEvent(new CustomEvent("fainanceDebtContactSelected"));}catch(_ev){}
+            setToast({text:L("Contatto importato dalla rubrica"),type:"success",icon:"📇"});
+            return;
           }
         }
-        setToast({text:L("Rubrica non disponibile. Inserisci il titolare manualmente."),type:"warning",color:"#FFF8E1",icon:"📇",textColor:"#856404"});
-      }catch(e){setToast({text:L("Impossibile leggere la rubrica. Inserisci il titolare manualmente."),type:"warning",color:"#FFF8E1",icon:"📇",textColor:"#856404"});}
+        keepDebtFormOpen();
+        setToast({text:L("Nessun contatto selezionato."),type:"warning",color:"#FFF8E1",icon:"📇",textColor:"#856404"});
+      }catch(e){keepDebtFormOpen();setToast({text:L("Impossibile leggere la rubrica. Inserisci il titolare manualmente."),type:"warning",color:"#FFF8E1",icon:"📇",textColor:"#856404"});}
+      finally{setDebtContactBusy(false);}
     }
     function saveItem(){
       if(!debtBaseAllowed){setToast({text:L("Debiti / Crediti disponibili dal piano Base."),type:"error",color:"#E24B4A",icon:"🚫"});return;}
       var a=parseMoney(amount);if(!holder.trim()||!a){setToast({text:L("Inserisci titolare e importo."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}
       if(editingId){
         setDebtCredits(function(list){return (list||[]).map(function(x){return String(x.id)===String(editingId)?{...x,kind:kind,holder:holder.trim(),initialAmount:a,startDate:startDate||todayStr(),estimatedEndDate:endDate||"",note:note.trim(),updatedAt:new Date().toISOString()}:x;});});
-        setSelectedId(editingId);setToast({text:L("Debito / Credito aggiornato"),type:"success",icon:"✅"});resetForm();return;
+        setSelectedId(null);setToast({text:L("Debito / Credito aggiornato"),type:"success",icon:"✅"});resetForm();return;
       }
       var item={id:"dc_"+Date.now(),kind:kind,holder:holder.trim(),initialAmount:a,startDate:startDate||todayStr(),estimatedEndDate:endDate||"",note:note.trim(),transactions:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-      setDebtCredits(function(list){return [item].concat(list||[]);});setSelectedId(item.id);setToast({text:L("Debito / Credito salvato"),type:"success",icon:"✅"});resetForm();
+      setDebtCredits(function(list){return [item].concat(list||[]);});setSelectedId(null);setToast({text:L("Debito / Credito salvato"),type:"success",icon:"✅"});resetForm();
     }
     function deleteItem(id){if(!window.confirm(L("Eliminare questo Debito / Credito?")))return;setDebtCredits(function(list){return (list||[]).filter(function(x){return String(x.id)!==String(id);});});if(String(selectedId)===String(id))setSelectedId(null);if(String(editingId)===String(id))resetForm();setToast({text:L("Debito / Credito eliminato"),type:"success",icon:"🗑️"});}
     function editItem(item){setKind(item.kind||"debt");setHolder(item.holder||"");setAmount(String(item.initialAmount||""));setStartDate(item.startDate||todayStr());setEndDate(item.estimatedEndDate||"");setNote(item.note||"");setEditingId(item.id);setSelectedId(null);setShowTxForm(false);setShowDebtForm(true);}
@@ -4376,14 +4982,22 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           </div>
           <button onClick={function(){resetForm();setShowDebtForm(true);}} disabled={!debtBaseAllowed} style={{background:debtBaseAllowed?confirmButtonColor:"#ccc",color:"#fff",border:"none",borderRadius:btnRadius,padding:"12px 14px",fontWeight:900,cursor:debtBaseAllowed?"pointer":"not-allowed"}}>＋ {L("Aggiungi Debito o Credito")}</button>
         </div>
-        {(showDebtForm||editingId)&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"150px 1fr 130px 150px",gap:10}}>
-          {field("Tipo",<select value={kind} onChange={function(e){setKind(e.target.value);}} style={sinp}><option value="debt">{L("Debito")}</option><option value="credit">{L("Credito")}</option></select>)}
-          {field("Titolare",<div style={{display:"flex",gap:6}}><input value={holder} onChange={function(e){setHolder(e.target.value);}} placeholder={L("Nome titolare")} style={sinp}/><button onClick={pickContact} title={L("Cerca nella rubrica")} style={{border:"1px solid "+borderC,borderRadius:10,background:dark?"#252535":"#fff",color:textC,padding:"0 12px",cursor:"pointer"}}>📇</button></div>)}
-          {field("Importo iniziale",<input value={amount} onChange={function(e){setAmount(e.target.value);}} placeholder={L("Importo")} inputMode="decimal" style={sinp}/>)}
-          {field("Data inizio",<input type="date" value={startDate} onChange={function(e){setStartDate(e.target.value);}} style={sinp}/>)}
-          {field("Data stimata fine",<input type="date" value={endDate} onChange={function(e){setEndDate(e.target.value);}} style={sinp}/>)}
-          {field("Commento",<input value={note} onChange={function(e){setNote(e.target.value);}} placeholder={L("Commento")} style={sinp}/>)}
-          <div style={{display:"flex",gap:8,alignItems:"flex-end"}}><button onClick={saveItem} disabled={!debtBaseAllowed} style={{background:debtBaseAllowed?confirmButtonColor:"#ccc",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 14px",fontWeight:800,cursor:debtBaseAllowed?"pointer":"not-allowed",width:"100%"}}>＋ {L(editingId?"Salva modifica":"Aggiungi")}</button>{editingId&&<button onClick={resetForm} style={{background:dark?"#252535":"#f0f0f0",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"10px 12px",fontWeight:800,cursor:"pointer"}}>{L("Annulla")}</button>}</div>
+        {(showDebtForm||editingId)&&<div style={{position:"fixed",inset:0,zIndex:9999,background:dark?"#12121d":"#F6F7FB",padding:isMobile?12:24,boxSizing:"border-box",overflowY:"auto"}}>
+          <div style={{maxWidth:760,margin:"0 auto",background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:isMobile?14:18,boxShadow:dark?"none":"0 18px 48px rgba(15,23,42,.18)"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:14}}>
+              <div style={{fontSize:19,fontWeight:950,color:textC}}>{L(editingId?"Salva modifica":"Aggiungi Debito o Credito")}</div>
+              <button type="button" onClick={resetForm} aria-label={L("Chiudi")} style={{width:40,height:40,borderRadius:12,border:"1px solid #FFB8B8",background:dark?"#3A1F25":"#FFF0F0",color:"#E24B4A",fontSize:24,fontWeight:950,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>×</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"150px 1fr 130px 150px",gap:10}}>
+              {field("Tipo",<select value={kind} onChange={function(e){setKind(e.target.value);}} style={sinp}><option value="debt">{L("Debito")}</option><option value="credit">{L("Credito")}</option></select>)}
+              {field("Titolare",<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto",gap:8}}><input value={holder} onChange={function(e){setHolder(e.target.value);}} placeholder={L("Nome titolare")} style={sinp}/><button type="button" onClick={pickContact} disabled={debtContactBusy} title={L("Cerca nella rubrica")} style={{border:"1px solid "+secondaryButtonColor,background:secondaryButtonColor,color:"#fff",borderRadius:btnRadius,padding:"10px 13px",fontSize:12,fontWeight:900,cursor:debtContactBusy?"not-allowed":"pointer",whiteSpace:"nowrap",opacity:debtContactBusy?0.75:1,boxShadow:dark?"none":"0 3px 10px rgba(0,0,0,0.10)"}}>{debtContactBusy?"...":L("Da Rubrica")}</button></div>)}
+              {field("Importo iniziale",<input value={amount} onChange={function(e){setAmount(e.target.value);}} placeholder={L("Importo")} inputMode="decimal" style={sinp}/>)}
+              {field("Data inizio",<input type="date" value={startDate} onChange={function(e){setStartDate(e.target.value);}} style={sinp}/>)}
+              {field("Data stimata fine",<input type="date" value={endDate} onChange={function(e){setEndDate(e.target.value);}} style={sinp}/>)}
+              {field("Commento",<input value={note} onChange={function(e){setNote(e.target.value);}} placeholder={L("Commento")} style={sinp}/>)}
+              <div style={{display:"flex",gap:8,alignItems:"flex-end",gridColumn:isMobile?"auto":"1 / -1"}}><button onClick={saveItem} disabled={!debtBaseAllowed} style={{background:debtBaseAllowed?confirmButtonColor:"#ccc",color:"#fff",border:"none",borderRadius:btnRadius,padding:"12px 14px",fontWeight:900,cursor:debtBaseAllowed?"pointer":"not-allowed",width:"100%"}}>{L("Salva")}</button></div>
+            </div>
+          </div>
         </div>}
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr",gap:12}}>
@@ -4463,8 +5077,8 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     function groupedProducts(){var groups=[];var by={};productArchive().forEach(function(x){var a=x.area||"Altro";if(!by[a]){by[a]=[];groups.push({area:a,items:by[a]});}by[a].push(x);});if(shoppingProductSort==="alpha"||shoppingProductSort==="usage")return [{area:L(shoppingProductSort==="alpha"?"Alfabetico":"Per utilizzo"),items:productArchive()}];return groups.sort(function(g1,g2){return areaIndex(g1.area)-areaIndex(g2.area);});}
     function ean13CheckDigit(first12){var sum=0;String(first12||"").slice(0,12).split("").forEach(function(ch,i){sum+=(Number(ch)||0)*(i%2===0?1:3);});return String((10-(sum%10))%10);}
     function encodeEan13Bits(raw){var code=String(raw||"").replace(/\D/g,"");if(code.length===12)code+=ean13CheckDigit(code);if(code.length!==13)return "";var Lp=["0001101","0011001","0010011","0111101","0100011","0110001","0101111","0111011","0110111","0001011"];var Gp=["0100111","0110011","0011011","0100001","0011101","0111001","0000101","0010001","0001001","0010111"];var Rp=["1110010","1100110","1101100","1000010","1011100","1001110","1010000","1000100","1001000","1110100"];var parity=["LLLLLL","LLGLGG","LLGGLG","LLGGGL","LGLLGG","LGGLLG","LGGGLL","LGLGLG","LGLGGL","LGGLGL"][Number(code[0])||0];var bits="101";for(var i=1;i<=6;i++){var d=Number(code[i])||0;bits+=(parity[i-1]==="L"?Lp[d]:Gp[d]);}bits+="01010";for(var j=7;j<=12;j++){bits+=Rp[Number(code[j])||0];}bits+="101";return bits;}
-    function code128Bits(raw){var value=String(raw||"").trim();if(!value)return "";var patterns=["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"];var vals=[104];for(var i=0;i<value.length;i++){var code=value.charCodeAt(i);vals.push(Math.max(0,Math.min(94,code-32)));}var checksum=104;for(var j=1;j<vals.length;j++)checksum+=vals[j]*j;vals.push(checksum%103);vals.push(106);var bits="";vals.forEach(function(v){var pat=patterns[v]||patterns[0];for(var k=0;k<pat.length;k++){bits+=(k%2===0?"1":"0").repeat(Number(pat[k])||1);}});return bits;}
-    function barcodeBars(code){var clean=String(code||"").replace(/\D/g,"");var bits=encodeEan13Bits(clean)||code128Bits(clean);if(!bits)return [];return bits.split("").map(function(x){return {on:x==="1",w:2};});}
+    function code128Bits(raw){var value=String(raw||"").trim().replace(/[^ -~]/g,"");if(!value)return "";var patterns=["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"];var vals=[];if(/^\d{2,}$/.test(value)){if(value.length%2===0){vals=[105];for(var i=0;i<value.length;i+=2)vals.push(Number(value.slice(i,i+2)));}else{vals=[104,Math.max(0,Math.min(94,value.charCodeAt(0)-32)),99];for(var i=1;i<value.length;i+=2)vals.push(Number(value.slice(i,i+2)));}}else{vals=[104];for(var i=0;i<value.length;i++){var code=value.charCodeAt(i);vals.push(Math.max(0,Math.min(94,code-32)));}}var checksum=vals[0];for(var j=1;j<vals.length;j++)checksum+=vals[j]*j;vals.push(checksum%103);vals.push(106);var bits="";vals.forEach(function(v){var pat=patterns[v]||patterns[0];for(var k=0;k<pat.length;k++){bits+=(k%2===0?"1":"0").repeat(Number(pat[k])||1);}});return bits;}
+    function barcodeBars(code){var raw=String(code||"").replace(/[^0-9A-Za-z \.\-_$%\/+]/g,"").trim();var bits=code128Bits(raw);if(!bits){var clean=String(code||"").replace(/\D/g,"");bits=encodeEan13Bits(clean);}if(!bits)return [];bits="0000000000"+bits+"0000000000";return bits.split("").map(function(x){return {on:x==="1",w:2};});}
     function qrCells(code){var seed=String(code||"");var cells=[];for(var y=0;y<17;y++){for(var x=0;x<17;x++){var finder=(x<5&&y<5)||(x>11&&y<5)||(x<5&&y>11);var v=finder?((x===0||x===4||y===0||y===4)||(x>1&&x<3&&y>1&&y<3)):(((x*7+y*11+seed.charCodeAt((x+y)%Math.max(seed.length,1)))%5)<2);cells.push({x:x,y:y,on:v});}}return cells;}
     function catalogHas(name,area,list){return (list||shoppingItems||[]).some(function(x){return x.archived&&normName(x.name)===normName(name)&&String(x.area||"Altro")===String(area||"Altro");});}
     function listHasProduct(x){return activeItems().some(function(a){return sameProduct(a,x);});}
@@ -4477,7 +5091,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     function readRawFromBarcodeResult(res){var candidates=[];try{candidates.push(res&&res.rawValue,res&&res.displayValue,res&&res.content,res&&res.text,res&&res.value,res&&res.result);}catch(e){}try{if(res&&Array.isArray(res.barcodes))res.barcodes.forEach(function(b){candidates.push(b&&b.rawValue,b&&b.displayValue,b&&b.value,b&&b.text);});}catch(e){}for(var i=0;i<candidates.length;i++){var raw=String(candidates[i]||"").replace(/\D/g,"");if(raw.length>=4)return raw;}return "";}
     async function scanCardWithNativePlugins(){try{var cap=(window as any).Capacitor;var plugins=(cap&&cap.Plugins)||{};var p=plugins.BarcodeScanner||plugins.BarcodeScanning||plugins.MLKitBarcodeScanner;if(!p)return "";try{if(p.requestPermissions)await p.requestPermissions();}catch(e){}var formats=["QR_CODE","EAN_13","EAN_8","CODE_128","CODE_39","UPC_A","UPC_E","ITF"];var res=null;if(p.scan){res=await p.scan({formats:formats});}else if(p.scanBarcode){res=await p.scanBarcode({formats:formats});}else if(p.startScan){res=await p.startScan();}else if(p.scanCode){res=await p.scanCode();}var raw=readRawFromBarcodeResult(res);try{if(p.stopScan)await p.stopScan();}catch(e){}return raw;}catch(e){return "";}}
     function manualCardPrompt(message){setShowCardCreateChoice(true);setShowCardManualForm(true);setToast({text:L(message||"Non sono riuscito a leggere automaticamente il codice. Si apre l’inserimento manuale."),type:"warning",color:"#FFF8E1",icon:"⌨️",textColor:"#856404"});}
-    function normalizeScannedCardCode(raw){var clean=String(raw||"").replace(/\D/g,"");if(clean.length===12)clean="0"+clean;return clean;}
+    function normalizeScannedCardCode(raw){return String(raw||"").replace(/\D/g,"");}
     function guessScannedCardName(clean){var c=String(clean||"");if(c==="0470024406224"||c==="470024406224")return "Il Gigante";return L("Carta scansionata");}
     function saveScannedCard(raw,kind){var clean=normalizeScannedCardCode(raw);if(!clean){manualCardPrompt();return;}var detectedType=kind||"barcode";var suggestedName=guessScannedCardName(clean);var draftColor=cardColor||"#0F9F76";setPendingScannedCard({name:suggestedName,code:clean,codeType:detectedType,color:draftColor,createdAt:new Date().toISOString()});setEditingCardId("");setCardName(suggestedName);setCardCode(clean);setCardCodeType(detectedType);setCardColor(draftColor);setShowCardCreateChoice(true);setShowCardManualForm(true);setTabShop("cards");}
     function scanPhysicalCard(){(async function(){try{var nativeRaw=await scanCardWithNativePlugins();if(nativeRaw){saveScannedCard(nativeRaw,"barcode");return;}scanCardFromImage(true);}catch(e){manualCardPrompt("Scanner non disponibile. Inserisci il codice manualmente.");}})();}
@@ -5071,9 +5685,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       if(!email){setToast({text:"Inserisci l'email dell'utente",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}
       setParticipantBusy(true);
       try{
-        var foundUser=null;
-        var userSnap=await getDocs(query(collection(fbDb,"users"),where("email","==",email),limit(1))).catch(function(){return null;});
-        if(userSnap&&userSnap.docs&&userSnap.docs.length){var d=userSnap.docs[0];foundUser={uid:d.id,...d.data()};}
+        var foundUser=await findRegisteredUserForShare(email,"");
         name=foundUser?(foundUser.name||foundUser.displayName||email):email;
         var item={id:"p_"+Date.now(),uid:foundUser?foundUser.uid:null,name:name,email:email,kind:foundUser?"registered":"invited",type:foundUser?"registered":"invited",role:"member",status:"pending"};
         updateShareProject(selected.id,function(p){return{...p,participants:(p.participants||[]).concat([item])};});
@@ -5081,6 +5693,50 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
         setNewPersonName("");setNewPersonEmail("");
         setToast(foundUser?"Invito Share inviato correttamente.":"Invito creato: email inviata. Quando l'utente si registra con questa email, troverà l'invito.");
       }catch(e){console.error(e);setToast("Errore durante la creazione dell'invito");}
+      finally{setParticipantBusy(false);}
+    }
+    async function pickContactFromAddressBook(){
+      if(!selected||participantBusy)return;
+      setParticipantBusy(true);
+      try{
+        var c=await pickFainanceContact();
+        if(!c){setToast({text:L("Rubrica non disponibile su questo dispositivo."),type:"warning",icon:"📇",color:"#FFF8E1",textColor:"#856404"});return;}
+        var nm=String(c.name||"").trim();
+        var em=normalizeEmail(c.email||"");
+        var ph=normalizePhoneForLookup(c.phone||"");
+        var label=(nm||em||ph||"").trim();
+        if(!label){setToast({text:L("Contatto senza nome o email."),type:"warning",icon:"📇",color:"#FFF8E1",textColor:"#856404"});return;}
+        var foundUser=await findRegisteredUserForShare(em,ph);
+        if(foundUser&&foundUser.email&&!em)em=normalizeEmail(foundUser.email);
+        var already=(participants||[]).some(function(p){
+          var pe=normalizeEmail(p.email||"");
+          var pp=normalizePhoneForLookup(p.phone||"");
+          var pn=String(p.name||"").trim().toLowerCase();
+          return (em&&pe&&pe===em)||(ph&&pp&&pp===ph)||(!em&&!ph&&pn&&pn===label.toLowerCase())||(foundUser&&p.uid&&p.uid===foundUser.uid);
+        });
+        if(already){setToast({text:L("Partecipante già presente"),type:"warning",icon:"📇",color:"#FFF8E1",textColor:"#856404"});return;}
+        if(foundUser){
+          var name=foundUser.name||foundUser.displayName||nm||em||ph;
+          var item={id:"p_"+Date.now(),uid:foundUser.uid,email:em||normalizeEmail(foundUser.email||""),phone:ph||normalizePhoneForLookup(foundUser.phone||""),name:name,kind:"registered",type:"registered",role:"member",status:"pending"};
+          updateShareProject(selected.id,function(p){return{...p,participants:(p.participants||[]).concat([item]),updatedAt:new Date().toISOString()};});
+          try{await createShareInvite(selected,item,item.email||"",name,foundUser);}catch(inviteErr){console.warn("Share invite from contact not sent",inviteErr);}
+          setPersonMode("user");setNewPersonEmail("");setNewPersonName("");
+          setToast({text:L("Invito Share inviato correttamente."),type:"success",icon:"📇"});
+          return;
+        }
+        if(em){
+          var itemInv={id:"p_"+Date.now(),uid:null,name:nm||em,email:em,phone:ph,kind:"invited",type:"invited",role:"member",status:"pending"};
+          updateShareProject(selected.id,function(p){return{...p,participants:(p.participants||[]).concat([itemInv]),updatedAt:new Date().toISOString()};});
+          try{await createShareInvite(selected,itemInv,em,nm||em,null);}catch(inviteErr2){console.warn("Share invite from contact not sent",inviteErr2);}
+          setPersonMode("user");setNewPersonEmail("");setNewPersonName("");
+          setToast({text:L("Contatto importato dalla rubrica"),type:"success",icon:"📇"});
+          return;
+        }
+        var fakeItem={id:"p_"+Date.now(),name:label,email:"",phone:ph,kind:"fake",type:"fake",role:"member",status:"active"};
+        updateShareProject(selected.id,function(p){return{...p,participants:(p.participants||[]).concat([fakeItem]),updatedAt:new Date().toISOString()};});
+        setPersonMode("fake");setNewPersonEmail("");setNewPersonName("");
+        setToast({text:L("Contatto importato dalla rubrica"),type:"success",icon:"📇"});
+      }catch(e){console.error(e);setToast({text:L("Rubrica non disponibile su questo dispositivo."),type:"warning",icon:"📇",color:"#FFF8E1",textColor:"#856404"});}
       finally{setParticipantBusy(false);}
     }
     function removeParticipant(pid){if(!selected||pid==="me")return;if(!window.confirm(L("Eliminare questa persona dal progetto Share?")))return;updateShareProject(selected.id,function(p){return{...p,participants:(p.participants||[]).filter(function(x){return x.id!==pid;})};});setToast("Partecipante eliminato");}
@@ -5211,7 +5867,22 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           <div id="share_expense_form" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L(shareEditingActivityId?"Modifica spesa condivisa":"+ Spesa condivisa")}</div>{shareEditingActivityId&&<button onClick={resetShareExpenseForm} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:9,padding:"6px 8px",fontSize:12,color:subC,cursor:"pointer"}}>{L("Annulla modifica")}</button>}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 2fr 1fr",gap:8}}><input type="number" placeholder={L("Importo")} value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={sinp}/><input placeholder={L("Descrizione")} value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={sinp}/><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={sinp}/></div><div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}><button onClick={function(){setShareReceiptOpen(!shareReceiptOpen);}} style={{border:"1px solid "+borderC,borderRadius:10,background:shareReceiptOpen?confirmButtonColor:(dark?"#252535":"#fff"),color:shareReceiptOpen?"#fff":textC,padding:"8px 10px",fontSize:12,fontWeight:900,cursor:"pointer"}}>🧾 {L("Leggi scontrino Share")}</button><span style={{fontSize:11,color:subC}}>{L("Gratis 1, Base 2, Completo illimitati. Conservazione 6 mesi solo Completo.")}</span></div>{shareReceiptOpen&&<div style={{marginTop:8,border:"1px solid "+borderC,borderRadius:14,padding:10,background:dark?"#252535":"#f9f9f9"}}><ReceiptScanPanel onSave={saveShareReceiptFromScan} shareMode/></div>}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.4fr",gap:8,marginTop:8}}><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagato da")} {personLabel(p)}</option>;})}</select><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{[{id:"equal",label:L("Equa")},{id:"percent",label:L("Percentuali")},{id:"amount",label:L("Importi")}].map(function(m){return <button key={m.id} onClick={function(){setSplitMode(m.id);setSplitDraft({});setShareSplitTouched(false);}} style={{border:"1px solid "+(splitMode===m.id?confirmButtonColor:borderC),background:splitMode===m.id?confirmButtonColor:"transparent",color:splitMode===m.id?"#fff":textC,borderRadius:10,padding:"8px 6px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{m.label}</button>;})}</div></div><div style={{marginTop:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:12,fontWeight:900,color:textC}}>{L("Condivisa con")}</div><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:subC,cursor:"pointer"}}><input type="checkbox" checked={activeParticipants.length>0&&shareParticipantIds.length===activeParticipants.length} onChange={function(){var all=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(shareParticipantIds.length===all.length?[]:all);}}/>{L("Tutti")}</label></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{activeParticipants.map(function(p){var checked=shareParticipantIds.includes(p.id);return <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,border:"1px solid "+(checked?confirmButtonColor:borderC),background:checked?confirmButtonColor+"22":"transparent",borderRadius:20,padding:"5px 9px",fontSize:12,color:checked?confirmButtonColor:textC,cursor:"pointer"}}><input type="checkbox" checked={checked} onChange={function(){setShareParticipantIds(function(list){return list.includes(p.id)?list.filter(function(x){return x!==p.id;}):list.concat([p.id]);});}}/>{personLabel(p)}</label>;})}</div></div>{splitMode!=="equal"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginTop:8}}>{activeParticipants.filter(function(p){return shareParticipantIds.includes(p.id);}).map(function(p){return <div key={p.id}><label style={{fontSize:11,color:subC}}>{personLabel(p)} {splitMode==="percent"?"%":"€"}</label><input type="number" value={splitDraft[p.id]||""} onChange={function(e){var v=e.target.value;setShareSplitTouched(true);setSplitDraft(function(d){return{...d,[p.id]:v};});}} style={sinp}/></div>;})}</div>}{showShareCheck&&<div style={{marginTop:10,background:dark?"#2f2a1e":"#fff8e6",border:"1px solid #F2C94C77",borderRadius:12,padding:"9px 10px",fontSize:12,color:dark?"#F2C94C":"#8A6500",fontWeight:600}}>💡 {shareCheck.message}</div>}<div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontSize:12,color:subC}}>{L("Quote")}: {Object.keys(computeShares()).map(function(id){var p=participants.find(function(x){return x.id===id;});return (p?personLabel(p):id)+" "+fmt(computeShares()[id]);}).join(" · ")}</div><Btn onClick={addSharedActivity} bg={showShareCheck?"#999":confirmButtonColor} disabled={showShareCheck}>{L(shareEditingActivityId?"Aggiorna spesa":"Salva spesa")}</Btn></div></div>
           <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Attività del progetto")}</div>{(selected.activities||[]).length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"18px 0"}}>{L("Nessuna attività")}</div>}{(selected.activities||[]).map(function(a){var paid=participants.find(function(p){return p.id===a.paidBy;});var from=participants.find(function(p){return p.id===a.from;});var to=participants.find(function(p){return p.id===a.to;});var editing=shareEditingActivityId===a.id&&a.kind!=="settlement";return <div key={a.id} style={{borderBottom:"1px solid "+borderC,padding:"10px 0"}}>{editing?<div style={{background:dark?"#1e1e30":"#F7F8FF",border:"1px solid "+confirmButtonColor+"55",borderRadius:14,padding:12,display:"flex",flexDirection:"column",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Modifica spesa Share")}</div><button onClick={resetShareExpenseForm} style={{background:"transparent",border:"none",color:subC,cursor:"pointer",fontSize:18}}>×</button></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr 1fr",gap:8}}><input type="number" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={sinp} placeholder={L("Importo")}/><input value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={sinp} placeholder={L("Descrizione")}/><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={sinp}/></div><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagata da")} {personLabel(p)}</option>;})}</select><div style={{fontSize:11,color:subC}}>{L("La modifica viene salvata direttamente su questa transazione.")}</div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn onClick={resetShareExpenseForm} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn><Btn onClick={addSharedActivity} bg={confirmButtonColor}>{L("Salva modifica")}</Btn></div></div>:<div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{fontSize:18}}>{a.kind==="settlement"?"↔️":"🧾"}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.kind==="settlement"?((from?personLabel(from):a.from)+" "+L("ha pagato")+" "+(to?personLabel(to):a.to)):a.desc}</div><div style={{fontSize:11,color:subC}}>{fmtDate(a.date,dateFmt)} · {a.time||"--:--"}</div>{a.kind!=="settlement"&&<div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}><div style={{fontSize:11,color:textC,fontWeight:700}}>{L("Pagata da")}: {paid?personLabel(paid):(a.paidBy||"—")}</div><div style={{fontSize:11,color:subC}}>{L("Condivisa con")}: {Object.keys(a.shares||{}).map(function(pid){var pp=participants.find(function(x){return x.id===pid;});return (pp?personLabel(pp):pid)+" "+fmt(a.shares[pid]);}).join(" · ")||"—"}</div></div>}</div><div style={{fontSize:13,fontWeight:900,color:a.kind==="settlement"?confirmButtonColor:expenseColor}}>{fmt(a.amount)}</div>{a.kind!=="settlement"&&<button onClick={function(){startEditSharedActivity(a);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",borderRadius:9,padding:"5px 8px",cursor:"pointer",color:confirmButtonColor,fontSize:12,fontWeight:800}}>{L("Modifica")}</button>}<button onClick={function(){deleteActivity(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:subC}}>×</button></div>}</div>;})}</div>
         </div>}
-        {shareProjectTab==="partecipanti"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Partecipanti")}</div>{participants.map(function(p){return <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid "+borderC,opacity:p.status==="archived"?0.55:1}}><div style={{width:34,height:34,borderRadius:"50%",background:confirmButtonColor+"22",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,color:confirmButtonColor}}>{personLabel(p).slice(0,1).toUpperCase()}</div><div style={{flex:1}}><div style={{fontSize:13,fontWeight:900,color:textC}}>{personLabel(p)}</div><div style={{fontSize:11,color:subC}}>{L(p.kind==="fake"?"Persona esterna":p.kind==="registered"?"Utente fAInance":"Invito in attesa")}{p.email?" · "+p.email:""}{p.status==="pending"?" · "+L("pendente"):""}{p.status==="archived"?" · "+L("archiviato"):""}</div></div>{p.id!=="me"&&<div style={{display:"flex",gap:5}}>{p.status==="archived"?<button onClick={function(){restoreParticipant(p.id);}} style={{background:"#eef8f4",border:"1px solid #bdebdc",borderRadius:8,color:incomeColor,padding:"5px 7px"}}>{L("Ripristina")}</button>:<button onClick={function(){archiveParticipant(p.id);}} style={{background:"#fff8e1",border:"1px solid #ffe29a",borderRadius:8,color:"#9a6a00",padding:"5px 7px"}}>{L("Archivia")}</button>}<button onClick={function(){removeParticipant(p.id);}} style={{background:"#fff0f0",border:"1px solid #ffd0d0",borderRadius:8,color:expenseColor,padding:"5px 7px"}}>{L("Elimina")}</button></div>}</div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Aggiungi partecipante")}</div><div style={{display:"flex",gap:0,background:dark?"#252535":"#f5f5f5",borderRadius:10,padding:3,marginBottom:10}}>{[{id:"user",label:L("Utente")},{id:"fake",label:L("Persona esterna")}].map(function(m){return <button key={m.id} onClick={function(){setPersonMode(m.id);}} style={{flex:1,border:"none",borderRadius:8,padding:"7px",background:personMode===m.id?confirmButtonColor:"transparent",color:personMode===m.id?"#fff":subC,fontSize:12,fontWeight:800}}>{m.label}</button>;})}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto",gap:8}}>{personMode==="fake"?<input placeholder={L("Nome persona esterna")} value={newPersonName} onChange={function(e){setNewPersonName(e.target.value);}} style={sinp}/>:<input placeholder={L("Email utente")} value={newPersonEmail} onChange={function(e){setNewPersonEmail(e.target.value);}} style={sinp}/>}<Btn onClick={addParticipant} bg={confirmButtonColor} disabled={participantBusy}>{participantBusy?"...":L("Aggiungi")}</Btn></div><div style={{fontSize:11,color:subC,marginTop:8}}>{L("Utente richiede solo l'email: quando l'account viene collegato, verrà mostrato il nome reale. Persona esterna usa solo il nome e non riceve inviti.")}</div></div></div>}
+        {shareProjectTab==="partecipanti"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,boxShadow:dark?"none":"0 8px 24px rgba(15,23,42,.06)"}}>
+            <div style={{fontSize:14,fontWeight:950,color:textC,marginBottom:12}}>{L("Partecipanti")}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>{participants.map(function(p){var archived=p.status==="archived";return <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 11px",border:"1px solid "+borderC,borderRadius:14,background:dark?"#252535":"#fff",opacity:archived?0.55:1}}><div style={{width:38,height:38,borderRadius:14,background:(p.kind==="fake"?secondaryButtonColor:confirmButtonColor)+"22",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:950,color:p.kind==="fake"?secondaryButtonColor:confirmButtonColor,flexShrink:0}}>{personLabel(p).slice(0,1).toUpperCase()}</div><div style={{flex:1,minWidth:0}}><div className="fai-ellipsis" style={{fontSize:13,fontWeight:950,color:textC}}>{personLabel(p)}</div><div className="fai-ellipsis" style={{fontSize:11,color:subC,marginTop:2}}>{L(p.kind==="fake"?"Persona Esterna":p.kind==="registered"?"Utente fAInance":"Invito in attesa")}{p.email?" · "+p.email:""}{p.status==="pending"?" · "+L("pendente"):""}{archived?" · "+L("archiviato"):""}</div></div>{p.id!=="me"&&<div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>{archived?<button onClick={function(){restoreParticipant(p.id);}} style={{background:"#eef8f4",border:"1px solid #bdebdc",borderRadius:9,color:incomeColor,padding:"6px 8px",fontSize:11,fontWeight:850}}>{L("Ripristina")}</button>:<button onClick={function(){archiveParticipant(p.id);}} style={{background:"#fff8e1",border:"1px solid #ffe29a",borderRadius:9,color:"#9a6a00",padding:"6px 8px",fontSize:11,fontWeight:850}}>{L("Archivia")}</button>}<button onClick={function(){removeParticipant(p.id);}} style={{background:"#fff0f0",border:"1px solid #ffd0d0",borderRadius:9,color:expenseColor,padding:"6px 8px",fontSize:11,fontWeight:850}}>{L("Elimina")}</button></div>}</div>;})}</div>
+          </div>
+          <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,boxShadow:dark?"none":"0 8px 24px rgba(15,23,42,.06)"}}>
+            <div style={{fontSize:14,fontWeight:950,color:textC,marginBottom:10}}>{L("Aggiungi partecipante")}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
+              <button type="button" onClick={function(){setPersonMode("user");}} style={{border:"1px solid "+(personMode==="user"?secondaryButtonColor:borderC),background:personMode==="user"?secondaryButtonColor:(dark?"#252535":"#fff"),color:personMode==="user"?"#fff":textC,borderRadius:btnRadius,padding:"9px 8px",fontSize:12,fontWeight:900,cursor:"pointer"}}>{L("Utente")}</button>
+              <button type="button" onClick={pickContactFromAddressBook} disabled={participantBusy} style={{border:"1px solid "+(participantBusy?secondaryButtonColor:borderC),background:participantBusy?secondaryButtonColor:(dark?"#252535":"#fff"),color:participantBusy?"#fff":textC,borderRadius:btnRadius,padding:"9px 8px",fontSize:12,fontWeight:900,cursor:participantBusy?"not-allowed":"pointer",opacity:participantBusy?0.75:1}}>{participantBusy?"...":L("Da Rubrica")}</button>
+              <button type="button" onClick={function(){setPersonMode("fake");}} style={{border:"1px solid "+(personMode==="fake"?secondaryButtonColor:borderC),background:personMode==="fake"?secondaryButtonColor:(dark?"#252535":"#fff"),color:personMode==="fake"?"#fff":textC,borderRadius:btnRadius,padding:"9px 8px",fontSize:12,fontWeight:900,cursor:"pointer"}}>{L("Persona Esterna")}</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto",gap:8}}>{personMode==="fake"?<input placeholder={L("Nome persona esterna")} value={newPersonName} onChange={function(e){setNewPersonName(e.target.value);}} style={sinp}/>:<input placeholder={L("Email utente")} value={newPersonEmail} onChange={function(e){setNewPersonEmail(e.target.value);}} style={sinp}/>}<Btn onClick={addParticipant} bg={confirmButtonColor} disabled={participantBusy}>{participantBusy?"...":L("Aggiungi")}</Btn></div>
+            <div style={{fontSize:11,color:subC,marginTop:8,lineHeight:1.35}}>{L("Utente richiede solo l'email: quando l'account viene collegato, verrà mostrato il nome reale. Persona esterna usa solo il nome e non riceve inviti.")}</div>
+          </div>
+        </div>}
         {shareProjectTab==="riassunto"&&<div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Riassunto")}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10}}><StatCard title={L("Spese progetto")} value={fmt(totalSpent)} color={expenseColor} bg={expenseColor+"22"}/><StatCard title={L("Mi devono")} value={fmt(Math.max(0,myBalance))} color={incomeColor} bg={incomeColor+"22"}/><StatCard title={L("Devo")} value={fmt(Math.max(0,-myBalance))} color={expenseColor} bg={expenseColor+"22"}/></div><div style={{fontSize:12,color:subC,marginTop:12}}>{L("Questa sezione è secondaria: il flusso principale resta progetto → inserimento spesa.")}</div></div>}
         {shareProjectTab==="saldi"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Registra saldo/rimborso")}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr auto",gap:8}}><select value={settlementFrom} onChange={function(e){setSettlementFrom(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select><select value={settlementTo} onChange={function(e){setSettlementTo(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{L("a")} {personLabel(p)}</option>;})}</select><input type="number" placeholder={L("Importo")} value={settlementAmount} onChange={function(e){setSettlementAmount(e.target.value);}} style={sinp}/><input type="date" value={settlementDate} onChange={function(e){setSettlementDate(e.target.value);}} style={sinp}/><Btn onClick={addSettlement} bg={confirmButtonColor}>{L("Registra")}</Btn></div></div></div>}
       </>}
@@ -5222,7 +5893,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     function capMenuLabel(v){v=String(v||"");return v?v.charAt(0).toLocaleUpperCase()+v.slice(1):v;}
     var menuSubs={consulenteAI:translateUiRuntimeText("Analisi e domande"),patrimonio:translateUiRuntimeText("Asset, conti e storico"),budget:translateUiRuntimeText("Piano mensile e risparmio"),goals:translateUiRuntimeText("Risparmi e target"),alerts:translateUiRuntimeText("Soglie e avvisi"),share:translateUiRuntimeText("Progetti, costi condivisi e saldi"),appunti:translateUiRuntimeText("Note, documenti e coordinate"),settings:translateUiRuntimeText("Profilo, dati e preferenze")};
     var items=buildMobileMenuItems().map(function(item){return {...item,sub:menuSubs[item.id]||""};});
-    return <div style={{display:"flex",flexDirection:"column",gap:14}}><div style={{fontSize:20,fontWeight:900,color:textC}}>{translateUiRuntimeText("Altro")}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>{items.map(function(item){return <button key={item.id} onClick={function(){setTab(item.id);setSettingsPage(null);setMobileMenu(false);}} style={{position:"relative",textAlign:"left",background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:"15px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",color:textC,boxShadow:dark?"none":"0 4px 14px rgba(0,0,0,0.05)"}}><span style={{fontSize:24,width:32,textAlign:"center"}}>{item.icon}</span><span style={{flex:1}}><span style={{display:"block",fontSize:15,fontWeight:800}}>{capMenuLabel(item.label)}</span><span style={{display:"block",fontSize:12,color:subC,marginTop:2}}>{item.sub}</span></span>{item.badge>0&&<span style={{position:"absolute",right:12,top:12,background:expenseColor,color:"#fff",borderRadius:"50%",width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{item.badge}</span>}</button>;})}</div></div>;
+    return <div style={{display:"flex",flexDirection:"column",gap:14}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><div style={{fontSize:20,fontWeight:900,color:textC}}>{translateUiRuntimeText("Altro")}</div>{isMobile&&<button onClick={function(){setTab("home");setMobileMenu(false);}} aria-label="Chiudi menu" style={{width:36,height:36,borderRadius:12,border:"1px solid "+borderC,background:cardBg,color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button>}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12}}>{items.map(function(item){return <button key={item.id} onClick={function(){setTab(item.id);setSettingsPage(null);setMobileMenu(false);}} style={{position:"relative",textAlign:"left",background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:"15px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",color:textC,boxShadow:dark?"none":"0 4px 14px rgba(0,0,0,0.05)"}}><span style={{fontSize:24,width:32,textAlign:"center"}}>{item.icon}</span><span style={{flex:1}}><span style={{display:"block",fontSize:15,fontWeight:800}}>{capMenuLabel(item.label)}</span><span style={{display:"block",fontSize:12,color:subC,marginTop:2}}>{item.sub}</span></span>{item.badge>0&&<span style={{position:"absolute",right:12,top:12,background:expenseColor,color:"#fff",borderRadius:"50%",width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{item.badge}</span>}</button>;})}</div></div>;
   }
   // panelContent() is defined in sezioni.tsx and imported above
     function panelContent(){
@@ -5246,8 +5917,22 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
 
   var mobileMain=buildBottomNavItems();
 
-  function BiometricLockScreen(){return <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",background:dark?"linear-gradient(160deg,#111827,#1E1E30)":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{width:"100%",maxWidth:420,background:cardBg,border:"1px solid "+borderC,borderRadius:24,boxShadow:dark?"0 18px 70px rgba(0,0,0,.45)":"0 18px 70px rgba(74,66,160,.22)",padding:24,textAlign:"center"}}><div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,borderRadius:24,background:dark?"#24213a":"#F0EDFF",marginBottom:14,fontSize:34}}>🔐</div><div style={{fontSize:22,fontWeight:950,color:textC,marginBottom:6}}>{L("fAInance è bloccata")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45,marginBottom:18}}>{L("Sblocca l’app per visualizzare i tuoi dati finanziari.")}</div>{biometricLockMessage&&<div style={{background:dark?"#342424":"#fff0f0",border:"1px solid "+(dark?"#5a3333":"#f3b6b6"),color:dark?"#ffd0d0":"#8a2d2d",borderRadius:12,padding:"10px 12px",fontSize:12,lineHeight:1.35,marginBottom:14}}>{L(biometricLockMessage)}</div>}<button onClick={function(){unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");}} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con biometria")}</button><button onClick={onLogout} style={{width:"100%",marginTop:10,background:dark?"#252535":"#f5f5f5",color:subC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"11px 16px",fontSize:13,fontWeight:800,cursor:"pointer"}}>{L("Esci dall’account")}</button></div></div>;}
-
+  function BiometricLockScreen(){
+    var configuredPin=validateLocalPin(localLockPin);
+    var method=unlockMethod||localLockMethod||"biometric";
+    if(method==="pin"&&!configuredPin)method="biometric";
+    function submitPin(){unlockWithPin((unlockPinRef&&unlockPinRef.current)||unlockPin);}
+    function submitPassword(){unlockWithAccountPassword(unlockPassword);}
+    function chooseUnlockMethod(m){setUnlockMethod(m);setBiometricLockMessage("");setUnlockPin("");unlockPinRef.current="";setUnlockPassword("");}
+    var optionBtn=function(id,label){var active=method===id;return <button type="button" onClick={function(){chooseUnlockMethod(id);}} style={{flex:1,border:"1px solid "+(active?confirmButtonColor:borderC),background:active?(confirmButtonColor+"22"):(dark?"#252535":"#fff"),color:active?confirmButtonColor:textC,borderRadius:btnRadius,padding:"9px 8px",fontSize:12,fontWeight:900,cursor:"pointer"}}>{L(label)}</button>;};
+    return <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",background:dark?"linear-gradient(160deg,#111827,#1E1E30)":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{width:"100%",maxWidth:420,background:cardBg,border:"1px solid "+borderC,borderRadius:24,boxShadow:dark?"0 18px 70px rgba(0,0,0,.45)":"0 18px 70px rgba(74,66,160,.22)",padding:24,textAlign:"center"}}><div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,borderRadius:24,background:dark?"#24213a":"#F0EDFF",marginBottom:14,fontSize:34}}>🔐</div><div style={{fontSize:22,fontWeight:950,color:textC,marginBottom:6}}>{L("fAInance è bloccata")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45,marginBottom:18}}>{L("Sblocca l’app per visualizzare i tuoi dati finanziari.")}</div>{biometricLockMessage&&<div style={{background:dark?"#342424":"#fff0f0",border:"1px solid "+(dark?"#5a3333":"#f3b6b6"),color:dark?"#ffd0d0":"#8a2d2d",borderRadius:12,padding:"10px 12px",fontSize:12,lineHeight:1.35,marginBottom:14}}>{L(biometricLockMessage)}</div>}
+      <div style={{display:"flex",gap:8,marginBottom:12}}>{optionBtn("biometric","Biometria")}{optionBtn("password","Password")}{configuredPin&&optionBtn("pin","PIN")}</div>
+      {method==="pin"&&<div style={{display:"flex",flexDirection:"column",gap:10}}><input defaultValue="" onChange={function(e){unlockPinRef.current=String(e.currentTarget.value||"").replace(/\D/g,"").slice(0,4);}} onKeyDown={function(e){if(e.key==="Enter")submitPin();}} inputMode="numeric" type="text" maxLength={4} autoComplete="off" placeholder={L("Inserisci PIN")} style={{width:"100%",borderRadius:btnRadius,border:"1px solid "+borderC,padding:"13px 14px",fontSize:20,textAlign:"center",letterSpacing:8,background:dark?"#252535":"#fff",color:textC,boxSizing:"border-box"}}/><button onClick={submitPin} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{L("Sblocca con PIN")}</button><button type="button" onClick={function(){chooseUnlockMethod("biometric");}} style={{background:"transparent",border:"none",color:confirmButtonColor,fontSize:12,fontWeight:900,cursor:"pointer"}}>{L("PIN dimenticato? Usa un altro metodo")}</button></div>}
+      {method==="password"&&<div style={{display:"flex",flexDirection:"column",gap:10}}><input value={unlockPassword} onChange={function(e){setUnlockPassword(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")submitPassword();}} type="password" autoComplete="current-password" placeholder={L("Password account")} style={{width:"100%",borderRadius:btnRadius,border:"1px solid "+borderC,padding:"13px 14px",fontSize:15,background:dark?"#252535":"#fff",color:textC,boxSizing:"border-box"}}/><button onClick={submitPassword} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con password")}</button></div>}
+      {method!=="pin"&&method!=="password"&&<button onClick={function(){unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");}} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con biometria")}</button>}
+      <div style={{fontSize:11,color:subC,marginTop:12,lineHeight:1.35}}>{L("Se non ricordi il PIN, sblocca con biometria o password account e poi imposta un nuovo PIN in Sicurezza.")}</div>
+    </div></div>;
+  }
   return <AppCtx.Provider value={ctxValue}>
     {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
@@ -5259,7 +5944,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       {aiFloatingEnabled&&tab!=="settings"&&<FloatingAIButton/>}
       {voiceModal&&<VoiceEntryModal/>}
       <div style={{background:headerBg,borderTop:"1px solid "+borderC,display:"flex",flexShrink:0}}>{mobileMain.map(function(item){return <button key={item.id} onClick={function(){if(item.id==="voice"){openVoiceModal();setMobileMenu(false);}else if(item.id==="more"){setTab("more");setMobileMenu(function(s){return !s;});setSettingsPage(null);}else{setTab(item.id);setMobileMenu(false);setSettingsPage(null);}}} style={{flex:1,padding:"9px 2px",border:"none",background:"transparent",display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?textC:subC,borderTop:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?"2px solid "+(dark?"#eee":"#333"):"2px solid transparent"}}><span style={{fontSize:17}}>{item.icon}</span><span style={{fontSize:9,fontWeight:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?500:400}}>{item.label}</span></button>;})}</div>
-      {mobileMenu&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,display:"flex",alignItems:"flex-end"}} onClick={function(){setMobileMenu(false);}}><div style={{background:cardBg,borderRadius:"20px 20px 0 0",width:"100%",padding:"20px 16px 32px"}} onClick={function(e){e.stopPropagation();}}>{buildMobileMenuItems().map(function(item){return <button key={item.id} onClick={function(){setTab(item.id);setSettingsPage(null);setMobileMenu(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"14px 8px",border:"none",background:"transparent",borderBottom:"1px solid "+borderC,fontSize:15,cursor:"pointer",color:textC}}><span style={{fontSize:22}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{marginLeft:"auto",background:expenseColor,color:"#fff",borderRadius:"50%",width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{item.badge}</span>}</button>;})}</div></div>}
+      {mobileMenu&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:9998,display:"flex",alignItems:"flex-end",paddingBottom:8,boxSizing:"border-box"}} onClick={function(){setMobileMenu(false);}}><div style={{background:cardBg,borderRadius:"20px 20px 0 0",width:"100%",padding:"10px 16px 14px",maxHeight:"72vh",overflowY:"auto",WebkitOverflowScrolling:"touch",boxShadow:dark?"none":"0 -8px 30px rgba(0,0,0,0.18)"}} onClick={function(e){e.stopPropagation();}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"0 2px 8px",position:"sticky",top:0,background:cardBg,zIndex:1}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{translateUiRuntimeText("Altro")}</div><button onClick={function(){setMobileMenu(false);}} aria-label="Chiudi menu" style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div>{buildMobileMenuItems().map(function(item){return <button key={item.id} onClick={function(){setTab(item.id);setSettingsPage(null);setMobileMenu(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"12px 8px",border:"none",background:"transparent",borderBottom:"1px solid "+borderC,fontSize:15,cursor:"pointer",color:textC}}><span style={{fontSize:22}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{marginLeft:"auto",background:expenseColor,color:"#fff",borderRadius:"50%",width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{item.badge}</span>}</button>;})}</div></div>}
       {isOffline&&<div style={{position:"fixed",top:0,left:0,right:0,zIndex:9998,background:"#E24B4A",color:"#fff",textAlign:"center",fontSize:13,fontWeight:700,padding:"6px 12px"}}>{L("Nessuna connessione. I dati verranno sincronizzati al ripristino della rete.")}</div>}
   {toast&&<Toast key={(toast&&toast.id)||String(toast)} msg={toast} onDone={function(){setToast(null);}}/>}
       {alertPopup&&alertPopup.length>0&&<AlertPopup newAlerts={alertPopup} onClose={function(list){markAlertsSeen(list||alertPopup);}}/>}
@@ -5283,6 +5968,19 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
 }
 
 export default AppWithLogin;
+
+// fAInance - fix urgenti dati/home/modifica entrate.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Distribuzione uscite',{it:'Distribuzione uscite',en:'Expense distribution',es:'Distribución de gastos',fr:'Répartition des dépenses',de:'Ausgabenverteilung',pt:'Distribuição de despesas',pl:'Rozkład wydatków',nl:'Uitgavenverdeling',ro:'Distribuția cheltuielilor',el:'Κατανομή εξόδων'});
+  add('Aree / Categorie Uscite',{it:'Aree / Categorie Uscite',en:'Areas / Expense Categories',es:'Áreas / Categorías de gastos',fr:'Zones / Catégories de dépenses',de:'Bereiche / Ausgabenkategorien',pt:'Áreas / Categorias de despesas',pl:'Obszary / Kategorie wydatków',nl:'Gebieden / Uitgavencategorieën',ro:'Zone / Categorii cheltuieli',el:'Περιοχές / Κατηγορίες εξόδων'});
+  add('Aree / Categorie Entrate',{it:'Aree / Categorie Entrate',en:'Areas / Income Categories',es:'Áreas / Categorías de ingresos',fr:'Zones / Catégories de revenus',de:'Bereiche / Einnahmenkategorien',pt:'Áreas / Categorias de receitas',pl:'Obszary / Kategorie przychodów',nl:'Gebieden / Inkomstencategorieën',ro:'Zone / Categorii venituri',el:'Περιοχές / Κατηγορίες εσόδων'});
+  add('Categoria entrata',{it:'Categoria entrata',en:'Income category',es:'Categoría de ingreso',fr:'Catégorie de revenu',de:'Einnahmenkategorie',pt:'Categoria de receita',pl:'Kategoria przychodu',nl:'Inkomstencategorie',ro:'Categorie venit',el:'Κατηγορία εσόδου'});
+  add('Ultimi 30 giorni',{it:'Ultimi 30 giorni',en:'Last 30 days',es:'Últimos 30 días',fr:'30 derniers jours',de:'Letzte 30 Tage',pt:'Últimos 30 dias',pl:'Ostatnie 30 dni',nl:'Laatste 30 dagen',ro:'Ultimele 30 de zile',el:'Τελευταίες 30 ημέρες'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
 
 
 // fAInance 1.6.31 - Debiti, Spesa e widget: traduzioni complete aggiuntive.
@@ -5338,6 +6036,164 @@ export default AppWithLogin;
     '1 minuto':{en:'1 minute',es:'1 minuto',fr:'1 minute',de:'1 Minute',pt:'1 minuto',pl:'1 minuta',nl:'1 minuut',ro:'1 minut',el:'1 λεπτό'},
     '5 minuti':{en:'5 minutes',es:'5 minutos',fr:'5 minutes',de:'5 Minuten',pt:'5 minutos',pl:'5 minut',nl:'5 minuten',ro:'5 minute',el:'5 λεπτά'},
     '15 minuti':{en:'15 minutes',es:'15 minutos',fr:'15 minutes',de:'15 Minuten',pt:'15 minutos',pl:'15 minut',nl:'15 minuten',ro:'15 minute',el:'15 λεπτά'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance - sicurezza locale, PIN/password e filtri storico: traduzioni aggiuntive.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Proteggi l’app':{en:'Protect the app',es:'Proteger la app',fr:'Protéger l’app',de:'App schützen',pt:'Proteger a app',pl:'Chroń aplikację',nl:'App beveiligen',ro:'Protejează aplicația',el:'Προστασία εφαρμογής'},
+    'Scegli se sbloccare fAInance con biometria, password dell’account o PIN di 4 numeri.':{en:'Choose whether to unlock fAInance with biometrics, your account password, or a 4-digit PIN.',es:'Elige si desbloquear fAInance con biometría, la contraseña de la cuenta o un PIN de 4 números.',fr:'Choisis de déverrouiller fAInance avec la biométrie, le mot de passe du compte ou un PIN à 4 chiffres.',de:'Wähle, ob du fAInance mit Biometrie, Kontopasswort oder einer 4-stelligen PIN entsperrst.',pt:'Escolhe se queres desbloquear o fAInance com biometria, palavra-passe da conta ou PIN de 4 dígitos.',pl:'Wybierz odblokowanie fAInance biometrią, hasłem konta albo 4-cyfrowym PIN-em.',nl:'Kies of je fAInance ontgrendelt met biometrie, je accountwachtwoord of een 4-cijferige PIN.',ro:'Alege dacă deblochezi fAInance cu biometrie, parola contului sau un PIN de 4 cifre.',el:'Επίλεξε αν θα ξεκλειδώνεις το fAInance με βιομετρικά, κωδικό λογαριασμού ή 4ψήφιο PIN.'},
+    'Biometria':{en:'Biometrics',es:'Biometría',fr:'Biométrie',de:'Biometrie',pt:'Biometria',pl:'Biometria',nl:'Biometrie',ro:'Biometrie',el:'Βιομετρικά'},
+    'Impronta, Face ID o codice dispositivo':{en:'Fingerprint, Face ID or device passcode',es:'Huella, Face ID o código del dispositivo',fr:'Empreinte, Face ID ou code de l’appareil',de:'Fingerabdruck, Face ID oder Gerätecode',pt:'Impressão digital, Face ID ou código do dispositivo',pl:'Odcisk palca, Face ID lub kod urządzenia',nl:'Vingerafdruk, Face ID of apparaatcode',ro:'Amprentă, Face ID sau codul dispozitivului',el:'Δακτυλικό αποτύπωμα, Face ID ή κωδικός συσκευής'},
+    'Password account':{en:'Account password',es:'Contraseña de la cuenta',fr:'Mot de passe du compte',de:'Kontopasswort',pt:'Palavra-passe da conta',pl:'Hasło konta',nl:'Accountwachtwoord',ro:'Parola contului',el:'Κωδικός λογαριασμού'},
+    'Usa la stessa password dell’account email':{en:'Use the same password as the email account',es:'Usa la misma contraseña de la cuenta email',fr:'Utilise le même mot de passe que le compte email',de:'Nutze dasselbe Passwort wie für das E-Mail-Konto',pt:'Usa a mesma palavra-passe da conta de email',pl:'Użyj tego samego hasła co dla konta e-mail',nl:'Gebruik hetzelfde wachtwoord als het e-mailaccount',ro:'Folosește aceeași parolă ca pentru contul de email',el:'Χρησιμοποίησε τον ίδιο κωδικό με τον λογαριασμό email'},
+    'PIN 4 numeri':{en:'4-digit PIN',es:'PIN de 4 números',fr:'PIN à 4 chiffres',de:'4-stellige PIN',pt:'PIN de 4 dígitos',pl:'4-cyfrowy PIN',nl:'4-cijferige PIN',ro:'PIN de 4 cifre',el:'4ψήφιο PIN'},
+    'Codice locale di 4 cifre':{en:'Local 4-digit code',es:'Código local de 4 cifras',fr:'Code local à 4 chiffres',de:'Lokaler 4-stelliger Code',pt:'Código local de 4 dígitos',pl:'Lokalny 4-cyfrowy kod',nl:'Lokale 4-cijferige code',ro:'Cod local de 4 cifre',el:'Τοπικός 4ψήφιος κωδικός'},
+    'PIN di 4 numeri':{en:'4-digit PIN',es:'PIN de 4 números',fr:'PIN à 4 chiffres',de:'4-stellige PIN',pt:'PIN de 4 dígitos',pl:'4-cyfrowy PIN',nl:'4-cijferige PIN',ro:'PIN de 4 cifre',el:'4ψήφιο PIN'},
+    'Il PIN deve contenere 4 numeri.':{en:'The PIN must contain 4 digits.',es:'El PIN debe contener 4 números.',fr:'Le PIN doit contenir 4 chiffres.',de:'Die PIN muss 4 Ziffern enthalten.',pt:'O PIN deve conter 4 dígitos.',pl:'PIN musi mieć 4 cyfry.',nl:'De PIN moet 4 cijfers bevatten.',ro:'PIN-ul trebuie să conțină 4 cifre.',el:'Το PIN πρέπει να περιέχει 4 ψηφία.'},
+    'PIN salvato':{en:'PIN saved',es:'PIN guardado',fr:'PIN enregistré',de:'PIN gespeichert',pt:'PIN guardado',pl:'PIN zapisany',nl:'PIN opgeslagen',ro:'PIN salvat',el:'Το PIN αποθηκεύτηκε'},
+    'Salva PIN':{en:'Save PIN',es:'Guardar PIN',fr:'Enregistrer le PIN',de:'PIN speichern',pt:'Guardar PIN',pl:'Zapisz PIN',nl:'PIN opslaan',ro:'Salvează PIN-ul',el:'Αποθήκευση PIN'},
+    'PIN configurato':{en:'PIN configured',es:'PIN configurado',fr:'PIN configuré',de:'PIN eingerichtet',pt:'PIN configurado',pl:'PIN skonfigurowany',nl:'PIN ingesteld',ro:'PIN configurat',el:'Το PIN ρυθμίστηκε'},
+    'La password dell’account funziona per gli account creati con email e password. Gli account Google o Apple possono non avere una password fAInance verificabile localmente.':{en:'The account password works for accounts created with email and password. Google or Apple accounts may not have a fAInance password that can be verified locally.',es:'La contraseña de la cuenta funciona para cuentas creadas con email y contraseña. Las cuentas Google o Apple pueden no tener una contraseña fAInance verificable localmente.',fr:'Le mot de passe du compte fonctionne pour les comptes créés avec email et mot de passe. Les comptes Google ou Apple peuvent ne pas avoir de mot de passe fAInance vérifiable localement.',de:'Das Kontopasswort funktioniert für Konten mit E-Mail und Passwort. Google- oder Apple-Konten haben möglicherweise kein lokal prüfbares fAInance-Passwort.',pt:'A palavra-passe da conta funciona para contas criadas com email e palavra-passe. Contas Google ou Apple podem não ter uma palavra-passe fAInance verificável localmente.',pl:'Hasło konta działa dla kont utworzonych przez e-mail i hasło. Konta Google lub Apple mogą nie mieć lokalnie weryfikowalnego hasła fAInance.',nl:'Het accountwachtwoord werkt voor accounts die met e-mail en wachtwoord zijn gemaakt. Google- of Apple-accounts hebben mogelijk geen lokaal controleerbaar fAInance-wachtwoord.',ro:'Parola contului funcționează pentru conturile create cu email și parolă. Conturile Google sau Apple pot să nu aibă o parolă fAInance verificabilă local.',el:'Ο κωδικός λογαριασμού λειτουργεί για λογαριασμούς με email και κωδικό. Οι λογαριασμοί Google ή Apple μπορεί να μην έχουν τοπικά επαληθεύσιμο κωδικό fAInance.'},
+    'Richiedi blocco al ritorno nell’app':{en:'Require lock when returning to the app',es:'Solicitar bloqueo al volver a la app',fr:'Demander le verrouillage au retour dans l’app',de:'Sperre beim Zurückkehren in die App anfordern',pt:'Pedir bloqueio ao voltar à app',pl:'Wymagaj blokady po powrocie do aplikacji',nl:'Vergrendeling vragen bij terugkeer naar de app',ro:'Solicită blocarea la revenirea în aplicație',el:'Απαίτηση κλειδώματος κατά την επιστροφή στην εφαρμογή'},
+    'Il blocco locale non sostituisce il login Google, Apple o email: protegge solo l’accesso ai dati già disponibili sul dispositivo.':{en:'The local lock does not replace Google, Apple or email login: it only protects access to data already available on the device.',es:'El bloqueo local no sustituye el inicio de sesión con Google, Apple o email: solo protege el acceso a los datos ya disponibles en el dispositivo.',fr:'Le verrouillage local ne remplace pas la connexion Google, Apple ou email : il protège seulement l’accès aux données déjà disponibles sur l’appareil.',de:'Die lokale Sperre ersetzt nicht den Login mit Google, Apple oder E-Mail: Sie schützt nur den Zugriff auf Daten, die bereits auf dem Gerät verfügbar sind.',pt:'O bloqueio local não substitui o login Google, Apple ou email: protege apenas o acesso aos dados já disponíveis no dispositivo.',pl:'Blokada lokalna nie zastępuje logowania Google, Apple ani e-mail: chroni tylko dostęp do danych już dostępnych na urządzeniu.',nl:'De lokale vergrendeling vervangt de login met Google, Apple of e-mail niet: ze beschermt alleen toegang tot gegevens die al op het apparaat beschikbaar zijn.',ro:'Blocarea locală nu înlocuiește autentificarea Google, Apple sau email: protejează doar accesul la datele deja disponibile pe dispozitiv.',el:'Το τοπικό κλείδωμα δεν αντικαθιστά τη σύνδεση Google, Apple ή email: προστατεύει μόνο την πρόσβαση στα δεδομένα που υπάρχουν ήδη στη συσκευή.'},
+    'Protezione app attivata':{en:'App protection enabled',es:'Protección de la app activada',fr:'Protection de l’app activée',de:'App-Schutz aktiviert',pt:'Proteção da app ativada',pl:'Ochrona aplikacji włączona',nl:'Appbeveiliging ingeschakeld',ro:'Protecția aplicației a fost activată',el:'Η προστασία εφαρμογής ενεργοποιήθηκε'},
+    'Protezione app disattivata':{en:'App protection disabled',es:'Protección de la app desactivada',fr:'Protection de l’app désactivée',de:'App-Schutz deaktiviert',pt:'Proteção da app desativada',pl:'Ochrona aplikacji wyłączona',nl:'Appbeveiliging uitgeschakeld',ro:'Protecția aplicației a fost dezactivată',el:'Η προστασία εφαρμογής απενεργοποιήθηκε'},
+    'Imposta prima un PIN di 4 numeri.':{en:'Set a 4-digit PIN first.',es:'Configura primero un PIN de 4 números.',fr:'Configure d’abord un PIN à 4 chiffres.',de:'Lege zuerst eine 4-stellige PIN fest.',pt:'Configura primeiro um PIN de 4 dígitos.',pl:'Najpierw ustaw 4-cyfrowy PIN.',nl:'Stel eerst een 4-cijferige PIN in.',ro:'Configurează mai întâi un PIN de 4 cifre.',el:'Ρύθμισε πρώτα ένα 4ψήφιο PIN.'},
+    'PIN non configurato. Vai in Impostazioni > Sicurezza e imposta un PIN di 4 numeri.':{en:'PIN not configured. Go to Settings > Security and set a 4-digit PIN.',es:'PIN no configurado. Ve a Ajustes > Seguridad y configura un PIN de 4 números.',fr:'PIN non configuré. Va dans Paramètres > Sécurité et configure un PIN à 4 chiffres.',de:'PIN nicht eingerichtet. Gehe zu Einstellungen > Sicherheit und lege eine 4-stellige PIN fest.',pt:'PIN não configurado. Vai a Definições > Segurança e configura um PIN de 4 dígitos.',pl:'PIN nie jest skonfigurowany. Przejdź do Ustawienia > Bezpieczeństwo i ustaw 4-cyfrowy PIN.',nl:'PIN niet ingesteld. Ga naar Instellingen > Beveiliging en stel een 4-cijferige PIN in.',ro:'PIN-ul nu este configurat. Mergi la Setări > Securitate și setează un PIN de 4 cifre.',el:'Το PIN δεν έχει ρυθμιστεί. Πήγαινε στις Ρυθμίσεις > Ασφάλεια και όρισε 4ψήφιο PIN.'},
+    'PIN errato.':{en:'Wrong PIN.',es:'PIN incorrecto.',fr:'PIN incorrect.',de:'Falsche PIN.',pt:'PIN incorreto.',pl:'Nieprawidłowy PIN.',nl:'Verkeerde PIN.',ro:'PIN greșit.',el:'Λάθος PIN.'},
+    'Account non disponibile. Effettua di nuovo il login.':{en:'Account not available. Log in again.',es:'Cuenta no disponible. Inicia sesión de nuevo.',fr:'Compte indisponible. Connecte-toi à nouveau.',de:'Konto nicht verfügbar. Melde dich erneut an.',pt:'Conta indisponível. Inicia sessão novamente.',pl:'Konto niedostępne. Zaloguj się ponownie.',nl:'Account niet beschikbaar. Log opnieuw in.',ro:'Cont indisponibil. Autentifică-te din nou.',el:'Ο λογαριασμός δεν είναι διαθέσιμος. Συνδέσου ξανά.'},
+    'Verifica password non disponibile in questa build.':{en:'Password verification is not available in this build.',es:'La verificación de contraseña no está disponible en esta build.',fr:'La vérification du mot de passe n’est pas disponible dans cette build.',de:'Passwortprüfung ist in diesem Build nicht verfügbar.',pt:'A verificação da palavra-passe não está disponível nesta build.',pl:'Weryfikacja hasła nie jest dostępna w tej kompilacji.',nl:'Wachtwoordcontrole is niet beschikbaar in deze build.',ro:'Verificarea parolei nu este disponibilă în acest build.',el:'Η επαλήθευση κωδικού δεν είναι διαθέσιμη σε αυτό το build.'},
+    'Password account non corretta o account non compatibile con accesso tramite password.':{en:'Account password is incorrect or the account is not compatible with password access.',es:'La contraseña de la cuenta no es correcta o la cuenta no es compatible con el acceso por contraseña.',fr:'Le mot de passe du compte est incorrect ou le compte n’est pas compatible avec l’accès par mot de passe.',de:'Das Kontopasswort ist falsch oder das Konto unterstützt keinen Passwortzugriff.',pt:'A palavra-passe da conta está incorreta ou a conta não é compatível com acesso por palavra-passe.',pl:'Hasło konta jest nieprawidłowe albo konto nie obsługuje dostępu hasłem.',nl:'Het accountwachtwoord is onjuist of het account ondersteunt geen wachtwoordtoegang.',ro:'Parola contului este incorectă sau contul nu este compatibil cu accesul prin parolă.',el:'Ο κωδικός λογαριασμού είναι λάθος ή ο λογαριασμός δεν υποστηρίζει πρόσβαση με κωδικό.'},
+    'Plugin biometrico non disponibile in questa build Android. Installa il pacchetto, esegui npx cap sync android e ricompila l’app.':{en:'Biometric plugin is not available in this Android build. Install the package, run npx cap sync android and rebuild the app.',es:'El plugin biométrico no está disponible en esta build Android. Instala el paquete, ejecuta npx cap sync android y recompila la app.',fr:'Le plugin biométrique n’est pas disponible dans cette build Android. Installe le paquet, exécute npx cap sync android et recompile l’app.',de:'Das Biometrie-Plugin ist in diesem Android-Build nicht verfügbar. Installiere das Paket, führe npx cap sync android aus und baue die App neu.',pt:'O plugin biométrico não está disponível nesta build Android. Instala o pacote, executa npx cap sync android e recompila a app.',pl:'Plugin biometryczny nie jest dostępny w tej kompilacji Androida. Zainstaluj pakiet, uruchom npx cap sync android i zbuduj aplikację ponownie.',nl:'De biometrische plugin is niet beschikbaar in deze Android-build. Installeer het pakket, voer npx cap sync android uit en bouw de app opnieuw.',ro:'Pluginul biometric nu este disponibil în acest build Android. Instalează pachetul, rulează npx cap sync android și recompilă aplicația.',el:'Το βιομετρικό plugin δεν είναι διαθέσιμο σε αυτό το Android build. Εγκατάστησε το πακέτο, εκτέλεσε npx cap sync android και ξαναχτίσε την εφαρμογή.'},
+    'Inserisci PIN':{en:'Enter PIN',es:'Introduce PIN',fr:'Saisis le PIN',de:'PIN eingeben',pt:'Introduz o PIN',pl:'Wpisz PIN',nl:'PIN invoeren',ro:'Introdu PIN-ul',el:'Εισαγωγή PIN'},
+    'Sblocca con PIN':{en:'Unlock with PIN',es:'Desbloquear con PIN',fr:'Déverrouiller avec le PIN',de:'Mit PIN entsperren',pt:'Desbloquear com PIN',pl:'Odblokuj PIN-em',nl:'Ontgrendelen met PIN',ro:'Deblochează cu PIN',el:'Ξεκλείδωμα με PIN'},
+    'Sblocca con password':{en:'Unlock with password',es:'Desbloquear con contraseña',fr:'Déverrouiller avec le mot de passe',de:'Mit Passwort entsperren',pt:'Desbloquear com palavra-passe',pl:'Odblokuj hasłem',nl:'Ontgrendelen met wachtwoord',ro:'Deblochează cu parolă',el:'Ξεκλείδωμα με κωδικό'},
+    'Data Movimento':{en:'Movement date',es:'Fecha del movimiento',fr:'Date du mouvement',de:'Bewegungsdatum',pt:'Data do movimento',pl:'Data ruchu',nl:'Bewegingsdatum',ro:'Data mișcării',el:'Ημερομηνία κίνησης'},
+    'Data Immissione':{en:'Entry date',es:'Fecha de introducción',fr:'Date de saisie',de:'Eingabedatum',pt:'Data de inserção',pl:'Data wprowadzenia',nl:'Invoerdatum',ro:'Data introducerii',el:'Ημερομηνία εισαγωγής'},
+    'Importo Da':{en:'Amount From',es:'Importe Desde',fr:'Montant De',de:'Betrag Von',pt:'Valor De',pl:'Kwota od',nl:'Bedrag vanaf',ro:'Sumă de la',el:'Ποσό από'},
+    'Importo A':{en:'Amount To',es:'Importe Hasta',fr:'Montant À',de:'Betrag Bis',pt:'Valor Até',pl:'Kwota do',nl:'Bedrag tot',ro:'Sumă până la',el:'Ποσό έως'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance - filtri storico avanzati, rubrica Share e testi aggiuntivi.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Parola chiave':{en:'Keyword',es:'Palabra clave',fr:'Mot-clé',de:'Schlüsselwort',pt:'Palavra-chave',pl:'Słowo kluczowe',nl:'Trefwoord',ro:'Cuvânt-cheie',el:'Λέξη-κλειδί'},
+    'Periodo':{en:'Period',es:'Periodo',fr:'Période',de:'Zeitraum',pt:'Período',pl:'Okres',nl:'Periode',ro:'Perioadă',el:'Περίοδος'},
+    'Seleziona Mesi':{en:'Select months',es:'Seleccionar meses',fr:'Sélectionner les mois',de:'Monate auswählen',pt:'Selecionar meses',pl:'Wybierz miesiące',nl:'Maanden selecteren',ro:'Selectează lunile',el:'Επιλογή μηνών'},
+    'Includi Categorie':{en:'Include categories',es:'Incluir categorías',fr:'Inclure les catégories',de:'Kategorien einschließen',pt:'Incluir categorias',pl:'Uwzględnij kategorie',nl:'Categorieën opnemen',ro:'Include categorii',el:'Συμπερίληψη κατηγοριών'},
+    'Escludi Categorie':{en:'Exclude categories',es:'Excluir categorías',fr:'Exclure les catégories',de:'Kategorien ausschließen',pt:'Excluir categorias',pl:'Wyklucz kategorie',nl:'Categorieën uitsluiten',ro:'Exclude categorii',el:'Εξαίρεση κατηγοριών'},
+    'Categorie Uscite':{en:'Expense categories',es:'Categorías de gastos',fr:'Catégories de dépenses',de:'Ausgabenkategorien',pt:'Categorias de despesas',pl:'Kategorie wydatków',nl:'Uitgavencategorieën',ro:'Categorii cheltuieli',el:'Κατηγορίες εξόδων'},
+    'Categorie Entrate':{en:'Income categories',es:'Categorías de ingresos',fr:'Catégories de revenus',de:'Einnahmekategorien',pt:'Categorias de receitas',pl:'Kategorie przychodów',nl:'Inkomstencategorieën',ro:'Categorii venituri',el:'Κατηγορίες εσόδων'},
+    'Metodo di pagamento':{en:'Payment method',es:'Método de pago',fr:'Mode de paiement',de:'Zahlungsmethode',pt:'Método de pagamento',pl:'Metoda płatności',nl:'Betaalmethode',ro:'Metodă de plată',el:'Μέθοδος πληρωμής'},
+    'Pulisci metodi':{en:'Clear methods',es:'Limpiar métodos',fr:'Effacer les méthodes',de:'Methoden leeren',pt:'Limpar métodos',pl:'Wyczyść metody',nl:'Methoden wissen',ro:'Șterge metodele',el:'Εκκαθάριση μεθόδων'},
+    'Area':{en:'Area',es:'Área',fr:'Zone',de:'Bereich',pt:'Área',pl:'Obszar',nl:'Gebied',ro:'Zonă',el:'Περιοχή'},
+    'Personale':{en:'Personal',es:'Personal',fr:'Personnel',de:'Persönlich',pt:'Pessoal',pl:'Osobiste',nl:'Persoonlijk',ro:'Personal',el:'Προσωπικό'},
+    'Rubrica':{en:'Contacts',es:'Contactos',fr:'Contacts',de:'Kontakte',pt:'Contactos',pl:'Kontakty',nl:'Contacten',ro:'Contacte',el:'Επαφές'},
+    'Rubrica non disponibile su questo dispositivo.':{en:'Contacts are not available on this device.',es:'Los contactos no están disponibles en este dispositivo.',fr:'Les contacts ne sont pas disponibles sur cet appareil.',de:'Kontakte sind auf diesem Gerät nicht verfügbar.',pt:'Os contactos não estão disponíveis neste dispositivo.',pl:'Kontakty nie są dostępne na tym urządzeniu.',nl:'Contacten zijn niet beschikbaar op dit apparaat.',ro:'Contactele nu sunt disponibile pe acest dispozitiv.',el:'Οι επαφές δεν είναι διαθέσιμες σε αυτήν τη συσκευή.'},
+    'Contatto senza nome o email.':{en:'Contact without name or email.',es:'Contacto sin nombre ni email.',fr:'Contact sans nom ni email.',de:'Kontakt ohne Namen oder E-Mail.',pt:'Contacto sem nome ou email.',pl:'Kontakt bez nazwy lub adresu e-mail.',nl:'Contact zonder naam of e-mail.',ro:'Contact fără nume sau email.',el:'Επαφή χωρίς όνομα ή email.'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance - rubrica nativa, filtri importo e testi popup Ordina/Filtra.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Da rubrica':{en:'From contacts',es:'Desde contactos',fr:'Depuis les contacts',de:'Aus Kontakten',pt:'Dos contactos',pl:'Z kontaktów',nl:'Uit contacten',ro:'Din contacte',el:'Από επαφές'},
+    'Persona Esterna':{en:'External person',es:'Persona externa',fr:'Personne externe',de:'Externe Person',pt:'Pessoa externa',pl:'Osoba zewnętrzna',nl:'Externe persoon',ro:'Persoană externă',el:'Εξωτερικό άτομο'},
+    'Importo':{en:'Amount',es:'Importe',fr:'Montant',de:'Betrag',pt:'Valor',pl:'Kwota',nl:'Bedrag',ro:'Sumă',el:'Ποσό'},
+    'Importo Superiore a':{en:'Amount greater than',es:'Importe superior a',fr:'Montant supérieur à',de:'Betrag größer als',pt:'Valor superior a',pl:'Kwota większa niż',nl:'Bedrag hoger dan',ro:'Sumă mai mare decât',el:'Ποσό μεγαλύτερο από'},
+    'Importo Inferiore a':{en:'Amount lower than',es:'Importe inferior a',fr:'Montant inférieur à',de:'Betrag kleiner als',pt:'Valor inferior a',pl:'Kwota mniejsza niż',nl:'Bedrag lager dan',ro:'Sumă mai mică decât',el:'Ποσό μικρότερο από'},
+    'Categorie':{en:'Categories',es:'Categorías',fr:'Catégories',de:'Kategorien',pt:'Categorias',pl:'Kategorie',nl:'Categorieën',ro:'Categorii',el:'Κατηγορίες'},
+    'Categoria':{en:'Category',es:'Categoría',fr:'Catégorie',de:'Kategorie',pt:'Categoria',pl:'Kategoria',nl:'Categorie',ro:'Categorie',el:'Κατηγορία'},
+    'Data da':{en:'Date from',es:'Fecha desde',fr:'Date de début',de:'Datum von',pt:'Data de',pl:'Data od',nl:'Datum vanaf',ro:'Data de la',el:'Ημερομηνία από'},
+    'Data a':{en:'Date to',es:'Fecha hasta',fr:'Date de fin',de:'Datum bis',pt:'Data até',pl:'Data do',nl:'Datum tot',ro:'Data până la',el:'Ημερομηνία έως'},
+    'Mese corrente':{en:'Current month',es:'Mes actual',fr:'Mois en cours',de:'Aktueller Monat',pt:'Mês atual',pl:'Bieżący miesiąc',nl:'Huidige maand',ro:'Luna curentă',el:'Τρέχων μήνας'},
+    'Ultimi 30 giorni':{en:'Last 30 days',es:'Últimos 30 días',fr:'30 derniers jours',de:'Letzte 30 Tage',pt:'Últimos 30 dias',pl:'Ostatnie 30 dni',nl:'Laatste 30 dagen',ro:'Ultimele 30 de zile',el:'Τελευταίες 30 ημέρες'},
+    'Crescente':{en:'Ascending',es:'Ascendente',fr:'Croissant',de:'Aufsteigend',pt:'Crescente',pl:'Rosnąco',nl:'Oplopend',ro:'Crescător',el:'Αύξουσα'},
+    'Decrescente':{en:'Descending',es:'Descendente',fr:'Décroissant',de:'Absteigend',pt:'Decrescente',pl:'Malejąco',nl:'Aflopend',ro:'Descrescător',el:'Φθίνουσα'},
+    'Filtra per':{en:'Filter by',es:'Filtrar por',fr:'Filtrer par',de:'Filtern nach',pt:'Filtrar por',pl:'Filtruj według',nl:'Filteren op',ro:'Filtrează după',el:'Φιλτράρισμα κατά'},
+    'Ordina per':{en:'Sort by',es:'Ordenar por',fr:'Trier par',de:'Sortieren nach',pt:'Ordenar por',pl:'Sortuj według',nl:'Sorteren op',ro:'Sortează după',el:'Ταξινόμηση κατά'},
+    'E poi per':{en:'And then by',es:'Y luego por',fr:'Puis par',de:'Und dann nach',pt:'E depois por',pl:'A potem według',nl:'En daarna op',ro:'Și apoi după',el:'Και μετά κατά'},
+    'Scrivi il numero del contatto da usare':{en:'Type the number of the contact to use',es:'Escribe el número del contacto que quieres usar',fr:'Saisis le numéro du contact à utiliser',de:'Gib die Nummer des zu verwendenden Kontakts ein',pt:'Escreve o número do contacto a usar',pl:'Wpisz numer kontaktu do użycia',nl:'Typ het nummer van het contact dat je wilt gebruiken',ro:'Scrie numărul contactului de folosit',el:'Γράψε τον αριθμό της επαφής που θέλεις να χρησιμοποιήσεις'},
+    'Rubrica non disponibile. Inserisci il titolare manualmente.':{en:'Contacts are not available. Enter the holder manually.',es:'Los contactos no están disponibles. Introduce el titular manualmente.',fr:'Les contacts ne sont pas disponibles. Saisis le titulaire manuellement.',de:'Kontakte sind nicht verfügbar. Gib den Inhaber manuell ein.',pt:'Os contactos não estão disponíveis. Introduz o titular manualmente.',pl:'Kontakty nie są dostępne. Wpisz właściciela ręcznie.',nl:'Contacten zijn niet beschikbaar. Voer de houder handmatig in.',ro:'Contactele nu sunt disponibile. Introdu titularul manual.',el:'Οι επαφές δεν είναι διαθέσιμες. Εισήγαγε τον κάτοχο χειροκίνητα.'},
+    'Impossibile leggere la rubrica. Inserisci il titolare manualmente.':{en:'Unable to read contacts. Enter the holder manually.',es:'No se puede leer la agenda. Introduce el titular manualmente.',fr:'Impossible de lire les contacts. Saisis le titulaire manuellement.',de:'Kontakte können nicht gelesen werden. Gib den Inhaber manuell ein.',pt:'Não foi possível ler os contactos. Introduz o titular manualmente.',pl:'Nie można odczytać kontaktów. Wpisz właściciela ręcznie.',nl:'Kan contacten niet lezen. Voer de houder handmatig in.',ro:'Nu se pot citi contactele. Introdu titularul manual.',el:'Δεν είναι δυνατή η ανάγνωση επαφών. Εισήγαγε τον κάτοχο χειροκίνητα.'},
+    'Partecipante già presente':{en:'Participant already present',es:'Participante ya presente',fr:'Participant déjà présent',de:'Teilnehmer bereits vorhanden',pt:'Participante já presente',pl:'Uczestnik już istnieje',nl:'Deelnemer al aanwezig',ro:'Participant deja prezent',el:'Ο συμμετέχων υπάρχει ήδη'},
+    'Contatto importato dalla rubrica':{en:'Contact imported from contacts',es:'Contacto importado desde contactos',fr:'Contact importé depuis les contacts',de:'Kontakt aus Kontakten importiert',pt:'Contacto importado dos contactos',pl:'Kontakt zaimportowany z kontaktów',nl:'Contact geïmporteerd uit contacten',ro:'Contact importat din agendă',el:'Η επαφή εισήχθη από τις επαφές'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance - recovery PIN, rubrica e filtri importo: traduzioni aggiuntive.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'PIN dimenticato? Usa un altro metodo':{en:'Forgot PIN? Use another method',es:'¿Olvidaste el PIN? Usa otro método',fr:'PIN oublié ? Utilise une autre méthode',de:'PIN vergessen? Andere Methode verwenden',pt:'Esqueceste o PIN? Usa outro método',pl:'Nie pamiętasz PIN-u? Użyj innej metody',nl:'PIN vergeten? Gebruik een andere methode',ro:'Ai uitat PIN-ul? Folosește altă metodă',el:'Ξέχασες το PIN; Χρησιμοποίησε άλλη μέθοδο'},
+    'Se non ricordi il PIN, sblocca con biometria o password account e poi imposta un nuovo PIN in Sicurezza.':{en:'If you do not remember the PIN, unlock with biometrics or your account password, then set a new PIN in Security.',es:'Si no recuerdas el PIN, desbloquea con biometría o contraseña de la cuenta y luego configura un nuevo PIN en Seguridad.',fr:'Si tu ne te souviens pas du PIN, déverrouille avec la biométrie ou le mot de passe du compte, puis définis un nouveau PIN dans Sécurité.',de:'Wenn du die PIN nicht mehr weißt, entsperre mit Biometrie oder Kontopasswort und lege dann unter Sicherheit eine neue PIN fest.',pt:'Se não te lembrares do PIN, desbloqueia com biometria ou palavra-passe da conta e depois define um novo PIN em Segurança.',pl:'Jeśli nie pamiętasz PIN-u, odblokuj biometrią lub hasłem konta, a potem ustaw nowy PIN w Zabezpieczeniach.',nl:'Als je de PIN niet meer weet, ontgrendel met biometrie of je accountwachtwoord en stel daarna een nieuwe PIN in bij Beveiliging.',ro:'Dacă nu îți amintești PIN-ul, deblochează cu biometrie sau parola contului, apoi setează un PIN nou în Securitate.',el:'Αν δεν θυμάσαι το PIN, ξεκλείδωσε με βιομετρικά ή κωδικό λογαριασμού και μετά όρισε νέο PIN στην Ασφάλεια.'},
+    'PIN non configurato. Puoi sbloccare con biometria o password account e poi impostare un nuovo PIN.':{en:'PIN not configured. You can unlock with biometrics or account password and then set a new PIN.',es:'PIN no configurado. Puedes desbloquear con biometría o contraseña de la cuenta y luego configurar un nuevo PIN.',fr:'PIN non configuré. Tu peux déverrouiller avec la biométrie ou le mot de passe du compte, puis définir un nouveau PIN.',de:'PIN nicht eingerichtet. Du kannst mit Biometrie oder Kontopasswort entsperren und danach eine neue PIN festlegen.',pt:'PIN não configurado. Podes desbloquear com biometria ou palavra-passe da conta e depois definir um novo PIN.',pl:'PIN nie jest skonfigurowany. Możesz odblokować biometrią lub hasłem konta, a potem ustawić nowy PIN.',nl:'PIN niet ingesteld. Je kunt ontgrendelen met biometrie of accountwachtwoord en daarna een nieuwe PIN instellen.',ro:'PIN neconfigurat. Poți debloca prin biometrie sau parola contului și apoi poți seta un PIN nou.',el:'Το PIN δεν έχει ρυθμιστεί. Μπορείς να ξεκλειδώσεις με βιομετρικά ή κωδικό λογαριασμού και μετά να ορίσεις νέο PIN.'},
+    'Importo esatto':{en:'Exact amount',es:'Importe exacto',fr:'Montant exact',de:'Genauer Betrag',pt:'Valor exato',pl:'Dokładna kwota',nl:'Exact bedrag',ro:'Sumă exactă',el:'Ακριβές ποσό'},
+    'Da':{en:'From',es:'Desde',fr:'De',de:'Von',pt:'De',pl:'Od',nl:'Van',ro:'De la',el:'Από'},
+    'A':{en:'To',es:'A',fr:'À',de:'Bis',pt:'A',pl:'Do',nl:'Tot',ro:'Până la',el:'Έως'},
+    'Cerca nella rubrica':{en:'Search contacts',es:'Buscar en contactos',fr:'Chercher dans les contacts',de:'In Kontakten suchen',pt:'Procurar nos contactos',pl:'Szukaj w kontaktach',nl:'Zoeken in contacten',ro:'Caută în contacte',el:'Αναζήτηση στις επαφές'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Da Rubrica',{it:'Da Rubrica',en:'From contacts',es:'Desde contactos',fr:'Depuis les contacts',de:'Aus Kontakten',pt:'Dos contactos',pl:'Z kontaktów',nl:'Uit contacten',ro:'Din contacte',el:'Από επαφές'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance - testi rubrica nativa e permessi contatti.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Nessun contatto selezionato.',{en:'No contact selected.',es:'No se seleccionó ningún contacto.',fr:'Aucun contact sélectionné.',de:'Kein Kontakt ausgewählt.',pt:'Nenhum contacto selecionado.',pl:'Nie wybrano kontaktu.',nl:'Geen contact geselecteerd.',ro:'Niciun contact selectat.',el:'Δεν επιλέχθηκε επαφή.'});
+  add("Impossibile aprire la rubrica. Controlla i permessi contatti nelle impostazioni Android dell'app.",{en:'Unable to open contacts. Check contact permissions in the Android app settings.',es:'No se puede abrir la agenda. Comprueba los permisos de contactos en los ajustes de Android de la app.',fr:'Impossible d’ouvrir les contacts. Vérifie les autorisations de contacts dans les réglages Android de l’app.',de:'Kontakte können nicht geöffnet werden. Prüfe die Kontaktberechtigungen in den Android-App-Einstellungen.',pt:'Não foi possível abrir os contactos. Verifica as permissões de contactos nas definições Android da app.',pl:'Nie można otworzyć kontaktów. Sprawdź uprawnienia kontaktów w ustawieniach aplikacji Android.',nl:'Kan contacten niet openen. Controleer de contactmachtigingen in de Android-appinstellingen.',ro:'Nu se pot deschide contactele. Verifică permisiunile pentru contacte în setările Android ale aplicației.',el:'Δεν είναι δυνατό το άνοιγμα των επαφών. Έλεγξε τα δικαιώματα επαφών στις ρυθμίσεις Android της εφαρμογής.'});
+  add('Permesso rubrica non concesso.',{en:'Contacts permission not granted.',es:'Permiso de contactos no concedido.',fr:'Autorisation des contacts non accordée.',de:'Kontaktberechtigung nicht erteilt.',pt:'Permissão de contactos não concedida.',pl:'Nie przyznano uprawnienia do kontaktów.',nl:'Contactmachtiging niet verleend.',ro:'Permisiunea pentru contacte nu a fost acordată.',el:'Δεν δόθηκε άδεια επαφών.'});
+  add('Seleziona contatto',{en:'Select contact',es:'Selecciona contacto',fr:'Sélectionner un contact',de:'Kontakt auswählen',pt:'Selecionar contacto',pl:'Wybierz kontakt',nl:'Contact selecteren',ro:'Selectează contactul',el:'Επιλογή επαφής'});
+  add('Cerca contatto',{en:'Search contact',es:'Buscar contacto',fr:'Rechercher un contact',de:'Kontakt suchen',pt:'Procurar contacto',pl:'Szukaj kontaktu',nl:'Contact zoeken',ro:'Caută contact',el:'Αναζήτηση επαφής'});
+  add('Nessun contatto trovato',{en:'No contact found',es:'No se encontró ningún contacto',fr:'Aucun contact trouvé',de:'Kein Kontakt gefunden',pt:'Nenhum contacto encontrado',pl:'Nie znaleziono kontaktu',nl:'Geen contact gevonden',ro:'Nu s-a găsit niciun contact',el:'Δεν βρέθηκε επαφή'});
+  add('Contatto',{en:'Contact',es:'Contacto',fr:'Contact',de:'Kontakt',pt:'Contacto',pl:'Kontakt',nl:'Contact',ro:'Contact',el:'Επαφή'});
+  add('Completo gratuito',{en:'Free Premium',es:'Premium gratuito',fr:'Premium gratuit',de:'Kostenloses Premium',pt:'Premium gratuito',pl:'Darmowy Premium',nl:'Gratis Premium',ro:'Premium gratuit',el:'Δωρεάν Premium'});
+  add('Invito Share inviato correttamente.',{en:'Share invitation sent successfully.',es:'Invitación Share enviada correctamente.',fr:'Invitation Share envoyée correctement.',de:'Share-Einladung erfolgreich gesendet.',pt:'Convite Share enviado corretamente.',pl:'Zaproszenie Share wysłane poprawnie.',nl:'Share-uitnodiging succesvol verzonden.',ro:'Invitația Share a fost trimisă corect.',el:'Η πρόσκληση Share στάλθηκε επιτυχώς.'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance - fix statistiche ultimi 12 mesi e import con progresso.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Ultimi 12 mesi':{en:'Last 12 months',es:'Últimos 12 meses',fr:'12 derniers mois',de:'Letzte 12 Monate',pt:'Últimos 12 meses',pl:'Ostatnie 12 miesięcy',nl:'Laatste 12 maanden',ro:'Ultimele 12 luni',el:'Τελευταίοι 12 μήνες'},
+    'Caricamento file':{en:'Loading file',es:'Cargando archivo',fr:'Chargement du fichier',de:'Datei wird geladen',pt:'A carregar ficheiro',pl:'Ładowanie pliku',nl:'Bestand laden',ro:'Se încarcă fișierul',el:'Φόρτωση αρχείου'},
+    'Lettura file':{en:'Reading file',es:'Leyendo archivo',fr:'Lecture du fichier',de:'Datei wird gelesen',pt:'A ler ficheiro',pl:'Odczytywanie pliku',nl:'Bestand lezen',ro:'Se citește fișierul',el:'Ανάγνωση αρχείου'},
+    'Analisi file':{en:'Analyzing file',es:'Analizando archivo',fr:'Analyse du fichier',de:'Datei wird analysiert',pt:'A analisar ficheiro',pl:'Analiza pliku',nl:'Bestand analyseren',ro:'Se analizează fișierul',el:'Ανάλυση αρχείου'},
+    'Preparazione colonne':{en:'Preparing columns',es:'Preparando columnas',fr:'Préparation des colonnes',de:'Spalten werden vorbereitet',pt:'A preparar colunas',pl:'Przygotowywanie kolumn',nl:'Kolommen voorbereiden',ro:'Se pregătesc coloanele',el:'Προετοιμασία στηλών'},
+    'File caricato':{en:'File loaded',es:'Archivo cargado',fr:'Fichier chargé',de:'Datei geladen',pt:'Ficheiro carregado',pl:'Plik załadowany',nl:'Bestand geladen',ro:'Fișier încărcat',el:'Το αρχείο φορτώθηκε'},
+    'Errore durante la lettura del file.':{en:'Error while reading the file.',es:'Error al leer el archivo.',fr:'Erreur pendant la lecture du fichier.',de:'Fehler beim Lesen der Datei.',pt:'Erro ao ler o ficheiro.',pl:'Błąd podczas odczytu pliku.',nl:'Fout bij het lezen van het bestand.',ro:'Eroare la citirea fișierului.',el:'Σφάλμα κατά την ανάγνωση του αρχείου.'},
+    "Errore durante l'analisi del file Excel.":{en:'Error while analyzing the Excel file.',es:'Error al analizar el archivo Excel.',fr:'Erreur pendant l’analyse du fichier Excel.',de:'Fehler beim Analysieren der Excel-Datei.',pt:'Erro ao analisar o ficheiro Excel.',pl:'Błąd podczas analizy pliku Excel.',nl:'Fout bij het analyseren van het Excel-bestand.',ro:'Eroare la analiza fișierului Excel.',el:'Σφάλμα κατά την ανάλυση του αρχείου Excel.'},
+    'Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova.':{en:'Unsupported Excel format. Save the file as .xlsx or CSV and try again.',es:'Formato Excel no compatible. Guarda el archivo como .xlsx o CSV e inténtalo de nuevo.',fr:'Format Excel non pris en charge. Enregistre le fichier en .xlsx ou CSV puis réessaie.',de:'Nicht unterstütztes Excel-Format. Speichere die Datei als .xlsx oder CSV und versuche es erneut.',pt:'Formato Excel não suportado. Guarda o ficheiro como .xlsx ou CSV e tenta novamente.',pl:'Nieobsługiwany format Excela. Zapisz plik jako .xlsx albo CSV i spróbuj ponownie.',nl:'Niet-ondersteund Excel-formaat. Sla het bestand op als .xlsx of CSV en probeer opnieuw.',ro:'Format Excel neacceptat. Salvează fișierul ca .xlsx sau CSV și încearcă din nou.',el:'Μη υποστηριζόμενη μορφή Excel. Αποθηκεύστε το αρχείο ως .xlsx ή CSV και δοκιμάστε ξανά.'}
   };
   Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
   try{fainanceTranslationCache={};}catch(e){}
