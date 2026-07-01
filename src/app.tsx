@@ -786,12 +786,52 @@ function AppWithLogin(){
   async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
+  var manualLoginRef=useRef(null);
 
   function minimalProfileFromUser(user){
     var normalizedEmail=String((user&&user.email)||"").toLowerCase();
     return {id:user&&user.uid?user.uid:"",email:normalizedEmail,name:(user&&user.displayName)||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};
   }
   function syntheticFirebaseUser(u){return {uid:u&&u.id?u.id:"",email:u&&u.email?u.email:"",displayName:u&&u.name?u.name:"Utente"};}
+  function hasMeaningfulUserDataDoc(d){
+    if(!d||typeof d!=="object")return false;
+    var arrayKeys=["expenses","incomes","recurring","goals","alerts","shareProjects","debtCredits","shoppingCards","shoppingItems","appuntiDocuments","appuntiNotes","bankCoords"];
+    for(var i=0;i<arrayKeys.length;i++){var v=d[arrayKeys[i]];if(Array.isArray(v)&&v.length>0)return true;}
+    var objectKeys=["patrimonioValues","patrimonioHistory","patrimonioNotes","budgetPlan"];
+    for(var j=0;j<objectKeys.length;j++){var o=d[objectKeys[j]];if(o&&typeof o==="object"&&!Array.isArray(o)&&Object.keys(o).length>0)return true;}
+    return false;
+  }
+  async function findLegacyUserDataByEmail(email,currentUid){
+    var cleanEmail=String(email||"").trim().toLowerCase();
+    if(!cleanEmail)return null;
+    try{
+      var found=await getDocs(query(collection(fbDb,"users"),where("email","==",cleanEmail),limit(10)));
+      if(!found||!found.docs||!found.docs.length)return null;
+      for(var i=0;i<found.docs.length;i++){
+        var oldUid=found.docs[i].id;
+        if(!oldUid||String(oldUid)===String(currentUid))continue;
+        try{
+          var oldSnap=await getDoc(doc(fbDb,"userData",oldUid));
+          if(oldSnap.exists()){
+            var oldData=oldSnap.data();
+            if(hasMeaningfulUserDataDoc(oldData))return {uid:oldUid,data:oldData};
+          }
+        }catch(readErr){}
+      }
+    }catch(err){console.warn("Legacy user data lookup failed",(err&&err.code)||"unknown");}
+    return null;
+  }
+  function acceptLoginPayload(u){
+    var synthetic=syntheticFirebaseUser(u);
+    var profile={id:synthetic.uid,email:String(synthetic.email||"").toLowerCase(),name:synthetic.displayName||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};
+    manualLoginRef.current={uid:synthetic.uid,email:profile.email,name:profile.name,ts:Date.now()};
+    setUserData(profile);
+    setFbUser(synthetic);
+    setTimeout(function(){
+      var pending=manualLoginRef.current;
+      if(pending&&String(pending.uid)===String(synthetic.uid))manualLoginRef.current=null;
+    },15000);
+  }
   function applyAuthenticatedUser(user){
     if(!user){setFbUser(null);setUserData(null);return;}
     var minimal=minimalProfileFromUser(user);
@@ -811,19 +851,33 @@ function AppWithLogin(){
 
   useEffect(function(){
     var settled=false;
+    function pendingManualLogin(){
+      var pending=manualLoginRef.current;
+      return pending&&Date.now()-Number(pending.ts||0)<15000?pending:null;
+    }
+    function resolveAuthState(user){
+      if(user){manualLoginRef.current=null;applyAuthenticatedUser(user);return;}
+      var current=fbAuth.currentUser;
+      if(current){manualLoginRef.current=null;applyAuthenticatedUser(current);return;}
+      var pending=pendingManualLogin();
+      if(pending){
+        setFbUser({uid:pending.uid,email:pending.email,displayName:pending.name||"Utente"});
+        setUserData(function(prev){return prev||{id:pending.uid,email:pending.email,name:pending.name||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""};});
+        return;
+      }
+      setFbUser(null);setUserData(null);
+    }
     var fallbackTimer=setTimeout(function(){
       if(settled)return;
       settled=true;
-      var current=fbAuth.currentUser;
-      if(current)applyAuthenticatedUser(current);else{setFbUser(null);setUserData(null);}
+      resolveAuthState(fbAuth.currentUser);
     },6000);
     var unsub=onAuthStateChanged(fbAuth,function(user){
       if(!settled){settled=true;clearTimeout(fallbackTimer);}
-      applyAuthenticatedUser(user);
+      resolveAuthState(user);
     },function(){
       if(!settled){settled=true;clearTimeout(fallbackTimer);}
-      var current=fbAuth.currentUser;
-      if(current)applyAuthenticatedUser(current);else{setFbUser(null);setUserData(null);}
+      resolveAuthState(fbAuth.currentUser);
     });
     return function(){clearTimeout(fallbackTimer);try{unsub&&unsub();}catch(e){}};
   },[]);
@@ -848,7 +902,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){var synthetic=syntheticFirebaseUser(u);setUserData({id:synthetic.uid,email:String(synthetic.email||"").toLowerCase(),name:synthetic.displayName||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});setFbUser(synthetic);}}/>;
+  if(!fbUser)return <LoginScreen onLogin={acceptLoginPayload}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
@@ -1121,9 +1175,16 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     setAppuntiDocuments([]);setAppuntiNotes([]);setBankCoords([]);setAiDismissed([]);setAiChat([]);setShareProjects([]);setDebtCredits([]);setShoppingCards([]);setShoppingItems([]);setShareReceiptUploads([]);setCustomNotifs([]);setPlanUsage({});setShownAlertIds([]);
     // Load data from Firestore before enabling the UI, so one account can never inherit local data from another account.
     var docRef=doc(fbDb,"userData",userId);
-    getDoc(docRef).then(function(snap){
-      if(snap.exists()){
-        var d=snap.data();
+    getDoc(docRef).then(async function(snap){
+      var d=snap.exists()?snap.data():null;
+      if(!hasMeaningfulUserDataDoc(d)){
+        var legacy=await findLegacyUserDataByEmail(currentUser&&currentUser.email,userId);
+        if(legacy&&legacy.data){
+          d={...legacy.data,migratedFromUid:legacy.uid,migratedAt:new Date().toISOString()};
+          try{await setDoc(docRef,d,{merge:true});}catch(copyErr){console.warn("Legacy user data copy failed",(copyErr&&copyErr.code)||"unknown");}
+        }
+      }
+      if(d){
         setExpenses(Array.isArray(d.expenses)?d.expenses:[]);
         setIncomes(Array.isArray(d.incomes)?d.incomes:[]);
         (function(){var cloudTs=Number(d.catsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}var cloudCats=Array.isArray(d.cats)?d.cats:null;if(localTs>cloudTs&&Array.isArray(cats)&&cats.length>0){setCats(cats);}else{setCats(chooseCloudLocalArray(cloudCats,cats,DEFAULT_CATS,false));}})();
