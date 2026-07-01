@@ -409,7 +409,7 @@ function LoginScreen({onLogin}){
   async function doLogin(){
     setError("");setLoading(true);
     try{
-      var cred:any=await fainancePromiseTimeout(signInWithEmailAndPassword(fbAuth,email,password),20000,"Timeout accesso email/password.");
+      var cred:any=await signInWithEmailAndPassword(fbAuth,email,password);
       onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"},cred.user);
     }catch(err:any){
       setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+(err&&err.message?err.message:String(err)));
@@ -425,7 +425,7 @@ function LoginScreen({onLogin}){
     if(password!==confirmPwd){setError(L("Le password non coincidono."));return;}
     setLoading(true);
     try{
-      var cred:any=await fainancePromiseTimeout(createUserWithEmailAndPassword(fbAuth,email,password),20000,"Timeout creazione account.");
+      var cred:any=await createUserWithEmailAndPassword(fbAuth,email,password);
       try{await fainancePromiseTimeout(setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:String(email||"").toLowerCase(),createdAt:new Date().toISOString()},{merge:true}),7000,"Timeout salvataggio profilo.");}catch(saveErr){}
       onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()},cred.user);
     }catch(err:any){
@@ -444,7 +444,7 @@ function LoginScreen({onLogin}){
         if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithGoogle){throw new Error("Google login non disponibile nel plugin di autenticazione installato.");}
         async function nativeGoogleAttempt(resetFirst){
           if(resetFirst&&FirebaseAuthentication.signOut){try{await FirebaseAuthentication.signOut();}catch(e){}}
-          return await fainancePromiseTimeout(FirebaseAuthentication.signInWithGoogle({scopes:["email","profile"],skipNativeAuth:true,customParameters:[{key:"prompt",value:"select_account"}]}),30000,"Timeout login Google nativo.");
+          return await FirebaseAuthentication.signInWithGoogle({scopes:["email","profile"],skipNativeAuth:true,customParameters:[{key:"prompt",value:"select_account"}]});
         }
         var result:any=null;
         try{
@@ -462,12 +462,12 @@ function LoginScreen({onLogin}){
         const accessToken=credData.accessToken||credData.access_token||"";
         if(!idToken&&!accessToken) throw new Error("Google login non ha restituito token utilizzabili.");
         const credential = GoogleAuthProvider.credential(idToken||null, accessToken||null);
-        const cred:any = await fainancePromiseTimeout(signInWithCredential(fbAuth, credential),20000,"Timeout accesso Firebase con Google.");
+        const cred:any = await signInWithCredential(fbAuth, credential);
         onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
         return;
       }
       googleProvider.setCustomParameters({prompt:"select_account"});
-      const cred:any = await fainancePromiseTimeout(signInWithPopup(fbAuth, googleProvider),60000,"Timeout popup Google.");
+      const cred:any = await signInWithPopup(fbAuth, googleProvider);
       onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
     } catch(err:any){
       console.error("Google login error",(err&&err.code)||"unknown");
@@ -475,8 +475,8 @@ function LoginScreen({onLogin}){
       var code=(err&&err.code)||"unknown";
       if(msg.toLowerCase().indexOf("no credentials")>=0){
         setError(L("Errore Google: nessuna credenziale Google disponibile sul dispositivo. Riprova dopo aver selezionato un account Google nel popup."));
-      }else if(msg.toLowerCase().indexOf("timeout")>=0){
-        setError(L("Errore Google: accesso scaduto. Riprova."));
+      }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
+        setError(L("Accesso Google annullato."));
       }else{
         setError(L("Errore Google: ")+code+" - "+msg);
       }
@@ -494,27 +494,21 @@ function LoginScreen({onLogin}){
         if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithApple){
           throw new Error("Sign in with Apple non disponibile nel plugin di autenticazione installato.");
         }
-        const result:any = await fainancePromiseTimeout(FirebaseAuthentication.signInWithApple({
+        const result:any = await FirebaseAuthentication.signInWithApple({
           scopes:["email","name"],
           skipNativeAuth:true,
           customParameters:[{key:"locale",value:loginLang()}]
-        }),30000,"Timeout login Apple nativo.");
+        });
         const credData=(result&&result.credential)||result||{};
         const idToken=credData.idToken||credData.id_token||credData.identityToken||credData.identity_token||"";
         const accessToken=credData.accessToken||credData.access_token||"";
         const rawNonce=credData.rawNonce||credData.raw_nonce||credData.nonce||"";
         if(!idToken){
-          var nativeUser=(result&&result.user)||{};
-          var jsUser=fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null;
-          if(nativeUser&&nativeUser.uid&&jsUser&&jsUser.uid===nativeUser.uid){
-            onLogin({id:jsUser.uid,email:jsUser.email||nativeUser.email||"",name:jsUser.displayName||nativeUser.displayName||nativeUser.name||"Utente"},jsUser);
-            return;
-          }
           throw new Error("Apple login non ha restituito identity token utilizzabile. Verifica provider Apple in Firebase Authentication e configurazione Sign in with Apple.");
         }
         const provider = new OAuthProvider("apple.com");
         const credential = provider.credential(rawNonce?{idToken:idToken,rawNonce:rawNonce,accessToken:accessToken||undefined}:{idToken:idToken,accessToken:accessToken||undefined});
-        const cred:any = await fainancePromiseTimeout(signInWithCredential(fbAuth, credential),20000,"Timeout accesso Firebase con Apple.");
+        const cred:any = await signInWithCredential(fbAuth, credential);
         try{
           var appleName=(cred.user.displayName||"").trim();
           if(cred.user.uid){
@@ -532,7 +526,7 @@ function LoginScreen({onLogin}){
       provider.addScope("email");
       provider.addScope("name");
       provider.setCustomParameters({locale:loginLang()});
-      const cred:any = await fainancePromiseTimeout(signInWithPopup(fbAuth, provider),60000,"Timeout popup Apple.");
+      const cred:any = await signInWithPopup(fbAuth, provider);
       try{
         if(cred.user&&cred.user.uid){
           var refWeb=doc(fbDb,"users",cred.user.uid);
@@ -553,8 +547,6 @@ function LoginScreen({onLogin}){
         setError(L("Esiste già un account con questa email. Accedi con il metodo usato in precedenza."));
       }else if(msg.toLowerCase().indexOf("cancel")>=0||code==="auth/cancelled-popup-request"||code==="auth/popup-closed-by-user"){
         setError(L("Accesso Apple annullato."));
-      }else if(msg.toLowerCase().indexOf("timeout")>=0){
-        setError(L("Errore Apple: accesso scaduto. Riprova."));
       }else{
         setError(L("Errore Apple: ")+code+" - "+msg);
       }

@@ -10,8 +10,8 @@ import appBanner from "../assets/splash.png";
 import aiGrilloMascot from "../assets/ai_grillo_mascot_transparent.png";
 export { appLogo, appBanner, aiGrilloMascot };
 import { initializeApp } from "firebase/app";
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser } from "firebase/auth";
-export { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser };
+import { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser } from "firebase/auth";
+export { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser };
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, query, where, limit, getDocs, addDoc } from "firebase/firestore";
 export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, query, where, limit, getDocs, addDoc };
 
@@ -25,7 +25,16 @@ export const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 export const firebaseApp = initializeApp(firebaseConfig);
-export const fbAuth = getAuth(firebaseApp);
+function createFainanceAuth(){
+  try{
+    // Su iOS/WKWebView evitiamo la persistenza predefinita di Firebase Auth,
+    // che può bloccarsi durante l'inizializzazione e lasciare login/onAuthStateChanged sospesi.
+    return initializeAuth(firebaseApp,{persistence:browserLocalPersistence});
+  }catch(e){
+    return getAuth(firebaseApp);
+  }
+}
+export const fbAuth = createFainanceAuth();
 export const fbDb = getFirestore(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
 export const AI_AGENT_ENDPOINT = "https://europe-west1-fainance-a7794.cloudfunctions.net/askFinanceAI";
