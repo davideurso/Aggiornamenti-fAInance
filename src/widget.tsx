@@ -21,7 +21,7 @@ import { TRANSLATIONS, translateFainanceText } from './traduzioni';
 const GOOGLE_PICKER_CLIENT_ID = '739607555867-i5uhrj1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com';
 const GOOGLE_PICKER_API_KEY = 'AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno';
 const GOOGLE_PICKER_APP_ID = '739607555867';
-const GOOGLE_PICKER_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const GOOGLE_PICKER_SCOPE = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly';
 var FAINANCE_GOOGLE_PICKER_TOKEN = '';
 var FAINANCE_GOOGLE_SCRIPT_PROMISES:any = {};
 
@@ -831,9 +831,23 @@ export function BudgetPlanPanel(){
   </div>;
 }
 
-export function SettingsList({items,setItems,label,showGroup,showIcon,groupList,isMethod,allowArchive}){var ctx=useApp();function L(v){return translateFainanceText(v,(ctx&&ctx.lang)||"it");}var t=ctx.t,dark=ctx.dark,isMobile=ctx.isMobile;var expenses=ctx.expenses||[],incomes=ctx.incomes||[],recurring=ctx.recurring||[],budgetPlan=ctx.budgetPlan||{};var gl=groupList||[];var [newName,setNewName]=useState("");var [newColor,setNewColor]=useState(COLORS[0]);var [newGroup,setNewGroup]=useState(gl[0]?gl[0].id:"");var [newIcon,setNewIcon]=useState("📦");var [editId,setEditId]=useState(null);var [editName,setEditName]=useState("");var [editColor,setEditColor]=useState("");var [editGroup,setEditGroup]=useState(gl[0]?gl[0].id:"");var [editIcon,setEditIcon]=useState("📦");var [sortMode,setSortMode]=useState("group");var dragIdx=useRef(null);var dragOverIdx=useRef(null);var inp={width:"100%",borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"7px 10px",fontSize:14,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333"};var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";var borderC=dark?"#444":"#eee";var baseBlocked=ctx.currentPlan==="free";var setToast=ctx.setToast;function lockedWarn(){if(setToast)setToast({text:"Funzione disponibile dal piano Base.",type:"warning",color:"#EF9F27",icon:"⚠️"});}
-  function add(){if(baseBlocked){lockedWarn();return;}if(!newName.trim())return;setItems([...items,{id:Date.now(),name:newName.trim(),color:newColor,icon:newIcon,...(showGroup?{group:newGroup}:{})}]);setNewName("");}
-  function itemIsUsed(id){var sid=String(id);if(isMethod){return expenses.some(function(e){return String(e.methodId||e.method||"")===sid;})||incomes.some(function(e){return String(e.methodId||e.method||"")===sid;})||recurring.some(function(e){return String(e.methodId||e.method||"")===sid;});}return expenses.some(function(e){return String(e.catId||e.categoryId||"")===sid;})||incomes.some(function(e){return String(e.catId||e.categoryId||e.typeId||"")===sid;})||recurring.some(function(e){return String(e.catId||e.categoryId||"")===sid;})||((budgetPlan.items||[]).some(function(b){return String(b.catId||b.categoryId||"")===sid&&(Number(b.amount||0)>0||Number(b.pct||0)>0);}));}
+export function SettingsList({items,setItems,label,showGroup,showIcon,groupList,isMethod,allowArchive,usageScope}){var ctx=useApp();function L(v){return translateFainanceText(v,(ctx&&ctx.lang)||"it");}var t=ctx.t,dark=ctx.dark,isMobile=ctx.isMobile;var expenses=ctx.expenses||[],incomes=ctx.incomes||[],recurring=ctx.recurring||[];var gl=groupList||[];if(usageScope==="expenseCategory")gl=effectiveExpenseGroups(gl);var [newName,setNewName]=useState("");var [newColor,setNewColor]=useState(COLORS[0]);var [newGroup,setNewGroup]=useState(gl[0]?gl[0].id:"");var [newIcon,setNewIcon]=useState("📦");var [editId,setEditId]=useState(null);var [editName,setEditName]=useState("");var [editColor,setEditColor]=useState("");var [editGroup,setEditGroup]=useState(gl[0]?gl[0].id:"");var [editIcon,setEditIcon]=useState("📦");var [sortMode,setSortMode]=useState("group");var dragIdx=useRef(null);var dragOverIdx=useRef(null);var inp={width:"100%",borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"7px 10px",fontSize:14,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333"};var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";var borderC=dark?"#444":"#eee";var baseBlocked=ctx.currentPlan==="free";var setToast=ctx.setToast;function lockedWarn(){if(setToast)setToast({text:"Funzione disponibile dal piano Base.",type:"warning",color:"#EF9F27",icon:"⚠️"});}
+  function add(){if(baseBlocked){lockedWarn();return;}if(!newName.trim())return;var groupToSave=newGroup;if(showGroup&&usageScope==="expenseCategory"&&(!groupToSave||groupIds.indexOf(String(groupToSave))<0))groupToSave="altro";setItems([...items,{id:Date.now(),name:newName.trim(),color:newColor,icon:newIcon,...(showGroup?{group:groupToSave}:{})}]);setNewName("");}
+  function itemIsUsed(id){
+    var sid=String(id);
+    function same(v){return String(v==null?"":v)===sid;}
+    var scope=usageScope||(isMethod?"method":"generic");
+    if(scope==="method"){
+      return expenses.some(function(e){return same(e.methodId)||same(e.method);})||incomes.some(function(e){return same(e.methodId)||same(e.method);})||recurring.some(function(e){return same(e.methodId)||same(e.method);});
+    }
+    if(scope==="expenseCategory"){
+      return expenses.some(function(e){return same(e.catId)||same(e.categoryId);})||recurring.some(function(e){return String(e.rtype||"expense")!=="income"&&(same(e.catId)||same(e.categoryId));});
+    }
+    if(scope==="incomeCategory"){
+      return incomes.some(function(e){return same(e.type)||same(e.incomeType)||same(e.typeId)||same(e.catId)||same(e.categoryId);})||recurring.some(function(e){return String(e.rtype||"")==="income"&&(same(e.incomeType)||same(e.type)||same(e.typeId));});
+    }
+    return expenses.some(function(e){return same(e.catId)||same(e.categoryId);})||incomes.some(function(e){return same(e.type)||same(e.incomeType)||same(e.typeId)||same(e.catId)||same(e.categoryId);})||recurring.some(function(e){return same(e.catId)||same(e.categoryId)||same(e.incomeType)||same(e.type)||same(e.typeId);});
+  }
   function usedDeleteWarn(){var msg=L("Non puoi eliminare questa voce perché esistono già elementi associati. Archiviala invece di eliminarla.");if(setToast)setToast({text:msg,type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});else if(typeof window!=="undefined")window.alert(msg);}
   function del(id){if(baseBlocked){lockedWarn();return;}if(itemIsUsed(id)){usedDeleteWarn();return;}if(typeof window!=="undefined"&&!window.confirm(L("Confermi la cancellazione?")))return;setItems(items.filter(function(i){return i.id!==id;}));if(setToast)setToast({text:L("Cancellazione completata"),type:"success",icon:"🗑️"});}
   function startEdit(item){if(baseBlocked){lockedWarn();return;}setEditId(item.id);setEditName(item.name);setEditColor(item.color||COLORS[0]);setEditGroup(item.group||(gl[0]?gl[0].id:""));setEditIcon(item.icon||"📦");}
@@ -845,7 +859,8 @@ export function SettingsList({items,setItems,label,showGroup,showIcon,groupList,
   function onDragEnd(){dragIdx.current=null;dragOverIdx.current=null;}
   var showDrag=sortMode==="custom";
   var activeItems=showDrag?items:items.filter(function(i){return !i.archived;});
-  var grouped=showGroup&&gl.length&&!showDrag?gl.map(function(g){return{...g,items:items.filter(function(c){return c.group===g.id;})};}): [{id:"_",name:"",items:showDrag?items:items}];
+  var groupIds=(gl||[]).map(function(g){return String(g.id);});
+  var grouped=showGroup&&gl.length&&!showDrag?gl.map(function(g){return{...g,items:items.filter(function(c){var cg=String(c.group||"");return cg===String(g.id)||(usageScope==="expenseCategory"&&String(g.id)==="altro"&&(!cg||groupIds.indexOf(cg)<0));})};}): [{id:"_",name:"",items:showDrag?items:items}];
   return <div>
     
     {showDrag?<div style={{marginBottom:12}}><SortableRows items={items} onMove={function(i,dir){var j=i+dir;if(j<0||j>=items.length)return;var arr=items.slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setItems(arr);}} renderItem={function(item){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
@@ -1237,7 +1252,7 @@ export function ImportData(){
       if(!FirebaseAuthentication||!FirebaseAuthentication.signInWithGoogle)throw new Error("Autenticazione Google nativa non disponibile.");
       var promptValue=forceConsent?"consent select_account":"select_account";
       var result=await FirebaseAuthentication.signInWithGoogle({
-        scopes:["email","profile",GOOGLE_PICKER_SCOPE],
+        scopes:["email","profile"].concat(GOOGLE_PICKER_SCOPE.split(/\s+/)),
         customParameters:[{key:"prompt",value:promptValue}]
       });
       var credData=result&&result.credential?result.credential:(result&&result.user?result.user:(result||{}));
@@ -1289,6 +1304,46 @@ export function ImportData(){
     if(!res.ok){var txt="";try{txt=await res.text();}catch(e){}throw new Error(txt||("HTTP "+res.status));}
     return await res.json();
   }
+  async function googleDriveFetchBlob(url:string,token:any,retry?:boolean){
+    var res=await fetch(url,{headers:{Authorization:"Bearer "+token}});
+    if(res.status===401&&!retry){FAINANCE_GOOGLE_PICKER_TOKEN="";var google=(window as any).google;var tk=await requestGooglePickerToken(google,true);return await googleDriveFetchBlob(url,tk,true);}
+    if(!res.ok){var txt="";try{txt=await res.text();}catch(e){}throw new Error(txt||("HTTP "+res.status));}
+    return await res.arrayBuffer();
+  }
+  async function importDriveSpreadsheetFile(fileId:string,fileName:string,mimeType:string,token:any){
+    var name=String(fileName||"File Drive");
+    var mime=String(mimeType||"");
+    var id=encodeURIComponent(fileId);
+    var isGoogleSheet=/google-apps\.spreadsheet/i.test(mime);
+    if(isGoogleSheet){
+      try{await importGoogleSheetById(fileId,name,token);return;}
+      catch(sheetErr){
+        setImportProgress(name,"Esportazione Foglio Google",62);
+        var exportUrl="https://www.googleapis.com/drive/v3/files/"+id+"/export?mimeType="+encodeURIComponent("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        var exported=await googleDriveFetchBlob(exportUrl,token,false);
+        var exportedRows=await parseXLSXBuffer(exported);
+        if(!exportedRows||exportedRows.length<2)throw sheetErr;
+        applyImportedRows(exportedRows,name);return;
+      }
+    }
+    setImportProgress(name,"Download file Drive",52);
+    var mediaUrl="https://www.googleapis.com/drive/v3/files/"+id+"?alt=media";
+    var ab=await googleDriveFetchBlob(mediaUrl,token,false);
+    var lower=name.toLowerCase();
+    if(/\.csv$/.test(lower)||/csv|text\//i.test(mime)){
+      var txt=new TextDecoder("utf-8").decode(new Uint8Array(ab));
+      var parsed=parseImportedDelimitedText(txt);
+      if(!parsed||parsed.length<2){setImportLoading(null);setMsg(L("File CSV vuoto o non valido."));return;}
+      applyImportedRows(parsed,name);return;
+    }
+    if(/\.xlsx?$/.test(lower)||/spreadsheet|excel|vnd\.ms-excel/i.test(mime)){
+      var data=await parseXLSXBuffer(ab);
+      if(data&&data.__unsupported){setImportLoading(null);setMsg(L("Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."));return;}
+      if(!data||data.length<2){setImportLoading(null);setMsg(L("Nessun dato nel file Excel."));return;}
+      applyImportedRows(data,name);return;
+    }
+    setImportLoading(null);setMsg(L("Formato file non supportato. Usa un file .xlsx, .xls o .csv."));
+  }
   async function importGoogleSheetById(fileId:string,fileName:string,token:any){
     setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
     setImportProgress(fileName||"Google Sheets","Lettura Foglio Google",45);
@@ -1328,10 +1383,10 @@ export function ImportData(){
               if(data&&data.action===google.picker.Action.CANCEL){setImportLoading(null);resolve(true);return;}
               if(data&&data.action===google.picker.Action.PICKED&&data.docs&&data.docs[0]){
                 var doc=data.docs[0];
-                await importGoogleSheetById(String(doc.id||""),String(doc.name||doc.title||"Google Sheets"),token);
+                await importDriveSpreadsheetFile(String(doc.id||""),String(doc.name||doc.title||"Google Drive"),String(doc.mimeType||""),token);
                 resolve(true);return;
               }
-            }catch(e){setImportLoading(null);setMsg(L("Non riesco a leggere il Foglio Google selezionato. Controlla che il file non sia vuoto e che l'autorizzazione Google sia attiva."));resolve(true);}
+            }catch(e){setImportLoading(null);var detail=String((e&&e.message)||e||"");setMsg(L("Non riesco a leggere il file selezionato da Google Drive. Controlla che il file non sia vuoto e che l'autorizzazione Google sia attiva.")+(detail?"\n"+detail:""));resolve(true);}
           });
         try{builder.enableFeature(google.picker.Feature.SUPPORT_DRIVES);}catch(e){}
         var picker=builder.build();

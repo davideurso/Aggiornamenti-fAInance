@@ -248,8 +248,17 @@ export function getDefaultCurrency(){var loc=getDeviceLocale().toUpperCase();var
 export function getDefaultDateFormat(){var loc=getDeviceLocale().toUpperCase();var country=(loc.split("-")[1]||"");if(country==="US")return "mdy";if(country==="JP"||country==="CN"||country==="KR")return "ymd";return "dmy";}
 
 
+function readFainanceStorageValue(key,dv){
+  try{
+    var s=localStorage.getItem(key);
+    return s?JSON.parse(s):dv;
+  }catch(e){return dv;}
+}
 export function useStorage(key,dv){
-  var [v,setV]=useState(function(){try{var s=localStorage.getItem(key);return s?JSON.parse(s):dv;}catch(e){return dv;}});
+  var [v,setV]=useState(function(){return readFainanceStorageValue(key,dv);});
+  useEffect(function(){
+    setV(readFainanceStorageValue(key,dv));
+  },[key]);
   var save=useCallback(function(val){
     setV(function(prev){
       var next=typeof val==="function"?val(prev):val;
