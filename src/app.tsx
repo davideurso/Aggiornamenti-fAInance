@@ -1190,6 +1190,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return fallback||{};
   }
   var firestoreHydratedRef=useRef(false);
+  var applyingFirestoreRef=useRef(false);
+  function beginRemoteApply(){applyingFirestoreRef.current=true;}
+  function endRemoteApply(){setTimeout(function(){applyingFirestoreRef.current=false;},900);}
 
   var [lang,setLang]=useStorage("pref_lang_v2",getDefaultLang());
   function readUserLocalJson(key,fallback){try{var raw=localStorage.getItem(userKey(key));return raw?JSON.parse(raw):fallback;}catch(e){return fallback;}}
@@ -1197,9 +1200,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [expenses,setExpenses]=useStorage(userKey("exp_v10"),[]);
   var [incomes,setIncomes]=useStorage(userKey("inc_v10"),[]);
   var [cats,setCatsRaw]=useStorage(userKey("cats_v10"),DEFAULT_CATS);
-  function setCats(nextCats){markUserLocalChange("cats");return setCatsRaw(nextCats);}
+  function setCats(nextCats){if(!applyingFirestoreRef.current)markUserLocalChange("cats");return setCatsRaw(nextCats);}
   var [methods,setMethodsRaw]=useStorage(userKey("meth_v10"),DEFAULT_METHODS);
-  function setMethods(nextMethods){markUserLocalChange("methods");return setMethodsRaw(nextMethods);}
+  function setMethods(nextMethods){if(!applyingFirestoreRef.current)markUserLocalChange("methods");return setMethodsRaw(nextMethods);}
   var [methodGroups,setMethodGroups]=useStorage(userKey("method_groups_v1"),DEFAULT_METHOD_GROUPS);
   var [expenseGroups,setExpenseGroups]=useStorage(userKey("expense_groups_v1"),DEFAULT_EXPENSE_GROUPS);
   var [incomeGroups,setIncomeGroups]=useStorage(userKey("income_groups_v1"),DEFAULT_INCOME_GROUPS);
@@ -1488,34 +1491,53 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!userId){setFirestoreReady(true);return;}
     firestoreHydratedRef.current=false;
     setFirestoreReady(false);
-    // Quando cambia account, carica subito il salvataggio locale del profilo corrente.
-    // Così un dato appena creato/importato non sparisce se il salvataggio cloud è in ritardo.
+    // Quando cambia account, carica subito il salvataggio locale del profilo corrente,
+    // ma senza marcarlo come modifica: serve solo come fallback mentre arriva Firestore.
     var localSnap={
       expenses:readUserLocalJson("exp_v10",[]),incomes:readUserLocalJson("inc_v10",[]),recurring:readUserLocalJson("rec_v10",[]),goals:readUserLocalJson("goals_v1",DEFAULT_GOALS),alerts:readUserLocalJson("alerts_v1",[]),budgetPlan:readUserLocalJson("budget_plan_v1",DEFAULT_BUDGET_PLAN),
       cats:readUserLocalJson("cats_v10",DEFAULT_CATS),methods:readUserLocalJson("meth_v10",DEFAULT_METHODS),expenseGroups:readUserLocalJson("expense_groups_v1",DEFAULT_EXPENSE_GROUPS),incomeGroups:readUserLocalJson("income_groups_v1",DEFAULT_INCOME_GROUPS),methodGroups:readUserLocalJson("method_groups_v1",DEFAULT_METHOD_GROUPS),
       appuntiDocuments:readUserLocalJson("appunti_documents_v1",[]),appuntiNotes:readUserLocalJson("appunti_notes_v1",[]),bankCoords:readUserLocalJson("bank_coords_v1",[]),shareProjects:readUserLocalJson("share_projects_v1",[]),debtCredits:readUserLocalJson("debt_credits_v1",[]),shoppingCards:readUserLocalJson("shopping_cards_v1",[]),shoppingItems:readUserLocalJson("shopping_items_v1",[]),shareReceiptUploads:readUserLocalJson("share_receipt_uploads_v1",[]),customNotifs:readUserLocalJson("custom_notifs_v1",[]),planUsage:readUserLocalJson("plan_usage_v1",{}),shownAlertIds:readUserLocalJson("shown_alert_ids_v2",[])
     };
+    beginRemoteApply();
     setExpenses(Array.isArray(localSnap.expenses)?localSnap.expenses:[]);setIncomes(Array.isArray(localSnap.incomes)?localSnap.incomes:[]);setRecurring(Array.isArray(localSnap.recurring)?localSnap.recurring:[]);setGoals(Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS);setAlerts(Array.isArray(localSnap.alerts)?localSnap.alerts:[]);setBudgetPlan(localSnap.budgetPlan||DEFAULT_BUDGET_PLAN);
     setCats(Array.isArray(localSnap.cats)&&localSnap.cats.length?localSnap.cats:DEFAULT_CATS);setMethods(Array.isArray(localSnap.methods)&&localSnap.methods.length?localSnap.methods:DEFAULT_METHODS);setExpenseGroups(Array.isArray(localSnap.expenseGroups)&&localSnap.expenseGroups.length?localSnap.expenseGroups:DEFAULT_EXPENSE_GROUPS);setIncomeGroups(Array.isArray(localSnap.incomeGroups)&&localSnap.incomeGroups.length?localSnap.incomeGroups:DEFAULT_INCOME_GROUPS);setMethodGroups(Array.isArray(localSnap.methodGroups)&&localSnap.methodGroups.length?localSnap.methodGroups:DEFAULT_METHOD_GROUPS);
     setAppuntiDocuments(Array.isArray(localSnap.appuntiDocuments)?localSnap.appuntiDocuments:[]);setAppuntiNotes(Array.isArray(localSnap.appuntiNotes)?localSnap.appuntiNotes:[]);setBankCoords(Array.isArray(localSnap.bankCoords)?localSnap.bankCoords:[]);setAiDismissed([]);setAiChat([]);setShareProjects(Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[]);setDebtCredits(Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[]);setShoppingCards(Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[]);setShoppingItems(Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[]);setShareReceiptUploads(Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[]);setCustomNotifs(Array.isArray(localSnap.customNotifs)?localSnap.customNotifs:[]);setPlanUsage(localSnap.planUsage||{});setShownAlertIds(Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[]);
-    // Load data from Firestore before enabling the UI, so one account can never inherit local data from another account.
+    endRemoteApply();
+    // Firestore resta la sorgente condivisa: onSnapshot aggiorna in tempo reale tutti i dispositivi dello stesso account.
     var docRef=doc(fbDb,"userData",userId);
     var cancelled=false;
+    var firstSnapshot=true;
+    function sameJson(a,b){try{return JSON.stringify(a||[])===JSON.stringify(b||[]);}catch(e){return false;}}
     var readyFallback=setTimeout(function(){
       if(cancelled)return;
       console.warn("Firestore load timeout",userId);
       setFirestoreReady(true);
     },12000);
-    getDoc(docRef).then(function(snap:any){
+    var unsubData:any=null;
+    try{
+      unsubData=onSnapshot(docRef,function(snap:any){
       if(cancelled)return;
       clearTimeout(readyFallback);
+      beginRemoteApply();
       if(snap.exists()){
         var d=snap.data();
-        setExpenses(Array.isArray(d.expenses)?d.expenses:[]);
-        setIncomes(Array.isArray(d.incomes)?d.incomes:[]);
-        (function(){var cloudTs=Number(d.catsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}var cloudCats=Array.isArray(d.cats)?d.cats:null;var localCats=readUserLocalJson("cats_v10",cats);if(localTs>cloudTs&&Array.isArray(localCats)&&localCats.length>0){setCats(localCats);}else{setCats(chooseCloudLocalArray(cloudCats,localCats,DEFAULT_CATS,false));}})();
-        (function(){var cloudTs=Number(d.methodsUpdatedAt||0);var localTs=0;try{localTs=Number(localStorage.getItem(userKey("methods_updated_at"))||0);}catch(e){}var cloudMethods=Array.isArray(d.methods)?d.methods:null;var localMethods=readUserLocalJson("meth_v10",methods);if(localTs>cloudTs&&Array.isArray(localMethods)&&localMethods.length>0){setMethods(localMethods);}else{setMethods(chooseCloudLocalArray(cloudMethods,localMethods,DEFAULT_METHODS,false));}})();
-        setRecurring(Array.isArray(d.recurring)?d.recurring:[]);
+        var isFirstSnapshot=firstSnapshot;firstSnapshot=false;
+        var cloudExpenses=Array.isArray(d.expenses)?d.expenses:[];
+        var cloudIncomes=Array.isArray(d.incomes)?d.incomes:[];
+        var cloudCats=Array.isArray(d.cats)?d.cats:[];
+        var cloudMethods=Array.isArray(d.methods)?d.methods:[];
+        var cloudRecurring=Array.isArray(d.recurring)?d.recurring:[];
+        var mergedExpenses=isFirstSnapshot?mergeArrayByStableId(cloudExpenses,localSnap.expenses):cloudExpenses;
+        var mergedIncomes=isFirstSnapshot?mergeArrayByStableId(cloudIncomes,localSnap.incomes):cloudIncomes;
+        var mergedCats=isFirstSnapshot?mergeArrayByStableId(cloudCats,localSnap.cats):cloudCats;
+        var mergedMethods=isFirstSnapshot?mergeArrayByStableId(cloudMethods,localSnap.methods):cloudMethods;
+        var mergedRecurring=isFirstSnapshot?mergeArrayByStableId(cloudRecurring,localSnap.recurring):cloudRecurring;
+        var needsInitialBackfill=isFirstSnapshot&&(!sameJson(mergedExpenses,cloudExpenses)||!sameJson(mergedIncomes,cloudIncomes)||!sameJson(mergedCats,cloudCats)||!sameJson(mergedMethods,cloudMethods)||!sameJson(mergedRecurring,cloudRecurring));
+        setExpenses(mergedExpenses);
+        setIncomes(mergedIncomes);
+        setCats(chooseCloudLocalArray(mergedCats,null,DEFAULT_CATS,false));
+        setMethods(chooseCloudLocalArray(mergedMethods,null,DEFAULT_METHODS,false));
+        setRecurring(mergedRecurring);
         setGoals(Array.isArray(d.goals)?d.goals:DEFAULT_GOALS);
         setAlerts(Array.isArray(d.alerts)?d.alerts:[]);
         setBudgetPlan(d.budgetPlan!==undefined?d.budgetPlan:(budgetPlan||DEFAULT_BUDGET_PLAN));
@@ -1566,20 +1588,24 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       }
       firestoreHydratedRef.current=true;
       setFirestoreReady(true);
-    }).catch(function(err){if(cancelled)return;clearTimeout(readyFallback);console.error("Firestore load error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);});
-    return function(){cancelled=true;clearTimeout(readyFallback);};
+      if(typeof needsInitialBackfill!=="undefined"&&needsInitialBackfill){try{setDoc(docRef,{expenses:mergedExpenses,incomes:mergedIncomes,cats:mergedCats,methods:mergedMethods,recurring:mergedRecurring,updatedAt:new Date().toISOString(),updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore initial merge backfill error",(e&&e.code)||"unknown");});}catch(e){}}
+      endRemoteApply();
+    },function(err){if(cancelled)return;clearTimeout(readyFallback);console.error("Firestore realtime sync error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);endRemoteApply();});
+    }catch(err){clearTimeout(readyFallback);console.error("Firestore listener setup error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);endRemoteApply();}
+    return function(){cancelled=true;clearTimeout(readyFallback);try{if(unsubData)unsubData();}catch(e){}};
   },[userId]);
 
   async function saveToFirestore(){
     if(!userId||!firestoreHydratedRef.current)return;
+    if(applyingFirestoreRef.current)return;
     if(!navigator.onLine)return;
     try{if(localStorage.getItem("fainance_deleting_account_"+userId)==="1")return;}catch(e){}
     var docRef=doc(fbDb,"userData",userId);
     var bankCoordsToSave=bankCoords;
     try{var encBank=await encryptBankCoords(bankCoords,userId);if(encBank)bankCoordsToSave=encBank;}catch(e){}
-    var catsTs=Date.now();
-    try{localStorage.setItem(userKey("cats_updated_at"),String(catsTs));}catch(e){}
-    setDoc(docRef,{expenses,incomes,cats,methods,catsUpdatedAt:catsTs,methodsUpdatedAt:catsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,updatedAt:new Date().toISOString()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
+    var catsTs=0,methodsTs=0;try{catsTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}try{methodsTs=Number(localStorage.getItem(userKey("methods_updated_at"))||0);}catch(e){}
+    var nowIso=new Date().toISOString();
+    setDoc(docRef,{expenses,incomes,cats,methods,catsUpdatedAt:catsTs,methodsUpdatedAt:methodsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,updatedAt:nowIso,updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
   }
 
   async function deleteCurrentAccount(){
@@ -1815,12 +1841,12 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   // Auto-save to Firestore whenever data changes
   useEffect(function(){
-    if(!firestoreReady)return;
+    if(!firestoreReady||applyingFirestoreRef.current)return;
     var timer=setTimeout(saveToFirestore,700); // debounce rapido per non perdere dati se l'app viene chiusa
     return function(){clearTimeout(timer);};
   },[expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,currentPlan,planUsage,shownAlertIds]);
   useEffect(function(){
-    function flush(){if(firestoreReady&&firestoreHydratedRef.current)saveToFirestore();}
+    function flush(){if(firestoreReady&&firestoreHydratedRef.current&&!applyingFirestoreRef.current)saveToFirestore();}
     function onVisibility(){if(document.visibilityState==="hidden")flush();}
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("pagehide",flush);
