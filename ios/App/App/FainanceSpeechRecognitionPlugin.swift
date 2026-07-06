@@ -60,7 +60,7 @@ public class FainanceSpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin, SFSpe
         call.resolve(["listening": isListeningFlag])
     }
 
-    @objc func checkPermissions(_ call: CAPPluginCall) {
+    @objc public override func checkPermissions(_ call: CAPPluginCall) {
         resolvePermissions(call)
     }
 
@@ -72,7 +72,7 @@ public class FainanceSpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin, SFSpe
         requestPermissions(call)
     }
 
-    @objc func requestPermissions(_ call: CAPPluginCall) {
+    @objc public override func requestPermissions(_ call: CAPPluginCall) {
         SFSpeechRecognizer.requestAuthorization { speechStatus in
             AVAudioSession.sharedInstance().requestRecordPermission { micGranted in
                 DispatchQueue.main.async {
