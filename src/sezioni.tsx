@@ -1140,8 +1140,9 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
   var cap=win.Capacitor;
   var isNative=cap&&cap.isNativePlatform&&cap.isNativePlatform();
   var nativeSpeech=cap&&cap.Plugins&&cap.Plugins.SpeechRecognition;
+  var platform=(cap&&cap.getPlatform)?cap.getPlatform():"";
   if(isNative){
-    if(!nativeSpeech){setVoiceError("Su Android la WebView non gestisce il riconoscimento vocale in modo affidabile. Serve il plugin nativo SpeechRecognition. Installa @capacitor-community/speech-recognition e poi esegui npx cap sync android.");return;}
+    if(!nativeSpeech){setVoiceError(platform==="ios"?"Riconoscimento vocale iOS non disponibile in questa build. Scrivi il comando nel campo testo e premi Analizza.":"Riconoscimento vocale nativo non disponibile in questa build. Scrivi il comando nel campo testo e premi Analizza.");return;}
     setVoiceListening(true);
     function normalizePermState(res){
       var v=res&&(res.speechRecognition||res.microphone||res.permission||res.state||res.status);
@@ -1158,7 +1159,7 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
       }).then(function(res2){
         var state2=normalizePermState(res2);
         if(state2&&state2!=="granted"&&state2!=="authorized"&&state2!=="prompt"&&state2!=="undefined"){
-          throw new Error("Permesso microfono non concesso. Apri Impostazioni Android > App > fAInance Test > Autorizzazioni > Microfono > Consenti.");
+          throw new Error(platform==="ios"?"Permesso microfono o riconoscimento vocale non concesso. Apri Impostazioni iPhone > fAInance > Microfono e Riconoscimento vocale, poi consenti l'accesso.":"Permesso microfono non concesso. Apri Impostazioni Android > App > fAInance Test > Autorizzazioni > Microfono > Consenti.");
         }
         return res2;
       });
@@ -1167,7 +1168,7 @@ var {normalizeEmail,loadShareCollaboration,acceptShareInvite,declineShareInvite,
       .then(function(){return nativeSpeech.available?nativeSpeech.available():{available:true};})
       .then(function(av){if(av&&av.available===false)throw new Error("Riconoscimento vocale non disponibile sul dispositivo.");return nativeSpeech.start({language:language,maxResults:3,prompt:"Parla ora",partialResults:false,popup:false});})
       .then(function(res){var matches=res&&res.matches?res.matches:[];var txt2=matches&&matches[0]?matches[0]:"";if(!txt2)throw new Error("Nessun testo riconosciuto");setVoiceText(txt2);setVoiceParsed(parseVoiceCommand(txt2));})
-      .catch(function(err){var msg=err&&err.message?err.message:String(err||"");var low=msg.toLowerCase();if(retry&&(low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("nessun")>=0)){return new Promise(function(resolve){setTimeout(resolve,450);}).then(function(){return runNative(false);});}if(low.indexOf("missing permission")>=0||low.indexOf("permission")>=0){setVoiceError("Permesso microfono mancante o non letto correttamente. Controlla che il microfono sia consentito nelle impostazioni Android dell'app, poi chiudi e riapri fAInance Test.");return;}setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);})
+      .catch(function(err){var msg=err&&err.message?err.message:String(err||"");var low=msg.toLowerCase();if(retry&&(low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("nessun")>=0)){return new Promise(function(resolve){setTimeout(resolve,450);}).then(function(){return runNative(false);});}if(low.indexOf("missing permission")>=0||low.indexOf("permission")>=0){setVoiceError(platform==="ios"?"Permesso microfono o riconoscimento vocale mancante. Controlla le autorizzazioni iOS dell'app, poi chiudi e riapri fAInance.":"Permesso microfono mancante o non letto correttamente. Controlla che il microfono sia consentito nelle impostazioni Android dell'app, poi chiudi e riapri fAInance Test.");return;}setVoiceError((low.indexOf("didn't understand")>=0||low.indexOf("didnt understand")>=0||low.indexOf("no match")>=0||low.indexOf("nessun")>=0)?"Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo.":"Errore riconoscimento vocale nativo: "+msg);})
       .finally(function(){setVoiceListening(false);});};
     runNative(true);
     return;
