@@ -5,7 +5,7 @@ import AVFoundation
 
 @objc(FainanceSpeechRecognitionPlugin)
 public class FainanceSpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin, SFSpeechRecognizerDelegate {
-    public let identifier = "FainanceSpeechRecognitionPlugin"
+    public let identifier = "SpeechRecognition"
     public let jsName = "SpeechRecognition"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "available", returnType: CAPPluginReturnPromise),

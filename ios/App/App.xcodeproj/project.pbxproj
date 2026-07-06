@@ -22,8 +22,8 @@
 		FAI00000000000000000103 /* FainanceAdsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000203 /* FainanceAdsPlugin.swift */; };
 		FAI00000000000000000104 /* FainanceAdsPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000204 /* FainanceAdsPlugin.m */; };
 		FAI00000000000000000106 /* FainanceSpeechRecognitionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000205 /* FainanceSpeechRecognitionPlugin.swift */; };
-		FAI00000000000000000107 /* FainanceSpeechRecognitionPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000206 /* FainanceSpeechRecognitionPlugin.m */; };
 		FAI00000000000000000105 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = FAI00000000000000000402 /* GoogleMobileAds */; };
+		FAI00000000000000000108 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000207 /* MainViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,7 +45,7 @@
 		FAI00000000000000000203 /* FainanceAdsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceAdsPlugin.swift; sourceTree = "<group>"; };
 		FAI00000000000000000204 /* FainanceAdsPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FainanceAdsPlugin.m; sourceTree = "<group>"; };
 		FAI00000000000000000205 /* FainanceSpeechRecognitionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceSpeechRecognitionPlugin.swift; sourceTree = "<group>"; };
-		FAI00000000000000000206 /* FainanceSpeechRecognitionPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FainanceSpeechRecognitionPlugin.m; sourceTree = "<group>"; };
+		FAI00000000000000000207 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +83,7 @@
 			children = (
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				FAI00000000000000000207 /* MainViewController.swift */,
 				FAI00000000000000210 /* GoogleService-Info.plist */,
 				FAI00000000000000211 /* App.entitlements */,
 				FAI00000000000000000201 /* FainanceBillingPlugin.swift */,
@@ -90,7 +91,6 @@
 				FAI00000000000000000203 /* FainanceAdsPlugin.swift */,
 				FAI00000000000000000204 /* FainanceAdsPlugin.m */,
 				FAI00000000000000000205 /* FainanceSpeechRecognitionPlugin.swift */,
-				FAI00000000000000000206 /* FainanceSpeechRecognitionPlugin.m */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -191,12 +191,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				FAI00000000000000000108 /* MainViewController.swift in Sources */,
 				FAI00000000000000000101 /* FainanceBillingPlugin.swift in Sources */,
 				FAI00000000000000000102 /* FainanceBillingPlugin.m in Sources */,
 				FAI00000000000000000103 /* FainanceAdsPlugin.swift in Sources */,
 				FAI00000000000000000104 /* FainanceAdsPlugin.m in Sources */,
 				FAI00000000000000000106 /* FainanceSpeechRecognitionPlugin.swift in Sources */,
-				FAI00000000000000000107 /* FainanceSpeechRecognitionPlugin.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -340,7 +340,7 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "fainance-appstore-profile";
 				DEVELOPMENT_TEAM = SSV4P8694F;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 148;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -365,7 +365,7 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "fainance-appstore-profile";
 				DEVELOPMENT_TEAM = SSV4P8694F;
-				CURRENT_PROJECT_VERSION = 147;
+				CURRENT_PROJECT_VERSION = 148;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
