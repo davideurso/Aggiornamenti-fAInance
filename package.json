@@ -1,6 +1,6 @@
 {
   "name": "tracker-spese",
-  "version": "1.6.67",
+  "version": "1.6.66",
   "private": true,
   "scripts": {
     "dev": "vite",

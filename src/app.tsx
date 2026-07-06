@@ -2396,7 +2396,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   } 
 
 
-  var FAINANCE_CURRENT_VERSION="1.6.67";
+  var FAINANCE_CURRENT_VERSION="1.6.66";
   var FAINANCE_CURRENT_VERSION_CODE=155;
   function appUpdatePlatform(){
     try{
@@ -5342,7 +5342,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     if(settingsPage==="privacy_policy")return <div><PageHeader title="Info app / Informativa Privacy"/><PrivacyPolicyContent/></div>;
 
     function InfoSettingsPage(){
-      var APP_VERSION="1.6.67";
+      var APP_VERSION="1.6.66";
       var APP_VERSION_CODE=155;
       var APP_WEBSITE="https://fainance.app";
       var PLAY_STORE_WEB_URL="https://play.google.com/store/apps/details?id=it.fainanceapp.app&showAllReviews=true";
