@@ -33204,3 +33204,989 @@ function fainancePostProcessTranslation(value, lang){
     try{if(typeof FAINANCE_I18N_PHRASES!=="undefined"){if(!FAINANCE_I18N_PHRASES[lang])FAINANCE_I18N_PHRASES[lang]={};FAINANCE_I18N_PHRASES[lang][k]=rows[k][lang];}}catch(e){}
   });});
 })();
+
+
+// fAInance - ripristino traduzioni legali, impostazioni e protezione dati 1.2.15.
+(function(){
+  var rows={
+  "Termini di utilizzo": {
+    "it": "Termini di utilizzo",
+    "en": "Terms of Use",
+    "es": "Términos de uso",
+    "fr": "Conditions d’utilisation",
+    "de": "Nutzungsbedingungen",
+    "pt": "Termos de utilização",
+    "pl": "Warunki korzystania",
+    "nl": "Gebruiksvoorwaarden",
+    "ro": "Termeni de utilizare",
+    "el": "Όροι χρήσης"
+  },
+  "Usando fAInance accetti che l’app sia uno strumento di supporto alla gestione personale dei tuoi dati finanziari e non un servizio di consulenza professionale.": {
+    "it": "Usando fAInance accetti che l’app sia uno strumento di supporto alla gestione personale dei tuoi dati finanziari e non un servizio di consulenza professionale.",
+    "en": "By using fAInance, you accept that the app is a tool to support the personal management of your financial data and is not a professional advisory service.",
+    "es": "Al usar fAInance, aceptas que la app es una herramienta de apoyo para la gestión personal de tus datos financieros y no un servicio de asesoramiento profesional.",
+    "fr": "En utilisant fAInance, tu acceptes que l’app soit un outil d’aide à la gestion personnelle de tes données financières et non un service de conseil professionnel.",
+    "de": "Mit der Nutzung von fAInance akzeptierst du, dass die App ein Hilfsmittel zur persönlichen Verwaltung deiner Finanzdaten ist und keine professionelle Beratung darstellt.",
+    "pt": "Ao usar o fAInance, aceitas que a app é uma ferramenta de apoio à gestão pessoal dos teus dados financeiros e não um serviço de aconselhamento profissional.",
+    "pl": "Korzystając z fAInance, akceptujesz, że aplikacja jest narzędziem wspierającym osobiste zarządzanie danymi finansowymi, a nie profesjonalną usługą doradczą.",
+    "nl": "Door fAInance te gebruiken, accepteer je dat de app een hulpmiddel is voor persoonlijk beheer van je financiële gegevens en geen professionele adviesdienst is.",
+    "ro": "Prin utilizarea fAInance accepți că aplicația este un instrument de sprijin pentru gestionarea personală a datelor tale financiare și nu un serviciu de consultanță profesională.",
+    "el": "Χρησιμοποιώντας το fAInance αποδέχεσαι ότι η εφαρμογή είναι εργαλείο υποστήριξης για την προσωπική διαχείριση των οικονομικών σου δεδομένων και όχι υπηρεσία επαγγελματικής συμβουλευτικής."
+  },
+  "Ambito dell’app": {
+    "it": "Ambito dell’app",
+    "en": "Scope of the app",
+    "es": "Ámbito de la app",
+    "fr": "Champ d’application",
+    "de": "Umfang der App",
+    "pt": "Âmbito da app",
+    "pl": "Zakres aplikacji",
+    "nl": "Bereik van de app",
+    "ro": "Domeniul aplicației",
+    "el": "Πεδίο εφαρμογής"
+  },
+  "fAInance è uno strumento personale per registrare, organizzare e analizzare entrate, uscite, budget, patrimonio, obiettivi, alert, appunti e dati collegati alla gestione finanziaria personale.": {
+    "it": "fAInance è uno strumento personale per registrare, organizzare e analizzare entrate, uscite, budget, patrimonio, obiettivi, alert, appunti e dati collegati alla gestione finanziaria personale.",
+    "en": "fAInance is a personal tool for recording, organizing and analyzing income, expenses, budgets, assets, goals, alerts, notes and data related to personal finance management.",
+    "es": "fAInance es una herramienta personal para registrar, organizar y analizar ingresos, gastos, presupuestos, patrimonio, objetivos, alertas, notas y datos vinculados a la gestión financiera personal.",
+    "fr": "fAInance est un outil personnel pour enregistrer, organiser et analyser revenus, dépenses, budgets, patrimoine, objectifs, alertes, notes et données liées à la gestion financière personnelle.",
+    "de": "fAInance ist ein persönliches Werkzeug zum Erfassen, Organisieren und Analysieren von Einnahmen, Ausgaben, Budgets, Vermögen, Zielen, Warnungen, Notizen und Daten zur persönlichen Finanzverwaltung.",
+    "pt": "O fAInance é uma ferramenta pessoal para registar, organizar e analisar receitas, despesas, orçamentos, património, objetivos, alertas, notas e dados ligados à gestão financeira pessoal.",
+    "pl": "fAInance to osobiste narzędzie do rejestrowania, organizowania i analizowania przychodów, wydatków, budżetów, majątku, celów, alertów, notatek i danych związanych z finansami osobistymi.",
+    "nl": "fAInance is een persoonlijk hulpmiddel om inkomsten, uitgaven, budgetten, vermogen, doelen, meldingen, notities en gegevens voor persoonlijk financieel beheer vast te leggen, te organiseren en te analyseren.",
+    "ro": "fAInance este un instrument personal pentru înregistrarea, organizarea și analizarea veniturilor, cheltuielilor, bugetelor, patrimoniului, obiectivelor, alertelor, notițelor și datelor legate de finanțele personale.",
+    "el": "Το fAInance είναι προσωπικό εργαλείο για καταγραφή, οργάνωση και ανάλυση εσόδων, εξόδων, προϋπολογισμών, περιουσίας, στόχων, ειδοποιήσεων, σημειώσεων και δεδομένων προσωπικής οικονομικής διαχείρισης."
+  },
+  "Agente AI": {
+    "it": "Agente AI",
+    "en": "AI Agent",
+    "es": "Agente de IA",
+    "fr": "Agent IA",
+    "de": "KI-Agent",
+    "pt": "Agente de IA",
+    "pl": "Agent AI",
+    "nl": "AI-agent",
+    "ro": "Agent AI",
+    "el": "Πράκτορας AI"
+  },
+  "Il Consulente AI aiuta a interpretare i dati inseriti nell’app e a proporre spunti pratici di risparmio, controllo spese e organizzazione. Le risposte hanno finalità informative e organizzative.": {
+    "it": "Il Consulente AI aiuta a interpretare i dati inseriti nell’app e a proporre spunti pratici di risparmio, controllo spese e organizzazione. Le risposte hanno finalità informative e organizzative.",
+    "en": "The AI Advisor helps interpret the data entered in the app and suggests practical ideas for saving, controlling expenses and staying organized. Responses are for information and organization.",
+    "es": "El Asesor IA ayuda a interpretar los datos introducidos en la app y propone ideas prácticas para ahorrar, controlar gastos y organizarse. Las respuestas tienen finalidad informativa y organizativa.",
+    "fr": "Le Conseiller IA aide à interpréter les données saisies dans l’app et propose des pistes pratiques d’épargne, de contrôle des dépenses et d’organisation. Les réponses sont informatives et organisationnelles.",
+    "de": "Der KI-Berater hilft, die in der App eingegebenen Daten zu interpretieren, und schlägt praktische Ideen zum Sparen, zur Ausgabenkontrolle und zur Organisation vor. Die Antworten dienen der Information und Organisation.",
+    "pt": "O Consultor IA ajuda a interpretar os dados inseridos na app e propõe ideias práticas de poupança, controlo de despesas e organização. As respostas têm finalidade informativa e organizativa.",
+    "pl": "Doradca AI pomaga interpretować dane wprowadzone do aplikacji i proponuje praktyczne pomysły dotyczące oszczędzania, kontroli wydatków i organizacji. Odpowiedzi mają charakter informacyjny i organizacyjny.",
+    "nl": "De AI-adviseur helpt de ingevoerde gegevens te interpreteren en geeft praktische ideeën voor sparen, uitgavenbeheer en organisatie. Antwoorden zijn bedoeld voor informatie en organisatie.",
+    "ro": "Consilierul AI ajută la interpretarea datelor introduse în aplicație și propune idei practice pentru economisire, controlul cheltuielilor și organizare. Răspunsurile au scop informativ și organizatoric.",
+    "el": "Ο Σύμβουλος AI βοηθά στην ερμηνεία των δεδομένων της εφαρμογής και προτείνει πρακτικές ιδέες για αποταμίευση, έλεγχο εξόδων και οργάνωση. Οι απαντήσεις έχουν ενημερωτικό και οργανωτικό σκοπό."
+  },
+  "Nessuna consulenza professionale": {
+    "it": "Nessuna consulenza professionale",
+    "en": "No professional advice",
+    "es": "Sin asesoramiento profesional",
+    "fr": "Aucun conseil professionnel",
+    "de": "Keine professionelle Beratung",
+    "pt": "Sem aconselhamento profissional",
+    "pl": "Brak profesjonalnego doradztwa",
+    "nl": "Geen professioneel advies",
+    "ro": "Fără consultanță profesională",
+    "el": "Καμία επαγγελματική συμβουλή"
+  },
+  "Le analisi e i consigli dell’app non costituiscono consulenza finanziaria, fiscale, legale, patrimoniale o professionale. Le decisioni restano sempre responsabilità dell’utente.": {
+    "it": "Le analisi e i consigli dell’app non costituiscono consulenza finanziaria, fiscale, legale, patrimoniale o professionale. Le decisioni restano sempre responsabilità dell’utente.",
+    "en": "The app’s analyses and suggestions do not constitute financial, tax, legal, wealth or professional advice. Decisions always remain the user’s responsibility.",
+    "es": "Los análisis y consejos de la app no constituyen asesoramiento financiero, fiscal, legal, patrimonial o profesional. Las decisiones siguen siendo responsabilidad del usuario.",
+    "fr": "Les analyses et conseils de l’app ne constituent pas un conseil financier, fiscal, juridique, patrimonial ou professionnel. Les décisions restent toujours sous la responsabilité de l’utilisateur.",
+    "de": "Analysen und Hinweise der App stellen keine Finanz-, Steuer-, Rechts-, Vermögens- oder professionelle Beratung dar. Entscheidungen liegen immer in der Verantwortung des Nutzers.",
+    "pt": "As análises e sugestões da app não constituem aconselhamento financeiro, fiscal, jurídico, patrimonial ou profissional. As decisões são sempre responsabilidade do utilizador.",
+    "pl": "Analizy i wskazówki aplikacji nie stanowią doradztwa finansowego, podatkowego, prawnego, majątkowego ani zawodowego. Decyzje zawsze pozostają odpowiedzialnością użytkownika.",
+    "nl": "De analyses en suggesties van de app vormen geen financieel, fiscaal, juridisch, vermogens- of professioneel advies. Beslissingen blijven altijd de verantwoordelijkheid van de gebruiker.",
+    "ro": "Analizele și recomandările aplicației nu constituie consultanță financiară, fiscală, juridică, patrimonială sau profesională. Deciziile rămân întotdeauna responsabilitatea utilizatorului.",
+    "el": "Οι αναλύσεις και οι συμβουλές της εφαρμογής δεν αποτελούν οικονομική, φορολογική, νομική, περιουσιακή ή επαγγελματική συμβουλή. Οι αποφάσεις παραμένουν πάντα ευθύνη του χρήστη."
+  },
+  "Dati inseriti dall’utente": {
+    "it": "Dati inseriti dall’utente",
+    "en": "User-entered data",
+    "es": "Datos introducidos por el usuario",
+    "fr": "Données saisies par l’utilisateur",
+    "de": "Vom Nutzer eingegebene Daten",
+    "pt": "Dados inseridos pelo utilizador",
+    "pl": "Dane wprowadzone przez użytkownika",
+    "nl": "Door de gebruiker ingevoerde gegevens",
+    "ro": "Date introduse de utilizator",
+    "el": "Δεδομένα που εισάγει ο χρήστης"
+  },
+  "L’utente è responsabile della correttezza dei dati inseriti. Se i dati sono incompleti, errati o non aggiornati, anche statistiche, alert, budget e risposte AI possono risultare imprecisi.": {
+    "it": "L’utente è responsabile della correttezza dei dati inseriti. Se i dati sono incompleti, errati o non aggiornati, anche statistiche, alert, budget e risposte AI possono risultare imprecisi.",
+    "en": "The user is responsible for the accuracy of the data entered. If data is incomplete, incorrect or outdated, statistics, alerts, budgets and AI responses may also be inaccurate.",
+    "es": "El usuario es responsable de la exactitud de los datos introducidos. Si están incompletos, son incorrectos o no están actualizados, las estadísticas, alertas, presupuestos y respuestas de IA pueden ser imprecisos.",
+    "fr": "L’utilisateur est responsable de l’exactitude des données saisies. Si elles sont incomplètes, incorrectes ou obsolètes, les statistiques, alertes, budgets et réponses IA peuvent être imprécis.",
+    "de": "Der Nutzer ist für die Richtigkeit der eingegebenen Daten verantwortlich. Sind sie unvollständig, falsch oder veraltet, können auch Statistiken, Warnungen, Budgets und KI-Antworten ungenau sein.",
+    "pt": "O utilizador é responsável pela correção dos dados inseridos. Se forem incompletos, incorretos ou desatualizados, estatísticas, alertas, orçamentos e respostas da IA podem ser imprecisos.",
+    "pl": "Użytkownik odpowiada za poprawność wprowadzonych danych. Jeśli są niekompletne, błędne lub nieaktualne, statystyki, alerty, budżety i odpowiedzi AI mogą być niedokładne.",
+    "nl": "De gebruiker is verantwoordelijk voor de juistheid van de ingevoerde gegevens. Als gegevens onvolledig, onjuist of verouderd zijn, kunnen statistieken, meldingen, budgetten en AI-antwoorden ook onnauwkeurig zijn.",
+    "ro": "Utilizatorul este responsabil pentru corectitudinea datelor introduse. Dacă datele sunt incomplete, greșite sau neactualizate, statisticile, alertele, bugetele și răspunsurile AI pot fi inexacte.",
+    "el": "Ο χρήστης είναι υπεύθυνος για την ακρίβεια των δεδομένων που εισάγει. Αν είναι ελλιπή, λανθασμένα ή μη ενημερωμένα, στατιστικά, ειδοποιήσεις, προϋπολογισμοί και απαντήσεις AI μπορεί να είναι ανακριβή."
+  },
+  "Backup e conservazione dati": {
+    "it": "Backup e conservazione dati",
+    "en": "Backups and data storage",
+    "es": "Copias de seguridad y conservación de datos",
+    "fr": "Sauvegarde et conservation des données",
+    "de": "Backups und Datenspeicherung",
+    "pt": "Cópias de segurança e conservação de dados",
+    "pl": "Kopie zapasowe i przechowywanie danych",
+    "nl": "Back-ups en gegevensbewaring",
+    "ro": "Backup și păstrarea datelor",
+    "el": "Αντίγραφα ασφαλείας και αποθήκευση δεδομένων"
+  },
+  "L’utente deve eseguire backup periodici prima di aggiornamenti, reinstallazioni, cambi dispositivo o modifiche importanti. L’app offre strumenti di esportazione e ripristino, ma non garantisce il recupero automatico di dati cancellati manualmente.": {
+    "it": "L’utente deve eseguire backup periodici prima di aggiornamenti, reinstallazioni, cambi dispositivo o modifiche importanti. L’app offre strumenti di esportazione e ripristino, ma non garantisce il recupero automatico di dati cancellati manualmente.",
+    "en": "The user should make regular backups before updates, reinstalls, device changes or major changes. The app provides export and restore tools, but does not guarantee automatic recovery of manually deleted data.",
+    "es": "El usuario debe hacer copias de seguridad periódicas antes de actualizaciones, reinstalaciones, cambios de dispositivo o cambios importantes. La app ofrece exportación y restauración, pero no garantiza recuperar automáticamente datos eliminados manualmente.",
+    "fr": "L’utilisateur doit effectuer des sauvegardes régulières avant les mises à jour, réinstallations, changements d’appareil ou modifications importantes. L’app propose des outils d’exportation et de restauration, mais ne garantit pas la récupération automatique des données supprimées manuellement.",
+    "de": "Der Nutzer sollte vor Updates, Neuinstallationen, Gerätewechseln oder wichtigen Änderungen regelmäßig Backups erstellen. Die App bietet Export- und Wiederherstellungsfunktionen, garantiert aber keine automatische Wiederherstellung manuell gelöschter Daten.",
+    "pt": "O utilizador deve fazer cópias de segurança periódicas antes de atualizações, reinstalações, mudanças de dispositivo ou alterações importantes. A app oferece exportação e restauro, mas não garante a recuperação automática de dados apagados manualmente.",
+    "pl": "Użytkownik powinien wykonywać regularne kopie zapasowe przed aktualizacjami, reinstalacją, zmianą urządzenia lub ważnymi zmianami. Aplikacja oferuje eksport i przywracanie, ale nie gwarantuje automatycznego odzyskania danych usuniętych ręcznie.",
+    "nl": "De gebruiker moet regelmatig back-ups maken vóór updates, herinstallaties, apparaatwissels of belangrijke wijzigingen. De app biedt export- en hersteltools, maar garandeert geen automatisch herstel van handmatig verwijderde gegevens.",
+    "ro": "Utilizatorul trebuie să facă backup periodic înainte de actualizări, reinstalări, schimbări de dispozitiv sau modificări importante. Aplicația oferă export și restaurare, dar nu garantează recuperarea automată a datelor șterse manual.",
+    "el": "Ο χρήστης πρέπει να δημιουργεί τακτικά αντίγραφα ασφαλείας πριν από ενημερώσεις, επανεγκαταστάσεις, αλλαγές συσκευής ή σημαντικές αλλαγές. Η εφαρμογή προσφέρει εξαγωγή και επαναφορά, αλλά δεν εγγυάται αυτόματη ανάκτηση δεδομένων που διαγράφηκαν χειροκίνητα."
+  },
+  "Uso personale": {
+    "it": "Uso personale",
+    "en": "Personal use",
+    "es": "Uso personal",
+    "fr": "Usage personnel",
+    "de": "Persönliche Nutzung",
+    "pt": "Uso pessoal",
+    "pl": "Użytek osobisty",
+    "nl": "Persoonlijk gebruik",
+    "ro": "Utilizare personală",
+    "el": "Προσωπική χρήση"
+  },
+  "Aggiornamenti": {
+    "it": "Aggiornamenti",
+    "en": "Updates",
+    "es": "Actualizaciones",
+    "fr": "Mises à jour",
+    "de": "Aktualisierungen",
+    "pt": "Atualizações",
+    "pl": "Aktualizacje",
+    "nl": "Updates",
+    "ro": "Actualizări",
+    "el": "Ενημερώσεις"
+  },
+  "Informativa Privacy": {
+    "it": "Informativa Privacy",
+    "en": "Privacy Policy",
+    "es": "Política de privacidad",
+    "fr": "Politique de confidentialité",
+    "de": "Datenschutzerklärung",
+    "pt": "Política de privacidade",
+    "pl": "Polityka prywatności",
+    "nl": "Privacybeleid",
+    "ro": "Politica de confidențialitate",
+    "el": "Πολιτική απορρήτου"
+  },
+  "Questa informativa spiega in modo sintetico quali dati possono essere gestiti da fAInance e per quali finalità vengono usati.": {
+    "it": "Questa informativa spiega in modo sintetico quali dati possono essere gestiti da fAInance e per quali finalità vengono usati.",
+    "en": "This notice briefly explains which data may be handled by fAInance and for what purposes it is used.",
+    "es": "Esta información explica de forma resumida qué datos puede gestionar fAInance y con qué finalidades se usan.",
+    "fr": "Cette notice explique brièvement quelles données peuvent être gérées par fAInance et à quelles fins elles sont utilisées.",
+    "de": "Diese Erklärung beschreibt kurz, welche Daten von fAInance verarbeitet werden können und zu welchen Zwecken sie genutzt werden.",
+    "pt": "Esta informação explica de forma resumida que dados podem ser geridos pelo fAInance e para que finalidades são usados.",
+    "pl": "Ta informacja krótko wyjaśnia, jakie dane mogą być przetwarzane przez fAInance i w jakich celach są używane.",
+    "nl": "Deze verklaring legt kort uit welke gegevens door fAInance kunnen worden verwerkt en waarvoor ze worden gebruikt.",
+    "ro": "Această informare explică pe scurt ce date pot fi gestionate de fAInance și în ce scopuri sunt folosite.",
+    "el": "Αυτή η ενημέρωση εξηγεί συνοπτικά ποια δεδομένα μπορεί να διαχειρίζεται το fAInance και για ποιους σκοπούς χρησιμοποιούνται."
+  },
+  "Dati trattati": {
+    "it": "Dati trattati",
+    "en": "Data processed",
+    "es": "Datos tratados",
+    "fr": "Données traitées",
+    "de": "Verarbeitete Daten",
+    "pt": "Dados tratados",
+    "pl": "Przetwarzane dane",
+    "nl": "Verwerkte gegevens",
+    "ro": "Date prelucrate",
+    "el": "Δεδομένα που επεξεργάζονται"
+  },
+  "Account e accesso": {
+    "it": "Account e accesso",
+    "en": "Account and access",
+    "es": "Cuenta y acceso",
+    "fr": "Compte et accès",
+    "de": "Konto und Zugriff",
+    "pt": "Conta e acesso",
+    "pl": "Konto i dostęp",
+    "nl": "Account en toegang",
+    "ro": "Cont și acces",
+    "el": "Λογαριασμός και πρόσβαση"
+  },
+  "Salvataggio e sincronizzazione": {
+    "it": "Salvataggio e sincronizzazione",
+    "en": "Saving and synchronization",
+    "es": "Guardado y sincronización",
+    "fr": "Enregistrement et synchronisation",
+    "de": "Speicherung und Synchronisierung",
+    "pt": "Gravação e sincronização",
+    "pl": "Zapisywanie i synchronizacja",
+    "nl": "Opslag en synchronisatie",
+    "ro": "Salvare și sincronizare",
+    "el": "Αποθήκευση και συγχρονισμός"
+  },
+  "Uso dell’Agente AI": {
+    "it": "Uso dell’Agente AI",
+    "en": "Use of the AI Agent",
+    "es": "Uso del Agente de IA",
+    "fr": "Utilisation de l’Agent IA",
+    "de": "Nutzung des KI-Agenten",
+    "pt": "Utilização do Agente de IA",
+    "pl": "Korzystanie z Agenta AI",
+    "nl": "Gebruik van de AI-agent",
+    "ro": "Utilizarea Agentului AI",
+    "el": "Χρήση του πράκτορα AI"
+  },
+  "Finalità": {
+    "it": "Finalità",
+    "en": "Purposes",
+    "es": "Finalidades",
+    "fr": "Finalités",
+    "de": "Zwecke",
+    "pt": "Finalidades",
+    "pl": "Cele",
+    "nl": "Doeleinden",
+    "ro": "Scopuri",
+    "el": "Σκοποί"
+  },
+  "Responsabilità dell’utente": {
+    "it": "Responsabilità dell’utente",
+    "en": "User responsibility",
+    "es": "Responsabilidad del usuario",
+    "fr": "Responsabilité de l’utilisateur",
+    "de": "Verantwortung des Nutzers",
+    "pt": "Responsabilidade do utilizador",
+    "pl": "Odpowiedzialność użytkownika",
+    "nl": "Verantwoordelijkheid van de gebruiker",
+    "ro": "Responsabilitatea utilizatorului",
+    "el": "Ευθύνη του χρήστη"
+  },
+  "Cancellazione dati": {
+    "it": "Cancellazione dati",
+    "en": "Data deletion",
+    "es": "Eliminación de datos",
+    "fr": "Suppression des données",
+    "de": "Datenlöschung",
+    "pt": "Eliminação de dados",
+    "pl": "Usuwanie danych",
+    "nl": "Gegevens verwijderen",
+    "ro": "Ștergerea datelor",
+    "el": "Διαγραφή δεδομένων"
+  },
+  "Servizi terzi": {
+    "it": "Servizi terzi",
+    "en": "Third-party services",
+    "es": "Servicios de terceros",
+    "fr": "Services tiers",
+    "de": "Drittanbieterdienste",
+    "pt": "Serviços de terceiros",
+    "pl": "Usługi zewnętrzne",
+    "nl": "Diensten van derden",
+    "ro": "Servicii terțe",
+    "el": "Υπηρεσίες τρίτων"
+  },
+  "Versione termini: 1.0 · Ultimo aggiornamento: 25/05/2026": {
+    "it": "Versione termini: 1.0 · Ultimo aggiornamento: 25/05/2026",
+    "en": "Terms version: 1.0 · Last updated: 25/05/2026",
+    "es": "Versión de términos: 1.0 · Última actualización: 25/05/2026",
+    "fr": "Version des conditions : 1.0 · Dernière mise à jour : 25/05/2026",
+    "de": "Version der Bedingungen: 1.0 · Letzte Aktualisierung: 25.05.2026",
+    "pt": "Versão dos termos: 1.0 · Última atualização: 25/05/2026",
+    "pl": "Wersja warunków: 1.0 · Ostatnia aktualizacja: 25.05.2026",
+    "nl": "Versie voorwaarden: 1.0 · Laatst bijgewerkt: 25-05-2026",
+    "ro": "Versiune termeni: 1.0 · Ultima actualizare: 25/05/2026",
+    "el": "Έκδοση όρων: 1.0 · Τελευταία ενημέρωση: 25/05/2026"
+  },
+  "Versione privacy: 1.0 · Ultimo aggiornamento: 25/05/2026": {
+    "it": "Versione privacy: 1.0 · Ultimo aggiornamento: 25/05/2026",
+    "en": "Privacy version: 1.0 · Last updated: 25/05/2026",
+    "es": "Versión de privacidad: 1.0 · Última actualización: 25/05/2026",
+    "fr": "Version confidentialité : 1.0 · Dernière mise à jour : 25/05/2026",
+    "de": "Datenschutzversion: 1.0 · Letzte Aktualisierung: 25.05.2026",
+    "pt": "Versão de privacidade: 1.0 · Última atualização: 25/05/2026",
+    "pl": "Wersja prywatności: 1.0 · Ostatnia aktualizacja: 25.05.2026",
+    "nl": "Privacyversie: 1.0 · Laatst bijgewerkt: 25-05-2026",
+    "ro": "Versiune confidențialitate: 1.0 · Ultima actualizare: 25/05/2026",
+    "el": "Έκδοση απορρήτου: 1.0 · Τελευταία ενημέρωση: 25/05/2026"
+  },
+  "Autorizzazioni": {
+    "it": "Autorizzazioni",
+    "en": "Permissions",
+    "es": "Autorizaciones",
+    "fr": "Autorisations",
+    "de": "Berechtigungen",
+    "pt": "Autorizações",
+    "pl": "Uprawnienia",
+    "nl": "Toestemmingen",
+    "ro": "Autorizări",
+    "el": "Άδειες"
+  },
+  "Prima di continuare devi leggere e accettare i documenti obbligatori.": {
+    "it": "Prima di continuare devi leggere e accettare i documenti obbligatori.",
+    "en": "Before continuing, you must read and accept the required documents.",
+    "es": "Antes de continuar, debes leer y aceptar los documentos obligatorios.",
+    "fr": "Avant de continuer, tu dois lire et accepter les documents obligatoires.",
+    "de": "Bevor du fortfährst, musst du die erforderlichen Dokumente lesen und akzeptieren.",
+    "pt": "Antes de continuar, tens de ler e aceitar os documentos obrigatórios.",
+    "pl": "Przed kontynuowaniem musisz przeczytać i zaakceptować wymagane dokumenty.",
+    "nl": "Voordat je doorgaat, moet je de verplichte documenten lezen en accepteren.",
+    "ro": "Înainte de a continua, trebuie să citești și să accepți documentele obligatorii.",
+    "el": "Πριν συνεχίσεις, πρέπει να διαβάσεις και να αποδεχτείς τα υποχρεωτικά έγγραφα."
+  },
+  "Dichiaro di aver letto e accettato i Termini di utilizzo": {
+    "it": "Dichiaro di aver letto e accettato i Termini di utilizzo",
+    "en": "I confirm that I have read and accepted the Terms of Use",
+    "es": "Declaro que he leído y acepto los Términos de uso",
+    "fr": "Je déclare avoir lu et accepté les Conditions d’utilisation",
+    "de": "Ich bestätige, dass ich die Nutzungsbedingungen gelesen und akzeptiert habe",
+    "pt": "Declaro que li e aceito os Termos de utilização",
+    "pl": "Oświadczam, że przeczytałem(-am) i akceptuję Warunki korzystania",
+    "nl": "Ik verklaar dat ik de Gebruiksvoorwaarden heb gelezen en geaccepteerd",
+    "ro": "Declar că am citit și accept Termenii de utilizare",
+    "el": "Δηλώνω ότι διάβασα και αποδέχομαι τους Όρους χρήσης"
+  },
+  "Leggi i Termini di utilizzo": {
+    "it": "Leggi i Termini di utilizzo",
+    "en": "Read the Terms of Use",
+    "es": "Leer los Términos de uso",
+    "fr": "Lire les Conditions d’utilisation",
+    "de": "Nutzungsbedingungen lesen",
+    "pt": "Ler os Termos de utilização",
+    "pl": "Przeczytaj Warunki korzystania",
+    "nl": "Lees de Gebruiksvoorwaarden",
+    "ro": "Citește Termenii de utilizare",
+    "el": "Διάβασε τους Όρους χρήσης"
+  },
+  "Dichiaro di aver letto e accettato l’Informativa Privacy": {
+    "it": "Dichiaro di aver letto e accettato l’Informativa Privacy",
+    "en": "I confirm that I have read and accepted the Privacy Policy",
+    "es": "Declaro que he leído y acepto la Política de privacidad",
+    "fr": "Je déclare avoir lu et accepté la Politique de confidentialité",
+    "de": "Ich bestätige, dass ich die Datenschutzerklärung gelesen und akzeptiert habe",
+    "pt": "Declaro que li e aceito a Política de privacidade",
+    "pl": "Oświadczam, że przeczytałem(-am) i akceptuję Politykę prywatności",
+    "nl": "Ik verklaar dat ik het Privacybeleid heb gelezen en geaccepteerd",
+    "ro": "Declar că am citit și accept Politica de confidențialitate",
+    "el": "Δηλώνω ότι διάβασα και αποδέχομαι την Πολιτική απορρήτου"
+  },
+  "Leggi l’Informativa Privacy": {
+    "it": "Leggi l’Informativa Privacy",
+    "en": "Read the Privacy Policy",
+    "es": "Leer la Política de privacidad",
+    "fr": "Lire la Politique de confidentialité",
+    "de": "Datenschutzerklärung lesen",
+    "pt": "Ler a Política de privacidade",
+    "pl": "Przeczytaj Politykę prywatności",
+    "nl": "Lees het Privacybeleid",
+    "ro": "Citește Politica de confidențialitate",
+    "el": "Διάβασε την Πολιτική απορρήτου"
+  },
+  "Ho letto": {
+    "it": "Ho letto",
+    "en": "I have read it",
+    "es": "He leído",
+    "fr": "J’ai lu",
+    "de": "Ich habe es gelesen",
+    "pt": "Li",
+    "pl": "Przeczytałem(-am)",
+    "nl": "Ik heb het gelezen",
+    "ro": "Am citit",
+    "el": "Το διάβασα"
+  },
+  "Continua": {
+    "it": "Continua",
+    "en": "Continue",
+    "es": "Continuar",
+    "fr": "Continuer",
+    "de": "Weiter",
+    "pt": "Continuar",
+    "pl": "Kontynuuj",
+    "nl": "Doorgaan",
+    "ro": "Continuă",
+    "el": "Συνέχεια"
+  },
+  "‹ Indietro": {
+    "it": "‹ Indietro",
+    "en": "‹ Back",
+    "es": "‹ Atrás",
+    "fr": "‹ Retour",
+    "de": "‹ Zurück",
+    "pt": "‹ Voltar",
+    "pl": "‹ Wstecz",
+    "nl": "‹ Terug",
+    "ro": "‹ Înapoi",
+    "el": "‹ Πίσω"
+  },
+  "Autorizzazioni salvate": {
+    "it": "Autorizzazioni salvate",
+    "en": "Permissions saved",
+    "es": "Autorizaciones guardadas",
+    "fr": "Autorisations enregistrées",
+    "de": "Berechtigungen gespeichert",
+    "pt": "Autorizações guardadas",
+    "pl": "Uprawnienia zapisane",
+    "nl": "Toestemmingen opgeslagen",
+    "ro": "Autorizări salvate",
+    "el": "Οι άδειες αποθηκεύτηκαν"
+  },
+  "Metodo recuperato": {
+    "it": "Metodo recuperato",
+    "en": "Recovered method",
+    "es": "Método recuperado",
+    "fr": "Méthode récupérée",
+    "de": "Wiederhergestellte Methode",
+    "pt": "Método recuperado",
+    "pl": "Odzyskana metoda",
+    "nl": "Herstelde methode",
+    "ro": "Metodă recuperată",
+    "el": "Ανακτημένη μέθοδος"
+  },
+  "Questa voce è già usata nello storico o nelle ricorrenze: per proteggere i dati è stata archiviata, non eliminata.": {
+    "it": "Questa voce è già usata nello storico o nelle ricorrenze: per proteggere i dati è stata archiviata, non eliminata.",
+    "en": "This item is already used in history or recurring movements: to protect your data, it has been archived, not deleted.",
+    "es": "Este elemento ya se usa en el historial o en recurrencias: para proteger tus datos, se ha archivado y no eliminado.",
+    "fr": "Cet élément est déjà utilisé dans l’historique ou les récurrences : pour protéger tes données, il a été archivé et non supprimé.",
+    "de": "Dieser Eintrag wird bereits im Verlauf oder in Wiederholungen verwendet: Zum Schutz deiner Daten wurde er archiviert, nicht gelöscht.",
+    "pt": "Este item já é usado no histórico ou em recorrências: para proteger os dados, foi arquivado e não eliminado.",
+    "pl": "Ten element jest już używany w historii lub cyklicznych ruchach: aby chronić dane, został zarchiwizowany, a nie usunięty.",
+    "nl": "Dit item wordt al gebruikt in de geschiedenis of terugkerende mutaties: om je gegevens te beschermen is het gearchiveerd, niet verwijderd.",
+    "ro": "Acest element este deja folosit în istoric sau în recurențe: pentru protejarea datelor, a fost arhivat, nu șters.",
+    "el": "Αυτό το στοιχείο χρησιμοποιείται ήδη στο ιστορικό ή στις επαναλήψεις: για προστασία των δεδομένων αρχειοθετήθηκε, δεν διαγράφηκε."
+  },
+  "Sicurezza": {
+    "it": "Sicurezza",
+    "en": "Security",
+    "es": "Seguridad",
+    "fr": "Sécurité",
+    "de": "Sicherheit",
+    "pt": "Segurança",
+    "pl": "Bezpieczeństwo",
+    "nl": "Beveiliging",
+    "ro": "Securitate",
+    "el": "Ασφάλεια"
+  },
+  "Blocco biometrico dell’app": {
+    "it": "Blocco biometrico dell’app",
+    "en": "App biometric lock",
+    "es": "Bloqueo biométrico de la app",
+    "fr": "Verrouillage biométrique de l’app",
+    "de": "Biometrische App-Sperre",
+    "pt": "Bloqueio biométrico da app",
+    "pl": "Biometryczna blokada aplikacji",
+    "nl": "Biometrische appvergrendeling",
+    "ro": "Blocare biometrică a aplicației",
+    "el": "Βιομετρικό κλείδωμα εφαρμογής"
+  },
+  "Il PIN deve contenere 4 numeri.": {
+    "it": "Il PIN deve contenere 4 numeri.",
+    "en": "The PIN must contain 4 digits.",
+    "es": "El PIN debe contener 4 números.",
+    "fr": "Le PIN doit contenir 4 chiffres.",
+    "de": "Die PIN muss 4 Ziffern enthalten.",
+    "pt": "O PIN deve conter 4 números.",
+    "pl": "PIN musi zawierać 4 cyfry.",
+    "nl": "De pincode moet uit 4 cijfers bestaan.",
+    "ro": "PIN-ul trebuie să conțină 4 cifre.",
+    "el": "Το PIN πρέπει να περιέχει 4 ψηφία."
+  },
+  "PIN salvato": {
+    "it": "PIN salvato",
+    "en": "PIN saved",
+    "es": "PIN guardado",
+    "fr": "PIN enregistré",
+    "de": "PIN gespeichert",
+    "pt": "PIN guardado",
+    "pl": "PIN zapisany",
+    "nl": "Pincode opgeslagen",
+    "ro": "PIN salvat",
+    "el": "Το PIN αποθηκεύτηκε"
+  },
+  "Proteggi l’app": {
+    "it": "Proteggi l’app",
+    "en": "Protect the app",
+    "es": "Proteger la app",
+    "fr": "Protéger l’app",
+    "de": "App schützen",
+    "pt": "Proteger a app",
+    "pl": "Chroń aplikację",
+    "nl": "Bescherm de app",
+    "ro": "Protejează aplicația",
+    "el": "Προστάτευσε την εφαρμογή"
+  },
+  "Scegli se sbloccare fAInance con biometria, password dell’account o PIN di 4 numeri.": {
+    "it": "Scegli se sbloccare fAInance con biometria, password dell’account o PIN di 4 numeri.",
+    "en": "Choose whether to unlock fAInance with biometrics, account password or a 4-digit PIN.",
+    "es": "Elige si desbloquear fAInance con biometría, contraseña de la cuenta o PIN de 4 números.",
+    "fr": "Choisis si tu veux déverrouiller fAInance avec la biométrie, le mot de passe du compte ou un PIN à 4 chiffres.",
+    "de": "Wähle, ob du fAInance mit Biometrie, Kontopasswort oder 4-stelliger PIN entsperren möchtest.",
+    "pt": "Escolhe se queres desbloquear o fAInance com biometria, palavra-passe da conta ou PIN de 4 números.",
+    "pl": "Wybierz, czy odblokowywać fAInance biometrią, hasłem konta czy 4-cyfrowym PIN-em.",
+    "nl": "Kies of je fAInance ontgrendelt met biometrie, accountwachtwoord of een 4-cijferige pincode.",
+    "ro": "Alege dacă deblochezi fAInance cu biometrie, parola contului sau un PIN de 4 cifre.",
+    "el": "Επίλεξε αν θα ξεκλειδώνεις το fAInance με βιομετρικά, κωδικό λογαριασμού ή PIN 4 ψηφίων."
+  },
+  "PIN di 4 numeri": {
+    "it": "PIN di 4 numeri",
+    "en": "4-digit PIN",
+    "es": "PIN de 4 números",
+    "fr": "PIN à 4 chiffres",
+    "de": "4-stellige PIN",
+    "pt": "PIN de 4 números",
+    "pl": "4-cyfrowy PIN",
+    "nl": "4-cijferige pincode",
+    "ro": "PIN de 4 cifre",
+    "el": "PIN 4 ψηφίων"
+  },
+  "Salva PIN": {
+    "it": "Salva PIN",
+    "en": "Save PIN",
+    "es": "Guardar PIN",
+    "fr": "Enregistrer le PIN",
+    "de": "PIN speichern",
+    "pt": "Guardar PIN",
+    "pl": "Zapisz PIN",
+    "nl": "Pincode opslaan",
+    "ro": "Salvează PIN-ul",
+    "el": "Αποθήκευση PIN"
+  },
+  "PIN configurato": {
+    "it": "PIN configurato",
+    "en": "PIN configured",
+    "es": "PIN configurado",
+    "fr": "PIN configuré",
+    "de": "PIN eingerichtet",
+    "pt": "PIN configurado",
+    "pl": "PIN skonfigurowany",
+    "nl": "Pincode ingesteld",
+    "ro": "PIN configurat",
+    "el": "Το PIN ρυθμίστηκε"
+  },
+  "Richiedi blocco al ritorno nell’app": {
+    "it": "Richiedi blocco al ritorno nell’app",
+    "en": "Require lock when returning to the app",
+    "es": "Solicitar bloqueo al volver a la app",
+    "fr": "Demander le verrouillage au retour dans l’app",
+    "de": "Sperre beim Zurückkehren zur App anfordern",
+    "pt": "Pedir bloqueio ao voltar à app",
+    "pl": "Wymagaj blokady po powrocie do aplikacji",
+    "nl": "Vergrendeling vragen bij terugkeer naar de app",
+    "ro": "Cere blocarea la revenirea în aplicație",
+    "el": "Απαίτηση κλειδώματος κατά την επιστροφή στην εφαρμογή"
+  },
+  "Dopo quanto tempo in background fAInance deve bloccarsi di nuovo.": {
+    "it": "Dopo quanto tempo in background fAInance deve bloccarsi di nuovo.",
+    "en": "After how long in the background fAInance should lock again.",
+    "es": "Tras cuánto tiempo en segundo plano debe volver a bloquearse fAInance.",
+    "fr": "Après combien de temps en arrière-plan fAInance doit se verrouiller à nouveau.",
+    "de": "Nach welcher Zeit im Hintergrund fAInance erneut gesperrt werden soll.",
+    "pt": "Após quanto tempo em segundo plano o fAInance deve voltar a bloquear.",
+    "pl": "Po jakim czasie w tle fAInance ma ponownie się zablokować.",
+    "nl": "Na hoeveel tijd op de achtergrond fAInance opnieuw moet vergrendelen.",
+    "ro": "După cât timp în fundal fAInance trebuie să se blocheze din nou.",
+    "el": "Μετά από πόσο χρόνο στο παρασκήνιο το fAInance πρέπει να κλειδώνει ξανά."
+  },
+  "Il blocco locale non sostituisce il login Google, Apple o email: protegge solo l’accesso ai dati già disponibili sul dispositivo.": {
+    "it": "Il blocco locale non sostituisce il login Google, Apple o email: protegge solo l’accesso ai dati già disponibili sul dispositivo.",
+    "en": "The local lock does not replace Google, Apple or email login: it only protects access to data already available on the device.",
+    "es": "El bloqueo local no sustituye el inicio de sesión con Google, Apple o email: solo protege el acceso a los datos ya disponibles en el dispositivo.",
+    "fr": "Le verrouillage local ne remplace pas la connexion Google, Apple ou email : il protège seulement l’accès aux données déjà disponibles sur l’appareil.",
+    "de": "Die lokale Sperre ersetzt nicht die Anmeldung mit Google, Apple oder E-Mail: Sie schützt nur den Zugriff auf Daten, die bereits auf dem Gerät verfügbar sind.",
+    "pt": "O bloqueio local não substitui o login Google, Apple ou email: protege apenas o acesso aos dados já disponíveis no dispositivo.",
+    "pl": "Blokada lokalna nie zastępuje logowania Google, Apple ani e-mail: chroni tylko dostęp do danych już dostępnych na urządzeniu.",
+    "nl": "De lokale vergrendeling vervangt Google-, Apple- of e-maillogin niet: ze beschermt alleen toegang tot gegevens die al op het apparaat staan.",
+    "ro": "Blocarea locală nu înlocuiește autentificarea Google, Apple sau email: protejează doar accesul la datele deja disponibile pe dispozitiv.",
+    "el": "Το τοπικό κλείδωμα δεν αντικαθιστά τη σύνδεση Google, Apple ή email: προστατεύει μόνο την πρόσβαση στα δεδομένα που υπάρχουν ήδη στη συσκευή."
+  },
+  "Nome lista": {
+    "it": "Nome lista",
+    "en": "List name",
+    "es": "Nombre de la lista",
+    "fr": "Nom de la liste",
+    "de": "Listenname",
+    "pt": "Nome da lista",
+    "pl": "Nazwa listy",
+    "nl": "Lijstnaam",
+    "ro": "Numele listei",
+    "el": "Όνομα λίστας"
+  },
+  "Scegli icona": {
+    "it": "Scegli icona",
+    "en": "Choose icon",
+    "es": "Elegir icono",
+    "fr": "Choisir une icône",
+    "de": "Symbol auswählen",
+    "pt": "Escolher ícone",
+    "pl": "Wybierz ikonę",
+    "nl": "Kies pictogram",
+    "ro": "Alege pictograma",
+    "el": "Επιλογή εικονιδίου"
+  },
+  "Lista senza titolo": {
+    "it": "Lista senza titolo",
+    "en": "Untitled list",
+    "es": "Lista sin título",
+    "fr": "Liste sans titre",
+    "de": "Liste ohne Titel",
+    "pt": "Lista sem título",
+    "pl": "Lista bez tytułu",
+    "nl": "Lijst zonder titel",
+    "ro": "Listă fără titlu",
+    "el": "Λίστα χωρίς τίτλο"
+  },
+  "Orario": {
+    "it": "Orario",
+    "en": "Time",
+    "es": "Hora",
+    "fr": "Heure",
+    "de": "Uhrzeit",
+    "pt": "Hora",
+    "pl": "Godzina",
+    "nl": "Tijd",
+    "ro": "Oră",
+    "el": "Ώρα"
+  },
+  "Sezione disponibile dal piano Base. Puoi decidere dove far apparire i valori collegati.": {
+    "it": "Sezione disponibile dal piano Base. Puoi decidere dove far apparire i valori collegati.",
+    "en": "Section available from the Plus plan. You can choose where linked values appear.",
+    "es": "Sección disponible desde el plan Base. Puedes decidir dónde mostrar los valores vinculados.",
+    "fr": "Section disponible à partir du plan Base. Tu peux choisir où afficher les valeurs liées.",
+    "de": "Bereich ab dem Basis-Plan verfügbar. Du kannst festlegen, wo verknüpfte Werte erscheinen.",
+    "pt": "Secção disponível a partir do plano Base. Podes decidir onde mostrar os valores ligados.",
+    "pl": "Sekcja dostępna od planu Base. Możesz wybrać, gdzie mają się pojawiać powiązane wartości.",
+    "nl": "Sectie beschikbaar vanaf het Plus-abonnement. Je kunt kiezen waar gekoppelde waarden verschijnen.",
+    "ro": "Secțiune disponibilă din planul Base. Poți decide unde apar valorile asociate.",
+    "el": "Ενότητα διαθέσιμη από το πρόγραμμα Base. Μπορείς να επιλέξεις πού θα εμφανίζονται οι συνδεδεμένες τιμές."
+  },
+  "Gestisci i prodotti salvati della spesa con la stessa impostazione grafica delle categorie Uscite. La logica della sezione Spesa resta invariata.": {
+    "it": "Gestisci i prodotti salvati della spesa con la stessa impostazione grafica delle categorie Uscite. La logica della sezione Spesa resta invariata.",
+    "en": "Manage saved shopping products with the same visual setup as expense categories. The Shopping section logic remains unchanged.",
+    "es": "Gestiona los productos guardados de la compra con la misma configuración gráfica que las categorías de gastos. La lógica de la sección Compra no cambia.",
+    "fr": "Gère les produits de courses enregistrés avec la même présentation que les catégories de dépenses. La logique de la section Courses reste inchangée.",
+    "de": "Verwalte gespeicherte Einkaufsprodukte mit derselben grafischen Einrichtung wie Ausgabenkategorien. Die Logik des Einkaufsbereichs bleibt unverändert.",
+    "pt": "Gere os produtos guardados de compras com a mesma configuração visual das categorias de despesas. A lógica da secção Compras não muda.",
+    "pl": "Zarządzaj zapisanymi produktami zakupów z takim samym ustawieniem graficznym jak kategorie wydatków. Logika sekcji Zakupy pozostaje bez zmian.",
+    "nl": "Beheer opgeslagen boodschappenproducten met dezelfde visuele instelling als uitgavencategorieën. De logica van de sectie Boodschappen blijft ongewijzigd.",
+    "ro": "Gestionează produsele salvate pentru cumpărături cu aceeași configurare vizuală ca la categoriile de cheltuieli. Logica secțiunii Cumpărături rămâne neschimbată.",
+    "el": "Διαχειρίσου τα αποθηκευμένα προϊόντα αγορών με την ίδια οπτική ρύθμιση των κατηγοριών εξόδων. Η λογική της ενότητας Αγορές παραμένει αμετάβλητη."
+  },
+  "Es. Ricorda di pagare l'affitto di questo mese": {
+    "it": "Es. Ricorda di pagare l'affitto di questo mese",
+    "en": "E.g. Remember to pay this month’s rent",
+    "es": "Ej. Recuerda pagar el alquiler de este mes",
+    "fr": "Ex. Pense à payer le loyer de ce mois-ci",
+    "de": "Z. B. Denke daran, die Miete dieses Monats zu bezahlen",
+    "pt": "Ex. Lembra-te de pagar a renda deste mês",
+    "pl": "Np. Pamiętaj, aby zapłacić czynsz za ten miesiąc",
+    "nl": "Bijv. Denk eraan de huur van deze maand te betalen",
+    "ro": "Ex. Amintește-ți să plătești chiria din această lună",
+    "el": "Π.χ. Θυμήσου να πληρώσεις το ενοίκιο αυτού του μήνα"
+  }
+};
+  Object.keys(rows).forEach(function(k){Object.keys(rows[k]).forEach(function(lang){
+    try{if(!TRANSLATIONS[lang])TRANSLATIONS[lang]={};TRANSLATIONS[lang][k]=rows[k][lang];}catch(e){}
+    try{if(typeof FAINANCE_UI_TRANSLATIONS!=="undefined"){if(!FAINANCE_UI_TRANSLATIONS[lang])FAINANCE_UI_TRANSLATIONS[lang]={};FAINANCE_UI_TRANSLATIONS[lang][k]=rows[k][lang];}}catch(e){}
+    try{if(typeof FAINANCE_I18N_PHRASES!=="undefined"){if(!FAINANCE_I18N_PHRASES[lang])FAINANCE_I18N_PHRASES[lang]={};FAINANCE_I18N_PHRASES[lang][k]=rows[k][lang];}}catch(e){}
+  });});
+})();
+
+
+// fAInance - testi completi termini/privacy 1.2.15.
+(function(){
+  var rows={
+  "fAInance è pensata per uso personale e dimostrativo. Non deve essere usata come unico strumento per decisioni economiche rilevanti, dichiarazioni fiscali, investimenti o obblighi contabili professionali.": {
+    "it": "fAInance è pensata per uso personale e dimostrativo. Non deve essere usata come unico strumento per decisioni economiche rilevanti, dichiarazioni fiscali, investimenti o obblighi contabili professionali.",
+    "en": "fAInance is intended for personal and demonstrative use. It must not be used as the only tool for important financial decisions, tax returns, investments or professional accounting obligations.",
+    "es": "fAInance está pensada para uso personal y demostrativo. No debe usarse como única herramienta para decisiones económicas importantes, declaraciones fiscales, inversiones u obligaciones contables profesionales.",
+    "fr": "fAInance est conçue pour un usage personnel et démonstratif. Elle ne doit pas être utilisée comme seul outil pour des décisions économiques importantes, des déclarations fiscales, des investissements ou des obligations comptables professionnelles.",
+    "de": "fAInance ist für persönliche und demonstrative Nutzung gedacht. Sie darf nicht als einziges Werkzeug für wichtige wirtschaftliche Entscheidungen, Steuererklärungen, Investitionen oder professionelle Buchhaltungspflichten verwendet werden.",
+    "pt": "O fAInance destina-se a uso pessoal e demonstrativo. Não deve ser usado como única ferramenta para decisões económicas relevantes, declarações fiscais, investimentos ou obrigações contabilísticas profissionais.",
+    "pl": "fAInance jest przeznaczone do użytku osobistego i demonstracyjnego. Nie powinno być jedynym narzędziem do ważnych decyzji finansowych, deklaracji podatkowych, inwestycji ani obowiązków księgowych.",
+    "nl": "fAInance is bedoeld voor persoonlijk en demonstratief gebruik. Het mag niet als enig hulpmiddel worden gebruikt voor belangrijke financiële beslissingen, belastingaangiften, investeringen of professionele boekhoudverplichtingen.",
+    "ro": "fAInance este destinată utilizării personale și demonstrative. Nu trebuie folosită ca unic instrument pentru decizii economice importante, declarații fiscale, investiții sau obligații contabile profesionale.",
+    "el": "Το fAInance προορίζεται για προσωπική και δοκιμαστική χρήση. Δεν πρέπει να χρησιμοποιείται ως μοναδικό εργαλείο για σημαντικές οικονομικές αποφάσεις, φορολογικές δηλώσεις, επενδύσεις ή επαγγελματικές λογιστικές υποχρεώσεις."
+  },
+  "Le funzionalità, i testi, i limiti dell’Agente AI e questi termini possono essere aggiornati nelle versioni successive dell’app.": {
+    "it": "Le funzionalità, i testi, i limiti dell’Agente AI e questi termini possono essere aggiornati nelle versioni successive dell’app.",
+    "en": "Features, texts, AI Agent limits and these terms may be updated in later versions of the app.",
+    "es": "Las funciones, los textos, los límites del Agente IA y estos términos pueden actualizarse en versiones posteriores de la app.",
+    "fr": "Les fonctionnalités, les textes, les limites de l’Agent IA et ces conditions peuvent être mis à jour dans les versions suivantes de l’app.",
+    "de": "Funktionen, Texte, Grenzen des KI-Agenten und diese Bedingungen können in späteren App-Versionen aktualisiert werden.",
+    "pt": "As funcionalidades, textos, limites do Agente IA e estes termos podem ser atualizados em versões futuras da app.",
+    "pl": "Funkcje, teksty, limity Agenta AI i te warunki mogą zostać zaktualizowane w kolejnych wersjach aplikacji.",
+    "nl": "Functies, teksten, limieten van de AI-agent en deze voorwaarden kunnen in latere versies van de app worden bijgewerkt.",
+    "ro": "Funcționalitățile, textele, limitele Agentului AI și acești termeni pot fi actualizate în versiunile următoare ale aplicației.",
+    "el": "Οι λειτουργίες, τα κείμενα, τα όρια του πράκτορα AI και αυτοί οι όροι μπορεί να ενημερωθούν σε επόμενες εκδόσεις της εφαρμογής."
+  },
+  "fAInance può salvare i dati che inserisci nell’app, come entrate, uscite, categorie, metodi di pagamento, ricorrenze, budget, patrimonio, obiettivi, alert, appunti, documenti caricati e coordinate bancarie salvate volontariamente.": {
+    "it": "fAInance può salvare i dati che inserisci nell’app, come entrate, uscite, categorie, metodi di pagamento, ricorrenze, budget, patrimonio, obiettivi, alert, appunti, documenti caricati e coordinate bancarie salvate volontariamente.",
+    "en": "fAInance may save the data you enter in the app, such as income, expenses, categories, payment methods, recurring movements, budgets, assets, goals, alerts, notes, uploaded documents and bank details saved voluntarily.",
+    "es": "fAInance puede guardar los datos que introduces en la app, como ingresos, gastos, categorías, métodos de pago, recurrencias, presupuestos, patrimonio, objetivos, alertas, notas, documentos cargados y datos bancarios guardados voluntariamente.",
+    "fr": "fAInance peut enregistrer les données que tu saisis dans l’app, comme revenus, dépenses, catégories, moyens de paiement, récurrences, budgets, patrimoine, objectifs, alertes, notes, documents chargés et coordonnées bancaires enregistrées volontairement.",
+    "de": "fAInance kann die Daten speichern, die du in die App eingibst, wie Einnahmen, Ausgaben, Kategorien, Zahlungsmethoden, Wiederholungen, Budgets, Vermögen, Ziele, Warnungen, Notizen, hochgeladene Dokumente und freiwillig gespeicherte Bankdaten.",
+    "pt": "O fAInance pode guardar os dados inseridos na app, como receitas, despesas, categorias, métodos de pagamento, recorrências, orçamentos, património, objetivos, alertas, notas, documentos carregados e dados bancários guardados voluntariamente.",
+    "pl": "fAInance może zapisywać dane wprowadzane w aplikacji, takie jak przychody, wydatki, kategorie, metody płatności, cykliczne ruchy, budżety, majątek, cele, alerty, notatki, przesłane dokumenty i dobrowolnie zapisane dane bankowe.",
+    "nl": "fAInance kan de gegevens opslaan die je in de app invoert, zoals inkomsten, uitgaven, categorieën, betaalmethoden, terugkerende mutaties, budgetten, vermogen, doelen, meldingen, notities, geüploade documenten en vrijwillig opgeslagen bankgegevens.",
+    "ro": "fAInance poate salva datele pe care le introduci în aplicație, precum venituri, cheltuieli, categorii, metode de plată, recurențe, bugete, patrimoniu, obiective, alerte, notițe, documente încărcate și coordonate bancare salvate voluntar.",
+    "el": "Το fAInance μπορεί να αποθηκεύει τα δεδομένα που εισάγεις στην εφαρμογή, όπως έσοδα, έξοδα, κατηγορίες, τρόπους πληρωμής, επαναλήψεις, προϋπολογισμούς, περιουσία, στόχους, ειδοποιήσεις, σημειώσεις, έγγραφα και τραπεζικά στοιχεία που αποθηκεύονται εθελοντικά."
+  },
+  "Se accedi con email/password, Google o Apple, vengono usati i dati necessari all’autenticazione, come identificativo utente, email e nome profilo. L’accesso è gestito tramite Firebase Authentication.": {
+    "it": "Se accedi con email/password, Google o Apple, vengono usati i dati necessari all’autenticazione, come identificativo utente, email e nome profilo. L’accesso è gestito tramite Firebase Authentication.",
+    "en": "If you sign in with email/password, Google or Apple, the data required for authentication is used, such as user ID, email and profile name. Access is managed through Firebase Authentication.",
+    "es": "Si accedes con email/contraseña, Google o Apple, se usan los datos necesarios para la autenticación, como ID de usuario, email y nombre del perfil. El acceso se gestiona mediante Firebase Authentication.",
+    "fr": "Si tu te connectes avec email/mot de passe, Google ou Apple, les données nécessaires à l’authentification sont utilisées, comme l’identifiant utilisateur, l’email et le nom du profil. L’accès est géré via Firebase Authentication.",
+    "de": "Wenn du dich mit E-Mail/Passwort, Google oder Apple anmeldest, werden die für die Authentifizierung erforderlichen Daten verwendet, wie Nutzer-ID, E-Mail und Profilname. Der Zugriff wird über Firebase Authentication verwaltet.",
+    "pt": "Se iniciares sessão com email/palavra-passe, Google ou Apple, são usados os dados necessários à autenticação, como ID de utilizador, email e nome do perfil. O acesso é gerido através do Firebase Authentication.",
+    "pl": "Jeśli logujesz się przez e-mail/hasło, Google lub Apple, używane są dane wymagane do uwierzytelnienia, takie jak identyfikator użytkownika, e-mail i nazwa profilu. Dostęp jest obsługiwany przez Firebase Authentication.",
+    "nl": "Als je inlogt met e-mail/wachtwoord, Google of Apple, worden de gegevens gebruikt die nodig zijn voor authenticatie, zoals gebruikers-ID, e-mail en profielnaam. Toegang wordt beheerd via Firebase Authentication.",
+    "ro": "Dacă te autentifici cu email/parolă, Google sau Apple, sunt folosite datele necesare autentificării, precum ID-ul utilizatorului, emailul și numele profilului. Accesul este gestionat prin Firebase Authentication.",
+    "el": "Αν συνδεθείς με email/κωδικό, Google ή Apple, χρησιμοποιούνται τα απαραίτητα δεδομένα ταυτοποίησης, όπως αναγνωριστικό χρήστη, email και όνομα προφίλ. Η πρόσβαση διαχειρίζεται μέσω Firebase Authentication."
+  },
+  "I dati dell’app possono essere salvati localmente sul dispositivo e, per gli utenti autenticati, sincronizzati su Firestore/Firebase per consentire backup e recupero dei dati collegati all’account.": {
+    "it": "I dati dell’app possono essere salvati localmente sul dispositivo e, per gli utenti autenticati, sincronizzati su Firestore/Firebase per consentire backup e recupero dei dati collegati all’account.",
+    "en": "App data may be stored locally on the device and, for signed-in users, synchronized to Firestore/Firebase to allow backup and recovery of data linked to the account.",
+    "es": "Los datos de la app pueden guardarse localmente en el dispositivo y, para usuarios autenticados, sincronizarse en Firestore/Firebase para permitir copia de seguridad y recuperación de los datos vinculados a la cuenta.",
+    "fr": "Les données de l’app peuvent être enregistrées localement sur l’appareil et, pour les utilisateurs connectés, synchronisées sur Firestore/Firebase afin de permettre la sauvegarde et la récupération des données liées au compte.",
+    "de": "App-Daten können lokal auf dem Gerät gespeichert und für angemeldete Nutzer mit Firestore/Firebase synchronisiert werden, um Backup und Wiederherstellung der mit dem Konto verknüpften Daten zu ermöglichen.",
+    "pt": "Os dados da app podem ser guardados localmente no dispositivo e, para utilizadores autenticados, sincronizados no Firestore/Firebase para permitir cópia de segurança e recuperação dos dados ligados à conta.",
+    "pl": "Dane aplikacji mogą być zapisywane lokalnie na urządzeniu oraz, dla zalogowanych użytkowników, synchronizowane z Firestore/Firebase, aby umożliwić kopię zapasową i odzyskanie danych powiązanych z kontem.",
+    "nl": "Appgegevens kunnen lokaal op het apparaat worden opgeslagen en, voor ingelogde gebruikers, gesynchroniseerd met Firestore/Firebase voor back-up en herstel van gegevens die aan het account zijn gekoppeld.",
+    "ro": "Datele aplicației pot fi salvate local pe dispozitiv și, pentru utilizatorii autentificați, sincronizate în Firestore/Firebase pentru backup și recuperarea datelor asociate contului.",
+    "el": "Τα δεδομένα της εφαρμογής μπορούν να αποθηκεύονται τοπικά στη συσκευή και, για συνδεδεμένους χρήστες, να συγχρονίζονται σε Firestore/Firebase για αντίγραφα ασφαλείας και ανάκτηση δεδομένων που συνδέονται με τον λογαριασμό."
+  },
+  "Quando usi il Consulente AI, la domanda e i dati finanziari necessari all’analisi possono essere inviati al servizio AI collegato all’app per generare la risposta. È consigliabile non inserire dati non necessari o informazioni troppo sensibili nelle domande libere.": {
+    "it": "Quando usi il Consulente AI, la domanda e i dati finanziari necessari all’analisi possono essere inviati al servizio AI collegato all’app per generare la risposta. È consigliabile non inserire dati non necessari o informazioni troppo sensibili nelle domande libere.",
+    "en": "When you use the AI Advisor, the question and the financial data needed for the analysis may be sent to the AI service connected to the app to generate the response. Avoid entering unnecessary or overly sensitive data in free-form questions.",
+    "es": "Cuando usas el Asesor IA, la pregunta y los datos financieros necesarios para el análisis pueden enviarse al servicio de IA conectado a la app para generar la respuesta. Se recomienda no introducir datos innecesarios o demasiado sensibles en preguntas libres.",
+    "fr": "Quand tu utilises le Conseiller IA, la question et les données financières nécessaires à l’analyse peuvent être envoyées au service IA lié à l’app pour générer la réponse. Il est conseillé de ne pas saisir de données inutiles ou trop sensibles dans les questions libres.",
+    "de": "Wenn du den KI-Berater nutzt, können die Frage und die für die Analyse benötigten Finanzdaten an den mit der App verbundenen KI-Dienst gesendet werden. Gib in freien Fragen möglichst keine unnötigen oder zu sensiblen Daten ein.",
+    "pt": "Quando usas o Consultor IA, a pergunta e os dados financeiros necessários à análise podem ser enviados ao serviço de IA ligado à app para gerar a resposta. É aconselhável não inserir dados desnecessários ou demasiado sensíveis em perguntas livres.",
+    "pl": "Gdy korzystasz z Doradcy AI, pytanie i dane finansowe potrzebne do analizy mogą zostać wysłane do usługi AI połączonej z aplikacją w celu wygenerowania odpowiedzi. Nie zaleca się wpisywania zbędnych lub zbyt wrażliwych danych w pytaniach otwartych.",
+    "nl": "Wanneer je de AI-adviseur gebruikt, kunnen de vraag en de financiële gegevens die nodig zijn voor de analyse naar de AI-dienst van de app worden gestuurd om het antwoord te genereren. Vul geen onnodige of te gevoelige gegevens in vrije vragen in.",
+    "ro": "Când folosești Consilierul AI, întrebarea și datele financiare necesare analizei pot fi trimise serviciului AI conectat aplicației pentru generarea răspunsului. Este recomandat să nu introduci date inutile sau prea sensibile în întrebările libere.",
+    "el": "Όταν χρησιμοποιείς τον Σύμβουλο AI, η ερώτηση και τα οικονομικά δεδομένα που απαιτούνται για την ανάλυση μπορεί να αποστέλλονται στην υπηρεσία AI της εφαρμογής για δημιουργία απάντησης. Συνιστάται να μην εισάγεις περιττά ή πολύ ευαίσθητα δεδομένα σε ελεύθερες ερωτήσεις."
+  },
+  "I dati vengono usati per fornire le funzionalità dell’app: registrazione movimenti, statistiche, budget, alert, patrimonio, backup, sincronizzazione e analisi tramite AI.": {
+    "it": "I dati vengono usati per fornire le funzionalità dell’app: registrazione movimenti, statistiche, budget, alert, patrimonio, backup, sincronizzazione e analisi tramite AI.",
+    "en": "Data is used to provide the app’s features: movement recording, statistics, budgets, alerts, assets, backup, synchronization and AI analysis.",
+    "es": "Los datos se usan para ofrecer las funciones de la app: registro de movimientos, estadísticas, presupuestos, alertas, patrimonio, copia de seguridad, sincronización y análisis mediante IA.",
+    "fr": "Les données sont utilisées pour fournir les fonctionnalités de l’app : enregistrement des mouvements, statistiques, budgets, alertes, patrimoine, sauvegarde, synchronisation et analyse via IA.",
+    "de": "Die Daten werden verwendet, um die App-Funktionen bereitzustellen: Buchungen, Statistiken, Budgets, Warnungen, Vermögen, Backup, Synchronisierung und KI-Analyse.",
+    "pt": "Os dados são usados para fornecer as funcionalidades da app: registo de movimentos, estatísticas, orçamentos, alertas, património, cópia de segurança, sincronização e análise por IA.",
+    "pl": "Dane są używane do działania funkcji aplikacji: rejestrowania ruchów, statystyk, budżetów, alertów, majątku, kopii zapasowej, synchronizacji i analizy AI.",
+    "nl": "Gegevens worden gebruikt om de functies van de app te leveren: mutaties registreren, statistieken, budgetten, meldingen, vermogen, back-up, synchronisatie en AI-analyse.",
+    "ro": "Datele sunt folosite pentru funcțiile aplicației: înregistrarea mișcărilor, statistici, bugete, alerte, patrimoniu, backup, sincronizare și analiză prin AI.",
+    "el": "Τα δεδομένα χρησιμοποιούνται για τις λειτουργίες της εφαρμογής: καταγραφή κινήσεων, στατιστικά, προϋπολογισμοί, ειδοποιήσεις, περιουσία, αντίγραφα ασφαλείας, συγχρονισμός και ανάλυση μέσω AI."
+  },
+  "L’utente decide quali dati inserire, caricare o cancellare. Prima di salvare documenti, note o coordinate bancarie, valuta se siano davvero necessari per l’uso personale dell’app.": {
+    "it": "L’utente decide quali dati inserire, caricare o cancellare. Prima di salvare documenti, note o coordinate bancarie, valuta se siano davvero necessari per l’uso personale dell’app.",
+    "en": "The user decides which data to enter, upload or delete. Before saving documents, notes or bank details, consider whether they are truly necessary for personal use of the app.",
+    "es": "El usuario decide qué datos introducir, cargar o eliminar. Antes de guardar documentos, notas o datos bancarios, valora si son realmente necesarios para el uso personal de la app.",
+    "fr": "L’utilisateur décide quelles données saisir, charger ou supprimer. Avant d’enregistrer des documents, notes ou coordonnées bancaires, vérifie s’ils sont vraiment nécessaires à ton usage personnel de l’app.",
+    "de": "Der Nutzer entscheidet, welche Daten eingegeben, hochgeladen oder gelöscht werden. Prüfe vor dem Speichern von Dokumenten, Notizen oder Bankdaten, ob sie für die persönliche Nutzung der App wirklich erforderlich sind.",
+    "pt": "O utilizador decide que dados inserir, carregar ou apagar. Antes de guardar documentos, notas ou dados bancários, avalia se são realmente necessários para o uso pessoal da app.",
+    "pl": "Użytkownik decyduje, jakie dane wprowadzać, przesyłać lub usuwać. Przed zapisaniem dokumentów, notatek lub danych bankowych oceń, czy są naprawdę potrzebne do osobistego korzystania z aplikacji.",
+    "nl": "De gebruiker beslist welke gegevens worden ingevoerd, geüpload of verwijderd. Overweeg vóór het opslaan van documenten, notities of bankgegevens of ze echt nodig zijn voor persoonlijk gebruik van de app.",
+    "ro": "Utilizatorul decide ce date introduce, încarcă sau șterge. Înainte de a salva documente, note sau coordonate bancare, verifică dacă sunt cu adevărat necesare pentru utilizarea personală a aplicației.",
+    "el": "Ο χρήστης αποφασίζει ποια δεδομένα θα εισαγάγει, θα ανεβάσει ή θα διαγράψει. Πριν αποθηκεύσεις έγγραφα, σημειώσεις ή τραπεζικά στοιχεία, αξιολόγησε αν είναι πραγματικά απαραίτητα για προσωπική χρήση της εφαρμογής."
+  },
+  "L’app include funzioni per eliminare dati per sezione o cancellare informazioni salvate. Alcuni dati potrebbero restare in backup o cache tecniche fino ai normali tempi di aggiornamento dei servizi utilizzati.": {
+    "it": "L’app include funzioni per eliminare dati per sezione o cancellare informazioni salvate. Alcuni dati potrebbero restare in backup o cache tecniche fino ai normali tempi di aggiornamento dei servizi utilizzati.",
+    "en": "The app includes functions to delete data by section or remove saved information. Some data may remain in backups or technical caches until the normal update times of the services used.",
+    "es": "La app incluye funciones para eliminar datos por sección o borrar información guardada. Algunos datos podrían permanecer en copias de seguridad o cachés técnicas hasta los tiempos normales de actualización de los servicios usados.",
+    "fr": "L’app inclut des fonctions pour supprimer les données par section ou effacer les informations enregistrées. Certaines données peuvent rester dans des sauvegardes ou caches techniques jusqu’aux délais normaux de mise à jour des services utilisés.",
+    "de": "Die App enthält Funktionen zum Löschen von Daten nach Bereichen oder gespeicherten Informationen. Einige Daten können bis zu den normalen Aktualisierungszeiten der verwendeten Dienste in Backups oder technischen Caches verbleiben.",
+    "pt": "A app inclui funções para eliminar dados por secção ou apagar informações guardadas. Alguns dados podem permanecer em backups ou caches técnicos até aos tempos normais de atualização dos serviços usados.",
+    "pl": "Aplikacja zawiera funkcje usuwania danych według sekcji lub kasowania zapisanych informacji. Niektóre dane mogą pozostać w kopiach zapasowych lub technicznych pamięciach podręcznych do czasu standardowej aktualizacji używanych usług.",
+    "nl": "De app bevat functies om gegevens per sectie te verwijderen of opgeslagen informatie te wissen. Sommige gegevens kunnen in back-ups of technische caches blijven tot de normale updateperioden van de gebruikte diensten.",
+    "ro": "Aplicația include funcții pentru ștergerea datelor pe secțiuni sau eliminarea informațiilor salvate. Unele date pot rămâne în backup-uri sau cache-uri tehnice până la actualizarea normală a serviciilor folosite.",
+    "el": "Η εφαρμογή περιλαμβάνει λειτουργίες διαγραφής δεδομένων ανά ενότητα ή αποθηκευμένων πληροφοριών. Ορισμένα δεδομένα μπορεί να παραμείνουν σε αντίγραφα ασφαλείας ή τεχνικές κρυφές μνήμες έως τους κανονικούς χρόνους ενημέρωσης των υπηρεσιών."
+  },
+  "L’app può usare servizi esterni come Firebase, Firestore, autenticazione Google/Apple, API di cambio valuta e servizi AI. Ogni servizio può applicare proprie regole tecniche e privacy.": {
+    "it": "L’app può usare servizi esterni come Firebase, Firestore, autenticazione Google/Apple, API di cambio valuta e servizi AI. Ogni servizio può applicare proprie regole tecniche e privacy.",
+    "en": "The app may use external services such as Firebase, Firestore, Google/Apple authentication, exchange-rate APIs and AI services. Each service may apply its own technical and privacy rules.",
+    "es": "La app puede usar servicios externos como Firebase, Firestore, autenticación Google/Apple, API de cambio de divisas y servicios de IA. Cada servicio puede aplicar sus propias reglas técnicas y de privacidad.",
+    "fr": "L’app peut utiliser des services externes comme Firebase, Firestore, l’authentification Google/Apple, des API de taux de change et des services IA. Chaque service peut appliquer ses propres règles techniques et de confidentialité.",
+    "de": "Die App kann externe Dienste wie Firebase, Firestore, Google/Apple-Authentifizierung, Wechselkurs-APIs und KI-Dienste nutzen. Jeder Dienst kann eigene technische und Datenschutzregeln anwenden.",
+    "pt": "A app pode usar serviços externos como Firebase, Firestore, autenticação Google/Apple, APIs de câmbio e serviços de IA. Cada serviço pode aplicar as suas próprias regras técnicas e de privacidade.",
+    "pl": "Aplikacja może korzystać z usług zewnętrznych, takich jak Firebase, Firestore, uwierzytelnianie Google/Apple, API kursów walut i usługi AI. Każda usługa może stosować własne zasady techniczne i prywatności.",
+    "nl": "De app kan externe diensten gebruiken zoals Firebase, Firestore, Google/Apple-authenticatie, wisselkoers-API’s en AI-diensten. Elke dienst kan eigen technische en privacyregels toepassen.",
+    "ro": "Aplicația poate folosi servicii externe precum Firebase, Firestore, autentificare Google/Apple, API-uri de curs valutar și servicii AI. Fiecare serviciu poate aplica propriile reguli tehnice și de confidențialitate.",
+    "el": "Η εφαρμογή μπορεί να χρησιμοποιεί εξωτερικές υπηρεσίες όπως Firebase, Firestore, έλεγχο ταυτότητας Google/Apple, API συναλλαγματικών ισοτιμιών και υπηρεσίες AI. Κάθε υπηρεσία μπορεί να εφαρμόζει δικούς της τεχνικούς κανόνες και κανόνες απορρήτου."
+  },
+  "Questa informativa può essere aggiornata quando cambiano funzionalità, servizi tecnici, modalità di sincronizzazione o uso dell’Agente AI.": {
+    "it": "Questa informativa può essere aggiornata quando cambiano funzionalità, servizi tecnici, modalità di sincronizzazione o uso dell’Agente AI.",
+    "en": "This notice may be updated when features, technical services, synchronization methods or use of the AI Agent change.",
+    "es": "Esta información puede actualizarse cuando cambien las funciones, los servicios técnicos, las modalidades de sincronización o el uso del Agente IA.",
+    "fr": "Cette notice peut être mise à jour lorsque les fonctionnalités, services techniques, modes de synchronisation ou l’utilisation de l’Agent IA changent.",
+    "de": "Diese Erklärung kann aktualisiert werden, wenn sich Funktionen, technische Dienste, Synchronisierungsarten oder die Nutzung des KI-Agenten ändern.",
+    "pt": "Esta informação pode ser atualizada quando mudarem funcionalidades, serviços técnicos, modos de sincronização ou utilização do Agente IA.",
+    "pl": "Ta informacja może zostać zaktualizowana, gdy zmienią się funkcje, usługi techniczne, sposoby synchronizacji lub korzystanie z Agenta AI.",
+    "nl": "Deze verklaring kan worden bijgewerkt wanneer functies, technische diensten, synchronisatiemethoden of het gebruik van de AI-agent veranderen.",
+    "ro": "Această informare poate fi actualizată când se schimbă funcționalitățile, serviciile tehnice, modul de sincronizare sau utilizarea Agentului AI.",
+    "el": "Αυτή η ενημέρωση μπορεί να αλλάξει όταν αλλάζουν λειτουργίες, τεχνικές υπηρεσίες, τρόποι συγχρονισμού ή η χρήση του πράκτορα AI."
+  }
+};
+  Object.keys(rows).forEach(function(k){Object.keys(rows[k]).forEach(function(lang){
+    try{if(!TRANSLATIONS[lang])TRANSLATIONS[lang]={};TRANSLATIONS[lang][k]=rows[k][lang];}catch(e){}
+    try{if(typeof FAINANCE_UI_TRANSLATIONS!=="undefined"){if(!FAINANCE_UI_TRANSLATIONS[lang])FAINANCE_UI_TRANSLATIONS[lang]={};FAINANCE_UI_TRANSLATIONS[lang][k]=rows[k][lang];}}catch(e){}
+    try{if(typeof FAINANCE_I18N_PHRASES!=="undefined"){if(!FAINANCE_I18N_PHRASES[lang])FAINANCE_I18N_PHRASES[lang]={};FAINANCE_I18N_PHRASES[lang][k]=rows[k][lang];}}catch(e){}
+  });});
+})();
+
+// Traduzioni filtro storico salvato.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Salva filtro',{it:'Salva filtro',en:'Save filter',es:'Guardar filtro',fr:'Enregistrer le filtre',de:'Filter speichern',pt:'Guardar filtro',pl:'Zapisz filtr',nl:'Filter opslaan',ro:'Salvează filtrul',el:'Αποθήκευση φίλτρου'});
+  add('Filtro salvato',{it:'Filtro salvato',en:'Filter saved',es:'Filtro guardado',fr:'Filtre enregistré',de:'Filter gespeichert',pt:'Filtro guardado',pl:'Filtr zapisany',nl:'Filter opgeslagen',ro:'Filtru salvat',el:'Το φίλτρο αποθηκεύτηκε'});
+  add('Errore salvataggio filtro',{it:'Errore salvataggio filtro',en:'Filter save error',es:'Error al guardar el filtro',fr:'Erreur d’enregistrement du filtre',de:'Fehler beim Speichern des Filters',pt:'Erro ao guardar o filtro',pl:'Błąd zapisywania filtra',nl:'Fout bij opslaan filter',ro:'Eroare la salvarea filtrului',el:'Σφάλμα αποθήκευσης φίλτρου'});
+})();
+
+// Traduzioni pagina Impostazioni > Dati riformulata.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Importa Dati',{it:'Importa Dati',en:'Import data',es:'Importar datos',fr:'Importer des données',de:'Daten importieren',pt:'Importar dados',pl:'Importuj dane',nl:'Gegevens importeren',ro:'Importă date',el:'Εισαγωγή δεδομένων'});
+  add('Carica file CSV, Excel o un backup completo JSON.',{it:'Carica file CSV, Excel o un backup completo JSON.',en:'Upload CSV, Excel files or a full JSON backup.',es:'Carga archivos CSV, Excel o una copia de seguridad JSON completa.',fr:'Charge des fichiers CSV, Excel ou une sauvegarde JSON complète.',de:'CSV-, Excel-Dateien oder ein vollständiges JSON-Backup hochladen.',pt:'Carrega ficheiros CSV, Excel ou uma cópia de segurança JSON completa.',pl:'Prześlij pliki CSV, Excel albo pełną kopię JSON.',nl:'Upload CSV-, Excel-bestanden of een volledige JSON-back-up.',ro:'Încarcă fișiere CSV, Excel sau un backup JSON complet.',el:'Ανεβάστε αρχεία CSV, Excel ή πλήρες αντίγραφο ασφαλείας JSON.'});
+  add('Importa movimenti da file',{it:'Importa movimenti da file',en:'Import movements from file',es:'Importar movimientos desde archivo',fr:'Importer des mouvements depuis un fichier',de:'Buchungen aus Datei importieren',pt:'Importar movimentos de ficheiro',pl:'Importuj ruchy z pliku',nl:'Mutaties uit bestand importeren',ro:'Importă mișcări din fișier',el:'Εισαγωγή κινήσεων από αρχείο'});
+  add('Importa backup completo (Json)',{it:'Importa backup completo (Json)',en:'Import full backup (Json)',es:'Importar copia completa (Json)',fr:'Importer la sauvegarde complète (Json)',de:'Vollständiges Backup importieren (Json)',pt:'Importar cópia completa (Json)',pl:'Importuj pełną kopię (Json)',nl:'Volledige back-up importeren (Json)',ro:'Importă backup complet (Json)',el:'Εισαγωγή πλήρους αντιγράφου (Json)'});
+  add('Ripristina il JSON globale creato da Backup completo.',{it:'Ripristina il JSON globale creato da Backup completo.',en:'Restore the global JSON created by Full backup.',es:'Restaura el JSON global creado por la copia completa.',fr:'Restaure le JSON global créé par la sauvegarde complète.',de:'Stelle die globale JSON-Datei aus dem vollständigen Backup wieder her.',pt:'Restaura o JSON global criado pela cópia completa.',pl:'Przywróć globalny plik JSON utworzony przez pełną kopię.',nl:'Herstel de globale JSON die door Volledige back-up is gemaakt.',ro:'Restaurează JSON-ul global creat de backupul complet.',el:'Επαναφορά του γενικού JSON που δημιουργήθηκε από το πλήρες αντίγραφο.'});
+  add('Backup completo (Json)',{it:'Backup completo (Json)',en:'Full backup (Json)',es:'Copia completa (Json)',fr:'Sauvegarde complète (Json)',de:'Vollständiges Backup (Json)',pt:'Cópia completa (Json)',pl:'Pełna kopia (Json)',nl:'Volledige back-up (Json)',ro:'Backup complet (Json)',el:'Πλήρες αντίγραφο (Json)'});
+  add('Uscite - Excel',{it:'Uscite - Excel',en:'Expenses - Excel',es:'Gastos - Excel',fr:'Dépenses - Excel',de:'Ausgaben - Excel',pt:'Saídas - Excel',pl:'Wydatki - Excel',nl:'Uitgaven - Excel',ro:'Ieșiri - Excel',el:'Έξοδα - Excel'});
+  add('Uscite - CSV',{it:'Uscite - CSV',en:'Expenses - CSV',es:'Gastos - CSV',fr:'Dépenses - CSV',de:'Ausgaben - CSV',pt:'Saídas - CSV',pl:'Wydatki - CSV',nl:'Uitgaven - CSV',ro:'Ieșiri - CSV',el:'Έξοδα - CSV'});
+  add('Entrate - Excel',{it:'Entrate - Excel',en:'Income - Excel',es:'Ingresos - Excel',fr:'Revenus - Excel',de:'Einnahmen - Excel',pt:'Entradas - Excel',pl:'Przychody - Excel',nl:'Inkomsten - Excel',ro:'Intrări - Excel',el:'Έσοδα - Excel'});
+  add('Entrate - CSV',{it:'Entrate - CSV',en:'Income - CSV',es:'Ingresos - CSV',fr:'Revenus - CSV',de:'Einnahmen - CSV',pt:'Entradas - CSV',pl:'Przychody - CSV',nl:'Inkomsten - CSV',ro:'Intrări - CSV',el:'Έσοδα - CSV'});
+  add('Patrimonio (Json)',{it:'Patrimonio (Json)',en:'Assets (Json)',es:'Patrimonio (Json)',fr:'Patrimoine (Json)',de:'Vermögen (Json)',pt:'Património (Json)',pl:'Majątek (Json)',nl:'Vermogen (Json)',ro:'Patrimoniu (Json)',el:'Περιουσία (Json)'});
+  add('Budget (Json)',{it:'Budget (Json)',en:'Budget (Json)',es:'Presupuesto (Json)',fr:'Budget (Json)',de:'Budget (Json)',pt:'Orçamento (Json)',pl:'Budżet (Json)',nl:'Budget (Json)',ro:'Buget (Json)',el:'Προϋπολογισμός (Json)'});
+  add('Spesa (Json)',{it:'Spesa (Json)',en:'Shopping (Json)',es:'Compra (Json)',fr:'Courses (Json)',de:'Einkauf (Json)',pt:'Compras (Json)',pl:'Zakupy (Json)',nl:'Boodschappen (Json)',ro:'Cumpărături (Json)',el:'Αγορές (Json)'});
+  add('Debiti / Crediti (Json)',{it:'Debiti / Crediti (Json)',en:'Debts / Credits (Json)',es:'Deudas / Créditos (Json)',fr:'Dettes / Créances (Json)',de:'Schulden / Forderungen (Json)',pt:'Dívidas / Créditos (Json)',pl:'Długi / Należności (Json)',nl:'Schulden / Tegoeden (Json)',ro:'Datorii / Creanțe (Json)',el:'Χρέη / Πιστώσεις (Json)'});
+  add('Scegli cosa scaricare e poi conferma l’esportazione.',{it:'Scegli cosa scaricare e poi conferma l’esportazione.',en:'Choose what to download, then confirm the export.',es:'Elige qué descargar y confirma la exportación.',fr:'Choisis quoi télécharger, puis confirme l’exportation.',de:'Wähle aus, was heruntergeladen werden soll, und bestätige den Export.',pt:'Escolhe o que descarregar e confirma a exportação.',pl:'Wybierz, co pobrać, a następnie potwierdź eksport.',nl:'Kies wat je wilt downloaden en bevestig de export.',ro:'Alege ce să descarci, apoi confirmă exportul.',el:'Επιλέξτε τι θα κατεβάσετε και επιβεβαιώστε την εξαγωγή.'});
+  add('Esporta',{it:'Esporta',en:'Export',es:'Exportar',fr:'Exporter',de:'Exportieren',pt:'Exportar',pl:'Eksportuj',nl:'Exporteren',ro:'Exportă',el:'Εξαγωγή'});
+  add('Scegli una sezione da eliminare. L’operazione non è reversibile.',{it:'Scegli una sezione da eliminare. L’operazione non è reversibile.',en:'Choose a section to delete. This action cannot be undone.',es:'Elige una sección para eliminar. La operación no se puede deshacer.',fr:'Choisis une section à supprimer. L’opération est irréversible.',de:'Wähle einen Bereich zum Löschen aus. Der Vorgang kann nicht rückgängig gemacht werden.',pt:'Escolhe uma secção para eliminar. A operação não pode ser revertida.',pl:'Wybierz sekcję do usunięcia. Tej operacji nie można cofnąć.',nl:'Kies een sectie om te verwijderen. Deze actie kan niet ongedaan worden gemaakt.',ro:'Alege o secțiune de șters. Operațiunea nu poate fi anulată.',el:'Επιλέξτε ενότητα για διαγραφή. Η ενέργεια δεν αναιρείται.'});
+  add('Seleziona cosa eliminare',{it:'Seleziona cosa eliminare',en:'Select what to delete',es:'Selecciona qué eliminar',fr:'Sélectionne quoi supprimer',de:'Auswählen, was gelöscht werden soll',pt:'Seleciona o que eliminar',pl:'Wybierz, co usunąć',nl:'Selecteer wat je wilt verwijderen',ro:'Selectează ce să ștergi',el:'Επιλέξτε τι θα διαγραφεί'});
+  add('Confermi l’eliminazione dei dati selezionati?',{it:'Confermi l’eliminazione dei dati selezionati?',en:'Do you confirm deletion of the selected data?',es:'¿Confirmas la eliminación de los datos seleccionados?',fr:'Confirmer la suppression des données sélectionnées ?',de:'Löschung der ausgewählten Daten bestätigen?',pt:'Confirmas a eliminação dos dados selecionados?',pl:'Potwierdzasz usunięcie wybranych danych?',nl:'Bevestig je het verwijderen van de geselecteerde gegevens?',ro:'Confirmi ștergerea datelor selectate?',el:'Επιβεβαιώνετε τη διαγραφή των επιλεγμένων δεδομένων;'});
+})();
+
+// Traduzioni struttura Info, Piani & Supporto e Dati con selezione multipla.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Info, Piani & Supporto',{it:'Info, Piani & Supporto',en:'Info, Plans & Support',es:'Info, planes y soporte',fr:'Infos, offres et support',de:'Info, Tarife & Support',pt:'Info, planos e suporte',pl:'Informacje, plany i wsparcie',nl:'Info, abonnementen & ondersteuning',ro:'Info, planuri și suport',el:'Πληροφορίες, πλάνα & υποστήριξη'});
+  add('Piani, dati, supporto e informazioni app',{it:'Piani, dati, supporto e informazioni app',en:'Plans, data, support and app information',es:'Planes, datos, soporte e información de la app',fr:'Offres, données, support et informations de l’app',de:'Tarife, Daten, Support und App-Informationen',pt:'Planos, dados, suporte e informações da app',pl:'Plany, dane, wsparcie i informacje o aplikacji',nl:'Abonnementen, gegevens, ondersteuning en app-info',ro:'Planuri, date, suport și informații despre aplicație',el:'Πλάνα, δεδομένα, υποστήριξη και πληροφορίες εφαρμογής'});
+  add('Piani',{it:'Piani',en:'Plans',es:'Planes',fr:'Offres',de:'Tarife',pt:'Planos',pl:'Plany',nl:'Abonnementen',ro:'Planuri',el:'Πλάνα'});
+  add('Piani, acquisti e dettagli',{it:'Piani, acquisti e dettagli',en:'Plans, purchases and details',es:'Planes, compras y detalles',fr:'Offres, achats et détails',de:'Tarife, Käufe und Details',pt:'Planos, compras e detalhes',pl:'Plany, zakupy i szczegóły',nl:'Abonnementen, aankopen en details',ro:'Planuri, achiziții și detalii',el:'Πλάνα, αγορές και λεπτομέρειες'});
+  add('Versione, termini, privacy e aggiornamenti',{it:'Versione, termini, privacy e aggiornamenti',en:'Version, terms, privacy and updates',es:'Versión, términos, privacidad y actualizaciones',fr:'Version, conditions, confidentialité et mises à jour',de:'Version, Bedingungen, Datenschutz und Updates',pt:'Versão, termos, privacidade e atualizações',pl:'Wersja, warunki, prywatność i aktualizacje',nl:'Versie, voorwaarden, privacy en updates',ro:'Versiune, termeni, confidențialitate și actualizări',el:'Έκδοση, όροι, απόρρητο και ενημερώσεις'});
+  add('FAQ, sito web e contatti',{it:'FAQ, sito web e contatti',en:'FAQ, website and contacts',es:'FAQ, sitio web y contactos',fr:'FAQ, site web et contacts',de:'FAQ, Website und Kontakte',pt:'FAQ, site e contactos',pl:'FAQ, strona i kontakt',nl:'FAQ, website en contact',ro:'FAQ, site web și contacte',el:'FAQ, ιστότοπος και επικοινωνία'});
+  add('Scopri il dettaglio dei piani',{it:'Scopri il dettaglio dei piani',en:'See plan details',es:'Ver los detalles de los planes',fr:'Voir le détail des offres',de:'Tarifdetails ansehen',pt:'Ver detalhes dos planos',pl:'Zobacz szczegóły planów',nl:'Bekijk abonnementsdetails',ro:'Vezi detaliile planurilor',el:'Δείτε λεπτομέρειες πλάνων'});
+  add('Apri dettaglio piani sul sito',{it:'Apri dettaglio piani sul sito',en:'Open plan details on the website',es:'Abrir los detalles de los planes en el sitio',fr:'Ouvrir le détail des offres sur le site',de:'Tarifdetails auf der Website öffnen',pt:'Abrir detalhes dos planos no site',pl:'Otwórz szczegóły planów na stronie',nl:'Open abonnementsdetails op de website',ro:'Deschide detaliile planurilor pe site',el:'Άνοιγμα λεπτομερειών πλάνων στον ιστότοπο'});
+  add('Seleziona una o più sezioni da eliminare. L’operazione non è reversibile.',{it:'Seleziona una o più sezioni da eliminare. L’operazione non è reversibile.',en:'Select one or more sections to delete. This action cannot be undone.',es:'Selecciona una o más secciones para eliminar. La operación no se puede deshacer.',fr:'Sélectionne une ou plusieurs sections à supprimer. L’opération est irréversible.',de:'Wähle einen oder mehrere Bereiche zum Löschen aus. Der Vorgang kann nicht rückgängig gemacht werden.',pt:'Seleciona uma ou mais secções para eliminar. A operação não pode ser revertida.',pl:'Wybierz jedną lub więcej sekcji do usunięcia. Tej operacji nie można cofnąć.',nl:'Selecteer één of meer secties om te verwijderen. Deze actie kan niet ongedaan worden gemaakt.',ro:'Selectează una sau mai multe secțiuni de șters. Operațiunea nu poate fi anulată.',el:'Επιλέξτε μία ή περισσότερες ενότητες για διαγραφή. Η ενέργεια δεν αναιρείται.'});
+  add('Elimina tutto',{it:'Elimina tutto',en:'Delete everything',es:'Eliminar todo',fr:'Tout supprimer',de:'Alles löschen',pt:'Eliminar tudo',pl:'Usuń wszystko',nl:'Alles verwijderen',ro:'Șterge tot',el:'Διαγραφή όλων'});
+  add('Importa, esporta, backup, elimina',{it:'Importa, esporta, backup, elimina',en:'Import, export, backup, delete',es:'Importar, exportar, copia de seguridad, eliminar',fr:'Importer, exporter, sauvegarder, supprimer',de:'Importieren, exportieren, sichern, löschen',pt:'Importar, exportar, cópia, eliminar',pl:'Import, eksport, kopia, usuwanie',nl:'Importeren, exporteren, back-up, verwijderen',ro:'Importă, exportă, backup, șterge',el:'Εισαγωγή, εξαγωγή, αντίγραφο, διαγραφή'});
+})();
+
+
+// Traduzioni fix Info, Piani & Supporto e nuove creazioni da popup.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Info, Piani & Supporto',{it:'Info, Piani & Supporto',en:'Info, Plans & Support',es:'Info, planes y soporte',fr:'Infos, offres et support',de:'Info, Tarife & Support',pt:'Info, planos e suporte',pl:'Informacje, plany i wsparcie',nl:'Info, abonnementen & ondersteuning',ro:'Info, planuri și suport',el:'Πληροφορίες, πλάνα & υποστήριξη'});
+  add('Piani, supporto, dati e informazioni app',{it:'Piani, supporto, dati e informazioni app',en:'Plans, support, data and app information',es:'Planes, soporte, datos e información de la app',fr:'Offres, support, données et informations de l’app',de:'Tarife, Support, Daten und App-Informationen',pt:'Planos, suporte, dados e informações da app',pl:'Plany, wsparcie, dane i informacje o aplikacji',nl:'Abonnementen, ondersteuning, gegevens en app-info',ro:'Planuri, suport, date și informații despre aplicație',el:'Πλάνα, υποστήριξη, δεδομένα και πληροφορίες εφαρμογής'});
+  add('Nuova categoria',{it:'Nuova categoria',en:'New category',es:'Nueva categoría',fr:'Nouvelle catégorie',de:'Neue Kategorie',pt:'Nova categoria',pl:'Nowa kategoria',nl:'Nieuwe categorie',ro:'Categorie nouă',el:'Νέα κατηγορία'});
+  add('Nuovo metodo di pagamento',{it:'Nuovo metodo di pagamento',en:'New payment method',es:'Nuevo método de pago',fr:'Nouveau moyen de paiement',de:'Neue Zahlungsmethode',pt:'Novo método de pagamento',pl:'Nowa metoda płatności',nl:'Nieuwe betaalmethode',ro:'Metodă de plată nouă',el:'Νέα μέθοδος πληρωμής'});
+  add('Categorie accorpate',{it:'Categorie accorpate',en:'Categories merged',es:'Categorías agrupadas',fr:'Catégories fusionnées',de:'Kategorien zusammengeführt',pt:'Categorias agrupadas',pl:'Kategorie scalone',nl:'Categorieën samengevoegd',ro:'Categorii unite',el:'Οι κατηγορίες συγχωνεύτηκαν'});
+  add('Gestisci le categorie delle entrate con la stessa interfaccia delle altre liste: modifica, archivia, cancella, riordina, default e accorpamento.',{it:'Gestisci le categorie delle entrate con la stessa interfaccia delle altre liste: modifica, archivia, cancella, riordina, default e accorpamento.',en:'Manage income categories with the same interface as the other lists: edit, archive, delete, reorder, default and merge.',es:'Gestiona las categorías de ingresos con la misma interfaz de las demás listas: editar, archivar, eliminar, reordenar, predeterminada y agrupar.',fr:'Gère les catégories de revenus avec la même interface que les autres listes : modifier, archiver, supprimer, réordonner, valeur par défaut et fusion.',de:'Verwalte Einnahmenkategorien mit derselben Oberfläche wie die anderen Listen: bearbeiten, archivieren, löschen, sortieren, Standard und Zusammenführen.',pt:'Gere as categorias de receitas com a mesma interface das outras listas: editar, arquivar, apagar, reordenar, predefinição e agrupar.',pl:'Zarządzaj kategoriami przychodów w tym samym interfejsie co inne listy: edycja, archiwizacja, usuwanie, zmiana kolejności, domyślna wartość i scalanie.',nl:'Beheer inkomstencategorieën met dezelfde interface als de andere lijsten: bewerken, archiveren, verwijderen, herschikken, standaard en samenvoegen.',ro:'Gestionează categoriile de venituri cu aceeași interfață ca celelalte liste: modificare, arhivare, ștergere, reordonare, implicit și unire.',el:'Διαχειριστείτε τις κατηγορίες εσόδων με την ίδια διεπαφή των άλλων λιστών: επεξεργασία, αρχειοθέτηση, διαγραφή, αναδιάταξη, προεπιλογή και συγχώνευση.'});
+  add('Archiviati',{it:'Archiviati',en:'Archived',es:'Archivados',fr:'Archivés',de:'Archiviert',pt:'Arquivados',pl:'Zarchiwizowane',nl:'Gearchiveerd',ro:'Arhivate',el:'Αρχειοθετημένα'});
+  add('Area',{it:'Area',en:'Area',es:'Área',fr:'Zone',de:'Bereich',pt:'Área',pl:'Obszar',nl:'Gebied',ro:'Zonă',el:'Περιοχή'});
+  add('Funzione disponibile dal piano Base.',{it:'Funzione disponibile dal piano Base.',en:'Feature available from the Plus plan.',es:'Función disponible desde el plan Plus.',fr:'Fonction disponible à partir de l’offre Plus.',de:'Funktion ab dem Plus-Tarif verfügbar.',pt:'Funcionalidade disponível a partir do plano Plus.',pl:'Funkcja dostępna od planu Plus.',nl:'Functie beschikbaar vanaf het Plus-abonnement.',ro:'Funcție disponibilă începând cu planul Plus.',el:'Η λειτουργία είναι διαθέσιμη από το πλάνο Plus.'});
+})();
+
+// Traduzioni schermata nuova uscita/entrata dinamica.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Tocca per inserire importo',{it:'Tocca per inserire importo',en:'Tap to enter amount',es:'Toca para introducir el importe',fr:'Touchez pour saisir le montant',de:'Tippen, um den Betrag einzugeben',pt:'Toque para inserir o valor',pl:'Stuknij, aby wpisać kwotę',nl:'Tik om bedrag in te voeren',ro:'Atinge pentru a introduce suma',el:'Πατήστε για εισαγωγή ποσού'});
+  add('Aggiungi una descrizione (opzionale)',{it:'Aggiungi una descrizione (opzionale)',en:'Add a description (optional)',es:'Añade una descripción (opcional)',fr:'Ajoutez une description (facultatif)',de:'Beschreibung hinzufügen (optional)',pt:'Adicione uma descrição (opcional)',pl:'Dodaj opis (opcjonalnie)',nl:'Voeg een beschrijving toe (optioneel)',ro:'Adaugă o descriere (opțional)',el:'Προσθέστε περιγραφή (προαιρετικά)'});
+})();
+
+// Traduzioni aggiornamento grafica inserimento, Share e bottoni ricorrenti.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Tocca per modificare',{it:'Tocca per modificare',en:'Tap to edit',es:'Toca para modificar',fr:'Touchez pour modifier',de:'Tippen zum Bearbeiten',pt:'Toca para alterar',pl:'Stuknij, aby zmienić',nl:'Tik om te wijzigen',ro:'Atinge pentru a modifica',el:'Πατήστε για τροποποίηση'});
+  add('Aggiungi spesa',{it:'Aggiungi spesa',en:'Add expense',es:'Añadir gasto',fr:'Ajouter une dépense',de:'Ausgabe hinzufügen',pt:'Adicionar despesa',pl:'Dodaj wydatek',nl:'Uitgave toevoegen',ro:'Adaugă cheltuială',el:'Προσθήκη εξόδου'});
+  add('Aggiungi Partecipante',{it:'Aggiungi Partecipante',en:'Add Participant',es:'Añadir participante',fr:'Ajouter un participant',de:'Teilnehmer hinzufügen',pt:'Adicionar participante',pl:'Dodaj uczestnika',nl:'Deelnemer toevoegen',ro:'Adaugă participant',el:'Προσθήκη συμμετέχοντα'});
+  add('Riassunto e Saldi',{it:'Riassunto e Saldi',en:'Summary and Balances',es:'Resumen y saldos',fr:'Résumé et soldes',de:'Zusammenfassung und Salden',pt:'Resumo e saldos',pl:'Podsumowanie i salda',nl:'Samenvatting en saldi',ro:'Rezumat și solduri',el:'Σύνοψη και υπόλοιπα'});
+  add('Aggiungi partecipante',{it:'Aggiungi partecipante',en:'Add participant',es:'Añadir participante',fr:'Ajouter un participant',de:'Teilnehmer hinzufügen',pt:'Adicionar participante',pl:'Dodaj uczestnika',nl:'Deelnemer toevoegen',ro:'Adaugă participant',el:'Προσθήκη συμμετέχοντα'});
+})();
+
+// Traduzioni aggiornamento piani e Share progetto.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Piano attuale',{it:'Piano attuale',en:'Current plan',es:'Plan actual',fr:'Offre actuelle',de:'Aktueller Tarif',pt:'Plano atual',pl:'Aktualny plan',nl:'Huidig abonnement',ro:'Plan actual',el:'Τρέχον πλάνο'});
+  add('Rinnovo',{it:'Rinnovo',en:'Renewal',es:'Renovación',fr:'Renouvellement',de:'Verlängerung',pt:'Renovação',pl:'Odnowienie',nl:'Vernieuwing',ro:'Reînnoire',el:'Ανανέωση'});
+  add('Scegli progetto',{it:'Scegli progetto',en:'Choose project',es:'Elegir proyecto',fr:'Choisir un projet',de:'Projekt wählen',pt:'Escolher projeto',pl:'Wybierz projekt',nl:'Project kiezen',ro:'Alege proiectul',el:'Επιλογή έργου'});
+  add('Crea progetto',{it:'Crea progetto',en:'Create project',es:'Crear proyecto',fr:'Créer un projet',de:'Projekt erstellen',pt:'Criar projeto',pl:'Utwórz projekt',nl:'Project maken',ro:'Creează proiect',el:'Δημιουργία έργου'});
+  add('Nome progetto',{it:'Nome progetto',en:'Project name',es:'Nombre del proyecto',fr:'Nom du projet',de:'Projektname',pt:'Nome do projeto',pl:'Nazwa projektu',nl:'Projectnaam',ro:'Numele proiectului',el:'Όνομα έργου'});
+})();
+
+
+// Aggiornamento 1.3.1 Test: rinomina sezione barra superiore/inferiore.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add(['Barra superiore e inferiore','Aspetto / Barra superiore e inferiore'],{
+    it:'Barra superiore e inferiore',
+    en:'Top and bottom bar',
+    es:'Barra superior e inferior',
+    fr:'Barre supérieure et inférieure',
+    de:'Obere und untere Leiste',
+    pt:'Barra superior e inferior',
+    pl:'Górny i dolny pasek',
+    nl:'Boven- en onderbalk',
+    ro:'Bara de sus și de jos',
+    el:'Επάνω και κάτω μπάρα'
+  });
+})();
+
+
+// Aggiornamento Share: progetti, saldo/rimborso e popup dedicati.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Progetti',{it:'Progetti',en:'Projects',es:'Proyectos',fr:'Projets',de:'Projekte',pt:'Projetos',pl:'Projekty',nl:'Projecten',ro:'Proiecte',el:'Έργα'});
+  add('Nuovo progetto',{it:'Nuovo progetto',en:'New project',es:'Nuevo proyecto',fr:'Nouveau projet',de:'Neues Projekt',pt:'Novo projeto',pl:'Nowy projekt',nl:'Nieuw project',ro:'Proiect nou',el:'Νέο έργο'});
+  add('Registra un pagamento tra partecipanti del progetto.',{it:'Registra un pagamento tra partecipanti del progetto.',en:'Record a payment between project participants.',es:'Registra un pago entre participantes del proyecto.',fr:'Enregistrez un paiement entre les participants du projet.',de:'Erfasse eine Zahlung zwischen Projektteilnehmern.',pt:'Registe um pagamento entre participantes do projeto.',pl:'Zarejestruj płatność między uczestnikami projektu.',nl:'Registreer een betaling tussen projectdeelnemers.',ro:'Înregistrează o plată între participanții proiectului.',el:'Καταγράψτε μια πληρωμή μεταξύ συμμετεχόντων στο έργο.'});
+  add('Da',{it:'Da',en:'From',es:'De',fr:'De',de:'Von',pt:'De',pl:'Od',nl:'Van',ro:'De la',el:'Από'});
+  add('A',{it:'A',en:'To',es:'A',fr:'À',de:'An',pt:'Para',pl:'Do',nl:'Aan',ro:'Către',el:'Προς'});
+})();
+
+
+// Aggiornamento Share: blocco saldo stesso partecipante e conferma scontrino.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Non puoi registrare un saldo/rimborso con la stessa persona in Da e A.',{it:'Non puoi registrare un saldo/rimborso con la stessa persona in Da e A.',en:'You cannot record a balance/refund with the same person in From and To.',es:'No puedes registrar un saldo/reembolso con la misma persona en De y A.',fr:'Vous ne pouvez pas enregistrer un solde/remboursement avec la même personne en De et À.',de:'Du kannst keinen Saldo/keine Erstattung mit derselben Person in Von und An erfassen.',pt:'Não pode registar um saldo/reembolso com a mesma pessoa em De e Para.',pl:'Nie możesz zarejestrować salda/zwrotu z tą samą osobą w polach Od i Do.',nl:'Je kunt geen saldo/terugbetaling registreren met dezelfde persoon bij Van en Aan.',ro:'Nu poți înregistra un sold/o rambursare cu aceeași persoană la De la și Către.',el:'Δεν μπορείς να καταγράψεις υπόλοιπο/επιστροφή με το ίδιο άτομο στα πεδία Από και Προς.'});
+  add('Scontrino letto. Controlla i dati e conferma la spesa Share.',{it:'Scontrino letto. Controlla i dati e conferma la spesa Share.',en:'Receipt read. Check the data and confirm the Share expense.',es:'Recibo leído. Revisa los datos y confirma el gasto Share.',fr:'Ticket lu. Vérifiez les données et confirmez la dépense Share.',de:'Beleg gelesen. Prüfe die Daten und bestätige die Share-Ausgabe.',pt:'Recibo lido. Verifique os dados e confirme a despesa Share.',pl:'Paragon odczytany. Sprawdź dane i potwierdź wydatek Share.',nl:'Bon gelezen. Controleer de gegevens en bevestig de Share-uitgave.',ro:'Bon citit. Verifică datele și confirmă cheltuiala Share.',el:'Η απόδειξη διαβάστηκε. Έλεγξε τα δεδομένα και επιβεβαίωσε την έξοδο Share.'});
+  add('Inserisci un importo valido.',{it:'Inserisci un importo valido.',en:'Enter a valid amount.',es:'Introduce un importe válido.',fr:'Saisissez un montant valide.',de:'Gib einen gültigen Betrag ein.',pt:'Introduza um valor válido.',pl:'Wpisz prawidłową kwotę.',nl:'Voer een geldig bedrag in.',ro:'Introdu o sumă validă.',el:'Εισαγάγετε έγκυρο ποσό.'});
+})();
+
+
+// Aggiornamento Share vocale e widget ridimensionabili.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Scontrino Share',{it:'Scontrino Share',en:'Share receipt',es:'Recibo Share',fr:'Ticket Share',de:'Share-Beleg',pt:'Recibo Share',pl:'Paragon Share',nl:'Share-bon',ro:'Bon Share',el:'Απόδειξη Share'});
+})();

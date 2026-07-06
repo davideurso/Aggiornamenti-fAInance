@@ -37,11 +37,18 @@ class DebtCreditsWidgetProvider : AppWidgetProvider() {
             views.setTextColor(summaryId, textColor)
             views.setTextColor(settingsId, iconColor)
             views.setTextViewTextSize(titleId, TypedValue.COMPLEX_UNIT_SP, textSize + 2f)
-            views.setTextViewTextSize(summaryId, TypedValue.COMPLEX_UNIT_SP, textSize + 5f)
-            views.setInt(rootId, "setBackgroundResource", WidgetUtils.bgDrawableRes(context, cfg.optInt("bgAlpha", 65)))
+            views.setTextViewTextSize(summaryId, TypedValue.COMPLEX_UNIT_SP, textSize + 1f)
+            val bgAlpha = cfg.optInt("bgAlpha", 65).coerceIn(0, 100)
+            val bgDrawableAlpha = (100 - bgAlpha).coerceIn(0, 100)
+            views.setInt(rootId, "setBackgroundResource", WidgetUtils.bgDrawableRes(context, bgDrawableAlpha))
             val instance = WidgetUtils.instanceJson(context, "widget_debt_credits_instance", widgetId)
             val lineViewIds = lineNames.map { context.resources.getIdentifier(it, "id", context.packageName) }.toIntArray()
             lineViewIds.forEach { id -> if (id != 0) { views.setTextColor(id, textColor); views.setTextViewTextSize(id, TypedValue.COMPLEX_UNIT_SP, textSize) } }
+            val opts = manager.getAppWidgetOptions(widgetId)
+            val compact = opts.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 120) <= 70
+            if (compact) {
+                for (i in 1 until lineViewIds.size) if (lineViewIds[i] != 0) views.setViewVisibility(lineViewIds[i], View.GONE)
+            }
             val selectedIds = instance.optJSONArray("selectedIds") ?: cfg.optJSONArray("selectedIds") ?: JSONArray()
             val allItems = cfg.optJSONArray("allItems") ?: cfg.optJSONArray("items") ?: JSONArray()
             val items = JSONArray()

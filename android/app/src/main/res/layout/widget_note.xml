@@ -7,6 +7,15 @@
     android:background="@drawable/widget_panel_bg"
     android:padding="10dp">
 
+    <ImageView
+        android:id="@+id/widgetLogo"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_marginRight="8dp"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:src="@drawable/logo_fainance" />
+
     <TextView
         android:id="@+id/noteIcon"
         android:layout_width="38dp"

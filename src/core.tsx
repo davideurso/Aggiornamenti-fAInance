@@ -17,18 +17,29 @@ export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, q
 
 // ── FIREBASE CONFIG ───────────────────────────────────────────────────────────
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "fainance-a7794.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "fainance-a7794",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "fainance-a7794.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "739607555867",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:739607555867:web:fainanceweb"
 };
 export const firebaseApp = initializeApp(firebaseConfig);
+function fainanceCoreIsNativePlatform(){
+  try{
+    var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
+    if(cap&&typeof cap.isNativePlatform==="function")return !!cap.isNativePlatform();
+    if(cap&&typeof cap.getPlatform==="function"){var p=String(cap.getPlatform()||"").toLowerCase();return p==="ios"||p==="android";}
+  }catch(e){}
+  return false;
+}
 function createFainanceAuth(){
   try{
-    // Su iOS/WKWebView evitiamo la persistenza predefinita di Firebase Auth,
-    // che può bloccarsi durante l'inizializzazione e lasciare login/onAuthStateChanged sospesi.
+    if(!fainanceCoreIsNativePlatform()){
+      // Sul web usiamo getAuth: registra le dipendenze standard necessarie a signInWithPopup.
+      return getAuth(firebaseApp);
+    }
+    // Su app nativa manteniamo l'inizializzazione già presente.
     return initializeAuth(firebaseApp,{persistence:browserLocalPersistence});
   }catch(e){
     return getAuth(firebaseApp);

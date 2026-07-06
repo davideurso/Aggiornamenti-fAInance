@@ -45,7 +45,8 @@ class GoalWidgetProvider : AppWidgetProvider() {
             val textColor = parseColor(content.optString("textColor", global.optString("textColor", "#FFFFFF")), "#FFFFFF")
             val percentColor = parseColor(content.optString("percentColor", global.optString("percentColor", "#EF7D00")), "#EF7D00")
 
-            views.setInt(context.resources.getIdentifier("widgetRoot", "id", context.packageName), "setBackgroundResource", WidgetUtils.bgDrawableRes(context, bgAlpha))
+            val bgDrawableAlpha = (100 - bgAlpha).coerceIn(0, 100)
+            views.setInt(context.resources.getIdentifier("widgetRoot", "id", context.packageName), "setBackgroundResource", WidgetUtils.bgDrawableRes(context, bgDrawableAlpha))
             views.setTextViewText(context.resources.getIdentifier("goalIcon", "id", context.packageName), icon)
             views.setTextViewText(context.resources.getIdentifier("goalTitle", "id", context.packageName), title)
             views.setTextColor(context.resources.getIdentifier("goalTitle", "id", context.packageName), textColor)

@@ -53,8 +53,8 @@ class NoteWidgetProvider : AppWidgetProvider() {
             val resolved = resolveContent(global, local)
             val views = RemoteViews(context.packageName, context.resources.getIdentifier("widget_note", "layout", context.packageName))
             val type = resolved.optString("type", "note")
-            val title = resolved.optString("title", if (type == "bank") "Coordinata bancaria" else "Nota")
-            val body = resolved.optString("body", if (type == "bank") "Nessun IBAN selezionato" else "Nessuna nota selezionata")
+            val title = resolved.optString("title", defaultTitle(type))
+            val body = resolved.optString("body", defaultBody(type))
             val maxChars = global.optInt("maxChars", 500).coerceIn(20, 2000)
             val textSize = global.optInt("textSize", 14).coerceIn(10, 28)
             val titleColor = parseColor(global.optString("titleColor", "#FFFFFF"), "#FFFFFF")
@@ -63,11 +63,12 @@ class NoteWidgetProvider : AppWidgetProvider() {
             val shownBody = if (body.length > maxChars) body.take(maxChars - 1) + "…" else body
             val bgAlpha = global.optInt("bgAlpha", 65).coerceIn(0, 100)
 
-            views.setInt(context.resources.getIdentifier("widgetRoot", "id", context.packageName), "setBackgroundResource", WidgetUtils.bgDrawableRes(context, bgAlpha))
-            views.setTextViewText(context.resources.getIdentifier("noteIcon", "id", context.packageName), if (type == "bank") "🏦" else "▤")
+            val bgDrawableAlpha = (100 - bgAlpha).coerceIn(0, 100)
+            views.setInt(context.resources.getIdentifier("widgetRoot", "id", context.packageName), "setBackgroundResource", WidgetUtils.bgDrawableRes(context, bgDrawableAlpha))
+            views.setTextViewText(context.resources.getIdentifier("noteIcon", "id", context.packageName), iconForType(type))
             views.setTextColor(context.resources.getIdentifier("noteIcon", "id", context.packageName), iconColor)
             views.setTextViewText(context.resources.getIdentifier("noteTitle", "id", context.packageName), title)
-            views.setTextViewText(context.resources.getIdentifier("noteBody", "id", context.packageName), if (type == "bank") styledBankText(shownBody) else shownBody)
+            views.setTextViewText(context.resources.getIdentifier("noteBody", "id", context.packageName), if (type == "bank" || type == "creditCard") styledBankText(shownBody) else shownBody)
             views.setTextColor(context.resources.getIdentifier("noteTitle", "id", context.packageName), titleColor)
             views.setTextColor(context.resources.getIdentifier("noteBody", "id", context.packageName), bodyColor)
             views.setTextViewTextSize(context.resources.getIdentifier("noteTitle", "id", context.packageName), TypedValue.COMPLEX_UNIT_SP, (textSize + 1).toFloat())
@@ -99,16 +100,42 @@ class NoteWidgetProvider : AppWidgetProvider() {
 
         private fun resolveContent(global: JSONObject, local: JSONObject): JSONObject {
             val type = local.optString("type", global.optString("type", "note"))
-            val fallbackGlobalId = if (type == "bank") global.optString("selectedBankId", "") else global.optString("selectedNoteId", "")
+            val fallbackGlobalId = when (type) {
+                "bank" -> global.optString("selectedBankId", "")
+                "creditCard" -> global.optString("selectedCreditCardId", "")
+                else -> global.optString("selectedNoteId", "")
+            }
             val selectedId = local.optString("selectedId", fallbackGlobalId)
-            val items = if (type == "bank") global.optJSONArray("bankItems") else global.optJSONArray("noteItems")
+            val items = when (type) {
+                "bank" -> global.optJSONArray("bankItems")
+                "creditCard" -> global.optJSONArray("creditCardItems")
+                else -> global.optJSONArray("noteItems")
+            }
             val item = findById(items, selectedId)
             return JSONObject().apply {
                 put("type", type)
                 put("selectedId", selectedId)
-                put("title", item?.optString("title") ?: local.optString("title", if (type == "bank") "Coordinata bancaria" else "Nota"))
-                put("body", item?.optString("body") ?: local.optString("body", if (type == "bank") "Nessun IBAN selezionato" else "Nessuna nota selezionata"))
+                put("title", item?.optString("title") ?: local.optString("title", defaultTitle(type)))
+                put("body", item?.optString("body") ?: local.optString("body", defaultBody(type)))
             }
+        }
+
+        private fun defaultTitle(type: String): String = when (type) {
+            "bank" -> "Coordinata bancaria"
+            "creditCard" -> "Carta di credito"
+            else -> "Nota"
+        }
+
+        private fun defaultBody(type: String): String = when (type) {
+            "bank" -> "Nessun IBAN selezionato"
+            "creditCard" -> "Nessuna carta di credito selezionata"
+            else -> "Nessuna nota selezionata"
+        }
+
+        private fun iconForType(type: String): String = when (type) {
+            "bank" -> "🏦"
+            "creditCard" -> "💳"
+            else -> "▤"
         }
 
         private fun findById(arr: JSONArray?, id: String): JSONObject? {

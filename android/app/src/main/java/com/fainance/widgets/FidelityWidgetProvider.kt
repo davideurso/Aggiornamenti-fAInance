@@ -48,12 +48,12 @@ class FidelityWidgetProvider : AppWidgetProvider() {
             val opacity = ((100 - transparency) * 255 / 100).coerceIn(0, 255)
             val bg = (rawBg and 0x00FFFFFF) or (opacity shl 24)
             views.setInt(rootId, "setBackgroundColor", bg)
-            views.setTextViewText(titleId, cfg.optString("title", "Fidelity card"))
+            if (titleId != 0) { views.setTextViewText(titleId, ""); views.setViewVisibility(titleId, View.GONE) }
             views.setTextViewText(nameId, card?.optString("name") ?: "Nessuna carta")
             views.setViewVisibility(codeId, View.GONE)
             views.setViewVisibility(barcodeId, View.GONE)
             if (barcodeImageId != 0 && code.isNotBlank()) {
-                views.setImageViewBitmap(barcodeImageId, WidgetUtils.barcodeBitmap(code, 620, 230))
+                views.setImageViewBitmap(barcodeImageId, WidgetUtils.barcodeBitmap(code, 1100, 460))
                 views.setViewVisibility(barcodeImageId, View.VISIBLE)
             } else {
                 views.setTextViewText(barcodeId, WidgetUtils.barcodeVisual(code))

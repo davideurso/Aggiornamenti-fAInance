@@ -2,7 +2,8 @@
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/share_widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:padding="6dp">
 
     <ImageView
         android:id="@+id/share_widget_root_bg"
@@ -14,103 +15,210 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="horizontal"
-        android:padding="8dp"
-        android:gravity="center_vertical">
-
-        <TextView
-            android:layout_width="38dp"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:text="🤝"
-            android:textSize="24sp"
-            android:textColor="#FFFFFF"
-            android:background="@drawable/widget_settings_button" />
+        android:orientation="vertical"
+        android:padding="10dp">
 
         <LinearLayout
-            android:id="@+id/share_widget_title_box"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:layout_marginLeft="8dp"
-            android:layout_marginRight="8dp"
-            android:orientation="vertical"
-            android:gravity="center_vertical">
-
-            <TextView
-                android:id="@+id/share_widget_title"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Share"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:singleLine="true" />
-
-            <TextView
-                android:id="@+id/share_widget_subtitle"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:visibility="gone"
-                android:text="" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/share_widget_balance_box"
-            android:layout_width="74dp"
-            android:layout_height="match_parent"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:paddingLeft="4dp"
-            android:paddingRight="4dp">
-
-            <TextView
-                android:id="@+id/share_widget_balance_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="Saldo"
-                android:textSize="9sp"
-                android:textColor="#D8D8E8"
-                android:singleLine="true" />
-
-            <TextView
-                android:id="@+id/share_widget_balance_value"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:text="Apri"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="#FFFFFF"
-                android:singleLine="true" />
-        </LinearLayout>
-
-        <FrameLayout
-            android:id="@+id/share_widget_action"
-            android:layout_width="42dp"
-            android:layout_height="match_parent"
-            android:layout_marginLeft="8dp"
-            android:layout_marginTop="4dp"
-            android:layout_marginBottom="4dp">
+            android:id="@+id/share_widget_header"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="0.9"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <ImageView
-                android:id="@+id/share_widget_action_bg"
-                android:layout_width="match_parent"
+                android:id="@+id/share_widget_logo"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_fainance_widget" />
+
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="match_parent"
-                android:scaleType="fitXY"
-                android:src="@drawable/widget_btn_purple_rounded" />
+                android:layout_marginLeft="8dp"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/share_widget_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:singleLine="true"
+                    android:text="Share"
+                    android:textColor="#FFFFFF"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/share_widget_project"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="Progetto Share"
+                    android:textColor="#D8D6F2"
+                    android:textSize="11sp" />
+            </LinearLayout>
 
             <TextView
-                android:id="@+id/share_widget_action_label"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:id="@+id/share_widget_settings"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:gravity="center"
-                android:text="+"
-                android:textSize="24sp"
-                android:textStyle="bold"
+                android:text="⚙"
                 android:textColor="#FFFFFF"
-                android:singleLine="true" />
-        </FrameLayout>
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="6dp"
+            android:layout_weight="1.1"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:id="@+id/share_widget_balance_box"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginRight="8dp"
+                android:layout_weight="1">
+
+                <ImageView
+                    android:id="@+id/share_widget_balance_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:orientation="vertical"
+                    android:padding="6dp">
+
+                    <TextView
+                        android:id="@+id/share_widget_balance_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="Saldo"
+                        android:textColor="#D8D6F2"
+                        android:textSize="10sp" />
+
+                    <TextView
+                        android:id="@+id/share_widget_balance_value"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:singleLine="true"
+                        android:text="0,00 €"
+                        android:textColor="#FFFFFF"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </FrameLayout>
+
+            <LinearLayout
+                android:id="@+id/share_widget_info_box"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.25"
+                android:gravity="center_vertical"
+                android:orientation="vertical"
+                android:paddingLeft="2dp">
+
+                <TextView
+                    android:id="@+id/share_widget_owed_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="Ti devono: 0,00 €"
+                    android:textColor="#D8D6F2"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/share_widget_owe_text"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="Devi: 0,00 €"
+                    android:textColor="#D8D6F2"
+                    android:textSize="11sp" />
+
+                <TextView
+                    android:id="@+id/share_widget_last_activity"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:singleLine="true"
+                    android:text="Nessuna attività recente"
+                    android:textColor="#D8D6F2"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            android:layout_weight="0.75"
+            android:orientation="horizontal">
+
+            <FrameLayout
+                android:id="@+id/share_widget_action"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginRight="4dp"
+                android:layout_weight="1">
+
+                <ImageView
+                    android:id="@+id/share_widget_action_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY" />
+
+                <TextView
+                    android:id="@+id/share_widget_action_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:singleLine="true"
+                    android:text="+ Spesa"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+
+            <FrameLayout
+                android:id="@+id/share_widget_activity"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginLeft="4dp"
+                android:layout_weight="1">
+
+                <ImageView
+                    android:id="@+id/share_widget_activity_bg"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY" />
+
+                <TextView
+                    android:id="@+id/share_widget_activity_label"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:singleLine="true"
+                    android:text="Attività"
+                    android:textColor="#FFFFFF"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </FrameLayout>
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

@@ -1,6 +1,6 @@
 {
   "name": "tracker-spese",
-  "version": "1.0.0",
+  "version": "1.6.67",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "test:calculations": "node tests/financeCalculations.test.mjs",
     "test:i18n": "node tests/i18nTranslations.test.mjs",
-    "build:web": "npm run build && firebase deploy --only hosting:fainance-test",
+    "build:web": "npm run build && firebase deploy --only hosting:fainance-prod",
+    "build:web:test": "npm run build && firebase deploy --only hosting:fainance-test",
     "build:android": "npm run build && npx cap sync android && cd android && set \"JAVA_HOME=C:\\Programmi\\Android\\Android Studio\\jbr\" && gradlew clean && gradlew assembleDebug"
   },
   "dependencies": {

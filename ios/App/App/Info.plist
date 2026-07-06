@@ -32,7 +32,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>143</string>
+	<string>144</string>
 	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
 	<true/>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
@@ -42,7 +42,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Serve per scansionare scontrini e carte fidelity.</string>
+	<string>fAInance needs access to the camera so you can scan receipts and attach images to your transactions.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>fAInance usa la rubrica solo per inserire il titolare di un debito o credito.</string>
 	<key>SKAdNetworkItems</key>
@@ -75,5 +75,15 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>fAInance needs access to your photo library so you can select receipt images and import documents into the app.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>fAInance needs permission to save exported files or generated images to your photo library when you choose to do so.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>fAInance needs access to the microphone so you can add expenses and income using your voice.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>fAInance uses speech recognition to convert your voice commands into expense or income entries.</string>
 </dict>
 </plist>

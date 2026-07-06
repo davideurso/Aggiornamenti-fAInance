@@ -49,6 +49,10 @@ class QuickAddWidgetProvider : AppWidgetProvider() {
             if (layoutId == 0) return
 
             val views = RemoteViews(context.packageName, layoutId)
+            val bgTransparency = settings.optInt("bgAlpha", 65).coerceIn(0, 100)
+            val bgOpacity = ((100 - bgTransparency) * 255 / 100).coerceIn(0, 255)
+            val bgId = context.resources.getIdentifier("widget_root_bg", "id", context.packageName)
+            if (bgId != 0) views.setInt(bgId, "setImageAlpha", bgOpacity)
 
             setText(context, views, "widget_add_expense_icon", "−")
             setText(context, views, "widget_add_income_icon", "+")

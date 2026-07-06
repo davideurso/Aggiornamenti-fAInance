@@ -4,7 +4,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="12dp"
+    android:padding="8dp"
     android:background="#1E1E30">
 
     <LinearLayout
@@ -12,16 +12,49 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical">
-        <TextView
-            android:id="@+id/widgetTitle"
+        <ImageView
+            android:id="@+id/widgetLogo"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginRight="8dp"
+            android:adjustViewBounds="true"
+            android:scaleType="fitCenter"
+            android:src="@drawable/logo_fainance" />
+
+        <LinearLayout
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="30dp"
             android:layout_weight="1"
-            android:text="Debiti / Crediti"
-            android:textColor="#FFFFFFFF"
-            android:textStyle="bold"
-            android:textSize="15sp"
-            android:maxLines="1" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/widgetTitle"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1.05"
+                android:gravity="center_vertical"
+                android:text="Debiti / Crediti"
+                android:textColor="#FFFFFFFF"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/widgetSummary"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="0.95"
+                android:gravity="center_vertical|right"
+                android:text="Saldo 0 €"
+                android:textColor="#FFFFFFFF"
+                android:textStyle="bold"
+                android:textSize="13sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+
         <TextView
             android:id="@+id/settingsButton"
             android:layout_width="30dp"
@@ -33,21 +66,10 @@
             android:textSize="16sp" />
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/widgetSummary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Saldo 0 €"
-        android:textColor="#FFFFFFFF"
-        android:textStyle="bold"
-        android:textSize="19sp"
-        android:maxLines="1"
-        android:layout_marginTop="4dp"
-        android:layout_marginBottom="8dp" />
 
-    <TextView android:id="@+id/line1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFE9E7FF" android:textStyle="bold" android:textSize="12sp" android:maxLines="1" android:padding="7dp" android:background="#30FFFFFF" />
-    <TextView android:id="@+id/line2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
-    <TextView android:id="@+id/line3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
-    <TextView android:id="@+id/line4" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
-    <TextView android:id="@+id/line5" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="6dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+    <TextView android:id="@+id/line1" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFE9E7FF" android:textStyle="bold" android:textSize="12sp" android:maxLines="1" android:padding="4dp" android:background="#30FFFFFF" />
+    <TextView android:id="@+id/line2" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="4dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+    <TextView android:id="@+id/line3" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="4dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+    <TextView android:id="@+id/line4" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="4dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
+    <TextView android:id="@+id/line5" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFFFF" android:textSize="12sp" android:maxLines="1" android:padding="4dp" android:layout_marginTop="4dp" android:background="#1FFFFFFF" />
 </LinearLayout>

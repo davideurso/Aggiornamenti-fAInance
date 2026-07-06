@@ -21,6 +21,7 @@ class NoteWidgetConfigureActivity : Activity() {
     private var selectedIndex = 0
     private val noteItems = mutableListOf<Item>()
     private val bankItems = mutableListOf<Item>()
+    private val creditCardItems = mutableListOf<Item>()
     private lateinit var typeRoot: LinearLayout
     private lateinit var listRoot: LinearLayout
 
@@ -37,8 +38,10 @@ class NoteWidgetConfigureActivity : Activity() {
         val existing = WidgetUtils.instanceJson(this, "note_widget", appWidgetId)
         fillItems(global.optJSONArray("noteItems"), noteItems, WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Nota"))
         fillItems(global.optJSONArray("bankItems"), bankItems, "Coordinata bancaria")
+        fillItems(global.optJSONArray("creditCardItems"), creditCardItems, "Carta di credito")
         if (noteItems.isEmpty()) noteItems.add(Item("default_note", "Nessuna nota disponibile", "Crea prima una nota nell'app."))
         if (bankItems.isEmpty()) bankItems.add(Item("default_bank", "Nessuna coordinata disponibile", "Crea prima una coordinata bancaria nell'app."))
+        if (creditCardItems.isEmpty()) creditCardItems.add(Item("default_credit_card", "Nessuna carta disponibile", "Crea prima una carta di credito nell'app."))
 
         type = existing.optString("type", global.optString("type", "note"))
         val selectedId = existing.optString("selectedId", "")
@@ -51,8 +54,8 @@ class NoteWidgetConfigureActivity : Activity() {
             setBackgroundColor(Color.rgb(16, 17, 26))
         }
         scroll.addView(root)
-        root.addView(title(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Configura widget Nota / IBAN")))
-        root.addView(info(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Scegli solo il contenuto da mostrare in questo widget. Trasparenza, limite caratteri e stile restano nelle impostazioni Widget dell'app e valgono per tutti i widget Nota / IBAN.")))
+        root.addView(title(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Configura widget Nota / IBAN / Carta")))
+        root.addView(info(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Scegli solo il contenuto da mostrare in questo widget. Trasparenza, limite caratteri e stile restano nelle impostazioni Widget dell'app e valgono per tutti i widget Nota / IBAN / Carta.")))
 
         root.addView(label(WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Tipo di contenuto")))
         typeRoot = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
@@ -74,11 +77,19 @@ class NoteWidgetConfigureActivity : Activity() {
         setContentView(scroll)
     }
 
-    private fun currentList(): MutableList<Item> = if (type == "bank") bankItems else noteItems
+    private fun currentList(): MutableList<Item> = when (type) {
+        "bank" -> bankItems
+        "creditCard" -> creditCardItems
+        else -> noteItems
+    }
 
     private fun renderTypeButtons() {
         typeRoot.removeAllViews()
-        listOf("note" to WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Nota"), "bank" to WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Coordinata")).forEach { pair ->
+        listOf(
+            "note" to WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Nota"),
+            "bank" to WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Coordinata"),
+            "creditCard" to WidgetUtils.tr(this@NoteWidgetConfigureActivity, "Carta")
+        ).forEach { pair ->
             val active = type == pair.first
             val button = TextView(this).apply {
                 text = pair.second
@@ -106,7 +117,7 @@ class NoteWidgetConfigureActivity : Activity() {
                 setOnClickListener { selectedIndex = index; renderItemCards() }
             }
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            row.addView(TextView(this).apply { text = if (type == "bank") "🏦" else "▤"; textSize = 24f; gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(34), dp(38)))
+            row.addView(TextView(this).apply { text = when (type) { "bank" -> "🏦"; "creditCard" -> "💳"; else -> "▤" }; textSize = 24f; gravity = Gravity.CENTER }, LinearLayout.LayoutParams(dp(34), dp(38)))
             val texts = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
             texts.addView(TextView(this).apply { text = item.title; setTextColor(Color.WHITE); textSize = 17f; setTypeface(null, Typeface.BOLD); maxLines = 1 })
             texts.addView(TextView(this).apply { text = item.body.replace("\n", "  ·  "); setTextColor(Color.argb(195, 255, 255, 255)); textSize = 12f; maxLines = 2 })
