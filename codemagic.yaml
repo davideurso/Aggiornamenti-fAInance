@@ -24,8 +24,8 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.66"
-        IOS_BUILD_NUMBER: "144"
+        APP_VERSION: "1.6.67"
+        IOS_BUILD_NUMBER: "146"
         VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -120,7 +120,7 @@ workflows:
         script: |
           cd ios/App
 
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:"144"
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:-146}"
           echo "Using iOS marketing version: $APP_VERSION"
           echo "Using iOS build number: $BUILD_NUMBER"
 
