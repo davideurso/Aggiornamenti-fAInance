@@ -105,16 +105,16 @@ public class ShareWidgetProvider extends AppWidgetProvider {
         views.setTextColor(R.id.share_widget_owe_text, bodyColor);
         views.setTextColor(R.id.share_widget_last_activity, bodyColor);
 
-        PendingIntent openShare = createDeepLinkIntent(context, "fainance://open-share", REQUEST_OPEN_SHARE + appWidgetId);
-        PendingIntent addShare = createDeepLinkIntent(context, "fainance://share-add-expense", REQUEST_ADD_SHARE_EXPENSE + appWidgetId);
-        PendingIntent receiptShare = createDeepLinkIntent(context, "fainance://share-receipt", REQUEST_SHARE_RECEIPT + appWidgetId);
-        PendingIntent voiceShare = createDeepLinkIntent(context, "fainance://share-voice", REQUEST_SHARE_VOICE + appWidgetId);
+        String projectParam = buildProjectParam(settings.projectId, appWidgetId);
+        PendingIntent openShare = createDeepLinkIntent(context, "fainance://open-share" + projectParam, REQUEST_OPEN_SHARE + appWidgetId);
+        PendingIntent addShare = createDeepLinkIntent(context, "fainance://share-add-expense" + projectParam, REQUEST_ADD_SHARE_EXPENSE + appWidgetId);
+        PendingIntent receiptShare = createDeepLinkIntent(context, "fainance://share-receipt" + projectParam, REQUEST_SHARE_RECEIPT + appWidgetId);
+        PendingIntent voiceShare = createDeepLinkIntent(context, "fainance://share-voice" + projectParam, REQUEST_SHARE_VOICE + appWidgetId);
         PendingIntent configure = createConfigureIntent(context, appWidgetId);
 
         views.setOnClickPendingIntent(R.id.share_widget_root, openShare);
         views.setOnClickPendingIntent(R.id.share_widget_header, openShare);
         views.setOnClickPendingIntent(R.id.share_widget_balance_box, openShare);
-        views.setOnClickPendingIntent(R.id.share_widget_info_box, openShare);
         views.setOnClickPendingIntent(R.id.share_widget_action, addShare);
         views.setOnClickPendingIntent(R.id.share_widget_receipt, receiptShare);
         views.setOnClickPendingIntent(R.id.share_widget_voice, voiceShare);
@@ -305,6 +305,16 @@ public class ShareWidgetProvider extends AppWidgetProvider {
 
     private int dp(Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
+    }
+
+
+    private String buildProjectParam(String projectId, int appWidgetId) {
+        StringBuilder out = new StringBuilder("?");
+        if (projectId != null && projectId.trim().length() > 0) {
+            out.append("project=").append(Uri.encode(projectId.trim())).append("&");
+        }
+        out.append("widgetId=").append(appWidgetId);
+        return out.toString();
     }
 
     private PendingIntent createDeepLinkIntent(Context context, String deepLink, int requestCode) {
