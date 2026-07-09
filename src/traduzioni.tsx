@@ -33,7 +33,7 @@ Object.keys(_LANG_OVERRIDES).forEach(function(code){
 
 // Estensione centralizzata traduzioni UI/popup aggiunta nella versione 1.6.21.
 // Queste chiavi sono frasi reali mostrate in popup, toast, placeholder e sezioni.
-export const FAINANCE_UI_TRANSLATIONS = {
+var _UI_SEED = {
   "en": {
     "Password aggiornata": "Password updated",
     "Profilo aggiornato": "Profile updated",
@@ -406,10 +406,17 @@ export const FAINANCE_UI_TRANSLATIONS = {
     "Anteprima scontrino": "Προεπισκόπηση απόδειξης"
   }
 };
-Object.keys(FAINANCE_UI_TRANSLATIONS).forEach(function(code){
+Object.keys(_UI_SEED).forEach(function(code){
   if(!TRANSLATIONS[code]) TRANSLATIONS[code]={...TRANSLATIONS.en};
-  Object.assign(TRANSLATIONS[code], FAINANCE_UI_TRANSLATIONS[code]);
+  Object.assign(TRANSLATIONS[code], _UI_SEED[code]);
 });
+// 1.3.6 ottimizzazione memoria: FAINANCE_UI_TRANSLATIONS e FAINANCE_I18N_PHRASES
+// erano duplicati (~11MB ciascuno) di TRANSLATIONS mai letti dalla logica di traduzione.
+// Il seed dati e' gia' stato fuso in TRANSLATIONS qui sopra (_UI_SEED). Ora i due nomi
+// diventano "sink" a memoria costante: assorbono ogni scrittura senza accumulare.
+var _FAINANCE_TRANS_SINK=new Proxy({},{get:function(){return _FAINANCE_TRANS_SINK;},set:function(){return true;}});
+var FAINANCE_UI_TRANSLATIONS=_FAINANCE_TRANS_SINK;
+var FAINANCE_I18N_PHRASES=_FAINANCE_TRANS_SINK;
 
 // Patch 1.6.24: traduzioni a tappeto aggiunte da screenshot e ricerca hardcoded.
 export const FAINANCE_1624_TRANSLATIONS = {
@@ -23501,7 +23508,7 @@ Object.keys(FAINANCE_1635_EXACT_TRANSLATION_FIX).forEach(function(code){
   });
 })();
 
-export const FAINANCE_I18N_PHRASES = {};
+// FAINANCE_I18N_PHRASES ora e' un sink (vedi ottimizzazione 1.3.6 sopra)
 
 // fAInance 1.6.50 - legal paragraphs, import/export, support and plan labels as complete phrases.
 (function(){
@@ -34189,4 +34196,31 @@ function fainancePostProcessTranslation(value, lang){
   var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
   function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
   add('Scontrino Share',{it:'Scontrino Share',en:'Share receipt',es:'Recibo Share',fr:'Ticket Share',de:'Share-Beleg',pt:'Recibo Share',pl:'Paragon Share',nl:'Share-bon',ro:'Bon Share',el:'Απόδειξη Share'});
+})();
+
+// Correzione 1.3.7: voce menu Aspetto per barra superiore e inferiore.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var label={it:'Barra superiore ed Inferiore',en:'Top and bottom bar',es:'Barra superior e inferior',fr:'Barre supérieure et inférieure',de:'Obere und untere Leiste',pt:'Barra superior e inferior',pl:'Górny i dolny pasek',nl:'Boven- en onderbalk',ro:'Bara de sus și de jos',el:'Επάνω και κάτω γραμμή'};
+  var page={it:'Aspetto / Barra superiore ed Inferiore',en:'Appearance / Top and bottom bar',es:'Aspecto / Barra superior e inferior',fr:'Apparence / Barre supérieure et inférieure',de:'Darstellung / Obere und untere Leiste',pt:'Aspeto / Barra superior e inferior',pl:'Wygląd / Górny i dolny pasek',nl:'Weergave / Boven- en onderbalk',ro:'Aspect / Bara de sus și de jos',el:'Εμφάνιση / Επάνω και κάτω γραμμή'};
+  add('Barra superiore ed Inferiore',label);
+  add('Barra superiore e inferiore',label);
+  add('Aspetto / Barra superiore ed Inferiore',page);
+  add('Aspetto / Barra superiore e inferiore',page);
+})();
+
+// Correzione 1.3.7 v3: titoli Dati senza icone duplicate e voce Aspetto richiesta.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var importData={it:'Importa Dati',en:'Import data',es:'Importar datos',fr:'Importer des données',de:'Daten importieren',pt:'Importar dados',pl:'Importuj dane',nl:'Gegevens importeren',ro:'Importă date',el:'Εισαγωγή δεδομένων'};
+  var exportData={it:'Esporta dati',en:'Export data',es:'Exportar datos',fr:'Exporter les données',de:'Daten exportieren',pt:'Exportar dados',pl:'Eksportuj dane',nl:'Gegevens exporteren',ro:'Exportă date',el:'Εξαγωγή δεδομένων'};
+  var deleteData={it:'Elimina dati',en:'Delete data',es:'Eliminar datos',fr:'Supprimer les données',de:'Daten löschen',pt:'Eliminar dados',pl:'Usuń dane',nl:'Gegevens verwijderen',ro:'Șterge datele',el:'Διαγραφή δεδομένων'};
+  ['Importa Dati','📥 Importa Dati','📥  Importa Dati'].forEach(function(k){add(k,importData);});
+  ['Esporta dati','📤 Esporta dati','📤  Esporta dati'].forEach(function(k){add(k,exportData);});
+  ['Elimina dati','🗑 Elimina dati','🗑️ Elimina dati','🗑  Elimina dati','🗑️  Elimina dati'].forEach(function(k){add(k,deleteData);});
+  var label={it:'Barra superiore ed Inferiore',en:'Top and bottom bar',es:'Barra superior e inferior',fr:'Barre supérieure et inférieure',de:'Obere und untere Leiste',pt:'Barra superior e inferior',pl:'Górny i dolny pasek',nl:'Boven- en onderbalk',ro:'Bara de sus și de jos',el:'Επάνω και κάτω γραμμή'};
+  var page={it:'Aspetto / Barra superiore ed Inferiore',en:'Appearance / Top and bottom bar',es:'Aspecto / Barra superior e inferior',fr:'Apparence / Barre supérieure et inférieure',de:'Darstellung / Obere und untere Leiste',pt:'Aspeto / Barra superior e inferior',pl:'Wygląd / Górny i dolny pasek',nl:'Weergave / Boven- en onderbalk',ro:'Aspect / Bara de sus și de jos',el:'Εμφάνιση / Επάνω και κάτω γραμμή'};
+  add('Barra superiore ed Inferiore',label);add('Barra superiore e inferiore',label);add('Aspetto / Barra superiore ed Inferiore',page);add('Aspetto / Barra superiore e inferiore',page);
 })();

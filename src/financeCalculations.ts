@@ -4,10 +4,10 @@ export interface ExpenseItem {
 }
 export interface MonthlyTotal { label: string; exp: number; inc: number; value: number; }
 export interface PatrimonioEntry { id: string; [key: string]: any; }
-export type ViewMode = "reale" | "competenza";
+export type ViewMode = "reale" | "rateizzato" | "competenza";
 
 export function itemAmountForMonth(item: ExpenseItem, monthKey: string): number {
-  if (!item || !monthKey) return 0;
+  if (!item || !monthKey || !item.date) return 0;
   const amount = Number(item.amount || 0);
   if (!item.rateizzato) return String(item.date || "").startsWith(monthKey) ? amount : 0;
   const rate = Number(item.rate || 0);
@@ -17,7 +17,8 @@ export function itemAmountForMonth(item: ExpenseItem, monthKey: string): number 
   const p = String(monthKey).split("-");
   const year = parseInt(p[0], 10); const month = parseInt(p[1], 10);
   if (!year || !month) return 0;
-  const index = (year - start.getFullYear()) * 12 + (month - 1 - start.getMonth());
+  const forwardIndex = (year - start.getFullYear()) * 12 + (month - 1 - start.getMonth());
+  const index = item.rateDirection === "backward" ? -forwardIndex : forwardIndex;
   if (index < 0 || index >= rate) return 0;
   return amount / rate;
 }
@@ -31,9 +32,9 @@ export function last12MonthKeys(referenceDate?: string): string[] {
   const start = new Date(now.getFullYear(), now.getMonth() - 11, 1);
   return Array.from({length:12}, (_,i) => { const d = new Date(start.getFullYear(), start.getMonth()+i, 1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); });
 }
-export function balanceForMonths(expenses: ExpenseItem[], incomes: ExpenseItem[], monthKeys: string[]): number {
+export function balanceForMonths(expenses: ExpenseItem[], incomes: ExpenseItem[], monthKeys: string[], mode: ViewMode = "rateizzato"): number {
   const keys = Array.isArray(monthKeys) ? monthKeys : [];
-  return keys.reduce((s,k) => s+totalForMonth(incomes,k,"reale"), 0) - keys.reduce((s,k) => s+totalForMonth(expenses,k,"reale"), 0);
+  return keys.reduce((s,k) => s+totalForMonth(incomes,k,mode), 0) - keys.reduce((s,k) => s+totalForMonth(expenses,k,mode), 0);
 }
 export function monthlyTotalsForYear(expenses: ExpenseItem[], incomes: ExpenseItem[], year: number, mode: ViewMode, monthLabels: string[]): MonthlyTotal[] {
   return Array.from({length:12}, (_,i) => {

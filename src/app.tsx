@@ -55,6 +55,20 @@ function FAI_TRANSLATE(value:any){
 function L(value:any){return FAI_TRANSLATE(value);}
 function PL(value:any){return FAI_TRANSLATE(value);}
 
+
+function focusFainanceInput(ref:any, delay?:number){
+  try{
+    setTimeout(function(){
+      try{
+        var el=ref&&ref.current?ref.current:null;
+        if(!el||!el.focus)return;
+        el.focus({preventScroll:true});
+        if(el.select)el.select();
+      }catch(e){}
+    },delay==null?90:delay);
+  }catch(e){}
+}
+
 function fainancePromiseTimeout(promise:any, ms:number, message:string){
   return new Promise(function(resolve,reject){
     var done=false;
@@ -1243,14 +1257,60 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return out.length?out:ensureArrayValue(DEFAULT_METHODS,[]);
   }
   function hasFallbackItems(fallback){return Array.isArray(fallback)&&fallback.length>0;}
-  function defaultProtectedArray(value,fallback){
-    if(Array.isArray(value)&&value.length)return value;
-    return ensureArrayValue(fallback,[]);
+  function normalizeProtectedName(v){try{return String(v||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase().replace(/\s+/g," ");}catch(e){return String(v||"").trim().toLowerCase().replace(/\s+/g," ");}}
+  function protectedDefaultNameMap(defaults,dict){
+    var map={};
+    ensureArrayValue(defaults,[]).forEach(function(d){
+      if(!d||d.id==null)return;
+      if(d.name!=null)map[normalizeProtectedName(d.name)]=String(d.id);
+      var names=dict&&(dict[d.id]||dict[String(d.id)]);
+      if(names&&typeof names==="object")Object.keys(names).forEach(function(k){if(names[k]!=null)map[normalizeProtectedName(names[k])]=String(d.id);});
+    });
+    return map;
   }
-  function resolveDefaultProtectedNext(next,current,fallback){
-    var base=defaultProtectedArray(current,fallback);
+  function compactProtectedArray(value,fallback,dict){
+    var arr=Array.isArray(value)?value.slice():[];
+    if(!arr.length)arr=ensureArrayValue(fallback,[]).slice();
+    var defaults=ensureArrayValue(fallback,[]);
+    var defaultIds={};defaults.forEach(function(d){if(d&&d.id!=null)defaultIds[String(d.id)]=true;});
+    var nameMap=protectedDefaultNameMap(defaults,dict);
+    var out=[];var pos={};
+    function keyOf(item){
+      if(!item)return "null:"+out.length;
+      var sid=item.id!=null?String(item.id):"";
+      if(sid&&defaultIds[sid])return "default:"+sid;
+      var nid=nameMap[normalizeProtectedName(item.name)];
+      if(nid)return "default:"+nid;
+      if(sid)return "id:"+sid;
+      return "name:"+normalizeProtectedName(item.name)+":"+out.length;
+    }
+    function preferItem(a,b){
+      if(!a)return b;if(!b)return a;
+      if(a.deleted||b.deleted){
+        var src=b.deleted?b:a;
+        var base=a.deleted?a:b;
+        return {...base,...src,deleted:true,archived:true,custom:true};
+      }
+      var au=a.updatedAt?Date.parse(a.updatedAt):0,bu=b.updatedAt?Date.parse(b.updatedAt):0;
+      if((b.custom||b.userCreated||b.recovered)&&!(a.custom||a.userCreated||a.recovered))return {...a,...b,id:a.id};
+      if((a.custom||a.userCreated||a.recovered)&&!(b.custom||b.userCreated||b.recovered))return {...b,...a,id:a.id};
+      return bu>=au?{...a,...b,id:a.id}:{...b,...a,id:a.id};
+    }
+    arr.forEach(function(item){
+      if(!item)return;
+      var k=keyOf(item);
+      if(pos[k]===undefined){pos[k]=out.length;out.push(item);return;}
+      out[pos[k]]=preferItem(out[pos[k]],item);
+    });
+    return out;
+  }
+  function defaultProtectedArray(value,fallback,dict){
+    return compactProtectedArray(value,fallback,dict);
+  }
+  function resolveDefaultProtectedNext(next,current,fallback,dict){
+    var base=defaultProtectedArray(current,fallback,dict);
     var value=typeof next==="function"?next(base):next;
-    return defaultProtectedArray(value,fallback);
+    return defaultProtectedArray(value,fallback,dict);
   }
   function chooseCloudLocalArray(cloud,local,fallback,merge){
     var c=Array.isArray(cloud)?cloud:null;
@@ -1271,6 +1331,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
   var firestoreHydratedRef=useRef(false);
   var applyingFirestoreRef=useRef(false);
+  var backupImportPendingRef=useRef(0);
+  var backupImportIdRef=useRef("");
   function beginRemoteApply(){applyingFirestoreRef.current=true;}
   function endRemoteApply(){setTimeout(function(){applyingFirestoreRef.current=false;},900);}
 
@@ -1281,17 +1343,17 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [expenses,setExpenses]=useStorage(userKey("exp_v10"),[]);
   var [incomes,setIncomes]=useStorage(userKey("inc_v10"),[]);
   var [cats,setCatsRaw]=useStorage(userKey("cats_v10"),DEFAULT_CATS);
-  function setCats(nextCats){if(!applyingFirestoreRef.current)markUserLocalChange("cats");return setCatsRaw(resolveDefaultProtectedNext(nextCats,cats,DEFAULT_CATS));}
-  cats=defaultProtectedArray(cats,DEFAULT_CATS);
+  function setCats(nextCats){if(!applyingFirestoreRef.current)markUserLocalChange("cats");return setCatsRaw(resolveDefaultProtectedNext(nextCats,cats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES));}
+  cats=defaultProtectedArray(cats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES);
   var [methods,setMethodsRaw]=useStorage(userKey("meth_v10"),DEFAULT_METHODS);
-  function setMethods(nextMethods){if(!applyingFirestoreRef.current)markUserLocalChange("methods");return setMethodsRaw(resolveDefaultProtectedNext(nextMethods,methods,DEFAULT_METHODS));}
-  methods=defaultProtectedArray(methods,DEFAULT_METHODS);
+  function setMethods(nextMethods){if(!applyingFirestoreRef.current)markUserLocalChange("methods");return setMethodsRaw(resolveDefaultProtectedNext(nextMethods,methods,DEFAULT_METHODS,DEFAULT_METHOD_NAMES));}
+  methods=defaultProtectedArray(methods,DEFAULT_METHODS,DEFAULT_METHOD_NAMES);
   var [methodGroups,setMethodGroupsRaw]=useStorage(userKey("method_groups_v1"),DEFAULT_METHOD_GROUPS);
-  function setMethodGroups(nextGroups){return setMethodGroupsRaw(resolveDefaultProtectedNext(nextGroups,methodGroups,DEFAULT_METHOD_GROUPS));}
-  methodGroups=defaultProtectedArray(methodGroups,DEFAULT_METHOD_GROUPS);
+  function setMethodGroups(nextGroups){return setMethodGroupsRaw(resolveDefaultProtectedNext(nextGroups,methodGroups,DEFAULT_METHOD_GROUPS,DEFAULT_METHOD_GROUP_NAMES));}
+  methodGroups=defaultProtectedArray(methodGroups,DEFAULT_METHOD_GROUPS,DEFAULT_METHOD_GROUP_NAMES);
   var [expenseGroups,setExpenseGroupsRaw]=useStorage(userKey("expense_groups_v1"),DEFAULT_EXPENSE_GROUPS);
-  function setExpenseGroups(nextGroups){return setExpenseGroupsRaw(resolveDefaultProtectedNext(nextGroups,expenseGroups,DEFAULT_EXPENSE_GROUPS));}
-  expenseGroups=defaultProtectedArray(expenseGroups,DEFAULT_EXPENSE_GROUPS);
+  function setExpenseGroups(nextGroups){return setExpenseGroupsRaw(resolveDefaultProtectedNext(nextGroups,expenseGroups,DEFAULT_EXPENSE_GROUPS,DEFAULT_EXPENSE_GROUP_NAMES));}
+  expenseGroups=defaultProtectedArray(expenseGroups,DEFAULT_EXPENSE_GROUPS,DEFAULT_EXPENSE_GROUP_NAMES);
   var [incomeGroups,setIncomeGroupsRaw]=useStorage(userKey("income_groups_v1"),DEFAULT_INCOME_GROUPS);
   function setIncomeGroups(nextGroups){return setIncomeGroupsRaw(resolveDefaultProtectedNext(nextGroups,incomeGroups,DEFAULT_INCOME_GROUPS));}
   incomeGroups=defaultProtectedArray(incomeGroups,DEFAULT_INCOME_GROUPS);
@@ -1478,6 +1540,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [termsAccepted,setTermsAccepted]=useStorage(userKey("terms_accepted_v1"),false);
   var [privacyAccepted,setPrivacyAccepted]=useStorage(userKey("privacy_accepted_v1"),false);
   var [legalAcceptanceDate,setLegalAcceptanceDate]=useStorage(userKey("legal_acceptance_date_v1"),"");
+  var [onboardingGuideSeen,setOnboardingGuideSeen]=useStorage(userKey("onboarding_guide_seen_v1"),false);
+  var [onboardingGuideOpen,setOnboardingGuideOpen]=useState(false);
+  var [onboardingGuideStep,setOnboardingGuideStep]=useState(0);
   var [shareProjects,setShareProjects]=useStorage(userKey("share_projects_v1"),[]);
   var [showShareInHistory,setShowShareInHistory]=useStorage(userKey("share_show_history_v1"),true);
   var DEFAULT_SHOPPING_AREAS=["Alimenti","Banco Frigo","Macelleria","Pescheria","Salumi","Ortofrutta","Igiene","Altro"];
@@ -1502,6 +1567,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [manualFullGrant,setManualFullGrant]=useState(false);
   var [planBillingPeriod,setPlanBillingPeriod]=useStorage(userKey("plan_billing_period_v1"),"monthly");
   var [planPurchaseLoading,setPlanPurchaseLoading]=useState("");
+  var [premiumTrialPromptStatus,setPremiumTrialPromptStatus]=useStorage(userKey("premium_trial_prompt_status_v1"),"");
+  var [showPremiumTrialPrompt,setShowPremiumTrialPrompt]=useState(false);
+  var premiumTrialPromptShownRef=useRef(false);
   var [topAdDismissedAt,setTopAdDismissedAt]=useStorage(userKey("top_ad_dismissed_at_v1"),0);
   if(manualFullGrant&&currentPlan!=="premium"){currentPlan="premium";}
   var currentPlanRef=useRef(currentPlan||"free");
@@ -1588,13 +1656,13 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var localSnap={
       expenses:readUserLocalJson("exp_v10",[]),incomes:readUserLocalJson("inc_v10",[]),recurring:readUserLocalJson("rec_v10",[]),goals:readUserLocalJson("goals_v1",DEFAULT_GOALS),alerts:readUserLocalJson("alerts_v1",[]),budgetPlan:readUserLocalJson("budget_plan_v1",DEFAULT_BUDGET_PLAN),
       cats:readUserLocalJson("cats_v10",DEFAULT_CATS),methods:readUserLocalJson("meth_v10",DEFAULT_METHODS),expenseGroups:readUserLocalJson("expense_groups_v1",DEFAULT_EXPENSE_GROUPS),incomeGroups:readUserLocalJson("income_groups_v1",DEFAULT_INCOME_GROUPS),methodGroups:readUserLocalJson("method_groups_v1",DEFAULT_METHOD_GROUPS),
-      appuntiDocuments:readUserLocalJson("appunti_documents_v1",[]),appuntiNotes:readUserLocalJson("appunti_notes_v1",[]),bankCoords:readUserLocalJson("bank_coords_v1",[]),creditCards:readUserLocalJson("credit_cards_v1",[]),shareProjects:readUserLocalJson("share_projects_v1",[]),debtCredits:readUserLocalJson("debt_credits_v1",[]),shoppingCards:readUserLocalJson("shopping_cards_v1",[]),shoppingItems:readUserLocalJson("shopping_items_v1",[]),shareReceiptUploads:readUserLocalJson("share_receipt_uploads_v1",[]),customNotifs:readUserLocalJson("custom_notifs_v1",[]),planUsage:readUserLocalJson("plan_usage_v1",{}),shownAlertIds:readUserLocalJson("shown_alert_ids_v2",[])
+      appuntiDocuments:readUserLocalJson("appunti_documents_v1",[]),appuntiNotes:readUserLocalJson("appunti_notes_v1",[]),bankCoords:readUserLocalJson("bank_coords_v1",[]),creditCards:readUserLocalJson("credit_cards_v1",[]),shareProjects:readUserLocalJson("share_projects_v1",[]),debtCredits:readUserLocalJson("debt_credits_v1",[]),shoppingCards:readUserLocalJson("shopping_cards_v1",[]),shoppingItems:readUserLocalJson("shopping_items_v1",[]),shareReceiptUploads:readUserLocalJson("share_receipt_uploads_v1",[]),customNotifs:readUserLocalJson("custom_notifs_v1",[]),planUsage:readUserLocalJson("plan_usage_v1",{}),shownAlertIds:readUserLocalJson("shown_alert_ids_v2",[]),onboardingGuideSeen:readUserLocalJson("onboarding_guide_seen_v1",false)
     };
     beginRemoteApply();
     setExpenses(Array.isArray(localSnap.expenses)?localSnap.expenses:[]);setIncomes(Array.isArray(localSnap.incomes)?localSnap.incomes:[]);setRecurring(Array.isArray(localSnap.recurring)?localSnap.recurring:[]);setGoals(Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS);setAlerts(Array.isArray(localSnap.alerts)?localSnap.alerts:[]);setBudgetPlan(localSnap.budgetPlan||DEFAULT_BUDGET_PLAN);
     var localSafeMethods=ensureReferencedMethods(Array.isArray(localSnap.methods)&&localSnap.methods.length?localSnap.methods:DEFAULT_METHODS,localSnap.expenses,localSnap.recurring);
     setCats(Array.isArray(localSnap.cats)&&localSnap.cats.length?localSnap.cats:DEFAULT_CATS);setMethods(localSafeMethods);setExpenseGroups(Array.isArray(localSnap.expenseGroups)&&localSnap.expenseGroups.length?localSnap.expenseGroups:DEFAULT_EXPENSE_GROUPS);setIncomeGroups(Array.isArray(localSnap.incomeGroups)&&localSnap.incomeGroups.length?localSnap.incomeGroups:DEFAULT_INCOME_GROUPS);setMethodGroups(Array.isArray(localSnap.methodGroups)&&localSnap.methodGroups.length?localSnap.methodGroups:DEFAULT_METHOD_GROUPS);
-    setAppuntiDocuments(Array.isArray(localSnap.appuntiDocuments)?localSnap.appuntiDocuments:[]);setAppuntiNotes(Array.isArray(localSnap.appuntiNotes)?localSnap.appuntiNotes:[]);setBankCoords(Array.isArray(localSnap.bankCoords)?localSnap.bankCoords:[]);setCreditCards(Array.isArray(localSnap.creditCards)?localSnap.creditCards:[]);setAiDismissed([]);setAiChat([]);setShareProjects(Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[]);setDebtCredits(Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[]);setShoppingCards(Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[]);setShoppingItems(Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[]);setShareReceiptUploads(Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[]);setCustomNotifs(Array.isArray(localSnap.customNotifs)?localSnap.customNotifs:[]);setPlanUsage(localSnap.planUsage||{});setShownAlertIds(Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[]);
+    setAppuntiDocuments(Array.isArray(localSnap.appuntiDocuments)?localSnap.appuntiDocuments:[]);setAppuntiNotes(Array.isArray(localSnap.appuntiNotes)?localSnap.appuntiNotes:[]);setBankCoords(Array.isArray(localSnap.bankCoords)?localSnap.bankCoords:[]);setCreditCards(Array.isArray(localSnap.creditCards)?localSnap.creditCards:[]);setAiDismissed([]);setAiChat([]);setShareProjects(Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[]);setDebtCredits(Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[]);setShoppingCards(Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[]);setShoppingItems(Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[]);setShareReceiptUploads(Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[]);setCustomNotifs(Array.isArray(localSnap.customNotifs)?localSnap.customNotifs:[]);setPlanUsage(localSnap.planUsage||{});setShownAlertIds(Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[]);setOnboardingGuideSeen(!!localSnap.onboardingGuideSeen);
     endRemoteApply();
     setFirestoreReady(true);
     // Firestore resta la sorgente condivisa: onSnapshot aggiorna in tempo reale tutti i dispositivi dello stesso account.
@@ -1615,6 +1683,22 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       beginRemoteApply();
       if(snap.exists()){
         var d=snap.data();
+        var pendingBackupImportTs=Number(backupImportPendingRef.current||0);
+        var pendingBackupImportId=String(backupImportIdRef.current||"");
+        var cloudUpdatedAtMs=Number((d&&d.updatedAtMs)||0);
+        var cloudBackupImportId=String((d&&d._backupImportId)||"");
+        if(pendingBackupImportTs&&Date.now()-pendingBackupImportTs<30000){
+          if(pendingBackupImportId&&cloudBackupImportId===pendingBackupImportId){
+            backupImportPendingRef.current=0;
+            backupImportIdRef.current="";
+          }else{
+            endRemoteApply();
+            return;
+          }
+        }else if(pendingBackupImportTs){
+          backupImportPendingRef.current=0;
+          backupImportIdRef.current="";
+        }
         var isFirstSnapshot=firstSnapshot;firstSnapshot=false;
         var cloudExpenses=Array.isArray(d.expenses)?d.expenses:[];
         var cloudIncomes=Array.isArray(d.incomes)?d.incomes:[];
@@ -1635,7 +1719,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         var mergedExpenses=isFirstSnapshot?mergeArrayByStableId(cloudExpenses,latestLocalExpenses):cloudExpenses;
         var mergedIncomes=isFirstSnapshot?mergeArrayByStableId(cloudIncomes,latestLocalIncomes):cloudIncomes;
         var mergedRecurring=isFirstSnapshot?mergeArrayByStableId(cloudRecurring,latestLocalRecurring):cloudRecurring;
-        var mergedCats=mergeProtectedArrayByStableId(cloudCats,latestLocalCats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES,preferLocalCats);
+        var mergedCats=compactProtectedArray(mergeProtectedArrayByStableId(cloudCats,latestLocalCats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES,preferLocalCats),DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES);
         var mergedMethods=mergeProtectedArrayByStableId(cloudMethods,latestLocalMethods,DEFAULT_METHODS,DEFAULT_METHOD_NAMES,preferLocalMethods);
         mergedMethods=ensureReferencedMethods(mergedMethods,mergedExpenses,mergedRecurring);
         var needsInitialBackfill=isFirstSnapshot&&(!sameJson(mergedExpenses,cloudExpenses)||!sameJson(mergedIncomes,cloudIncomes)||!sameJson(mergedCats,cloudCats)||!sameJson(mergedMethods,cloudMethods)||!sameJson(mergedRecurring,cloudRecurring));
@@ -1660,6 +1744,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.shoppingAreaIcons)setShoppingAreaIcons(d.shoppingAreaIcons);if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);restoreLocalJson("shopping_lists_v2",d.shoppingLists);restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId);restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
         if(d.historySortDate)setHistorySortDate(d.historySortDate);
         if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
+        if(d.firstDayOfWeek)setFirstDayOfWeek(d.firstDayOfWeek);if(d.homeBalanceView)setHomeBalanceView(d.homeBalanceView);if(d.statsView)setStatsView(d.statsView);if(d.currency)setCurrency(d.currency);if(d.secondaryCurrency)setSecondaryCurrency(d.secondaryCurrency);
+        if(d.showSecInHistory!==undefined)setShowSecInHistory(!!d.showSecInHistory);if(d.showSecInStats!==undefined)setShowSecInStats(!!d.showSecInStats);if(d.showSecInBudget!==undefined)setShowSecInBudget(!!d.showSecInBudget);if(d.showSecInPatrimonio!==undefined)setShowSecInPatrimonio(!!d.showSecInPatrimonio);if(d.showAppSummaryHeader!==undefined)setShowAppSummaryHeader(!!d.showAppSummaryHeader);
+        if(Array.isArray(d.mobileNavOrder))setMobileNavOrder(d.mobileNavOrder);if(d.mobileNavIconCount!==undefined)setMobileNavIconCount(d.mobileNavIconCount);if(Array.isArray(d.mobileMenuOrder))setMobileMenuOrder(d.mobileMenuOrder);if(Array.isArray(d.mobileAllNavOrder))setMobileAllNavOrder(d.mobileAllNavOrder);
         if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);
         if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
@@ -1675,6 +1762,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.termsAccepted!==undefined)setTermsAccepted(!!d.termsAccepted);
         if(d.privacyAccepted!==undefined)setPrivacyAccepted(!!d.privacyAccepted);
         if(d.legalAcceptanceDate)setLegalAcceptanceDate(d.legalAcceptanceDate);
+        if(d.onboardingGuideSeen!==undefined)setOnboardingGuideSeen(!!d.onboardingGuideSeen);
         setShareProjects(chooseCloudLocalArray(d.shareProjects,shareProjects,[],true));
         setDebtCredits(chooseCloudLocalArray(d.debtCredits,debtCredits,[],true));
         setShoppingCards(chooseCloudLocalArray(d.shoppingCards,shoppingCards,[],true));
@@ -1687,13 +1775,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setPlanUsage(chooseCloudLocalObject(d.planUsage,planUsage,{}));
         setShownAlertIds(Array.isArray(d.shownAlertIds)?d.shownAlertIds:[]);
       } else {
+        if(backupImportPendingRef.current&&Date.now()-Number(backupImportPendingRef.current||0)<30000){endRemoteApply();return;}
         // Documento cloud mancante: mantieni il salvataggio locale del profilo corrente e lascialo risalire a Firestore.
         setExpenses(Array.isArray(localSnap.expenses)?localSnap.expenses:[]);setIncomes(Array.isArray(localSnap.incomes)?localSnap.incomes:[]);setRecurring(Array.isArray(localSnap.recurring)?localSnap.recurring:[]);setGoals(Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS);setAlerts(Array.isArray(localSnap.alerts)?localSnap.alerts:[]);setBudgetPlan(localSnap.budgetPlan||DEFAULT_BUDGET_PLAN);
         var restoredMethods=ensureReferencedMethods(chooseCloudLocalArray(null,localSnap.methods,DEFAULT_METHODS,false),localSnap.expenses,localSnap.recurring);
         setCats(chooseCloudLocalArray(null,localSnap.cats,DEFAULT_CATS,false));setMethods(restoredMethods);setExpenseGroups(chooseCloudLocalArray(null,localSnap.expenseGroups,DEFAULT_EXPENSE_GROUPS,false));setIncomeGroups(chooseCloudLocalArray(null,localSnap.incomeGroups,DEFAULT_INCOME_GROUPS,false));setMethodGroups(chooseCloudLocalArray(null,localSnap.methodGroups,DEFAULT_METHOD_GROUPS,false));
         setPatrimonioAreas(chooseCloudLocalArray(null,patrimonioAreas,DEFAULT_PATRIMONIO_AREAS,false));setPatrimonioEntries(chooseCloudLocalArray(null,patrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES,false));setPatrimonioValues(chooseCloudLocalObject(null,patrimonioValues,{}));setPatrimonioHistory(chooseCloudLocalObject(null,patrimonioHistory,{}));setPatrimonioNotes(chooseCloudLocalObject(null,patrimonioNotes,{}));
-        setAppuntiDocuments(Array.isArray(localSnap.appuntiDocuments)?localSnap.appuntiDocuments:[]);setAppuntiNotes(Array.isArray(localSnap.appuntiNotes)?localSnap.appuntiNotes:[]);setBankCoords(Array.isArray(localSnap.bankCoords)?localSnap.bankCoords:[]);setCreditCards(Array.isArray(localSnap.creditCards)?localSnap.creditCards:[]);setAiDismissed([]);setAiChat([]);setShareProjects(Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[]);setDebtCredits(Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[]);setShoppingCards(Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[]);setShoppingItems(Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[]);setShoppingAreas(Array.isArray(localSnap.shoppingAreas)&&localSnap.shoppingAreas.length?localSnap.shoppingAreas:DEFAULT_SHOPPING_AREAS);setShareReceiptUploads(Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[]);setShowShareInHistory(true);setCustomNotifs(Array.isArray(localSnap.customNotifs)?localSnap.customNotifs:[]);setNotifPrefs({remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free");setPlanUsage(localSnap.planUsage||{});setShownAlertIds(Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[]);
-        try{setDoc(docRef,{expenses:Array.isArray(localSnap.expenses)?localSnap.expenses:[],incomes:Array.isArray(localSnap.incomes)?localSnap.incomes:[],cats:Array.isArray(localSnap.cats)&&localSnap.cats.length?localSnap.cats:DEFAULT_CATS,methods:restoredMethods,recurring:Array.isArray(localSnap.recurring)?localSnap.recurring:[],goals:Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS,alerts:Array.isArray(localSnap.alerts)?localSnap.alerts:[],budgetPlan:localSnap.budgetPlan||DEFAULT_BUDGET_PLAN,expenseGroups:Array.isArray(localSnap.expenseGroups)&&localSnap.expenseGroups.length?localSnap.expenseGroups:DEFAULT_EXPENSE_GROUPS,incomeGroups:Array.isArray(localSnap.incomeGroups)&&localSnap.incomeGroups.length?localSnap.incomeGroups:DEFAULT_INCOME_GROUPS,methodGroups:Array.isArray(localSnap.methodGroups)&&localSnap.methodGroups.length?localSnap.methodGroups:DEFAULT_METHOD_GROUPS,shareProjects:Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[],debtCredits:Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[],shoppingCards:Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[],shoppingItems:Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[],shoppingAreas:Array.isArray(localSnap.shoppingAreas)&&localSnap.shoppingAreas.length?localSnap.shoppingAreas:DEFAULT_SHOPPING_AREAS,shareReceiptUploads:Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[],planUsage:localSnap.planUsage||{},shownAlertIds:Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[],updatedAt:new Date().toISOString(),updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore first local backfill error",(e&&e.code)||"unknown");});}catch(e){}
+        setAppuntiDocuments(Array.isArray(localSnap.appuntiDocuments)?localSnap.appuntiDocuments:[]);setAppuntiNotes(Array.isArray(localSnap.appuntiNotes)?localSnap.appuntiNotes:[]);setBankCoords(Array.isArray(localSnap.bankCoords)?localSnap.bankCoords:[]);setCreditCards(Array.isArray(localSnap.creditCards)?localSnap.creditCards:[]);setAiDismissed([]);setAiChat([]);setShareProjects(Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[]);setDebtCredits(Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[]);setShoppingCards(Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[]);setShoppingItems(Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[]);setShoppingAreas(Array.isArray(localSnap.shoppingAreas)&&localSnap.shoppingAreas.length?localSnap.shoppingAreas:DEFAULT_SHOPPING_AREAS);setShareReceiptUploads(Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[]);setShowShareInHistory(true);setCustomNotifs(Array.isArray(localSnap.customNotifs)?localSnap.customNotifs:[]);setNotifPrefs({remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});if(!PLAN_LIMITS[currentPlanRef.current])setCurrentPlan("free");setPlanUsage(localSnap.planUsage||{});setShownAlertIds(Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[]);setOnboardingGuideSeen(!!localSnap.onboardingGuideSeen);
+        try{setDoc(docRef,{expenses:Array.isArray(localSnap.expenses)?localSnap.expenses:[],incomes:Array.isArray(localSnap.incomes)?localSnap.incomes:[],cats:Array.isArray(localSnap.cats)&&localSnap.cats.length?localSnap.cats:DEFAULT_CATS,methods:restoredMethods,recurring:Array.isArray(localSnap.recurring)?localSnap.recurring:[],goals:Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS,alerts:Array.isArray(localSnap.alerts)?localSnap.alerts:[],budgetPlan:localSnap.budgetPlan||DEFAULT_BUDGET_PLAN,expenseGroups:Array.isArray(localSnap.expenseGroups)&&localSnap.expenseGroups.length?localSnap.expenseGroups:DEFAULT_EXPENSE_GROUPS,incomeGroups:Array.isArray(localSnap.incomeGroups)&&localSnap.incomeGroups.length?localSnap.incomeGroups:DEFAULT_INCOME_GROUPS,methodGroups:Array.isArray(localSnap.methodGroups)&&localSnap.methodGroups.length?localSnap.methodGroups:DEFAULT_METHOD_GROUPS,shareProjects:Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[],debtCredits:Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[],shoppingCards:Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[],shoppingItems:Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[],shoppingAreas:Array.isArray(localSnap.shoppingAreas)&&localSnap.shoppingAreas.length?localSnap.shoppingAreas:DEFAULT_SHOPPING_AREAS,shareReceiptUploads:Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[],planUsage:localSnap.planUsage||{},shownAlertIds:Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[],onboardingGuideSeen:!!localSnap.onboardingGuideSeen,updatedAt:new Date().toISOString(),updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore first local backfill error",(e&&e.code)||"unknown");});}catch(e){}
       }
       firestoreHydratedRef.current=true;
       setFirestoreReady(true);
@@ -1717,7 +1806,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var catsTs=0,methodsTs=0;try{catsTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}try{methodsTs=Number(localStorage.getItem(userKey("methods_updated_at"))||0);}catch(e){}
     var nowIso=new Date().toISOString();
     var safeMethodsToSave=ensureReferencedMethods(methods,expenses,recurring);
-    setDoc(docRef,{expenses,incomes,cats,methods:safeMethodsToSave,catsUpdatedAt:catsTs,methodsUpdatedAt:methodsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,creditCards:creditCardsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,updatedAt:nowIso,updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
+    setDoc(docRef,{expenses,incomes,cats,methods:safeMethodsToSave,catsUpdatedAt:catsTs,methodsUpdatedAt:methodsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,homeBalanceView,statsView,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrder,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,creditCards:creditCardsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,onboardingGuideSeen,updatedAt:nowIso,updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
   }
 
   async function deleteCurrentAccount(){
@@ -1800,21 +1889,51 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var base=SHARE_WEB_APP_URL.replace(/\/$/,"");
     return base+"/?shareInvite="+encodeURIComponent(String(inviteId||""))+"&shareProject="+encodeURIComponent(String(projectId||""));
   }
+  function shareProjectStamp(project){
+    var ms=Number(project&&project.updatedAtMs||0);
+    if(ms>0)return ms;
+    var rev=Number(project&&project.shareRevision||0);
+    if(rev>0)return rev;
+    var parsed=Date.parse(String((project&&project.updatedAt)||(project&&project.createdAt)||""));
+    return isNaN(parsed)?0:parsed;
+  }
+  function preferShareProject(a,b){
+    if(!a)return b;if(!b)return a;
+    var as=shareProjectStamp(a),bs=shareProjectStamp(b);
+    if(bs>as)return {...a,...b};
+    if(as>bs)return {...b,...a};
+    var aa=Array.isArray(a.activities)?a.activities.length:0,ba=Array.isArray(b.activities)?b.activities.length:0;
+    return ba>=aa?{...a,...b}:{...b,...a};
+  }
   function mergeShareProjectsFromCloud(cloudProjects){
     if(!Array.isArray(cloudProjects)||!cloudProjects.length)return;
     setShareProjects(function(list){
       var map={};
       (list||[]).forEach(function(p){map[String(p.id)]=p;});
-      cloudProjects.forEach(function(p){map[String(p.id)]=p;});
-      return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return String(b.createdAt||"").localeCompare(String(a.createdAt||""));});
+      cloudProjects.forEach(function(p){var key=String(p.id);map[key]=preferShareProject(map[key],p);});
+      return Object.keys(map).map(function(k){return map[k];}).sort(function(a,b){return shareProjectStamp(b)-shareProjectStamp(a)||String(b.createdAt||"").localeCompare(String(a.createdAt||""));});
     });
+  }
+  function shareMemberUidsForProject(project){
+    var ids=[];
+    function add(v){v=String(v||"").trim();if(v&&ids.indexOf(v)<0)ids.push(v);}
+    add(project&&project.ownerUid);
+    add(userId);
+    (project&&project.memberUids||[]).forEach(add);
+    (project&&project.participants||[]).forEach(function(p){
+      add(p&&p.uid);
+      var pid=String((p&&p.id)||"");
+      if(pid.indexOf("u_")===0)add(pid.slice(2));
+    });
+    return ids;
   }
   function syncShareProjectToCloud(project){
     if(!project||!userId)return;
     var pid=String(project.id);
-    var memberUids=Array.from(new Set((project.participants||[]).map(function(p){return p.uid;}).filter(Boolean).concat(project.memberUids||[])));
-    var cloudProject={...project,memberUids:memberUids,ownerUid:project.ownerUid||userId,updatedAt:new Date().toISOString()};
-    setDoc(doc(fbDb,"shareProjects",pid),cloudProject,{merge:true}).catch(function(e){console.error("Share project sync error",(e&&e.code)||"unknown");});
+    var nowIso=new Date().toISOString();
+    var memberUids=shareMemberUidsForProject(project);
+    var cloudProject={...project,memberUids:memberUids,ownerUid:project.ownerUid||userId,updatedAt:project.updatedAt||nowIso,updatedAtMs:Date.now(),shareRevision:Date.now()};
+    setDoc(doc(fbDb,"shareProjects",pid),cloudProject,{merge:true}).catch(function(e){console.error("Share project sync error",(e&&e.code)||"unknown");if(setToast)setToast({text:L("Errore sincronizzazione Share: verifica la connessione e riapri il progetto."),type:"error",color:"#E24B4A",icon:"⚠️"});});
   }
   function loadShareCollaboration(){
     if(!userId)return;
@@ -1848,9 +1967,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     function applyProjects(){
       var all={};
       Object.keys(projectMaps.member).forEach(function(k){all[k]=projectMaps.member[k];});
-      Object.keys(projectMaps.owner).forEach(function(k){all[k]=projectMaps.owner[k];});
-      var arr=Object.keys(all).map(function(k){return all[k];}).sort(function(a,b){return String(b.updatedAt||b.createdAt||"").localeCompare(String(a.updatedAt||a.createdAt||""));});
-      setShareProjects(arr);
+      Object.keys(projectMaps.owner).forEach(function(k){all[k]=preferShareProject(all[k],projectMaps.owner[k]);});
+      var remoteArr=Object.keys(all).map(function(k){return all[k];});
+      setShareProjects(function(current){
+        var merged={};
+        (current||[]).forEach(function(p){merged[String(p.id)]=p;});
+        remoteArr.forEach(function(p){var key=String(p.id);merged[key]=preferShareProject(merged[key],p);});
+        return Object.keys(merged).map(function(k){return merged[k];}).sort(function(a,b){return shareProjectStamp(b)-shareProjectStamp(a)||String(b.createdAt||"").localeCompare(String(a.createdAt||""));});
+      });
     }
     function applyInvites(){
       var all={};
@@ -1897,7 +2021,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       });
       if(!found)participants.push({id:"u_"+userId,uid:userId,email:email,name:currentUserShareName(),kind:"registered",type:"registered",role:"member",status:"active"});
       var memberUids=Array.from(new Set((project.memberUids||[]).concat([userId])));
-      var updated={...project,participants:participants,memberUids:memberUids,updatedAt:new Date().toISOString()};
+      var nowIso=new Date().toISOString();
+      var updatedDraft={...project,participants:participants,memberUids:memberUids,updatedAt:nowIso,updatedAtMs:Date.now(),shareRevision:Date.now()};
+      var updated={...updatedDraft,memberUids:shareMemberUidsForProject(updatedDraft)};
       await setDoc(projectRef,updated,{merge:true});
       await setDoc(doc(fbDb,"shareInvites",String(invite.id)),{status:"accepted",acceptedAt:new Date().toISOString(),invitedUid:userId},{merge:true});
       setShareProjects(function(list){var exists=(list||[]).some(function(p){return String(p.id)===String(updated.id);});return exists?(list||[]).map(function(p){return String(p.id)===String(updated.id)?updated:p;}):[updated].concat(list||[]);});
@@ -1956,14 +2082,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!firestoreReady||applyingFirestoreRef.current)return;
     var timer=setTimeout(saveToFirestore,700); // debounce rapido per non perdere dati se l'app viene chiusa
     return function(){clearTimeout(timer);};
-  },[expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,currentPlan,planUsage,shownAlertIds]);
+  },[expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,currentPlan,planUsage,shownAlertIds,onboardingGuideSeen]);
   useEffect(function(){
     function flush(){if(firestoreReady&&firestoreHydratedRef.current&&!applyingFirestoreRef.current)saveToFirestore();}
     function onVisibility(){if(document.visibilityState==="hidden")flush();}
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("pagehide",flush);
     return function(){document.removeEventListener("visibilitychange",onVisibility);window.removeEventListener("pagehide",flush);};
-  },[firestoreReady,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds]);
+  },[firestoreReady,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,onboardingGuideSeen]);
 
   var [speseSubTab,setSpeseSubTab]=useState("add");
   var [addType,setAddType]=useState("expense");
@@ -1975,16 +2101,29 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!url)return;
     var shareInviteId="";
     var shareProjectId="";
+    var fidelityCardId="";
+    var shoppingListId="";
+    var debtCreditId="";
     try{
       var parsed=new URL(raw,window&&window.location?window.location.origin:SHARE_WEB_APP_URL);
       shareInviteId=parsed.searchParams.get("shareInvite")||parsed.searchParams.get("invite")||"";
       shareProjectId=parsed.searchParams.get("shareProject")||parsed.searchParams.get("project")||"";
+      fidelityCardId=parsed.searchParams.get("cardId")||parsed.searchParams.get("card")||"";
+      shoppingListId=parsed.searchParams.get("listId")||parsed.searchParams.get("list")||"";
+      debtCreditId=parsed.searchParams.get("debtId")||parsed.searchParams.get("debt")||parsed.searchParams.get("creditId")||parsed.searchParams.get("credit")||"";
     }catch(e){
       var im=raw.match(/[?&](?:shareInvite|invite)=([^&]+)/);
       var pm=raw.match(/[?&](?:shareProject|project)=([^&]+)/);
+      var cm=raw.match(/[?&](?:cardId|card)=([^&]+)/);
+      var lm=raw.match(/[?&](?:listId|list)=([^&]+)/);
+      var dm=raw.match(/[?&](?:debtId|debt|creditId|credit)=([^&]+)/);
       shareInviteId=im?decodeURIComponent(im[1]):"";
       shareProjectId=pm?decodeURIComponent(pm[1]):"";
+      fidelityCardId=cm?decodeURIComponent(cm[1]):"";
+      shoppingListId=lm?decodeURIComponent(lm[1]):"";
+      debtCreditId=dm?decodeURIComponent(dm[1]):"";
     }
+    function dispatchWidgetEvent(eventName,detail){[80,240,650,1200,2000].forEach(function(ms){setTimeout(function(){try{window.dispatchEvent(new CustomEvent(eventName,{detail:detail||{}}));}catch(e){}},ms);});}
     if(url.indexOf("open-plan-info")>=0||url.indexOf("open-info")>=0||url.indexOf("plan-info")>=0){
       openPlanInfo();
       return;
@@ -2004,6 +2143,20 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       }catch(e){}
       return;
     }
+    if(url.indexOf("share-add-expense")>=0||url.indexOf("share-receipt")>=0||url.indexOf("share-voice")>=0){
+      var shareMode=url.indexOf("share-receipt")>=0?"receipt":(url.indexOf("share-voice")>=0?"voice":"simple");
+      setTab("share");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      setShareProjectTab("attivita");
+      if(shareProjectId)setShareSelectedProjectId(String(shareProjectId));
+      try{
+        localStorage.setItem("fainance_share_open_expense_mode",shareMode);
+        localStorage.setItem("fainance_share_widget_action_v1",JSON.stringify({mode:shareMode,projectId:String(shareProjectId||""),ts:Date.now()}));
+      }catch(e){}
+      dispatchWidgetEvent("fainance-open-share-expense",{mode:shareMode,projectId:String(shareProjectId||"")});
+      return;
+    }
     if(url.indexOf("open-receipt")>=0||url.indexOf("receipt")>=0||url.indexOf("scontrino")>=0){
       setTab("spese");
       setSpeseSubTab("add");
@@ -2013,14 +2166,41 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       setMobileMenu(false);
       return;
     }
-    if(url.indexOf("share-add-expense")>=0||url.indexOf("share-receipt")>=0||url.indexOf("share-voice")>=0){
-      setTab("share");
+    if(url.indexOf("open-fidelity-card")>=0){
+      setTab("shopping");
       setSettingsPage(null);
       setMobileMenu(false);
-      setShareProjectTab("attivita");
-      if(shareProjectId)setShareSelectedProjectId(String(shareProjectId));
-      try{localStorage.setItem("fainance_share_open_expense_mode",url.indexOf("share-receipt")>=0?"receipt":(url.indexOf("share-voice")>=0?"voice":"simple"));}catch(e){}
-      setTimeout(function(){try{window.dispatchEvent(new CustomEvent("fainance-open-share-expense"));}catch(e){}},120);
+      try{localStorage.setItem(userKey("shopping_active_tab_v1"),"cards");localStorage.setItem("fainance_shopping_widget_action_v1",JSON.stringify({tab:"cards",cardId:String(fidelityCardId||""),ts:Date.now()}));}catch(e){}
+      dispatchWidgetEvent("fainance-open-shopping-widget",{tab:"cards",cardId:String(fidelityCardId||"")});
+      return;
+    }
+    if(url.indexOf("open-shopping-list")>=0){
+      setTab("shopping");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      try{localStorage.setItem(userKey("shopping_active_tab_v1"),"list");localStorage.setItem("fainance_shopping_widget_action_v1",JSON.stringify({tab:"list",listId:String(shoppingListId||""),ts:Date.now()}));}catch(e){}
+      dispatchWidgetEvent("fainance-open-shopping-widget",{tab:"list",listId:String(shoppingListId||"")});
+      return;
+    }
+    if(url.indexOf("open-shopping")>=0){
+      setTab("shopping");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
+    }
+    if(url.indexOf("open-debt-credits")>=0){
+      setTab("debtCredits");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
+    }
+    if(url.indexOf("open-debt-credit")>=0){
+      setTab("debtCredits");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      try{localStorage.setItem("fainance_debt_credit_open_id_v1",String(debtCreditId||""));}catch(e){}
+      try{sessionStorage.setItem("fainance_debt_credit_open_id_v1",String(debtCreditId||""));}catch(e){}
+      dispatchWidgetEvent("fainance-open-debt-credit",{debtCreditId:String(debtCreditId||"")});
       return;
     }
     if(url.indexOf("share-activity")>=0){
@@ -2183,6 +2363,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [isMobile,setIsMobile]=useState(true);
   var [searchQuery,setSearchQuery]=useState("");
   var historySearchDraftRef=useRef("");
+  var backupJsonInputRef=useRef(null);
   var [filterCat,setFilterCat]=useState("all");
   var [filterCats,setFilterCats]=useState([]);
   var [filterCatExclude,setFilterCatExclude]=useState(false);
@@ -2559,7 +2740,111 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       </div>
     </div>;
   }
-  useEffect(function(){if(!appLocked&&termsAccepted&&privacyAccepted){var t=setTimeout(checkAppUpdatePopup,1600);return function(){clearTimeout(t);};}},[appLocked,termsAccepted,privacyAccepted,lang]);
+  function onboardingGuideEligibleNow(){
+    if(onboardingGuideSeen)return false;
+    var acceptedAt=Date.parse(String(legalAcceptanceDate||""));
+    if(!acceptedAt||isNaN(acceptedAt))return false;
+    return Date.now()-acceptedAt<=7*24*60*60*1000;
+  }
+
+  useEffect(function(){if(!appLocked&&termsAccepted&&privacyAccepted&&!onboardingGuideOpen&&!onboardingGuideEligibleNow()){var t=setTimeout(checkAppUpdatePopup,1600);return function(){clearTimeout(t);};}},[appLocked,termsAccepted,privacyAccepted,lang,onboardingGuideSeen,onboardingGuideOpen,legalAcceptanceDate]);
+
+  useEffect(function(){
+    if(appLocked||!termsAccepted||!privacyAccepted)return;
+    if(onboardingGuideOpen||!onboardingGuideEligibleNow())return;
+    var t=setTimeout(function(){
+      setOnboardingGuideStep(0);
+      setOnboardingGuideOpen(true);
+    },850);
+    return function(){clearTimeout(t);};
+  },[appLocked,termsAccepted,privacyAccepted,onboardingGuideSeen,onboardingGuideOpen,userId,legalAcceptanceDate]);
+
+  function markOnboardingGuideDone(){
+    setOnboardingGuideSeen(true);
+    setOnboardingGuideOpen(false);
+    setOnboardingGuideStep(0);
+  }
+
+  function OnboardingGuideModal(){
+    var slides=[
+      {icon:"💳",title:"Le tue finanze",text:"Tutto quello che ti serve per gestire le tue finanze in un’unica app.\nMovimenti, budget, patrimonio, obiettivi e strumenti intelligenti a portata di mano.",items:["Movimenti","Budget","Obiettivi"]},
+      {icon:"✍️",title:"Tieni traccia dei movimenti",text:"Aggiungi spese ed entrate manualmente, con la voce o fotografando uno scontrino.\nAutomatizza entrate e uscite periodiche, così non devi inserirle ogni volta.",items:["Entrate","Uscite","Storico"]},
+      {icon:"🤝",title:"Condividi le spese con Share",text:"Gestisci spese condivise con il partner, amici o famiglia.\nfAInance calcola la tua parte e la salva nello Storico, così il tuo saldo resta sempre aggiornato.",items:["Share","Quote","Storico"]},
+      {icon:"📊",title:"Controlla Budget e Statistiche",text:"Guarda grafici chiari e scopri dove vanno i tuoi soldi.\nImposta limiti di spesa e crea Alert per tenere sotto controllo le varie categorie.",items:["Budget","Grafici","Alert"]},
+      {icon:"🎯",title:"Organizza Patrimonio e Obiettivi",text:"Tieni sotto controllo conti correnti, risparmi, investimenti e altri valori del tuo portafoglio.\nCrea obiettivi di risparmio e segui i tuoi progressi nel tempo.",items:["Patrimonio","Risparmi","Obiettivi"]},
+      {icon:"🧰",title:"Scopri le altre funzionalità",text:"Gestisci Debiti e Crediti, Liste della spesa, Fidelity card e Widget.\nPersonalizza sezioni, categorie, colori e impostazioni in base al tuo modo di usare l’app.",items:["Debiti","Liste","Widget"]},
+      {icon:"🤖",title:"Usa l’AI come consulente",text:"Ricevi consigli pratici per capire meglio le tue abitudini finanziarie.\nfAInance ti aiuta a individuare le priorità, controllare le spese più importanti e trovare nuove opportunità di risparmio.",items:["AI","Consigli","Risparmio"]}
+    ];
+    var idx=Math.max(0,Math.min(onboardingGuideStep,slides.length-1));
+    var slide=slides[idx];
+    var primary=confirmButtonColor||"#378ADD";
+    var accent=secondaryButtonColor||"#7FC8F8";
+    var onboardingSwipeRef=useRef({x:0,y:0,t:0,active:false});
+    function next(){if(idx>=slides.length-1)markOnboardingGuideDone();else setOnboardingGuideStep(idx+1);}
+    function prev(){if(idx>0)setOnboardingGuideStep(idx-1);}
+    function swipeNext(){if(idx<slides.length-1)setOnboardingGuideStep(idx+1);}
+    function swipePrev(){if(idx>0)setOnboardingGuideStep(idx-1);}
+    function getSwipePoint(e:any){
+      var ev=(e&&e.nativeEvent)?e.nativeEvent:e;
+      if(ev&&ev.touches&&ev.touches.length)return ev.touches[0];
+      if(ev&&ev.changedTouches&&ev.changedTouches.length)return ev.changedTouches[0];
+      return ev||{};
+    }
+    function handleOnboardingSwipeStart(e:any){
+      var p=getSwipePoint(e);
+      onboardingSwipeRef.current={x:Number(p.clientX)||0,y:Number(p.clientY)||0,t:Date.now(),active:true};
+    }
+    function handleOnboardingSwipeEnd(e:any){
+      var s=onboardingSwipeRef.current;
+      if(!s||!s.active)return;
+      var p=getSwipePoint(e);
+      var dx=(Number(p.clientX)||0)-s.x;
+      var dy=(Number(p.clientY)||0)-s.y;
+      var ax=Math.abs(dx),ay=Math.abs(dy);
+      onboardingSwipeRef.current={x:0,y:0,t:0,active:false};
+      if(ax<52||ax<ay*1.25||Date.now()-s.t>950)return;
+      if(dx<0)swipeNext();else swipePrev();
+    }
+    function renderGuideBrandText(value:any){
+      var raw=String(value||"");
+      var parts=raw.split(/(fAInance)/g);
+      return parts.map(function(part,i){
+        if(part!=="fAInance")return <span key={i}>{part}</span>;
+        return <span key={i} style={{fontWeight:950,whiteSpace:"nowrap"}}><span style={{color:"#111827"}}>f</span><span style={{color:"#F2C94C"}}>AI</span><span style={{color:"#111827"}}>nance</span></span>;
+      });
+    }
+    function renderGuideText(value:any){
+      var translated=String(translateUiRuntimeText(value)||"");
+      var paragraphs=translated.split("\n");
+      return <div style={{fontSize:13.5,color:subC,lineHeight:1.56,maxWidth:390,margin:"0 auto 20px"}}>{paragraphs.map(function(p,i){return <div key={i} style={{marginBottom:i<paragraphs.length-1?8:0}}>{renderGuideBrandText(p)}</div>;})}</div>;
+    }
+    function illustration(){
+      var miniCardBg=dark?"rgba(255,255,255,.12)":"rgba(255,255,255,.86)";
+      return <div style={{width:190,height:190,borderRadius:"50%",background:dark?"linear-gradient(135deg,rgba(127,119,221,.24),rgba(55,138,221,.18))":"linear-gradient(135deg,#DDF7FF,#ECF2FF)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",margin:"0 auto 18px",boxShadow:dark?"0 14px 36px rgba(0,0,0,.25)":"0 16px 34px rgba(55,138,221,.16)",overflow:"hidden"}}>
+        <div style={{position:"absolute",left:18,top:28,width:40,height:12,borderRadius:999,background:"rgba(255,255,255,.55)"}}/>
+        <div style={{position:"absolute",right:20,bottom:32,width:52,height:12,borderRadius:999,background:"rgba(255,255,255,.42)"}}/>
+        <div style={{fontSize:54,filter:dark?"drop-shadow(0 8px 18px rgba(0,0,0,.35))":"drop-shadow(0 8px 18px rgba(55,138,221,.18))",zIndex:2}}>{slide.icon}</div>
+        <div style={{position:"absolute",left:36,bottom:48,display:"flex",flexDirection:"column",gap:6,zIndex:1}}>
+          {slide.items.slice(0,3).map(function(x,i){return <div key={x} style={{display:"flex",alignItems:"center",gap:6,background:miniCardBg,border:"1px solid "+(dark?"rgba(255,255,255,.16)":"rgba(55,138,221,.16)"),borderRadius:10,padding:"5px 8px",fontSize:10,fontWeight:900,color:textC,boxShadow:dark?"none":"0 4px 12px rgba(0,0,0,.06)",transform:"translateX("+(i*12)+"px)"}}><span style={{width:18,height:5,borderRadius:999,background:i===0?primary:(i===1?accent:"#7F77DD"),display:"inline-block"}}/><span>{translateUiRuntimeText(x)}</span></div>;})}
+        </div>
+      </div>;
+    }
+    return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10050,background:dark?"rgba(10,10,18,.92)":"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",padding:18,boxSizing:"border-box"}}>
+      <div onTouchStart={handleOnboardingSwipeStart} onTouchEnd={handleOnboardingSwipeEnd} onMouseDown={handleOnboardingSwipeStart} onMouseUp={handleOnboardingSwipeEnd} style={{width:"100%",maxWidth:isMobile?430:520,maxHeight:"94vh",overflowY:"auto",WebkitOverflowScrolling:"touch",touchAction:"pan-y",background:dark?"#1E1E30":"#fff",border:"1px solid "+(dark?"#34344a":"#E7EAF5"),borderRadius:28,padding:isMobile?"22px 20px 18px":"28px 28px 22px",boxShadow:dark?"0 24px 70px rgba(0,0,0,.55)":"0 24px 70px rgba(31,60,120,.18)",position:"relative",textAlign:"center"}}>
+        <button onClick={markOnboardingGuideDone} aria-label={translateUiRuntimeText("Salta guida")} style={{position:"absolute",right:14,top:14,border:"1px solid "+borderC,background:dark?"#252535":"#F8FAFF",color:subC,borderRadius:12,width:36,height:36,fontSize:20,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button>
+        <div style={{fontSize:11,fontWeight:900,color:primary,letterSpacing:.5,textTransform:"uppercase",marginBottom:12}}>{translateUiRuntimeText("Guida rapida")}</div>
+        {illustration()}
+        <div style={{fontSize:isMobile?22:24,fontWeight:950,color:textC,lineHeight:1.12,margin:"0 auto 10px",maxWidth:360}}>{translateUiRuntimeText(slide.title)}</div>
+        {renderGuideText(slide.text)}
+        <div style={{display:"flex",justifyContent:"center",gap:7,marginBottom:18}}>{slides.map(function(_,i){var active=i===idx;return <button key={i} onClick={function(){setOnboardingGuideStep(i);}} aria-label={translateUiRuntimeText("Vai alla schermata")+" "+(i+1)} style={{width:active?22:8,height:8,borderRadius:999,border:"none",background:active?primary:(dark?"#55556a":"#D9DDE8"),padding:0,cursor:"pointer",transition:"all .18s ease"}}/>;})}</div>
+        <div style={{display:"grid",gridTemplateColumns:idx>0?"1fr 1.5fr":"1fr",gap:10}}>
+          {idx>0&&<button onClick={prev} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:16,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer"}}>{translateUiRuntimeText("Indietro")}</button>}
+          <button onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:16,padding:"13px 16px",fontSize:15,fontWeight:950,cursor:"pointer",boxShadow:"0 10px 24px rgba(55,138,221,.26)"}}>{translateUiRuntimeText(idx>=slides.length-1?"Inizia ora":"Avanti")}</button>
+        </div>
+        <button onClick={markOnboardingGuideDone} style={{marginTop:12,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:800,cursor:"pointer"}}>{translateUiRuntimeText("Salta")}</button>
+      </div>
+    </div>;
+  }
 
   function isNativePlatform(){try{return !!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());}catch(e){return false;}}
   async function getNativeBiometric(){
@@ -3051,7 +3336,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     adConsentRequestedRef.current=true;
     try{ads.requestConsent({}).catch(function(e){console.warn("AdMob consent error",e);});}catch(e){}
   }
-  function purchasePlan(pid){
+  function purchasePlan(pid,forcedPeriod,options){
+    options=options||{};
     if(pid==="free"){
       setCurrentPlan("free",true);
       setToast("Piano aggiornato: "+planLabel("free",lang));
@@ -3063,7 +3349,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       setToast({text:L("Gli acquisti reali sono disponibili solo dall’app installata dallo store."),type:"warning",color:"#EF9F27",icon:"⚠️"});
       return;
     }
-    var period=planBillingPeriod==="yearly"?"yearly":"monthly";
+    var requestedPeriod=forcedPeriod||planBillingPeriod;
+    var period=requestedPeriod==="yearly"?"yearly":"monthly";
     var productId="";
     var basePlanId="";
     var productIds=[];
@@ -3084,7 +3371,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
     var loadingKey=pid+":"+period;
     setPlanPurchaseLoading(loadingKey);
-    billing.purchase({productId:productId,productIdsCsv:productIds.join("|"),basePlanId:basePlanId,plan:pid,billingPeriod:period,platform:nativePlatform()})
+    billing.purchase({productId:productId,productIdsCsv:productIds.join("|"),basePlanId:basePlanId,plan:pid,billingPeriod:period,platform:nativePlatform(),offerTag:String(options.offerTag||""),preferFreeTrial:!!options.preferFreeTrial,purchaseSource:String(options.purchaseSource||"")})
       .then(function(res){
         if(res&&res.success){
           setCurrentPlan(res.plan||pid,true);
@@ -3129,6 +3416,97 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       .catch(function(err){var msg=err&&err.message?err.message:String(err||"");setToast({text:L("Errore ripristino acquisti")+(msg?": "+msg:""),type:"error",color:"#E24B4A",icon:"❌"});})
       .finally(function(){setPlanPurchaseLoading("");});
   }
+  useEffect(function(){
+    if(appLocked||!termsAccepted||!privacyAccepted)return;
+    if(onboardingGuideOpen||onboardingGuideEligibleNow())return;
+    if(currentPlan!=="free")return;
+    if(premiumTrialPromptStatus)return;
+    var acceptedAt=Date.parse(String(legalAcceptanceDate||""));
+    if(!acceptedAt||isNaN(acceptedAt))return;
+    if(Date.now()-acceptedAt>24*60*60*1000)return;
+    if(premiumTrialPromptShownRef.current)return;
+    var t=setTimeout(function(){premiumTrialPromptShownRef.current=true;setShowPremiumTrialPrompt(true);},450);
+    return function(){clearTimeout(t);};
+  },[appLocked,termsAccepted,privacyAccepted,currentPlan,premiumTrialPromptStatus,legalAcceptanceDate,onboardingGuideSeen,onboardingGuideOpen]);
+
+  function dismissPremiumTrialPrompt(status){
+    setPremiumTrialPromptStatus(status||"dismissed");
+    setShowPremiumTrialPrompt(false);
+  }
+  function acceptPremiumTrialPrompt(){
+    setPremiumTrialPromptStatus("accepted");
+    setShowPremiumTrialPrompt(false);
+    setPlanBillingPeriod("monthly");
+    purchasePlan("premium","monthly",{offerTag:"complete-trial-2m",preferFreeTrial:true,purchaseSource:"onboarding_trial_popup"});
+  }
+  function PremiumTrialPromptModal(){
+    var trialBenefits=[
+      "Consigli AI illimitati",
+      "Conversazioni AI illimitate",
+      "Statistiche e Impostazioni complete",
+      "Movimenti Singoli Multipli, Ricorrenti e Rateizzati senza limiti",
+      "7 Widget",
+      "Progetti Share illimitati"
+    ];
+    var green="#1D9E75";
+    function languageCode(){return String(lang||"it").split("-")[0].toLowerCase();}
+    function renderColoredParts(parts){return <>{parts.map(function(p,i){return <span key={i} style={p[1]?{color:green,fontWeight:980}:undefined}>{p[0]}</span>;})}</>;}
+    function premiumTrialTitleParts(){
+      var l=languageCode();
+      var map:any={
+        it:[["Prova ",false],["gratuitamente",true],[" la versione ",false],["Completa",true],[" per 2 mesi",false]],
+        en:[["Try the ",false],["Complete",true],[" version ",false],["free",true],[" for 2 months",false]],
+        es:[["Prueba ",false],["gratis",true],[" la versión ",false],["Completa",true],[" durante 2 meses",false]],
+        fr:[["Essayez ",false],["gratuitement",true],[" la version ",false],["Complète",true],[" pendant 2 mois",false]],
+        de:[["Teste die ",false],["Vollständige",true],[" Version 2 Monate ",false],["kostenlos",true]],
+        pt:[["Experimenta ",false],["gratuitamente",true],[" a versão ",false],["Completa",true],[" durante 2 meses",false]],
+        pl:[["Wypróbuj ",false],["pełną",true],[" wersję ",false],["za darmo",true],[" przez 2 miesiące",false]],
+        nl:[["Probeer de ",false],["Volledige",true],[" versie 2 maanden ",false],["gratis",true]],
+        ro:[["Încearcă ",false],["gratuit",true],[" versiunea ",false],["Completă",true],[" timp de 2 luni",false]],
+        el:[["Δοκίμασε ",false],["δωρεάν",true],[" την ",false],["Πλήρη",true],[" έκδοση για 2 μήνες",false]]
+      };
+      return map[l]||map.it;
+    }
+    function premiumTrialSubtitleParts(){
+      var l=languageCode();
+      var map:any={
+        it:[["Con il piano ",false],["Completo",true],[" puoi usare tutte le funzioni ",false],["senza limiti",true],[" e ",false],["senza annunci",true]],
+        en:[["With the ",false],["Complete",true],[" plan, you can use all features ",false],["without limits",true],[" and ",false],["without ads",true]],
+        es:[["Con el plan ",false],["Completo",true],[" puedes usar todas las funciones ",false],["sin límites",true],[" y ",false],["sin anuncios",true]],
+        fr:[["Avec le forfait ",false],["Complet",true],[", vous pouvez utiliser toutes les fonctionnalités ",false],["sans limites",true],[" et ",false],["sans publicité",true]],
+        de:[["Mit dem Tarif ",false],["Completo",true],[" kannst du alle Funktionen ",false],["ohne Einschränkungen",true],[" und ",false],["ohne Werbung",true],[" nutzen",false]],
+        pt:[["Com o plano ",false],["Completo",true],[", podes usar todas as funções ",false],["sem limites",true],[" e ",false],["sem anúncios",true]],
+        pl:[["W planie ",false],["Completo",true],[" możesz korzystać ze wszystkich funkcji ",false],["bez limitów",true],[" i ",false],["bez reklam",true]],
+        nl:[["Met het ",false],["Completo",true],["-abonnement kun je alle functies ",false],["zonder beperkingen",true],[" en ",false],["zonder advertenties",true],[" gebruiken",false]],
+        ro:[["Cu planul ",false],["Completo",true],[" poți folosi toate funcțiile ",false],["fără limite",true],[" și ",false],["fără reclame",true]],
+        el:[["Με το πλάνο ",false],["Completo",true],[" μπορείς να χρησιμοποιείς όλες τις λειτουργίες ",false],["χωρίς όρια",true],[" και ",false],["χωρίς διαφημίσεις",true]]
+      };
+      return map[l]||map.it;
+    }
+    return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:930,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{width:"100%",maxWidth:560,background:cardBg,borderRadius:24,border:"1px solid "+borderC,boxShadow:"0 18px 70px rgba(0,0,0,0.34)",padding:20,position:"relative",overflow:"hidden"}}>
+        <button onClick={function(){dismissPremiumTrialPrompt("closed");}} aria-label={translateUiRuntimeText("Chiudi")} style={{position:"absolute",top:12,right:12,width:36,height:36,borderRadius:12,border:"1px solid rgba(243,111,111,.35)",background:"#F36F6F",color:"#fff",fontSize:24,fontWeight:950,cursor:"pointer",lineHeight:1,boxShadow:"0 6px 16px rgba(243,111,111,.22)"}}>×</button>
+        <div style={{display:"flex",alignItems:"center",gap:12,paddingRight:42,marginBottom:14}}>
+          <div style={{width:52,height:52,borderRadius:18,background:"linear-gradient(135deg,#7F77DD,#378ADD)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:27,boxShadow:"0 8px 24px rgba(127,119,221,.32)"}}>💎</div>
+          <div>
+            <div style={{fontSize:20,fontWeight:950,color:textC,lineHeight:1.12}}>{renderColoredParts(premiumTrialTitleParts())}</div>
+            <div style={{fontSize:12,color:subC,marginTop:5,fontWeight:750}}>{translateUiRuntimeText("Offerta valida per i nuovi utenti")}</div>
+          </div>
+        </div>
+        <div style={{background:dark?"#1e1e30":"#F5F7FF",border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),borderRadius:18,padding:15,marginBottom:14}}>
+          <div style={{fontSize:14,fontWeight:950,color:textC,lineHeight:1.35,marginBottom:6}}>{renderColoredParts(premiumTrialSubtitleParts())}</div>
+          <div style={{fontSize:13,fontWeight:900,color:textC,marginBottom:10}}>{translateUiRuntimeText("Inoltre hai a disposizione")}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr",gap:8}}>
+            {trialBenefits.map(function(x){return <div key={x} style={{fontSize:12.5,color:subC,fontWeight:780,lineHeight:1.32,display:"flex",gap:8,alignItems:"flex-start"}}><span style={{color:green,fontWeight:950}}>✓</span><span>{translateUiRuntimeText(x)}</span></div>;})}
+          </div>
+        </div>
+        <div style={{fontSize:12,color:subC,lineHeight:1.45,marginBottom:14}}>{translateUiRuntimeText("Se accetti, si aprirà lo store per attivare la prova gratuita. Dopo i 2 mesi l’abbonamento si rinnoverà automaticamente al prezzo indicato dallo store, salvo cancellazione prima della fine della prova.")}</div>
+        <button onClick={acceptPremiumTrialPrompt} disabled={!!planPurchaseLoading} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:950,cursor:planPurchaseLoading?"not-allowed":"pointer",opacity:planPurchaseLoading?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)",marginBottom:9}}>{translateUiRuntimeText(planPurchaseLoading?"Acquisto in corso...":"Accetta")}</button>
+        <button onClick={function(){dismissPremiumTrialPrompt("free");}} disabled={!!planPurchaseLoading} style={{width:"100%",background:dark?"#252535":"#fff",color:subC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"12px 16px",fontSize:14,fontWeight:900,cursor:planPurchaseLoading?"not-allowed":"pointer",opacity:planPurchaseLoading?0.7:1}}>{translateUiRuntimeText("Voglio continuare con la versione gratuita")}</button>
+      </div>
+    </div>;
+  }
+
   function showRewardedAdForExtraMovement(onReward){
     var nowMs=Date.now();
     if(rewardedAdInProgressRef.current)return;
@@ -3167,13 +3545,19 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var nextList=typeof nextItems==="function"?nextItems(cats):nextItems;
     nextList=Array.isArray(nextList)?nextList:[];
     var nextIds=nextList.map(function(c){return String(c.id);});
-    var removedIds=(cats||[]).filter(function(c){return nextIds.indexOf(String(c.id))<0;}).map(function(c){return String(c.id);});
+    var removedItems=(cats||[]).filter(function(c){return nextIds.indexOf(String(c.id))<0&&!c.deleted;});
+    var removedIds=removedItems.map(function(c){return String(c.id);});
     if(removedIds.length){
       setCatOrder(function(prev){return (prev||[]).filter(function(id){return removedIds.indexOf(String(id))<0;});});
       if(defaultExpenseCat&&removedIds.indexOf(String(defaultExpenseCat))>=0)setDefaultExpenseCat("");
       setBudgetPlan(function(prev){var bp=prev||{};return {...bp,items:(bp.items||[]).filter(function(b){return removedIds.indexOf(String(b.catId||b.categoryId||""))<0;})};});
+      var nowIso=new Date().toISOString();
+      var defaultIds={};(DEFAULT_CATS||[]).forEach(function(d){defaultIds[String(d.id)]=true;});
+      removedItems.forEach(function(c){
+        if(defaultIds[String(c.id)])nextList.push({...c,archived:true,deleted:true,custom:true,updatedAt:nowIso});
+      });
     }
-    setCats(nextList);
+    setCats(compactProtectedArray(nextList,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES));
   }
   function guardedHandler(fn,requiredPlan){return function(){if(blockSetting(requiredPlan))return;return fn.apply(null,arguments);};}
   function widgetAvailabilityForPlan(plan){
@@ -3336,7 +3720,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var curMonthInc=totalForMonth(incomes,curMonthKey,homeBalanceView==="reale"?"reale":"rateizzato");
   var yearExp=expenses.filter(function(e){return e.date.startsWith(String(curYear));}).reduce(function(a,e){return a+e.amount;},0);
   var yearInc=incomes.filter(function(i){return i.date.startsWith(String(curYear));}).reduce(function(a,i){return a+i.amount;},0);
-  var last12Balance=useMemo(function(){return balanceForMonths(expenses,incomes,last12MonthKeys(now));},[expenses,incomes,curMonthKey]);
+  var last12Balance=useMemo(function(){return balanceForMonths(expenses,incomes,last12MonthKeys(now),homeBalanceView==="reale"?"reale":"rateizzato");},[expenses,incomes,curMonthKey,homeBalanceView]);
   var localizedMonthShorts=useMemo(function(){return Array.from({length:12},function(_,i){return monthShortName(i);});},[lang]);
   var monthlyTotals=useMemo(function(){return monthlyTotalsForYear(expenses,incomes,curYear,statsView==="reale"?"reale":"rateizzato",localizedMonthShorts);},[expenses,incomes,curYear,statsView,localizedMonthShorts]);
   function recurringDueInCurrentMonth(r){
@@ -4305,6 +4689,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   function SettingsPanel(){
     var V=t;
+    var settingsActiveCats=(cats||[]).filter(function(c){return !c.deleted&&!c.archived;});
     var [dataImportOpen,setDataImportOpen]=useState(false);
     var [dataExportOpen,setDataExportOpen]=useState(false);
     var [dataDeleteOpen,setDataDeleteOpen]=useState(false);
@@ -4576,7 +4961,7 @@ var row=D[raw]||D[raw.trim()];
               <div style={{background:"rgba(255,255,255,.13)",borderRadius:12,padding:10,textAlign:"center"}}><div style={{fontSize:10,color:widgetShareBodyColor}}>{L("Saldo")}</div><div style={{fontSize:17,fontWeight:900,color:widgetShareTitleColor}}>{fmt(preview.net)}</div></div>
               <div style={{fontSize:11,color:widgetShareBodyColor,lineHeight:1.8}}><div>{L("Ti devono")}: <strong style={{color:widgetShareTitleColor}}>{fmt(preview.owed)}</strong></div><div>{L("Devi")}: <strong style={{color:widgetShareTitleColor}}>{fmt(preview.owe)}</strong></div><div style={{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{preview.last}</div></div>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginTop:10}}><div style={{background:widgetShareAccentColor,color:"#fff",borderRadius:btnRadius,padding:"8px 4px",textAlign:"center",fontWeight:900,fontSize:11}}>{"+ "+L("Spesa")}</div><div style={{background:widgetShareActivityColor,color:"#fff",borderRadius:btnRadius,padding:"8px 4px",textAlign:"center",fontWeight:900,fontSize:12}}>🧾</div><div style={{background:widgetShareActivityColor,color:"#fff",borderRadius:btnRadius,padding:"8px 4px",textAlign:"center",fontWeight:900,fontSize:12}}>🎙️</div><div style={{background:widgetShareActivityColor,color:"#fff",borderRadius:btnRadius,padding:"8px 4px",textAlign:"center",fontWeight:900,fontSize:11}}>{L("Attività")}</div></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:12}}><div style={{background:widgetShareAccentColor,color:"#fff",borderRadius:btnRadius,padding:"9px 5px",textAlign:"center",fontWeight:950,fontSize:11}}>{"+ "+L("Spesa")}</div><div style={{background:widgetShareActivityColor,color:"#fff",borderRadius:btnRadius,padding:"9px 5px",textAlign:"center",fontWeight:950,fontSize:11}}>{L("Attività")}</div></div>
           </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr",gap:10}}>
@@ -4609,10 +4994,10 @@ var row=D[raw]||D[raw.trim()];
       {view==="default"&&<div><SettingHint>Valore preselezionato quando apri il form relativo a questa sezione.</SettingHint><select value={defaultValue||""} onChange={function(e){setDefaultValue(e.target.value);}} style={{...sinp,width:"100%"}}><option value="">{L("Nessun default")}</option>{items.map(function(a){return <option key={a.id} value={a.id}>{withIcon?(a.icon||"📂")+" ":""}{L(a.name)}</option>;})}</select></div>}
       </div>{showCreate&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div style={{width:"100%",maxWidth:480,background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 16px 60px rgba(0,0,0,0.35)",padding:18}}><div style={{fontSize:17,fontWeight:900,color:textC,marginBottom:12}}>{createTitle}</div><div style={{display:"flex",flexDirection:"column",gap:12,...baseDisabledStyle()}}>{withIcon&&<div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Icona")}</div><EmojiPicker value={form.icon} onChange={function(v){if(blockSetting("base"))return;setForm(function(p){return{...p,icon:v};});}}/></div>}<div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Colore")}</div><input disabled={!baseSettingsAllowed} type="color" value={form.color} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,color:e.target.value};});}} style={{width:54,height:42,border:"none",borderRadius:10,padding:0,background:"transparent"}}/></div><div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Nome area")}</div><input autoFocus disabled={!baseSettingsAllowed} placeholder={L("Nuova area")} value={form.name} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,name:e.target.value};});}} onKeyDown={function(e){if(e.key==="Enter")add();}} style={{...sinp,width:"100%"}}/></div></div><div style={{display:"flex",gap:8,marginTop:16}}><Btn onClick={add} bg={confirmButtonColor||"#7F77DD"} style={{flex:1,padding:12,fontWeight:900}}>{L("Salva")}</Btn><Btn onClick={resetCreate} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn></div></div></div>}</div>;
     }
-    function ExpenseCategoriesSettings(){var [view,setView]=useStorage(userKey("expense_cats_settings_view_v1"),"list");var validCatIds=cats.map(function(c){return String(c.id);});
+    function ExpenseCategoriesSettings(){var [view,setView]=useStorage(userKey("expense_cats_settings_view_v1"),"list");var activeCats=(cats||[]).filter(function(c){return !c.deleted&&!c.archived;});var validCatIds=activeCats.map(function(c){return String(c.id);});
 var cleanCatOrder=(catOrder||[]).filter(function(id){return validCatIds.indexOf(String(id))>=0;});
 if(cleanCatOrder.length!==(catOrder||[]).length){setCatOrder(cleanCatOrder);}
-var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.find(function(c){return String(c.id)===String(id);});}).filter(Boolean).concat(cats.filter(function(c){return cleanCatOrder.indexOf(String(c.id))<0&&cleanCatOrder.indexOf(c.id)<0;})):cats);return <div><PageHeader title={L("Uscite / Categorie")}/><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}><SettingHint>{L("Gestisci categorie uscite: lista, riordino, default e accorpamento.")}</SettingHint><Segmented items={[{id:"list",label:"Lista categorie"},{id:"order",label:"Riordina",disabled:!baseSettingsAllowed,lockedMessage:settingLockedMessage("base")},{id:"default",label:"Default"},{id:"merge",label:"Accorpa",disabled:!baseSettingsAllowed,lockedMessage:settingLockedMessage("base")}]} value={view} onChange={setView}/>{view==="list"&&<><SettingsList items={cats} setItems={guardedSetter(setExpenseCatsFromSettings,"base")} label="Aggiungi categoria uscita" showGroup showIcon groupList={expenseGroups||DEFAULT_EXPENSE_GROUPS} usageScope="expenseCategory"/>{baseLockHint("Modifica, archiviazione, eliminazione e aggiunta categorie disponibili dal piano Base")}</>} {view==="order"&&<SortableRows items={ordered} onMove={function(i,dir){if(blockSetting("base"))return;var j=i+dir;if(j<0||j>=ordered.length)return;var arr=ordered.slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setCatOrder(arr.map(function(c){return c.id;}));setCats(arr.concat(cats.filter(function(c){return arr.findIndex(function(x){return String(x.id)===String(c.id);})<0;})));}} renderItem={function(c){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><span style={{fontSize:18}}>{c.icon}</span><span style={{fontSize:13,color:textC,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(c.name)}</span></div>;}}/>}{view==="default"&&<div><select value={defaultExpenseCat||""} onChange={function(e){setDefaultExpenseCat(e.target.value);}} style={{...sinp,width:"100%"}}><option value="">{L("Nessuna categoria default")}</option>{cats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div>}{view==="merge"&&<div><div style={{marginBottom:12}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("Da (elimina)")}</label><select value={mergeFrom} onChange={function(e){setMergeFrom(e.target.value);}} style={sinp}><option value="">-</option>{cats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div><div style={{marginBottom:16}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("In (mantieni)")}</label><select value={mergeTo} onChange={function(e){setMergeTo(e.target.value);}} style={sinp}><option value="">-</option>{cats.filter(function(c){return String(c.id)!==mergeFrom;}).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div><Btn onClick={function(){if(blockSetting("base"))return;if(!mergeFrom||!mergeTo)return;setExpenses(expenses.map(function(e){return e.catId===Number(mergeFrom)?{...e,catId:Number(mergeTo)}:e;}));setCats(cats.filter(function(c){return c.id!==Number(mergeFrom);}));setMergeFrom("");setMergeTo("");}} style={{width:"100%",padding:13,fontSize:14,fontWeight:600}}>{L("Accorpa")}</Btn></div>}</div></div>;}
+var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCats.find(function(c){return String(c.id)===String(id);});}).filter(Boolean).concat(activeCats.filter(function(c){return cleanCatOrder.indexOf(String(c.id))<0&&cleanCatOrder.indexOf(c.id)<0;})):activeCats);return <div><PageHeader title={L("Uscite / Categorie")}/><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}><SettingHint>{L("Gestisci categorie uscite: lista, riordino, default e accorpamento.")}</SettingHint><Segmented items={[{id:"list",label:"Lista categorie"},{id:"order",label:"Riordina",disabled:!baseSettingsAllowed,lockedMessage:settingLockedMessage("base")},{id:"default",label:"Default"},{id:"merge",label:"Accorpa",disabled:!baseSettingsAllowed,lockedMessage:settingLockedMessage("base")}]} value={view} onChange={setView}/>{view==="list"&&<><SettingsList items={cats} setItems={guardedSetter(setExpenseCatsFromSettings,"base")} label="Aggiungi categoria uscita" showGroup showIcon groupList={expenseGroups||DEFAULT_EXPENSE_GROUPS} usageScope="expenseCategory"/>{baseLockHint("Modifica, archiviazione, eliminazione e aggiunta categorie disponibili dal piano Base")}</>} {view==="order"&&<SortableRows items={ordered} onMove={function(i,dir){if(blockSetting("base"))return;var j=i+dir;if(j<0||j>=ordered.length)return;var arr=ordered.slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setCatOrder(arr.map(function(c){return c.id;}));setCats(arr.concat(cats.filter(function(c){return arr.findIndex(function(x){return String(x.id)===String(c.id);})<0;})));}} renderItem={function(c){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><span style={{fontSize:18}}>{c.icon}</span><span style={{fontSize:13,color:textC,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(c.name)}</span></div>;}}/>}{view==="default"&&<div><select value={defaultExpenseCat||""} onChange={function(e){setDefaultExpenseCat(e.target.value);}} style={{...sinp,width:"100%"}}><option value="">{L("Nessuna categoria default")}</option>{activeCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div>}{view==="merge"&&<div><div style={{marginBottom:12}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("Da (elimina)")}</label><select value={mergeFrom} onChange={function(e){setMergeFrom(e.target.value);}} style={sinp}><option value="">-</option>{activeCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div><div style={{marginBottom:16}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("In (mantieni)")}</label><select value={mergeTo} onChange={function(e){setMergeTo(e.target.value);}} style={sinp}><option value="">-</option>{activeCats.filter(function(c){return String(c.id)!==mergeFrom;}).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div><Btn onClick={function(){if(blockSetting("base"))return;if(!mergeFrom||!mergeTo)return;setExpenses(expenses.map(function(e){return String(e.catId||e.categoryId||"")===String(mergeFrom)?{...e,catId:mergeTo,categoryId:mergeTo}:e;}));setCats(cats.filter(function(c){return String(c.id)!==String(mergeFrom);}));setMergeFrom("");setMergeTo("");}} style={{width:"100%",padding:13,fontSize:14,fontWeight:600}}>{L("Accorpa")}</Btn></div>}</div></div>;}
     function ExpenseMethodsSettings(){var [view,setView]=useStorage(userKey("expense_methods_settings_view_v1"),"list");var ordered=(methodOrder&&methodOrder.length?methodOrder.map(function(id){return methods.find(function(m){return String(m.id)===String(id);});}).filter(Boolean).concat(methods.filter(function(m){return methodOrder.map(String).indexOf(String(m.id))<0;})):methods);return <div><PageHeader title="Uscite / Metodi di pagamento"/><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}><SettingHint>Gestisci metodi di pagamento: lista, riordino e default.</SettingHint><Segmented items={[{id:"list",label:"Lista"},{id:"order",label:"Riordina",disabled:!baseSettingsAllowed,lockedMessage:settingLockedMessage("base")},{id:"default",label:"Default"}]} value={view} onChange={setView}/>{view==="list"&&<div><SettingsList items={methods} setItems={guardedSetter(setMethods,"base")} label="Aggiungi metodo di pagamento" showIcon showGroup groupList={methodGroups} isMethod usageScope="method"/>{baseLockHint("Modifica, archiviazione, ripristino, riordino e aggiunta metodi disponibili dal piano Base")}<div style={{fontSize:12,color:subC,marginTop:8}}>🗂 = {L("Archivia")}  📂 = {L("Ripristina")}</div></div>}{view==="order"&&<SortableRows items={ordered} onMove={function(i,dir){if(blockSetting("base"))return;var j=i+dir;if(j<0||j>=ordered.length)return;var arr=ordered.slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setMethodOrder(arr.map(function(m){return m.id;}));setMethods(arr.concat(methods.filter(function(m){return arr.findIndex(function(x){return String(x.id)===String(m.id);})<0;})));}} renderItem={function(m){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}><span style={{fontSize:18}}>{m.icon}</span><span style={{fontSize:13,color:textC,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(m.name)}</span></div>;}}/>}{view==="default"&&<select value={defaultExpenseMethod||""} onChange={function(e){setDefaultExpenseMethod(e.target.value);}} style={{...sinp,width:"100%"}}><option value="">{L("Nessun metodo default")}</option>{methods.map(function(m){return <option key={m.id} value={m.id}>{m.icon} {L(m.name)}</option>;})}</select>}</div></div>;}
     function IncomeCategoriesSettings(){
       var [view,setView]=useStorage(userKey("income_cats_settings_view_v1"),"list");
@@ -4847,16 +5232,16 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       {settingsValuesTab==="defaultcat"&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
         <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:4}}>⭐ {L("Categoria default")}</div>
         <div style={{fontSize:12,color:subC,marginBottom:12}}>{L("Categoria preselezionata quando apri il form di inserimento uscita")}</div>
-        <select style={sinp}><option value="">{L("Nessuna (prima della lista)")}</option>{cats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select>
+        <select style={sinp}><option value="">{L("Nessuna (prima della lista)")}</option>{settingsActiveCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select>
         <div style={{display:"flex",alignItems:"flex-start",gap:8,marginTop:10,background:dark?"#252535":"#f0f4ff",borderRadius:10,padding:"10px 12px",border:"1px solid "+(dark?"#3a3a5a":"#c7d7f8")}}>
           <span style={{fontSize:16,flexShrink:0}}>ℹ️</span>
           <span style={{fontSize:12,color:dark?"#aac":"#446"}}>Questa impostazione definisce solo la <strong>visualizzazione predefinita</strong>: la categoria preselezionata all'apertura del form. Se selezioni manualmente una categoria diversa al momento dell'inserimento, quella scelta ha sempre la precedenza.</span>
         </div>
       </div>}
       {settingsValuesTab==="merge"&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-        <div style={{marginBottom:12}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("Da (elimina)")}</label><select value={mergeFrom} onChange={function(e){setMergeFrom(e.target.value);}} style={sinp}><option value="">-</option>{cats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div>
-        <div style={{marginBottom:16}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("In (mantieni)")}</label><select value={mergeTo} onChange={function(e){setMergeTo(e.target.value);}} style={sinp}><option value="">-</option>{cats.filter(function(c){return String(c.id)!==mergeFrom;}).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div>
-        <Btn onClick={function(){if(blockSetting("base"))return;if(!mergeFrom||!mergeTo)return;setExpenses(expenses.map(function(e){return e.catId===Number(mergeFrom)?{...e,catId:Number(mergeTo)}:e;}));setCats(cats.filter(function(c){return c.id!==Number(mergeFrom);}));setMergeFrom("");setMergeTo("");}} style={{width:"100%",padding:13,fontSize:14,fontWeight:600}}>{L("Accorpa")}</Btn>
+        <div style={{marginBottom:12}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("Da (elimina)")}</label><select value={mergeFrom} onChange={function(e){setMergeFrom(e.target.value);}} style={sinp}><option value="">-</option>{settingsActiveCats.map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div>
+        <div style={{marginBottom:16}}><label style={{fontSize:12,color:subC,display:"block",marginBottom:4}}>{L("In (mantieni)")}</label><select value={mergeTo} onChange={function(e){setMergeTo(e.target.value);}} style={sinp}><option value="">-</option>{settingsActiveCats.filter(function(c){return String(c.id)!==mergeFrom;}).map(function(c){return <option key={c.id} value={c.id}>{c.icon} {L(c.name)}</option>;})}</select></div>
+        <Btn onClick={function(){if(blockSetting("base"))return;if(!mergeFrom||!mergeTo)return;setExpenses(expenses.map(function(e){return String(e.catId||e.categoryId||"")===String(mergeFrom)?{...e,catId:mergeTo,categoryId:mergeTo}:e;}));setCats(cats.filter(function(c){return String(c.id)!==String(mergeFrom);}));setMergeFrom("");setMergeTo("");}} style={{width:"100%",padding:13,fontSize:14,fontWeight:600}}>{L("Accorpa")}</Btn>
       </div>}
     </div>;
 
@@ -5019,22 +5404,22 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
 
     if(settingsPage==="appearance")return <div><PageHeader title="Aspetto"/><SettingsCards items={[
       {id:"appearance_app",icon:"🎨",label:"App",desc:"Tema, sfondo, stile e colori dei pulsanti dell’app"},
-      {id:"appearance_nav",icon:"📱",label:"Barra superiore e inferiore",desc:"Riepilogo alto, numero icone e ordine delle sezioni"},
+      {id:"appearance_nav",icon:"📱",label:"Barra superiore ed Inferiore",desc:"Barra superiore, barra inferiore, numero icone e ordine delle sezioni"},
       {id:"appearance_widget",icon:"🧩",label:"Widget",desc:"Configurazione separata del widget Android"}
     ]}/></div>;
 
-    if(settingsPage==="appearance_nav")return <div><PageHeader title="Aspetto / Barra superiore e inferiore"/>
+    if(settingsPage==="appearance_nav")return <div><PageHeader title="Aspetto / Barra superiore ed Inferiore"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>📊 Mostra riepilogo in alto</div>
+          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>📊 {L("Barra Superiore")}</div>
           <SettingHint>{translateUiRuntimeText("Attiva o rimuove la barra superiore con Uscite, Saldo ed Entrate.")}</SettingHint>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:"12px 14px"}}>
-            <div><div style={{fontSize:13,fontWeight:700,color:textC}}>Mostra riepilogo in alto</div><div style={{fontSize:12,color:subC,marginTop:3,lineHeight:1.35}}>Mostra o nasconde la parte alta dell'app.</div></div>
+            <div><div style={{fontSize:13,fontWeight:700,color:textC}}>{L("Barra Superiore")}</div><div style={{fontSize:12,color:subC,marginTop:3,lineHeight:1.35}}>Mostra o nasconde la parte alta dell'app.</div></div>
             <Toggle label="" checked={!!showAppSummaryHeader} onChange={function(){setShowAppSummaryHeader(!showAppSummaryHeader);setToast(L("Impostazioni aggiornate"));}}/>
           </div>
         </div>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>{"📱 "+L("Barra superiore e inferiore")}</div>
+          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>{"📱 "+L("Barra Inferiore")}</div>
           <SettingHint>{L("Le prime sezioni dell'elenco entrano nella barra inferiore, in base al numero di icone scelto. Le altre restano nel menu Altro. L'icona Altro resta sempre disponibile.")}</SettingHint>
           <div style={{fontSize:13,fontWeight:700,color:textC,marginBottom:6}}>{L("Numero icone nella barra inferiore")}</div>
           <Segmented items={[3,4,5,6].map(function(n){return{id:String(n),label:String(n)};})} value={String(mobileNavIconCount||5)} onChange={function(v){setMobileNavIconCount(parseInt(v,10));setToast(L("Impostazioni aggiornate"));}}/>
@@ -5121,25 +5506,161 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           <Segmented items={[{id:"untilToday",label:"Solo fino a oggi"},{id:"all",label:"Mostra anche future"}]} value={historyFutureMode} onChange={setHistoryFutureMode}/>
         </div>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:14,fontWeight:600,color:textC,marginBottom:4}}>🤝 {L("Share nello storico")} {!baseSettingsAllowed&&<span style={{fontSize:11,color:subC}}> 🔒 Base</span>}</div>
+          <div style={{fontSize:14,fontWeight:600,color:textC,marginBottom:4}}>{L("Share nello storico")} {!baseSettingsAllowed&&<span style={{fontSize:11,color:subC}}> 🔒 Base</span>}</div>
           <SettingHint>Attiva questa opzione per mostrare nello storico anche la tua quota delle spese inserite nella sezione Share. La categoria Share comparirà nei filtri solo quando questa opzione è attiva.</SettingHint>
-          <Toggle label={L("Mostra transazioni Share nello storico")} checked={showShareInHistory} onChange={function(){setShowShareInHistory(!showShareInHistory);}} color={confirmButtonColor}/>
+          <Toggle label={dataTitle("Mostra transazioni Share nello storico")} checked={showShareInHistory} onChange={function(){setShowShareInHistory(!showShareInHistory);}} color={confirmButtonColor}/>
         </div>
       </div>
     </div>;
 
     function backupLocalJson(key,fallback){try{var raw=localStorage.getItem(userKey(key));return raw?JSON.parse(raw):fallback;}catch(e){return fallback;}}
     function restoreLocalJson(key,value){try{if(value!==undefined)localStorage.setItem(userKey(key),JSON.stringify(value));}catch(e){}}
-    function buildBackupPayload(){return {expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,creditCards,aiDataAccess,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists:backupLocalJson("shopping_lists_v2",[]),activeShoppingListId:backupLocalJson("shopping_active_list_id_v2","main"),shoppingProductSort:backupLocalJson("shopping_product_sort_v1","custom"),showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor,secondaryButtonColor};}
+    function buildBackupPayload(){return {expenses,incomes,cats,methods,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder,methodOrder,catSortMode,methodSortMode,incomeTypeOrder,defaultExpenseArea,defaultExpenseCat,defaultExpenseMethod,defaultIncomeArea,defaultIncomeType,defaultMethodArea,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,homeBalanceView,statsView,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrder,appuntiDocuments,appuntiNotes,bankCoords,creditCards,aiDataAccess,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists:backupLocalJson("shopping_lists_v2",[]),activeShoppingListId:backupLocalJson("shopping_active_list_id_v2","main"),shoppingProductSort:backupLocalJson("shopping_product_sort_v1","custom"),showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor,secondaryButtonColor};}
     function countBackupItems(d){d=d||{};var parts=[];function add(label,n){n=Number(n||0);if(n>0)parts.push(n+" "+label);}add("uscite",(d.expenses||[]).length);add("entrate",(d.incomes||[]).length);add("ricorrenti",(d.recurring||[]).length);add("obiettivi",(d.goals||[]).length);add("alert",(d.alerts||[]).length);add("voci patrimonio",(d.patrimonioEntries||[]).length);add("mesi patrimonio",Object.keys(d.patrimonioHistory||{}).length);add("documenti",(d.appuntiDocuments||[]).length);add("appunti",(d.appuntiNotes||[]).length);add("coordinate",(d.bankCoords||[]).length);add("carte di credito",(d.creditCards||[]).length);add("progetti Share",(d.shareProjects||[]).length);add(L("debiti/crediti"),(d.debtCredits||[]).length);add(L("carte fidelity"),(d.shoppingCards||[]).length);add(L("prodotti spesa"),(d.shoppingItems||[]).length);add(L("aree spesa"),(d.shoppingAreas||[]).length);add(L("liste spesa"),(d.shoppingLists||[]).length);return parts.length?parts.join(" · "):"0 voci";}
-    function applyBackupData(d){if(d.expenses)setExpenses(d.expenses);if(d.incomes)setIncomes(d.incomes);if(d.cats)setCats(d.cats);if(d.methods)setMethods(d.methods);if(d.recurring)setRecurring(d.recurring);if(d.goals)setGoals(d.goals);if(d.alerts)setAlerts(d.alerts);if(d.budgetPlan!==undefined)setBudgetPlan(d.budgetPlan);if(d.patrimonioValues)setPatrimonioValues(d.patrimonioValues);if(d.patrimonioAreas)setPatrimonioAreas(d.patrimonioAreas);if(d.patrimonioEntries)setPatrimonioEntries(d.patrimonioEntries);if(d.patrimonioHistory)setPatrimonioHistory(d.patrimonioHistory);if(d.patrimonioNotes)setPatrimonioNotes(d.patrimonioNotes);if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);if(d.historySortDate)setHistorySortDate(d.historySortDate);if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);if(d.appuntiDocuments)setAppuntiDocuments(d.appuntiDocuments);if(d.appuntiNotes)setAppuntiNotes(d.appuntiNotes);if(d.bankCoords)setBankCoords(d.bankCoords);if(d.creditCards)setCreditCards(d.creditCards);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);setToast("Backup ripristinato");}
-    function handleBackupJsonFile(e){var f=e.target.files&&e.target.files[0];if(!f)return;e.target.value="";var r=new FileReader();r.onload=function(ev){try{var d=JSON.parse(String(ev.target.result||"{}"));var summary=countBackupItems(d);var ok=window.confirm(L("Stai per ripristinare questo backup.\nVoci che verranno importate: ")+summary+L(".\n\nContinuare?"));if(!ok)return;applyBackupData(d);}catch(err){setToast({text:"File JSON non valido",type:"error",icon:"🚫",color:"#E24B4A"});}};r.readAsText(f);} 
+    function hasBackupKey(d,k){return !!d&&Object.prototype.hasOwnProperty.call(d,k);}
+    function backupStorageKeyMap(){return {
+      expenses:"exp_v10",incomes:"inc_v10",cats:"cats_v10",methods:"meth_v10",expenseGroups:"expense_groups_v1",incomeGroups:"income_groups_v1",methodGroups:"method_groups_v1",customIncomeTypes:"custom_income_types_v1",incomeTypeOverrides:"income_type_overrides_v1",catOrder:"cat_order_v1",methodOrder:"method_order_v1",catSortMode:"cat_sort_mode",methodSortMode:"method_sort_mode",incomeTypeOrder:"income_type_order_v1",
+      defaultExpenseArea:"default_expense_area_v1",defaultExpenseCat:"default_expense_cat_v1",defaultExpenseMethod:"default_expense_method_v1",defaultIncomeArea:"default_income_area_v1",defaultIncomeType:"default_income_type_v1",defaultMethodArea:"default_method_area_v1",
+      recurring:"rec_v10",goals:"goals_v1",alerts:"alerts_v1",budgetPlan:"budget_plan_v1",patrimonioValues:"patrimonio_values_v1",patrimonioAreas:"patrimonio_areas_v1",patrimonioEntries:"patrimonio_entries_v1",patrimonioHistory:"patrimonio_history_v1",patrimonioNotes:"patrimonio_notes_v1",
+      historyFutureMode:"history_future_mode_v1",historySortDate:"history_sort_date_v1",historySortDirection:"history_sort_direction_v1",historySortSecondary:"history_sort_secondary_v1",historySortSecondaryDirection:"history_sort_secondary_direction_v1",firstDayOfWeek:"pref_first_day_week",homeBalanceView:"pref_home_balance",statsView:"pref_statsview",currency:"pref_cur",secondaryCurrency:"pref_sec_cur",showSecInHistory:"pref_sec_history",showSecInStats:"pref_sec_stats",showSecInBudget:"pref_sec_budget",showSecInPatrimonio:"pref_sec_patrimonio",showAppSummaryHeader:"pref_show_app_summary_header_v1",mobileNavOrder:"pref_mobile_nav_order_v1",mobileNavIconCount:"pref_mobile_nav_icon_count_v1",mobileMenuOrder:"pref_mobile_menu_order_v1",mobileAllNavOrder:"pref_mobile_all_nav_order_v1",
+      appuntiDocuments:"appunti_documents_v1",appuntiNotes:"appunti_notes_v1",bankCoords:"bank_coords_v1",creditCards:"credit_cards_v1",aiDataAccess:"ai_data_access_v1",shareProjects:"share_projects_v1",showShareInHistory:"share_show_history_v1",debtCredits:"debt_credits_v1",shoppingCards:"shopping_cards_v1",shoppingItems:"shopping_items_v1",shoppingAreas:"shopping_areas_v1",shoppingAreaIcons:"shopping_area_icons_v1",shoppingBoughtColor:"shopping_bought_color_v1",shoppingDefaultArea:"shopping_default_area_v1",shoppingLists:"shopping_lists_v2",activeShoppingListId:"shopping_active_list_id_v2",shoppingProductSort:"shopping_product_sort_v1",showDebtCreditsInPatrimonio:"debt_credits_show_patrimonio_v1",showDebtCreditsInExpenses:"debt_credits_show_expenses_v1",shareReceiptUploads:"share_receipt_uploads_v1",confirmButtonColor:"pref_confirm_color",secondaryButtonColor:"pref_secondary_button_color_v1"
+    };}
+    function parseBackupStoredValue(v){if(typeof v==="string"){var t=v.trim();if((t.charAt(0)==="{"&&t.charAt(t.length-1)==="}")||(t.charAt(0)==="["&&t.charAt(t.length-1)==="]")||t==="true"||t==="false"||t==="null"||/^-?\d+(\.\d+)?$/.test(t)){try{return JSON.parse(t);}catch(e){return v;}}}return v;}
+    function readBackupStorageDumpValue(root,storageKey){
+      if(!root||typeof root!=="object"||Array.isArray(root))return undefined;
+      var keys=Object.keys(root);var exactUserKey="";try{exactUserKey=userKey(storageKey);}catch(e){}
+      var candidates=[storageKey,exactUserKey].filter(Boolean);
+      for(var i=0;i<keys.length;i++){var k=String(keys[i]);if(k===storageKey||k===exactUserKey||k.endsWith("_"+storageKey)||k.endsWith(":"+storageKey)||k.endsWith("/"+storageKey))candidates.push(k);}
+      for(var j=0;j<candidates.length;j++){var ck=candidates[j];if(ck&&Object.prototype.hasOwnProperty.call(root,ck))return parseBackupStoredValue(root[ck]);}
+      return undefined;
+    }
+    function backupFromStorageDump(root){
+      var map=backupStorageKeyMap();var out:any={};
+      Object.keys(map).forEach(function(k){var v=readBackupStorageDumpValue(root,map[k]);if(v!==undefined)out[k]=v;});
+      return Object.keys(out).length?out:null;
+    }
+    function normalizeBackupAliases(d){
+      if(!d||typeof d!=="object"||Array.isArray(d))return d;
+      var out={...d};
+      function alias(to,names){if(hasBackupKey(out,to))return;for(var i=0;i<names.length;i++){if(hasBackupKey(d,names[i])){out[to]=d[names[i]];return;}}}
+      alias("expenses",["exp_v10","uscite","spese","expenseList","expensesList"]);alias("incomes",["inc_v10","entrate","incomeList","incomesList"]);alias("recurring",["rec_v10","ricorrenti"]);alias("cats",["cats_v10","categorie","expenseCategories"]);alias("methods",["meth_v10","metodi","paymentMethods"]);alias("budgetPlan",["budget","budget_json"]);alias("patrimonioValues",["patrimonio","patrimonio_json","assetsValues"]);alias("debtCredits",["debt_credits","debt_credits_json","debitiCrediti"]);alias("shoppingCards",["fidelityCards","cardsFidelity"]);alias("shoppingItems",["shoppingProducts","prodottiSpesa"]);alias("shoppingLists",["shopping_lists","listeSpesa"]);
+      return out;
+    }
+    function restoreBackupLocalStorage(d){
+      if(!d||typeof d!=="object"||Array.isArray(d))return;
+      var map=backupStorageKeyMap();Object.keys(map).forEach(function(k){if(hasBackupKey(d,k))restoreLocalJson(map[k],d[k]);});
+      try{if(hasBackupKey(d,"cats"))markUserLocalChange("cats");if(hasBackupKey(d,"methods"))markUserLocalChange("methods");}catch(e){}
+    }
+    function applyBackupData(d,skipToast){
+      d=normalizeBackupAliases(d);
+      if(!d||typeof d!=="object"||Array.isArray(d))return 0;
+      restoreBackupLocalStorage(d);
+      var applied=0;
+      function arr(k,setter,fallback){if(hasBackupKey(d,k)){setter(Array.isArray(d[k])?d[k]:(fallback||[]));applied++;}}
+      function obj(k,setter,fallback){if(hasBackupKey(d,k)){setter(d[k]&&typeof d[k]==="object"&&!Array.isArray(d[k])?d[k]:(fallback||{}));applied++;}}
+      function val(k,setter){if(hasBackupKey(d,k)){setter(d[k]);applied++;}}
+      function bool(k,setter){if(hasBackupKey(d,k)){setter(!!d[k]);applied++;}}
+      arr("expenses",setExpenses,[]);arr("incomes",setIncomes,[]);arr("cats",setCats,DEFAULT_CATS);arr("methods",setMethods,DEFAULT_METHODS);arr("expenseGroups",setExpenseGroups,DEFAULT_EXPENSE_GROUPS);arr("incomeGroups",setIncomeGroups,DEFAULT_INCOME_GROUPS);arr("methodGroups",setMethodGroups,DEFAULT_METHOD_GROUPS);arr("customIncomeTypes",setCustomIncomeTypes,[]);obj("incomeTypeOverrides",setIncomeTypeOverrides,{});arr("catOrder",setCatOrder,[]);arr("methodOrder",setMethodOrder,[]);val("catSortMode",setCatSortMode);val("methodSortMode",setMethodSortMode);arr("incomeTypeOrder",setIncomeTypeOrder,[]);
+      val("defaultExpenseArea",setDefaultExpenseArea);val("defaultExpenseCat",setDefaultExpenseCat);val("defaultExpenseMethod",setDefaultExpenseMethod);val("defaultIncomeArea",setDefaultIncomeArea);val("defaultIncomeType",setDefaultIncomeType);val("defaultMethodArea",setDefaultMethodArea);
+      arr("recurring",setRecurring,[]);arr("goals",setGoals,DEFAULT_GOALS);arr("alerts",setAlerts,[]);obj("budgetPlan",setBudgetPlan,DEFAULT_BUDGET_PLAN);obj("patrimonioValues",setPatrimonioValues,{});arr("patrimonioAreas",setPatrimonioAreas,DEFAULT_PATRIMONIO_AREAS);arr("patrimonioEntries",setPatrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES);obj("patrimonioHistory",setPatrimonioHistory,{});obj("patrimonioNotes",setPatrimonioNotes,{});
+      val("historyFutureMode",setHistoryFutureMode);val("historySortDate",setHistorySortDate);val("historySortDirection",setHistorySortDirection);val("historySortSecondary",setHistorySortSecondary);val("historySortSecondaryDirection",setHistorySortSecondaryDirection);val("firstDayOfWeek",setFirstDayOfWeek);val("homeBalanceView",setHomeBalanceView);val("statsView",setStatsView);val("currency",setCurrency);val("secondaryCurrency",setSecondaryCurrency);bool("showSecInHistory",setShowSecInHistory);bool("showSecInStats",setShowSecInStats);bool("showSecInBudget",setShowSecInBudget);bool("showSecInPatrimonio",setShowSecInPatrimonio);bool("showAppSummaryHeader",setShowAppSummaryHeader);arr("mobileNavOrder",setMobileNavOrder,[]);val("mobileNavIconCount",setMobileNavIconCount);arr("mobileMenuOrder",setMobileMenuOrder,[]);arr("mobileAllNavOrder",setMobileAllNavOrder,DEFAULT_MOBILE_ALL_NAV_ORDER);
+      arr("appuntiDocuments",setAppuntiDocuments,[]);arr("appuntiNotes",setAppuntiNotes,[]);arr("bankCoords",setBankCoords,[]);arr("creditCards",setCreditCards,[]);if(hasBackupKey(d,"aiDataAccess")){setAiDataAccess(d.aiDataAccess);applied++;}
+      arr("shareProjects",setShareProjects,[]);bool("showShareInHistory",setShowShareInHistory);arr("debtCredits",setDebtCredits,[]);arr("shoppingCards",setShoppingCards,[]);arr("shoppingItems",setShoppingItems,[]);arr("shoppingAreas",setShoppingAreas,DEFAULT_SHOPPING_AREAS);obj("shoppingAreaIcons",setShoppingAreaIcons,{});val("shoppingBoughtColor",setShoppingBoughtColor);val("shoppingDefaultArea",setShoppingDefaultArea);if(hasBackupKey(d,"shoppingLists")){var restoredLists=Array.isArray(d.shoppingLists)?d.shoppingLists:[];setShoppingLists(restoredLists);restoreLocalJson("shopping_lists_v2",restoredLists);applied++;}if(hasBackupKey(d,"activeShoppingListId")){setActiveShoppingListId(d.activeShoppingListId||"main");restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId||"main");applied++;}if(hasBackupKey(d,"shoppingProductSort")){setShoppingProductSort(d.shoppingProductSort||"custom");restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort||"custom");applied++;}
+      bool("showDebtCreditsInPatrimonio",setShowDebtCreditsInPatrimonio);bool("showDebtCreditsInExpenses",setShowDebtCreditsInExpenses);arr("shareReceiptUploads",setShareReceiptUploads,[]);val("confirmButtonColor",setConfirmButtonColor);val("secondaryButtonColor",setSecondaryButtonColor);
+      if(applied>0&&!skipToast)setToast({text:L("Backup ripristinato"),type:"success",icon:"✅",color:confirmButtonColor});
+      return applied;
+    }
+    function normalizeBackupDataRoot(d){
+      if(!d||typeof d!=="object"||Array.isArray(d))return d;
+      var storageRoot=backupFromStorageDump(d);
+      if(storageRoot)return normalizeBackupAliases(storageRoot);
+      var roots=["data","backup","fainanceBackup","payload","userData","backupData","localStorage","storage"];
+      for(var i=0;i<roots.length;i++){
+        var key=roots[i];
+        if(d[key]&&typeof d[key]==="object"&&!Array.isArray(d[key])){
+          var fromStorage=backupFromStorageDump(d[key]);
+          if(fromStorage)return normalizeBackupAliases(fromStorage);
+          var normalized=normalizeBackupAliases(d[key]);
+          if(normalized&&typeof normalized==="object"&&!Array.isArray(normalized)){
+            var known=0;["expenses","incomes","recurring","cats","methods","budgetPlan","patrimonioValues","shareProjects","debtCredits","shoppingCards","shoppingItems","shoppingLists"].forEach(function(k){if(hasBackupKey(normalized,k))known++;});
+            if(known>0)return normalized;
+          }
+        }
+      }
+      return normalizeBackupAliases(d);
+    }
+    function backupFirestorePayload(d,importId){
+      var out:any={};
+      ["expenses","incomes","cats","methods","expenseGroups","incomeGroups","methodGroups","customIncomeTypes","incomeTypeOverrides","catOrder","methodOrder","catSortMode","methodSortMode","incomeTypeOrder","defaultExpenseArea","defaultExpenseCat","defaultExpenseMethod","defaultIncomeArea","defaultIncomeType","defaultMethodArea","recurring","goals","alerts","budgetPlan","patrimonioValues","patrimonioAreas","patrimonioEntries","patrimonioHistory","patrimonioNotes","historyFutureMode","historySortDate","historySortDirection","historySortSecondary","historySortSecondaryDirection","firstDayOfWeek","homeBalanceView","statsView","currency","secondaryCurrency","showSecInHistory","showSecInStats","showSecInBudget","showSecInPatrimonio","showAppSummaryHeader","mobileNavOrder","mobileNavIconCount","mobileMenuOrder","mobileAllNavOrder","appuntiDocuments","appuntiNotes","bankCoords","creditCards","aiDataAccess","shareProjects","showShareInHistory","debtCredits","shoppingCards","shoppingItems","shoppingAreas","shoppingAreaIcons","shoppingBoughtColor","shoppingDefaultArea","shoppingLists","activeShoppingListId","shoppingProductSort","showDebtCreditsInPatrimonio","showDebtCreditsInExpenses","shareReceiptUploads","confirmButtonColor","secondaryButtonColor"].forEach(function(k){if(hasBackupKey(d,k)&&d[k]!==undefined)out[k]=d[k];});
+      if(importId)out._backupImportId=String(importId);
+      out.updatedAt=new Date().toISOString();
+      out.updatedAtMs=Date.now();
+      return out;
+    }
+    async function persistBackupDataToFirestore(d,importId){
+      if(!userId||!fbDb)return false;
+      try{
+        var payload=backupFirestorePayload(d,importId);
+        if(!payload||Object.keys(payload).length<=2)return false;
+        await setDoc(doc(fbDb,"userData",userId),payload,{merge:true});
+        return true;
+      }catch(err){
+        console.error("Backup JSON Firestore persist error",err);
+        return false;
+      }
+    }
+    function openBackupJsonPicker(){
+      try{
+        var node:any=backupJsonInputRef&&backupJsonInputRef.current;
+        if(node){
+          node.value="";
+          node.click();
+        }
+      }catch(e){setToast({text:L("Errore durante la lettura del file."),type:"error",icon:"🚫",color:"#E24B4A"});}
+    }
+    function readBackupFileAsText(f){
+      if(f&&typeof f.text==="function")return f.text();
+      return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(ev){resolve(String((ev&&ev.target&&ev.target.result)||""));};r.onerror=function(){reject(r.error||new Error("read error"));};r.onabort=function(){reject(new Error("read aborted"));};r.readAsText(f);});
+    }
+    async function importBackupJsonText(txt,fileName){
+      setToast({text:L("Lettura file"),type:"info",icon:"📄",color:confirmButtonColor});
+      var parsed=JSON.parse(String(txt||"{}").replace(/^\uFEFF/,""));
+      var d=normalizeBackupDataRoot(parsed);
+      if(!d||typeof d!=="object"||Array.isArray(d))throw new Error("invalid json");
+      var importTs=Date.now();
+      var importId="backup_json_"+importTs+"_"+Math.random().toString(36).slice(2,8);
+      backupImportPendingRef.current=importTs;
+      backupImportIdRef.current=importId;
+      var summary=countBackupItems(d);
+      var applied=applyBackupData(d,true);
+      if(!applied){backupImportPendingRef.current=0;backupImportIdRef.current="";throw new Error("no supported keys");}
+      await persistBackupDataToFirestore(d,importId);
+      setToast({text:L("Backup ripristinato")+(summary&&summary!=="0 voci"?" · "+summary:""),type:"success",icon:"✅",color:confirmButtonColor});
+      return applied;
+    }
+    async function handleBackupJsonFile(e){
+      var input=e&&((e.currentTarget)||(e.target));
+      var f=input&&input.files&&input.files[0];
+      if(!f)return;
+      try{
+        var txt=await readBackupFileAsText(f);
+        await importBackupJsonText(txt,f&&f.name);
+      }catch(err){
+        console.error("Backup JSON import error",err);
+        setToast({text:L("File JSON non valido"),type:"error",icon:"🚫",color:"#E24B4A"});
+      }finally{
+        try{if(input)input.value="";}catch(clearErr){}
+      }
+    }
 
-    function dataTitle(label){var s=String(L(label)||label||"").trim();function strip(v){var out=String(v||"").trim();try{while(out.length){var cp=out.codePointAt(0)||0;var ch=String.fromCodePoint(cp);var isIcon=(cp>=0x1F000&&cp<=0x1FAFF)||(cp>=0x2600&&cp<=0x27BF)||cp===0xFE0F||cp===0xFE0E||cp===0x200D||/\s/.test(ch);if(!isIcon)break;out=out.slice(ch.length).trimStart();}}catch(e){}return out.replace(/^[^A-Za-z0-9À-ÖØ-öø-ÿΑ-ωΆ-ώ]+/g,"").trim();}return strip(s)||String(label||"");}
+    function dataTitle(label){var s=String(L(label)||label||"").trim();function strip(v){var out=String(v||"").trim();try{out=out.replace(/^(📥|📤|🗑️|🗑|🧺|📦|💾|✅|⚠️|⚠|🚫)\s*/g,"");while(out.length){var cp=out.codePointAt(0)||0;var ch=String.fromCodePoint(cp);var isIcon=(cp>=0x1F000&&cp<=0x1FAFF)||(cp>=0x2600&&cp<=0x27BF)||cp===0xFE0F||cp===0xFE0E||cp===0x200D||/\s/.test(ch);if(!isIcon)break;out=out.slice(ch.length).trimStart();}}catch(e){}return out.replace(/^[^A-Za-z0-9À-ÖØ-öø-ÿΑ-ωΆ-ώ]+/g,"").trim();}return strip(s)||strip(label)||String(label||"");}
     function DataAccordionCard(props){return <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
       <button type="button" onClick={function(){props.setOpen(!props.open);}} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,border:"none",background:"transparent",padding:0,cursor:"pointer",textAlign:"left"}}>
-        <div><div style={{fontSize:16,fontWeight:900,color:props.danger?"#E24B4A":textC}}>{dataTitle(props.title)}</div>{props.desc&&<div style={{fontSize:12,color:subC,marginTop:4}}>{L(props.desc)}</div>}</div>
-        <span style={{fontSize:22,color:subC,transform:props.open?"rotate(180deg)":"rotate(0deg)",transition:"transform .18s"}}>⌄</span>
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:0,flex:1}}>
+          {props.icon&&<span data-no-translate="true" aria-hidden="true" style={{fontSize:17,lineHeight:"20px",width:24,flexShrink:0,textAlign:"center",display:"inline-block"}}>{props.icon}</span>}
+          <div style={{minWidth:0,flex:1}}><div data-no-translate="true" className="notranslate" style={{fontSize:16,fontWeight:900,color:props.danger?"#E24B4A":textC}}>{dataTitle(props.title)}</div>{props.desc&&<div data-no-translate="true" className="notranslate" style={{fontSize:12,color:subC,marginTop:4}}>{L(props.desc)}</div>}</div>
+        </div>
+        <span style={{fontSize:22,color:subC,transform:props.open?"rotate(180deg)":"rotate(0deg)",transition:"transform .18s",flexShrink:0}}>⌄</span>
       </button>
       {props.open&&<div style={{marginTop:16,display:"flex",flexDirection:"column",gap:14}}>{props.children}</div>}
     </div>;}
@@ -5203,27 +5724,25 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
 
     if(settingsPage==="delete")return <div><PageHeader title="Dati"/>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <DataAccordionCard title="Importa Dati" desc="Carica file CSV, Excel o un backup completo JSON." open={dataImportOpen} setOpen={setDataImportOpen}>
+        <DataAccordionCard icon="📥" title="Importa Dati" desc="Carica file CSV, Excel o un backup completo JSON." open={dataImportOpen} setOpen={setDataImportOpen}>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",border:"1px solid "+borderC,borderRadius:14,padding:14}}>
             <div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:8}}>{L("Importa movimenti da file")}</div>
-            <ImportData/>
+            <ImportData onBackupJsonText={importBackupJsonText}/>
           </div>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",border:"1px solid "+borderC,borderRadius:14,padding:14}}>
             <div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:5}}>{L("Importa backup completo (Json)")}</div>
             <div style={{fontSize:12,color:subC,marginBottom:10}}>{L("Ripristina il JSON globale creato da Backup completo.")}</div>
-            <label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",background:confirmButtonColor,color:"#fff",borderRadius:btnRadius,padding:"10px 16px",fontSize:13,fontWeight:900,cursor:"pointer",minHeight:42}}>
-              {dataTitle("Ripristina JSON")}
-              <input type="file" accept=".json" style={{display:"none"}} onChange={handleBackupJsonFile}/>
-            </label>
+            <button type="button" onClick={openBackupJsonPicker} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 16px",fontSize:13,fontWeight:900,cursor:"pointer",minHeight:42}}>{dataTitle("Ripristina JSON")}</button>
+            <input ref={backupJsonInputRef} type="file" accept="application/json,.json,.txt" style={{display:"none"}} onChange={handleBackupJsonFile}/>
           </div>
         </DataAccordionCard>
-        <DataAccordionCard title="Esporta dati" desc="Scegli cosa scaricare e poi conferma l’esportazione." open={dataExportOpen} setOpen={setDataExportOpen}>
+        <DataAccordionCard icon="📤" title="Esporta dati" desc="Scegli cosa scaricare e poi conferma l’esportazione." open={dataExportOpen} setOpen={setDataExportOpen}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto",gap:10,alignItems:"end"}}>
             <select value={dataExportOption} onChange={function(e){setDataExportOption(e.target.value);}} style={{...sinp,width:"100%"}}>{exportDataOptions().map(function(o){return <option key={o.id} value={o.id}>{o.label}</option>;})}</select>
             <Btn onClick={runDataExport} bg={confirmButtonColor} style={{padding:"11px 18px",fontSize:14,fontWeight:900,minHeight:42}}>{L("Esporta")}</Btn>
           </div>
         </DataAccordionCard>
-        <DataAccordionCard title="Elimina dati" desc="Seleziona una o più sezioni da eliminare. L’operazione non è reversibile." open={dataDeleteOpen} setOpen={setDataDeleteOpen} danger={true}>
+        <DataAccordionCard icon="🗑️" title="Elimina dati" desc="Seleziona una o più sezioni da eliminare. L’operazione non è reversibile." open={dataDeleteOpen} setOpen={setDataDeleteOpen} danger={true}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
             {deleteDataOptions().map(function(o){var checked=(Array.isArray(dataDeleteSelection)?dataDeleteSelection:[]).indexOf(o.id)>=0;var isAll=o.id==="all";return <label key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:14,border:"1px solid "+(checked?(isAll?"#E24B4A":confirmButtonColor):borderC),background:checked?(isAll?(dark?"#381c1c":"#FFF0F0"):(dark?"#24213a":"#F0EDFF")):(dark?"#1e1e30":"#f9f9f9"),cursor:"pointer",minHeight:48}}>
               <input type="checkbox" checked={checked} onChange={function(){toggleDataDeleteOption(o.id);}} style={{width:18,height:18,accentColor:isAll?"#E24B4A":confirmButtonColor,flexShrink:0}}/>
@@ -5466,8 +5985,9 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     function field(label,child){return <div style={{display:"flex",flexDirection:"column",gap:0}}><label style={labelStyle}>{L(label)}</label>{child}</div>;}
     function balance(item){var v=Number(item.initialAmount||0);(item.transactions||[]).forEach(function(tx){var a=Number(tx.amount||0);v+=tx.action==="increase"?a:-a;});return Math.max(0,Math.round(v*100)/100);}
     function selected(){return (debtCredits||[]).find(function(x){return String(x.id)===String(selectedId);})||null;}
+    function scrollDebtCreditDetail(){setTimeout(function(){try{var el=document.getElementById("debtCreditDetailPanel");if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"start"});}catch(e){}},220);}
     function resetForm(){setEditingId(null);setKind("debt");setHolder("");setAmount("");setStartDate(todayStr());setEndDate("");setNote("");setShowDebtForm(false);}
-    function openItem(item){setSelectedId(item.id);setShowTxForm(false);setEditingTxId("");setTxType("reduction");setTxDate(todayStr());setTxStart(item.startDate||todayStr());setTxEnd(item.estimatedEndDate||"");setTxAmount("");setTxNote("");}
+    function openItem(item){setSelectedId(item.id);setShowTxForm(false);setEditingTxId("");setTxType("reduction");setTxDate(todayStr());setTxStart(item.startDate||todayStr());setTxEnd(item.estimatedEndDate||"");setTxAmount("");setTxNote("");scrollDebtCreditDetail();}
     function debtContactName(c:any){return String((c&&(c.name||c.email||c.phone))||"").trim();}
     function debtDraftSnapshot(){return {kind:kind,holder:holder,amount:amount,startDate:startDate,endDate:endDate,note:note,editingId:editingId,showDebtForm:true};}
     function applyDebtDraft(d:any){if(!d)return;if(d.kind)setKind(d.kind);if(typeof d.amount!=="undefined")setAmount(String(d.amount||""));if(typeof d.startDate!=="undefined")setStartDate(d.startDate||todayStr());if(typeof d.endDate!=="undefined")setEndDate(d.endDate||"");if(typeof d.note!=="undefined")setNote(d.note||"");if(typeof d.editingId!=="undefined")setEditingId(d.editingId||null);}
@@ -5530,6 +6050,28 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       return function(){try{if(timer)clearInterval(timer);window.removeEventListener("fainanceDebtContactSelected",h);window.removeEventListener("focus",h);document.removeEventListener("visibilitychange",h);}catch(e){}};
     },[]);
     useEffect(function(){consumePendingDebtContact();});
+    function consumePendingDebtCreditOpen(detail?:any){
+      var id=String((detail&&(detail.debtCreditId||detail.id))||"");
+      if(!id){try{id=String(sessionStorage.getItem("fainance_debt_credit_open_id_v1")||"");}catch(e){}}
+      if(!id){try{id=String(localStorage.getItem("fainance_debt_credit_open_id_v1")||"");}catch(e){}}
+      if(!id)return false;
+      var exists=(debtCredits||[]).some(function(d){return String(d.id)===String(id);});
+      if(!exists)return false;
+      setSelectedId(id);
+      setShowTxForm(false);
+      setEditingTxId("");
+      setShowDebtForm(false);
+      scrollDebtCreditDetail();
+      try{sessionStorage.removeItem("fainance_debt_credit_open_id_v1");}catch(e){}
+      try{localStorage.removeItem("fainance_debt_credit_open_id_v1");}catch(e){}
+      return true;
+    }
+    useEffect(function(){
+      function handler(ev?:any){consumePendingDebtCreditOpen(ev&&ev.detail);}
+      try{window.addEventListener("fainance-open-debt-credit",handler);}catch(e){}
+      var timers=[80,260,650,1200,2000].map(function(ms){return setTimeout(function(){consumePendingDebtCreditOpen();},ms);});
+      return function(){try{window.removeEventListener("fainance-open-debt-credit",handler);}catch(e){}timers.forEach(function(t){clearTimeout(t);});};
+    },[debtCredits.map(function(d){return String(d.id);}).join("|")]);
     async function pickContact(ev?:any){
       try{if(ev&&ev.preventDefault)ev.preventDefault();if(ev&&ev.stopPropagation)ev.stopPropagation();}catch(_e){}
       if(debtContactBusy)return;
@@ -5615,7 +6157,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           {!(debtCredits||[]).length&&<div style={{fontSize:13,color:subC}}>{L("Nessun Debito / Credito inserito")}</div>}
           {(debtCredits||[]).map(function(item){var b=balance(item);var active=String(selectedId)===String(item.id);var extinct=b<=0;return <div key={item.id} onClick={function(){openItem(item);}} style={{border:"1px solid "+(active?confirmButtonColor:borderC),borderRadius:12,padding:10,marginBottom:8,background:extinct?(dark?"#202024":"#f2f2f2"):(active?(dark?"#252535":"#f7f5ff"):(dark?"#1e1e30":"#fff")),opacity:extinct?.62:1,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",gap:8,alignItems:"flex-start"}}><div style={{minWidth:0}}><div style={{fontSize:14,fontWeight:900,color:textC,wordBreak:"break-word"}}>{item.kind==="debt"?"📉":"📈"} {item.holder}</div><div style={{fontSize:12,color:subC}}>{L(item.kind==="debt"?"Debito":"Credito")} · {L("Saldo")}: {fmt(b)} {extinct&&<span style={{marginLeft:6,fontWeight:900,color:incomeColor}}>· {L("Estinto")}</span>}</div></div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={function(e){e.stopPropagation();editItem(item);}} style={{border:"none",background:dark?"#2b2b3a":"#eef1ff",color:confirmButtonColor,borderRadius:8,padding:"6px 8px",cursor:"pointer"}}>✏️</button><button onClick={function(e){e.stopPropagation();deleteItem(item.id);}} style={{border:"none",background:"#FFF0F0",color:"#E24B4A",borderRadius:8,padding:"6px 8px",cursor:"pointer"}}>🗑️</button></div></div></div>;})}
         </div>
-        <div style={{display:"none"}}>
+        <div id="debtCreditDetailPanel" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}>
           {!sel&&<div style={{fontSize:13,color:subC}}>{L("Seleziona un Debito / Credito per inserire transazioni.")}</div>}
           {sel&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:balance(sel)<=0?(dark?"#202024":"#f2f2f2"):(dark?"#252535":"#F8FAFC"),border:"1px solid "+borderC,borderRadius:14,padding:14}}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"flex-start"}}><div><div style={{fontSize:16,fontWeight:900,color:textC}}>{sel.kind==="debt"?"📉":"📈"} {sel.holder}</div><div style={{fontSize:12,color:subC,marginTop:4}}>{L(sel.kind==="debt"?"Debito":"Credito")} · {L("Saldo attuale")}: <b style={{color:balance(sel)<=0?incomeColor:textC}}>{fmt(balance(sel))}</b> {balance(sel)<=0&&<b style={{color:incomeColor}}> · {L("Estinto")}</b>}</div><div style={{fontSize:12,color:subC,marginTop:4}}>{L("Data inizio")}: {sel.startDate||"-"} · {L("Fine stimata")}: {sel.estimatedEndDate||"-"}</div>{sel.note&&<div style={{fontSize:12,color:subC,marginTop:4}}>{sel.note}</div>}</div><div style={{display:"flex",gap:6,flexShrink:0}}><button onClick={function(){editItem(sel);}} style={{border:"none",background:dark?"#2b2b3a":"#eef1ff",color:confirmButtonColor,borderRadius:8,padding:"6px 8px",cursor:"pointer"}}>✏️</button><button onClick={function(){setSelectedId(null);setShowTxForm(false);}} style={{border:"none",background:dark?"#333":"#f0f0f0",color:textC,borderRadius:8,padding:"6px 8px",cursor:"pointer"}}>×</button></div></div></div>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{balance(sel)>0&&<button onClick={function(){setShowTxForm(function(v){return !v;});}} style={{background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"9px 12px",fontWeight:900,cursor:"pointer"}}>＋ {L("Aggiungi transazione")}</button>}{balance(sel)>0&&<button onClick={function(){closeItem(sel);}} style={{background:dark?"#252535":"#fff",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"9px 12px",fontWeight:900,cursor:"pointer"}}>✅ {L(sel.kind==="debt"?"Chiudi Debito":"Chiudi Credito")}</button>}{showDebtCreditsInPatrimonio&&<button onClick={function(){reportPatrimonio(sel);}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:10,padding:"8px 10px",fontWeight:800,cursor:"pointer"}}>💎 {L("Riporta nel patrimonio")}</button>}{showDebtCreditsInExpenses&&<button onClick={function(){reportMovement(sel);}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:10,padding:"8px 10px",fontWeight:800,cursor:"pointer"}}>💸 {L("Riporta nei movimenti")}</button>}</div>
@@ -5665,6 +6207,37 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     var [showCardCreateChoice,setShowCardCreateChoice]=useState(false);
     var [showCardManualForm,setShowCardManualForm]=useState(false);
     var [pendingScannedCard,setPendingScannedCard]=useState(null);
+    var [highlightedCardId,setHighlightedCardId]=useState("");
+    function scrollToFidelityCard(cardId){
+      if(!cardId)return;
+      setTimeout(function(){try{var safe=String(cardId).replace(/\"/g,'\\"');var el=document.querySelector('[data-fainance-card-id="'+safe+'"]');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){}},180);
+    }
+    function consumePendingShoppingWidgetAction(){
+      var payload:any=null;
+      try{var raw=localStorage.getItem("fainance_shopping_widget_action_v1")||"";if(raw)payload=JSON.parse(raw);}catch(e){}
+      if(!payload)return false;
+      if(payload.ts&&Date.now()-Number(payload.ts)>60000){try{localStorage.removeItem("fainance_shopping_widget_action_v1");}catch(e){}return false;}
+      var tab=String(payload.tab||"");
+      if(tab==="cards"){
+        setTabShop("cards");
+        if(payload.cardId){setHighlightedCardId(String(payload.cardId));scrollToFidelityCard(String(payload.cardId));}
+        try{localStorage.removeItem("fainance_shopping_widget_action_v1");}catch(e){}
+        return true;
+      }
+      if(tab==="list"){
+        setTabShop("list");
+        if(payload.listId)setActiveShoppingListId(String(payload.listId));
+        try{localStorage.removeItem("fainance_shopping_widget_action_v1");}catch(e){}
+        return true;
+      }
+      return false;
+    }
+    useEffect(function(){
+      function handler(){consumePendingShoppingWidgetAction();}
+      try{window.addEventListener("fainance-open-shopping-widget",handler);}catch(e){}
+      var timers=[80,260,650,1200].map(function(ms){return setTimeout(handler,ms);});
+      return function(){try{window.removeEventListener("fainance-open-shopping-widget",handler);}catch(e){}timers.forEach(function(t){clearTimeout(t);});};
+    },[shoppingCards.length,shoppingLists.length,activeShoppingListId]);
     var sinp={...inp,width:"100%",boxSizing:"border-box"};
     var softPanel={background:dark?"#1f1f31":"linear-gradient(180deg,#ffffff,#fffaf2)",border:"1px solid "+borderC,borderRadius:20,padding:16,boxShadow:dark?"none":"0 10px 26px rgba(15,23,42,.07)"};
     var formBox={background:dark?"#181827":"linear-gradient(135deg,#fffaf2,#ffffff)",border:"1px solid "+(dark?borderC:"#F4C46A"),borderRadius:18,padding:14,boxShadow:dark?"none":"0 8px 22px rgba(239,159,39,.10)"};
@@ -5784,7 +6357,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
           {showCardCreateChoice&&<div style={{...formBox,marginBottom:12}}><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:8}}><button type="button" onClick={function(e){e.preventDefault();e.stopPropagation();scanPhysicalCard();}} style={{background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"12px",fontWeight:950,cursor:"pointer"}}>📷 {L("Scansiona carta")}</button><button type="button" onClick={function(e){e.preventDefault();e.stopPropagation();uploadCardPhoto();}} style={{background:dark?"#252535":"#fff",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"12px",fontWeight:950,cursor:"pointer"}}>🖼️ {L("Carica foto")}</button><button type="button" onClick={function(e){e.preventDefault();e.stopPropagation();setShowCardManualForm(true);}} style={{background:dark?"#252535":"#fff",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"12px",fontWeight:950,cursor:"pointer"}}>⌨️ {L("Compila manualmente")}</button></div>{showCardManualForm&&<div style={{marginTop:12,background:dark?"#202033":"#fff",border:"1px solid "+borderC,borderRadius:18,padding:12}}>{pendingScannedCard&&<div style={{marginBottom:10,padding:"10px 12px",borderRadius:14,background:dark?"#26263a":"#F0FDF4",border:"1px solid "+(dark?"#3A3A52":"#BBF7D0")}}><div style={{fontSize:15,fontWeight:950,color:textC}}>✅ {L("Conferma dati carta")}</div><div style={{fontSize:12,color:subC,marginTop:3}}>{L("Il codice è stato letto. Controlla i dati prima di salvare la carta.")}</div></div>}<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1.2fr 1fr 130px 54px 120px",gap:8,alignItems:"end"}}><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Nome carta")}<input value={cardName} onChange={function(e){setCardName(e.target.value);}} placeholder={L("Nome carta")} style={{...sinp,marginTop:5}}/></label><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Codice numerico")}<input value={cardCode} onChange={function(e){setCardCode(e.target.value.replace(/\D/g,""));}} placeholder={L("Codice numerico")} inputMode="numeric" style={{...sinp,marginTop:5}}/></label><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Tipo codice")}<select value={cardCodeType} onChange={function(e){setCardCodeType(e.target.value);}} style={{...sinp,marginTop:5}}><option value="barcode">{L("Codice a barre")}</option><option value="qr">{L("QR")}</option></select></label><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Colore")}<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:6}}>{["#0F9F76","#378ADD","#7F77DD","#EF9F27","#E24B4A","#111827"].map(function(c){return <button key={c} type="button" onClick={function(){setCardColor(c);}} style={{width:26,height:26,borderRadius:999,border:cardColor===c?"3px solid #111827":"1px solid #E5E7EB",background:c,cursor:"pointer"}}/>;})}<input type="color" value={cardColor} onChange={function(e){setCardColor(e.target.value);}} style={{width:34,height:30,border:"none",background:"transparent"}}/></div></label><button type="button" onClick={saveCard} style={{background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"11px",fontWeight:950,cursor:"pointer"}}>{editingCardId?"💾 ":"＋ "}{L(editingCardId?"Salva modifica":"Aggiungi")}</button></div>{editingCardId&&<button type="button" onClick={function(){setEditingCardId("");setCardName("");setCardCode("");setCardCodeType("barcode");setCardColor("#0F9F76");setShowCardManualForm(false);setShowCardCreateChoice(false);}} style={{marginTop:8,background:dark?"#252535":"#fff",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"9px 12px",fontWeight:900,cursor:"pointer"}}>× {L("Annulla modifica")}</button>}</div>}</div>}
           {false&&pendingScannedCard&&<div style={{...formBox,marginBottom:12,border:"2px solid "+confirmButtonColor,background:dark?"#202033":"linear-gradient(135deg,#fff7df,#ffffff)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:10}}><div><div style={{fontSize:16,fontWeight:950,color:textC}}>✅ {L("Conferma dati carta")}</div><div style={{fontSize:12,color:subC,marginTop:3}}>{L("Il codice è stato letto. Controlla i dati prima di salvare la carta.")}</div></div><button type="button" onClick={function(){setPendingScannedCard(null);setCardName("");setCardCode("");setCardCodeType("barcode");setCardColor("#0F9F76");}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:12,padding:"7px 10px",fontWeight:950,cursor:"pointer"}}>×</button></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1.2fr 1fr 130px 54px 120px",gap:8,alignItems:"end"}}><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Nome carta")}<input value={cardName} onChange={function(e){setCardName(e.target.value);}} placeholder={L("Nome carta")} style={{...sinp,marginTop:5}}/></label><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Codice numerico")}<input value={cardCode} onChange={function(e){setCardCode(e.target.value.replace(/\D/g,""));}} placeholder={L("Codice numerico")} inputMode="numeric" style={{...sinp,marginTop:5}}/></label><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Tipo codice")}<select value={cardCodeType} onChange={function(e){setCardCodeType(e.target.value);}} style={{...sinp,marginTop:5}}><option value="barcode">{L("Codice a barre")}</option><option value="qr">{L("QR")}</option></select></label><label style={{fontSize:11,fontWeight:900,color:subC}}>{L("Colore")}<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:6}}>{["#0F9F76","#378ADD","#7F77DD","#EF9F27","#E24B4A","#111827"].map(function(c){return <button key={c} type="button" onClick={function(){setCardColor(c);}} style={{width:26,height:26,borderRadius:999,border:cardColor===c?"3px solid #111827":"1px solid #E5E7EB",background:c,cursor:"pointer"}}/>;})}<input type="color" value={cardColor} onChange={function(e){setCardColor(e.target.value);}} style={{width:34,height:30,border:"none",background:"transparent"}}/></div></label><button type="button" onClick={saveCard} style={{background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"11px",fontWeight:950,cursor:"pointer"}}>💾 {L("Salva carta")}</button></div></div>}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>{(shoppingCards||[]).map(function(c){var mainColor=c.color||((c.type||"")==="prepaid"?"#7F77DD":"#0F9F76");return <div key={c.id} style={{background:"linear-gradient(135deg,"+mainColor+",#101828 82%)",border:"1px solid rgba(255,255,255,.18)",borderRadius:26,padding:18,boxShadow:"0 18px 38px rgba(0,0,0,.24)",color:"#fff",position:"relative",overflow:"hidden",minHeight:250}}><div style={{position:"absolute",right:-45,top:-45,width:160,height:160,borderRadius:999,background:"rgba(255,255,255,.13)"}}/><div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:16,position:"relative"}}><div><div style={{fontSize:20,fontWeight:950,letterSpacing:.2}}>{c.name}</div><div style={{fontSize:12,opacity:.82,marginTop:6,letterSpacing:1.2}}>{c.code}</div></div><div style={{display:"flex",gap:6}}><button type="button" onClick={function(){editCard(c);}} style={{border:"none",background:"rgba(255,255,255,.22)",color:"#fff",borderRadius:10,padding:"7px 9px",height:36,cursor:"pointer"}}>✏️</button><button type="button" onClick={function(){deleteCard(c.id);}} style={{border:"none",background:"rgba(255,255,255,.22)",color:"#fff",borderRadius:10,padding:"7px 9px",height:36,cursor:"pointer"}}>🗑️</button></div></div>{cardCodePreview(c)}{String(editingCardId)===String(c.id)&&<div style={{marginTop:12,background:"rgba(255,255,255,.96)",color:"#111827",borderRadius:18,padding:12,position:"relative",zIndex:2}}><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 110px 54px",gap:8,alignItems:"end"}}><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Nome carta")}<input value={cardName} onChange={function(e){setCardName(e.target.value);}} placeholder={L("Nome carta")} style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}/></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Codice numerico")}<input value={cardCode} onChange={function(e){setCardCode(e.target.value.replace(/\D/g,""));}} placeholder={L("Codice numerico")} inputMode="numeric" style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}/></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Tipo codice")}<select value={cardCodeType} onChange={function(e){setCardCodeType(e.target.value);}} style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}><option value="barcode">{L("Codice a barre")}</option><option value="qr">{L("QR")}</option></select></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Colore")}<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:6}}>{["#0F9F76","#378ADD","#7F77DD","#EF9F27","#E24B4A","#111827"].map(function(c){return <button key={c} type="button" onClick={function(){setCardColor(c);}} style={{width:26,height:26,borderRadius:999,border:cardColor===c?"3px solid #111827":"1px solid #E5E7EB",background:c,cursor:"pointer"}}/>;})}<input type="color" value={cardColor} onChange={function(e){setCardColor(e.target.value);}} style={{width:34,height:30,border:"none",background:"transparent"}}/></div></label></div><div style={{display:"flex",gap:8,marginTop:10}}><button type="button" onClick={saveCard} style={{flex:1,background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontWeight:950,cursor:"pointer"}}>💾 {L("Salva modifica")}</button><button type="button" onClick={function(){setEditingCardId("");setCardName("");setCardCode("");setCardCodeType("barcode");setCardColor("#0F9F76");}} style={{background:"#fff",color:"#111827",border:"1px solid #E5E7EB",borderRadius:btnRadius,padding:"10px 12px",fontWeight:950,cursor:"pointer"}}>× {L("Annulla")}</button></div></div>}</div>;})}{!(shoppingCards||[]).length&&<div style={{fontSize:13,color:subC,background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:16}}>{L("Nessuna carta inserita")}</div>}</div>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>{(shoppingCards||[]).map(function(c){var mainColor=c.color||((c.type||"")==="prepaid"?"#7F77DD":"#0F9F76");return <div key={c.id} data-fainance-card-id={String(c.id)} style={{background:"linear-gradient(135deg,"+mainColor+",#101828 82%)",border:String(highlightedCardId)===String(c.id)?"3px solid "+confirmButtonColor:"1px solid rgba(255,255,255,.18)",borderRadius:26,padding:18,boxShadow:"0 18px 38px rgba(0,0,0,.24)",color:"#fff",position:"relative",overflow:"hidden",minHeight:250}}><div style={{position:"absolute",right:-45,top:-45,width:160,height:160,borderRadius:999,background:"rgba(255,255,255,.13)"}}/><div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:16,position:"relative"}}><div><div style={{fontSize:20,fontWeight:950,letterSpacing:.2}}>{c.name}</div><div style={{fontSize:12,opacity:.82,marginTop:6,letterSpacing:1.2}}>{c.code}</div></div><div style={{display:"flex",gap:6}}><button type="button" onClick={function(){editCard(c);}} style={{border:"none",background:"rgba(255,255,255,.22)",color:"#fff",borderRadius:10,padding:"7px 9px",height:36,cursor:"pointer"}}>✏️</button><button type="button" onClick={function(){deleteCard(c.id);}} style={{border:"none",background:"rgba(255,255,255,.22)",color:"#fff",borderRadius:10,padding:"7px 9px",height:36,cursor:"pointer"}}>🗑️</button></div></div>{cardCodePreview(c)}{String(editingCardId)===String(c.id)&&<div style={{marginTop:12,background:"rgba(255,255,255,.96)",color:"#111827",borderRadius:18,padding:12,position:"relative",zIndex:2}}><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 110px 54px",gap:8,alignItems:"end"}}><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Nome carta")}<input value={cardName} onChange={function(e){setCardName(e.target.value);}} placeholder={L("Nome carta")} style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}/></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Codice numerico")}<input value={cardCode} onChange={function(e){setCardCode(e.target.value.replace(/\D/g,""));}} placeholder={L("Codice numerico")} inputMode="numeric" style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}/></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Tipo codice")}<select value={cardCodeType} onChange={function(e){setCardCodeType(e.target.value);}} style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}><option value="barcode">{L("Codice a barre")}</option><option value="qr">{L("QR")}</option></select></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Colore")}<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:6}}>{["#0F9F76","#378ADD","#7F77DD","#EF9F27","#E24B4A","#111827"].map(function(c){return <button key={c} type="button" onClick={function(){setCardColor(c);}} style={{width:26,height:26,borderRadius:999,border:cardColor===c?"3px solid #111827":"1px solid #E5E7EB",background:c,cursor:"pointer"}}/>;})}<input type="color" value={cardColor} onChange={function(e){setCardColor(e.target.value);}} style={{width:34,height:30,border:"none",background:"transparent"}}/></div></label></div><div style={{display:"flex",gap:8,marginTop:10}}><button type="button" onClick={saveCard} style={{flex:1,background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontWeight:950,cursor:"pointer"}}>💾 {L("Salva modifica")}</button><button type="button" onClick={function(){setEditingCardId("");setCardName("");setCardCode("");setCardCodeType("barcode");setCardColor("#0F9F76");}} style={{background:"#fff",color:"#111827",border:"1px solid #E5E7EB",borderRadius:btnRadius,padding:"10px 12px",fontWeight:950,cursor:"pointer"}}>× {L("Annulla")}</button></div></div>}</div>;})}{!(shoppingCards||[]).length&&<div style={{fontSize:13,color:subC,background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:16}}>{L("Nessuna carta inserita")}</div>}</div>
       </div>}
     </div>;
   }
@@ -6230,14 +6803,14 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
   function createShareProject(name,description,icon,color){
     if(!canAddPlanItem("shareProjects",(shareProjects||[]).length,1)){setToast({text:upgradeMessage("shareProjects",(shareProjects||[]).length),type:"error",color:"#E24B4A",icon:"🚫"});return null;}
     var owner={id:"me",uid:userId,name:currentUser&&currentUser.name?currentUser.name:"Io",email:currentUser&&currentUser.email?normalizeEmail(currentUser.email):"",kind:"registered",type:"registered",role:"owner",status:"active"};
-    var p={id:String(Date.now()),name:(name||"").trim()||"Progetto Share",description:(description||"").trim(),icon:icon||"🤝",color:color||"#4F8FF7",ownerUid:userId,ownerName:owner.name,ownerEmail:owner.email,memberUids:userId?[userId]:[],participants:[owner],activities:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    var p={id:String(Date.now()),name:(name||"").trim()||"Progetto Share",description:(description||"").trim(),icon:icon||"🤝",color:color||"#4F8FF7",ownerUid:userId,ownerName:owner.name,ownerEmail:owner.email,memberUids:userId?[userId]:[],participants:[owner],activities:[],createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),updatedAtMs:Date.now()};
     setShareProjects(function(list){return[p].concat(list||[]);});
     syncShareProjectToCloud(p);
     setShareSelectedProjectId(p.id);
     setShareProjectTab("attivita");
     return p;
   }
-  function updateShareProject(pid,fn){setShareProjects(function(list){return(list||[]).map(function(p){if(String(p.id)!==String(pid))return p;var updated=fn(p);syncShareProjectToCloud(updated);return updated;});});}
+  function updateShareProject(pid,fn){setShareProjects(function(list){return(list||[]).map(function(p){if(String(p.id)!==String(pid))return p;var nowIso=new Date().toISOString();var updated={...fn(p),updatedAt:nowIso,updatedAtMs:Date.now()};syncShareProjectToCloud(updated);return updated;});});}
   function deleteShareProject(pid){setShareProjects(function(list){return(list||[]).filter(function(p){return String(p.id)!==String(pid);});});deleteDoc(doc(fbDb,"shareProjects",String(pid))).catch(function(){});if(String(shareSelectedProjectId)===String(pid))setShareSelectedProjectId(null);setToast("Progetto Share eliminato");}
   function SharePanel(){
     function L(s){return translateUiRuntimeText(s);}
@@ -6284,6 +6857,10 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
     var [shareVoiceListening,setShareVoiceListening]=useState(false);
     var [shareVoiceText,setShareVoiceText]=useState("");
     var [shareParticipantPopupOpen,setShareParticipantPopupOpen]=useState(false);
+    var shareAmountInputRef=useRef(null);
+    var settlementAmountInputRef=useRef(null);
+    useEffect(function(){if((shareExpenseFormOpen||shareEditingActivityId)&&shareExpenseMode==="simple")focusFainanceInput(shareAmountInputRef,120);},[shareExpenseFormOpen,shareEditingActivityId,shareExpenseMode]);
+    useEffect(function(){if(settlementPopupOpen)focusFainanceInput(settlementAmountInputRef,120);},[settlementPopupOpen]);
     var sinp={width:"100%",borderRadius:10,border:"1px solid "+borderC,padding:"9px 11px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:textC,boxSizing:"border-box"};
     useEffect(function(){setProjectNameDraft(selected?selected.name||"":"");setProjectDescDraft(selected?selected.description||"":"");setProjectIconDraft(selected?(selected.icon||"🤝"):"🤝");setProjectColorDraft(selected?(selected.color||"#4F8FF7"):"#4F8FF7");setProjectEditingDetails(false);setShareEditingActivityId(null);},[selected?selected.id:null]);
     useEffect(function(){var ids=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(function(list){var clean=(list||[]).filter(function(id){return ids.includes(id);});return clean.length?clean:ids;});},[selected?selected.id:null,activeParticipants.map(function(p){return p.id;}).join("|")]);
@@ -6298,7 +6875,26 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
       setShareExpenseFormOpen(true);
       if(mode==="voice")setTimeout(function(){startShareVoiceCommand();},250);
     }
-    useEffect(function(){function handler(){var mode="simple";try{mode=localStorage.getItem("fainance_share_open_expense_mode")||"simple";localStorage.removeItem("fainance_share_open_expense_mode");}catch(e){}openShareExpensePopup(mode);}try{window.addEventListener("fainance-open-share-expense",handler);}catch(e){}return function(){try{window.removeEventListener("fainance-open-share-expense",handler);}catch(e){}};},[]);
+    function consumePendingShareWidgetAction(){
+      var payload:any=null;
+      try{var raw=localStorage.getItem("fainance_share_widget_action_v1")||"";if(raw)payload=JSON.parse(raw);}catch(e){}
+      try{if(!payload){var oldMode=localStorage.getItem("fainance_share_open_expense_mode")||"";if(oldMode)payload={mode:oldMode,ts:Date.now()};}}catch(e){}
+      if(!payload)return false;
+      if(payload.ts&&Date.now()-Number(payload.ts)>60000){try{localStorage.removeItem("fainance_share_widget_action_v1");localStorage.removeItem("fainance_share_open_expense_mode");}catch(e){}return false;}
+      var mode=String(payload.mode||"simple");
+      var projectId=String(payload.projectId||payload.shareProjectId||"");
+      if(projectId&&(!selected||String(selected.id)!==projectId)){setShareSelectedProjectId(projectId);return false;}
+      if(!selected&&!(projects||[]).length)return false;
+      try{localStorage.removeItem("fainance_share_widget_action_v1");localStorage.removeItem("fainance_share_open_expense_mode");}catch(e){}
+      openShareExpensePopup(mode);
+      return true;
+    }
+    useEffect(function(){
+      function handler(){consumePendingShareWidgetAction();}
+      try{window.addEventListener("fainance-open-share-expense",handler);}catch(e){}
+      var timers=[80,260,650,1200].map(function(ms){return setTimeout(handler,ms);});
+      return function(){try{window.removeEventListener("fainance-open-share-expense",handler);}catch(e){}timers.forEach(function(t){clearTimeout(t);});};
+    },[selected?selected.id:null,(projects||[]).map(function(p){return String(p.id);}).join("|"),activeParticipants.map(function(p){return String(p.id);}).join("|")]);
 
     
     function shareReceiptCurrentDefaults(){
@@ -6517,34 +7113,53 @@ function parseShareVoiceCommand(text){
       }
     }
     function startShareVoiceCommand(){
-      async function nativeVoice(){
-        var speech:any=await import("@capacitor-community/speech-recognition");
-        var SR=speech.SpeechRecognition||speech.default||speech;
-        if(!SR||!SR.start)throw new Error("SpeechRecognition plugin non disponibile");
-        try{if(SR.requestPermissions)await SR.requestPermissions();}catch(e){}
-        setShareVoiceListening(true);
-        if(SR.addListener){
-          try{await SR.removeAllListeners();}catch(e){}
-          try{SR.addListener("partialResults",function(data){var arr=(data&&data.matches)||[];var txt=String(arr[0]||"").trim();if(txt){setShareVoiceText(txt);parseShareVoiceCommand(txt);}});}catch(e){}
-        }
-        var res:any=await SR.start({language:(lang==="en"?"en-US":lang==="es"?"es-ES":lang==="fr"?"fr-FR":lang==="de"?"de-DE":lang==="pt"?"pt-PT":"it-IT"),maxResults:1,partialResults:true,popup:false});
-        var txt=String((res&&res.matches&&res.matches[0])||(res&&res.value)||"").trim();
-        if(txt){setShareVoiceText(txt);parseShareVoiceCommand(txt);}
-        setTimeout(function(){setShareVoiceListening(false);},2500);
-      }
+      var language=lang==="en"?"en-US":lang==="es"?"es-ES":lang==="fr"?"fr-FR":lang==="de"?"de-DE":lang==="pt"?"pt-PT":lang==="pl"?"pl-PL":lang==="nl"?"nl-NL":lang==="ro"?"ro-RO":lang==="el"?"el-GR":"it-IT";
+      function applyVoiceText(txt){txt=String(txt||"").trim();if(!txt)return;setShareVoiceText(txt);parseShareVoiceCommand(txt);}
+      var safetyTimer:any=null;
+      function stopSafetyTimer(){if(safetyTimer){clearTimeout(safetyTimer);safetyTimer=null;}}
       try{
-        var isNative=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());
-        if(isNative){nativeVoice().catch(function(){setShareVoiceListening(false);setToast(L("Comando vocale non riuscito. Riprova."));});return;}
-        var SR=(window.SpeechRecognition||window.webkitSpeechRecognition);
-        if(!SR){setToast(L("Comando vocale non disponibile su questo dispositivo."));return;}
-        var rec=new SR();rec.lang=(lang==="en"?"en-US":lang==="es"?"es-ES":lang==="fr"?"fr-FR":lang==="de"?"de-DE":lang==="pt"?"pt-PT":"it-IT");rec.interimResults=false;rec.maxAlternatives=1;
-        rec.onstart=function(){setShareVoiceListening(true);};
-        rec.onerror=function(){setShareVoiceListening(false);setToast(L("Comando vocale non riuscito. Riprova."));};
-        rec.onend=function(){setShareVoiceListening(false);};
-        rec.onresult=function(ev){var txt=(ev.results&&ev.results[0]&&ev.results[0][0]&&ev.results[0][0].transcript)||"";setShareVoiceText(txt);parseShareVoiceCommand(txt);};
+        if(window&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
+          setShareVoiceListening(true);
+          (async function(){
+            try{
+              var cap:any=(window as any).Capacitor;
+              var SpeechRecognition:any=cap&&cap.Plugins?cap.Plugins.SpeechRecognition:null;
+              if(!SpeechRecognition){var speech:any=await import("@capacitor-community/speech-recognition");SpeechRecognition=speech.SpeechRecognition||speech.default||speech;}
+              if(!SpeechRecognition||!SpeechRecognition.start)throw new Error("SpeechRecognition plugin non disponibile");
+              try{if(SpeechRecognition.requestPermissions)await SpeechRecognition.requestPermissions();else if(SpeechRecognition.requestPermission)await SpeechRecognition.requestPermission();}catch(e){}
+              try{if(SpeechRecognition.removeAllListeners)await SpeechRecognition.removeAllListeners();}catch(e){}
+              if(SpeechRecognition.addListener){
+                try{await SpeechRecognition.addListener("partialResults",function(data:any){var matches=(data&&data.matches)||[];applyVoiceText(matches[0]||data?.value||"");});}catch(e){}
+                try{await SpeechRecognition.addListener("listeningState",function(data:any){if(data&&data.status==="stopped")setShareVoiceListening(false);});}catch(e){}
+              }
+              safetyTimer=setTimeout(function(){setShareVoiceListening(false);},13000);
+              var res:any=await SpeechRecognition.start({language:language,maxResults:3,partialResults:true,popup:false,prompt:"Parla ora",timeoutSeconds:12});
+              var nativeText=(res&&res.matches&&res.matches[0])||(res&&res.value)||"";
+              applyVoiceText(nativeText);
+            }catch(err){setToast({text:L("Errore riconoscimento vocale"),type:"error",color:"#E24B4A",icon:"🎙️"});}
+            finally{stopSafetyTimer();setShareVoiceListening(false);}
+          })();
+          return;
+        }
+        var SpeechRecognition:any=(window as any).SpeechRecognition||(window as any).webkitSpeechRecognition;
+        if(!SpeechRecognition){setToast({text:L("Riconoscimento vocale non disponibile su questo dispositivo"),type:"warning",color:"#EF9F27",icon:"🎙️"});return;}
+        var rec=new SpeechRecognition();
+        rec.lang=language;rec.interimResults=true;rec.continuous=true;rec.maxAlternatives=1;
+        var best="";
+        rec.onresult=function(ev:any){
+          var text="";
+          for(var i=0;i<ev.results.length;i++){text+=String(ev.results[i][0]&&ev.results[i][0].transcript||"")+" ";}
+          best=text.trim()||best;
+          applyVoiceText(best);
+        };
+        rec.onerror=function(){stopSafetyTimer();setShareVoiceListening(false);};
+        rec.onend=function(){stopSafetyTimer();setShareVoiceListening(false);if(best)applyVoiceText(best);};
+        setShareVoiceListening(true);
+        safetyTimer=setTimeout(function(){try{rec.stop();}catch(e){}},12000);
         rec.start();
-      }catch(e){setShareVoiceListening(false);setToast(L("Comando vocale non disponibile su questo dispositivo."));}
+      }catch(e){stopSafetyTimer();setShareVoiceListening(false);setToast({text:L("Errore riconoscimento vocale"),type:"error",color:"#E24B4A",icon:"🎙️"});}
     }
+
     function resetNewProjectDraft(){setNewProjectName("");setNewProjectDesc("");setNewProjectIcon("🤝");setNewProjectColor("#4F8FF7");}
     function projectTheme(p){return {icon:(p&&p.icon)||"🤝",color:(p&&p.color)||"#4F8FF7"};}
     var shareProjectIcons=["🤝","🏠","✈️","🍽️","👨‍👩‍👧‍👦","🎉","🚗","💼"];
@@ -6764,8 +7379,8 @@ function parseShareVoiceCommand(text){
         </div>
 {shareProjectTab==="attivita"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Btn onClick={function(){setShareEditingActivityId(null);openShareExpensePopup("simple");}} bg={confirmButtonColor} style={{width:"100%",padding:"14px 16px",fontSize:15,fontWeight:950}}>＋ {L("Aggiungi spesa")}</Btn>
-          {(shareExpenseFormOpen||shareEditingActivityId)&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)closeShareExpensePopup();}}><div id="share_expense_form" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L(shareEditingActivityId?"Modifica spesa condivisa":"+ Spesa condivisa")}</div><div style={{display:"flex",gap:8,alignItems:"center"}}>{shareEditingActivityId&&<button onClick={resetShareExpenseForm} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:9,padding:"6px 8px",fontSize:12,color:subC,cursor:"pointer"}}>{L("Annulla modifica")}</button>}<button onClick={closeShareExpensePopup} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>{[{id:"simple",label:L("Spesa semplice")},{id:"receipt",label:L("Scontrino")},{id:"voice",label:L("Vocale")}].map(function(tb){var active=shareExpenseMode===tb.id;return <button key={tb.id} type="button" onClick={function(){setShareReceiptReady(false);if(tb.id==="receipt"){startShareReceiptFlow();return;}setShareExpenseMode(tb.id);setShareReceiptOpen(false);setShareExpenseFormOpen(true);if(tb.id==="voice")setTimeout(function(){startShareVoiceCommand();},150);}} style={{border:"1px solid "+(active?secondaryButtonColor:borderC),background:active?secondaryButtonColor:(dark?"#333":"#f0f0f0"),color:active?"#fff":textC,borderRadius:btnRadius,padding:"10px 6px",fontSize:11,fontWeight:900,cursor:"pointer"}}>{tb.label}</button>;})}</div>{shareReceiptBusy&&<div style={{border:"1px solid "+borderC,borderRadius:16,padding:12,background:dark?"#252535":"#f9f9f9",fontSize:13,fontWeight:800,color:textC,marginBottom:10}}>🧾 {L("Sto leggendo lo scontrino...")}</div>}{(shareExpenseMode!=="receipt"||shareReceiptReady||String(shareAmount||"").trim()||String(shareDesc||"").trim())&&<>{shareExpenseMode==="voice"&&<div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,marginBottom:10}}><Btn onClick={startShareVoiceCommand} bg={secondaryButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950}}>🎙️ {L(shareVoiceListening?"Ascolto in corso...":"Avvia comando vocale")}</Btn>{shareVoiceText&&<div style={{fontSize:12,color:subC,marginTop:8,lineHeight:1.35}}>{shareVoiceText}</div>}</div>}<div style={{background:"linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)",borderRadius:18,padding:"14px 14px",display:"grid",gridTemplateColumns:"44px minmax(0,1fr)",gap:8,alignItems:"center",color:"#fff",boxShadow:dark?"none":"0 10px 24px rgba(83,74,183,.12)",marginBottom:10}}><div style={{width:34,height:34,borderRadius:"50%",background:"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",color:"#E24B4A",fontSize:18,boxShadow:"0 6px 16px rgba(0,0,0,.12)"}}>💳</div><div style={{minWidth:0,textAlign:"center"}}><div style={{fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:.8,color:"rgba(255,255,255,.70)",marginBottom:2}}>{L("Importo")}</div><div style={{position:"relative"}}>{!String(shareAmount||"").trim()&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,fontWeight:950,color:"#fff",lineHeight:1,pointerEvents:"none"}}>0,00</div>}<input type="text" inputMode="decimal" placeholder="" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={{width:"100%",border:"none",background:"transparent",padding:0,textAlign:"center",fontSize:34,fontWeight:950,color:"#fff",WebkitTextFillColor:"#fff",outline:"none",lineHeight:1}}/></div>{!String(shareAmount||"").trim()&&<div style={{fontSize:13,color:"rgba(255,255,255,.70)",fontWeight:600,marginTop:4}}>{L("Tocca per modificare")}</div>}</div></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("Descrizione")}</label><textarea placeholder={L("Descrizione")} value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={{...sinp,minHeight:72,height:72,resize:"none",padding:"11px 12px",lineHeight:1.25,fontFamily:"inherit"}}/></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:8}}>{L("Data")}</label><div style={{display:"grid",gridTemplateColumns:".58fr .58fr .92fr 2.28fr",gap:5,alignItems:"center"}}><button type="button" onClick={function(){setShareDate(todayStr());}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===todayStr()?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===todayStr()?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===todayStr()?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.today}</button><button type="button" onClick={function(){setShareDate(dateOffset(1));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(1)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(1)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(1)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.yesterday}</button><button type="button" onClick={function(){setShareDate(dateOffset(2));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(2)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(2)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(2)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.twoDaysAgo}</button><label style={{height:38,borderRadius:12,border:"1px solid "+(dark?"#3f3f52":"#E4E2F2"),background:dark?"#252535":"#fff",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",padding:"0 5px",gap:4,cursor:"pointer"}}><span style={{pointerEvents:"none",fontWeight:850,color:textC}}>{fmtDate(shareDate,dateFmt)}</span><span style={{pointerEvents:"none",fontSize:17}}>📅</span><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}}/></label></div></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.4fr",gap:8,marginTop:8}}><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagato da")} {personLabel(p)}</option>;})}</select><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{[{id:"equal",label:L("Equa")},{id:"percent",label:L("Percentuali")},{id:"amount",label:L("Importi")}].map(function(m){return <button key={m.id} onClick={function(){setSplitMode(m.id);setSplitDraft({});setShareSplitTouched(false);}} style={{border:"1px solid "+(splitMode===m.id?confirmButtonColor:borderC),background:splitMode===m.id?confirmButtonColor:"transparent",color:splitMode===m.id?"#fff":textC,borderRadius:10,padding:"8px 6px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{m.label}</button>;})}</div></div><div style={{marginTop:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:12,fontWeight:900,color:textC}}>{L("Condivisa con")}</div><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:subC,cursor:"pointer"}}><input type="checkbox" checked={activeParticipants.length>0&&shareParticipantIds.length===activeParticipants.length} onChange={function(){var all=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(shareParticipantIds.length===all.length?[]:all);}}/>{L("Tutti")}</label></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{activeParticipants.map(function(p){var checked=shareParticipantIds.includes(p.id);return <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,border:"1px solid "+(checked?confirmButtonColor:borderC),background:checked?confirmButtonColor+"22":"transparent",borderRadius:20,padding:"5px 9px",fontSize:12,color:checked?confirmButtonColor:textC,cursor:"pointer"}}><input type="checkbox" checked={checked} onChange={function(){setShareParticipantIds(function(list){return list.includes(p.id)?list.filter(function(x){return x!==p.id;}):list.concat([p.id]);});}}/>{personLabel(p)}</label>;})}</div></div>{splitMode!=="equal"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginTop:8}}>{activeParticipants.filter(function(p){return shareParticipantIds.includes(p.id);}).map(function(p){return <div key={p.id}><label style={{fontSize:11,color:subC}}>{personLabel(p)} {splitMode==="percent"?"%":"€"}</label><input type="number" value={splitDraft[p.id]||""} onChange={function(e){var v=e.target.value;setShareSplitTouched(true);setSplitDraft(function(d){return{...d,[p.id]:v};});}} style={sinp}/></div>;})}</div>}{showShareCheck&&<div style={{marginTop:10,background:dark?"#2f2a1e":"#fff8e6",border:"1px solid #F2C94C77",borderRadius:12,padding:"9px 10px",fontSize:12,color:dark?"#F2C94C":"#8A6500",fontWeight:600}}>💡 {shareCheck.message}</div>}<div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontSize:12,color:subC}}>{L("Quote")}: {Object.keys(computeShares()).map(function(id){var p=participants.find(function(x){return x.id===id;});return (p?personLabel(p):id)+" "+fmt(computeShares()[id]);}).join(" · ")}</div><Btn onClick={addSharedActivity} bg={showShareCheck?"#999":confirmButtonColor} disabled={showShareCheck}>{L(shareEditingActivityId?"Aggiorna spesa":"Salva spesa")}</Btn></div></>}</div></div>}
-          <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Attività del progetto")}</div>{(selected.activities||[]).length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"18px 0"}}>{L("Nessuna attività")}</div>}{(selected.activities||[]).map(function(a){var paid=participants.find(function(p){return p.id===a.paidBy;});var from=participants.find(function(p){return p.id===a.from;});var to=participants.find(function(p){return p.id===a.to;});var editing=shareEditingActivityId===a.id&&a.kind!=="settlement";return <div key={a.id} style={{borderBottom:"1px solid "+borderC,padding:"10px 0"}}>{editing?<div style={{background:dark?"#1e1e30":"#F7F8FF",border:"1px solid "+confirmButtonColor+"55",borderRadius:14,padding:12,display:"flex",flexDirection:"column",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Modifica spesa Share")}</div><button onClick={resetShareExpenseForm} style={{background:"transparent",border:"none",color:subC,cursor:"pointer",fontSize:18}}>×</button></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr 1fr",gap:8}}><input type="number" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={sinp} placeholder={L("Importo")}/><input value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={sinp} placeholder={L("Descrizione")}/><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={sinp}/></div><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagata da")} {personLabel(p)}</option>;})}</select><div style={{fontSize:11,color:subC}}>{L("La modifica viene salvata direttamente su questa transazione.")}</div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn onClick={resetShareExpenseForm} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn><Btn onClick={addSharedActivity} bg={confirmButtonColor}>{L("Salva modifica")}</Btn></div></div>:<div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{fontSize:18}}>{a.kind==="settlement"?"↔️":"🧾"}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.kind==="settlement"?((from?personLabel(from):a.from)+" "+L("ha pagato")+" "+(to?personLabel(to):a.to)):a.desc}</div><div style={{fontSize:11,color:subC}}>{fmtDate(a.date,dateFmt)} · {a.time||"--:--"}</div>{a.kind!=="settlement"&&<div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}><div style={{fontSize:11,color:textC,fontWeight:700}}>{L("Pagata da")}: {paid?personLabel(paid):(a.paidBy||"—")}</div><div style={{fontSize:11,color:subC}}>{L("Condivisa con")}: {Object.keys(a.shares||{}).map(function(pid){var pp=participants.find(function(x){return x.id===pid;});return (pp?personLabel(pp):pid)+" "+fmt(a.shares[pid]);}).join(" · ")||"—"}</div></div>}</div><div style={{fontSize:13,fontWeight:900,color:a.kind==="settlement"?confirmButtonColor:expenseColor}}>{fmt(a.amount)}</div>{a.kind!=="settlement"&&<button onClick={function(){startEditSharedActivity(a);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",borderRadius:9,padding:"5px 8px",cursor:"pointer",color:confirmButtonColor,fontSize:12,fontWeight:800}}>{L("Modifica")}</button>}<button onClick={function(){deleteActivity(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:subC}}>×</button></div>}</div>;})}</div>
+          {(shareExpenseFormOpen||shareEditingActivityId)&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)closeShareExpensePopup();}}><div id="share_expense_form" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L(shareEditingActivityId?"Modifica spesa condivisa":"+ Spesa condivisa")}</div><div style={{display:"flex",gap:8,alignItems:"center"}}>{shareEditingActivityId&&<button onClick={resetShareExpenseForm} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:9,padding:"6px 8px",fontSize:12,color:subC,cursor:"pointer"}}>{L("Annulla modifica")}</button>}<button onClick={closeShareExpensePopup} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>{[{id:"simple",label:L("Spesa semplice")},{id:"receipt",label:L("Scontrino")},{id:"voice",label:L("Vocale")}].map(function(tb){var active=shareExpenseMode===tb.id;return <button key={tb.id} type="button" onClick={function(){setShareReceiptReady(false);if(tb.id==="receipt"){startShareReceiptFlow();return;}setShareExpenseMode(tb.id);setShareReceiptOpen(false);setShareExpenseFormOpen(true);if(tb.id==="voice")setTimeout(function(){startShareVoiceCommand();},150);}} style={{border:"1px solid "+(active?secondaryButtonColor:borderC),background:active?secondaryButtonColor:(dark?"#333":"#f0f0f0"),color:active?"#fff":textC,borderRadius:btnRadius,padding:"10px 6px",fontSize:11,fontWeight:900,cursor:"pointer"}}>{tb.label}</button>;})}</div>{shareReceiptBusy&&<div style={{border:"1px solid "+borderC,borderRadius:16,padding:12,background:dark?"#252535":"#f9f9f9",fontSize:13,fontWeight:800,color:textC,marginBottom:10}}>🧾 {L("Sto leggendo lo scontrino...")}</div>}{(shareExpenseMode!=="receipt"||shareReceiptReady||String(shareAmount||"").trim()||String(shareDesc||"").trim())&&<>{shareExpenseMode==="voice"&&<div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,marginBottom:10}}><Btn onClick={startShareVoiceCommand} bg={secondaryButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950}}>🎙️ {L(shareVoiceListening?"Ascolto in corso...":"Avvia comando vocale")}</Btn>{shareVoiceText&&<div style={{fontSize:12,color:subC,marginTop:8,lineHeight:1.35}}>{shareVoiceText}</div>}</div>}<div style={{background:"linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)",borderRadius:18,padding:"14px 14px",display:"grid",gridTemplateColumns:"44px minmax(0,1fr)",gap:8,alignItems:"center",color:"#fff",boxShadow:dark?"none":"0 10px 24px rgba(83,74,183,.12)",marginBottom:10}}><div style={{width:34,height:34,borderRadius:"50%",background:"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",color:"#E24B4A",fontSize:18,boxShadow:"0 6px 16px rgba(0,0,0,.12)"}}>💳</div><div style={{minWidth:0,textAlign:"center"}}><div style={{fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:.8,color:"rgba(255,255,255,.70)",marginBottom:2}}>{L("Importo")}</div><div style={{position:"relative"}}>{!String(shareAmount||"").trim()&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,fontWeight:950,color:"#fff",lineHeight:1,pointerEvents:"none"}}>_,__</div>}<input ref={shareAmountInputRef} autoFocus type="text" inputMode="decimal" placeholder="" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={{width:"100%",border:"none",background:"transparent",padding:0,textAlign:"center",fontSize:34,fontWeight:950,color:"#fff",WebkitTextFillColor:"#fff",outline:"none",lineHeight:1}}/></div>{!String(shareAmount||"").trim()&&<div style={{fontSize:13,color:"rgba(255,255,255,.70)",fontWeight:600,marginTop:4}}>{L("Inserisci l\'importo")}</div>}</div></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("Descrizione")}</label><textarea placeholder={L("Descrizione")} value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={{...sinp,minHeight:72,height:72,resize:"none",padding:"11px 12px",lineHeight:1.25,fontFamily:"inherit"}}/></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:8}}>{L("Data")}</label><div style={{display:"grid",gridTemplateColumns:".58fr .58fr .92fr 2.28fr",gap:5,alignItems:"center"}}><button type="button" onClick={function(){setShareDate(todayStr());}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===todayStr()?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===todayStr()?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===todayStr()?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.today}</button><button type="button" onClick={function(){setShareDate(dateOffset(1));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(1)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(1)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(1)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.yesterday}</button><button type="button" onClick={function(){setShareDate(dateOffset(2));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(2)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(2)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(2)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.twoDaysAgo}</button><label style={{height:38,borderRadius:12,border:"1px solid "+(dark?"#3f3f52":"#E4E2F2"),background:dark?"#252535":"#fff",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",padding:"0 5px",gap:4,cursor:"pointer"}}><span style={{pointerEvents:"none",fontWeight:850,color:textC}}>{fmtDate(shareDate,dateFmt)}</span><span style={{pointerEvents:"none",fontSize:17}}>📅</span><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}}/></label></div></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.4fr",gap:8,marginTop:8}}><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagato da")} {personLabel(p)}</option>;})}</select><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{[{id:"equal",label:L("Equa")},{id:"percent",label:L("Percentuali")},{id:"amount",label:L("Importi")}].map(function(m){return <button key={m.id} onClick={function(){setSplitMode(m.id);setSplitDraft({});setShareSplitTouched(false);}} style={{border:"1px solid "+(splitMode===m.id?confirmButtonColor:borderC),background:splitMode===m.id?confirmButtonColor:"transparent",color:splitMode===m.id?"#fff":textC,borderRadius:10,padding:"8px 6px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{m.label}</button>;})}</div></div><div style={{marginTop:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:12,fontWeight:900,color:textC}}>{L("Condivisa con")}</div><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:subC,cursor:"pointer"}}><input type="checkbox" checked={activeParticipants.length>0&&shareParticipantIds.length===activeParticipants.length} onChange={function(){var all=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(shareParticipantIds.length===all.length?[]:all);}}/>{L("Tutti")}</label></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{activeParticipants.map(function(p){var checked=shareParticipantIds.includes(p.id);return <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,border:"1px solid "+(checked?confirmButtonColor:borderC),background:checked?confirmButtonColor+"22":"transparent",borderRadius:20,padding:"5px 9px",fontSize:12,color:checked?confirmButtonColor:textC,cursor:"pointer"}}><input type="checkbox" checked={checked} onChange={function(){setShareParticipantIds(function(list){return list.includes(p.id)?list.filter(function(x){return x!==p.id;}):list.concat([p.id]);});}}/>{personLabel(p)}</label>;})}</div></div>{splitMode!=="equal"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginTop:8}}>{activeParticipants.filter(function(p){return shareParticipantIds.includes(p.id);}).map(function(p){return <div key={p.id}><label style={{fontSize:11,color:subC}}>{personLabel(p)} {splitMode==="percent"?"%":"€"}</label><input type="text" inputMode={splitMode==="percent"?"numeric":"decimal"} placeholder={splitMode==="percent"?"%":"_,__"} value={splitDraft[p.id]||""} onChange={function(e){var v=e.target.value;setShareSplitTouched(true);setSplitDraft(function(d){return{...d,[p.id]:v};});}} style={sinp}/></div>;})}</div>}{showShareCheck&&<div style={{marginTop:10,background:dark?"#2f2a1e":"#fff8e6",border:"1px solid #F2C94C77",borderRadius:12,padding:"9px 10px",fontSize:12,color:dark?"#F2C94C":"#8A6500",fontWeight:600}}>💡 {shareCheck.message}</div>}<div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontSize:12,color:subC}}>{L("Quote")}: {Object.keys(computeShares()).map(function(id){var p=participants.find(function(x){return x.id===id;});return (p?personLabel(p):id)+" "+fmt(computeShares()[id]);}).join(" · ")}</div><Btn onClick={addSharedActivity} bg={showShareCheck?"#999":confirmButtonColor} disabled={showShareCheck}>{L(shareEditingActivityId?"Aggiorna spesa":"Salva spesa")}</Btn></div></>}</div></div>}
+          <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Attività del progetto")}</div>{(selected.activities||[]).length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"18px 0"}}>{L("Nessuna attività")}</div>}{(selected.activities||[]).map(function(a){var paid=participants.find(function(p){return p.id===a.paidBy;});var from=participants.find(function(p){return p.id===a.from;});var to=participants.find(function(p){return p.id===a.to;});var editing=shareEditingActivityId===a.id&&a.kind!=="settlement";return <div key={a.id} style={{borderBottom:"1px solid "+borderC,padding:"10px 0"}}>{editing?<div style={{background:dark?"#1e1e30":"#F7F8FF",border:"1px solid "+confirmButtonColor+"55",borderRadius:14,padding:12,display:"flex",flexDirection:"column",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Modifica spesa Share")}</div><button onClick={resetShareExpenseForm} style={{background:"transparent",border:"none",color:subC,cursor:"pointer",fontSize:18}}>×</button></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr 1fr",gap:8}}><input type="text" inputMode="decimal" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={sinp} placeholder="_,__"/><input value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={sinp} placeholder={L("Descrizione")}/><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={sinp}/></div><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagata da")} {personLabel(p)}</option>;})}</select><div style={{fontSize:11,color:subC}}>{L("La modifica viene salvata direttamente su questa transazione.")}</div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn onClick={resetShareExpenseForm} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn><Btn onClick={addSharedActivity} bg={confirmButtonColor}>{L("Salva modifica")}</Btn></div></div>:<div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{fontSize:18}}>{a.kind==="settlement"?"↔️":"🧾"}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.kind==="settlement"?((from?personLabel(from):a.from)+" "+L("ha pagato")+" "+(to?personLabel(to):a.to)):a.desc}</div><div style={{fontSize:11,color:subC}}>{fmtDate(a.date,dateFmt)} · {a.time||"--:--"}</div>{a.kind!=="settlement"&&<div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}><div style={{fontSize:11,color:textC,fontWeight:700}}>{L("Pagata da")}: {paid?personLabel(paid):(a.paidBy||"—")}</div><div style={{fontSize:11,color:subC}}>{L("Condivisa con")}: {Object.keys(a.shares||{}).map(function(pid){var pp=participants.find(function(x){return x.id===pid;});return (pp?personLabel(pp):pid)+" "+fmt(a.shares[pid]);}).join(" · ")||"—"}</div></div>}</div><div style={{fontSize:13,fontWeight:900,color:a.kind==="settlement"?confirmButtonColor:expenseColor}}>{fmt(a.amount)}</div>{a.kind!=="settlement"&&<button onClick={function(){startEditSharedActivity(a);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",borderRadius:9,padding:"5px 8px",cursor:"pointer",color:confirmButtonColor,fontSize:12,fontWeight:800}}>{L("Modifica")}</button>}<button onClick={function(){deleteActivity(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:subC}}>×</button></div>}</div>;})}</div>
         </div>}
         {shareProjectTab==="partecipanti"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,boxShadow:dark?"none":"0 8px 24px rgba(15,23,42,.06)"}}>
@@ -6784,7 +7399,7 @@ function parseShareVoiceCommand(text){
           </div></div></div>}
         </div>}
         {shareProjectTab==="riassunto"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Riassunto")}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10}}><StatCard title={L("Spese progetto")} value={fmt(totalSpent)} color={expenseColor} bg={expenseColor+"22"}/><StatCard title={L("Mi devono")} value={fmt(Math.max(0,myBalance))} color={incomeColor} bg={incomeColor+"22"}/><StatCard title={L("Devo")} value={fmt(Math.max(0,-myBalance))} color={expenseColor} bg={expenseColor+"22"}/></div></div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
-        {settlementPopupOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setSettlementPopupOpen(false);}}><div style={{background:dark?"#181827":"#fff",border:"1px solid "+borderC,borderRadius:22,padding:16,width:"100%",maxWidth:430,boxShadow:dark?"none":"0 18px 42px rgba(15,23,42,.18)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div><div style={{fontSize:17,fontWeight:950,color:textC}}>↔️ {L("Registra saldo/rimborso")}</div><div style={{fontSize:12,color:subC,marginTop:3}}>{L("Registra un pagamento tra partecipanti del progetto.")}</div></div><button onClick={function(){setSettlementPopupOpen(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Da")}</label><select value={settlementFrom} onChange={function(e){setSettlementFrom(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("A")}</label><select value={settlementTo} onChange={function(e){setSettlementTo(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}><div style={{background:dark?"#1f1f31":"#FFF7F2",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Importo")}</label><input type="number" placeholder="0,00" value={settlementAmount} onChange={function(e){setSettlementAmount(e.target.value);}} style={{...sinp,fontSize:18,fontWeight:900}}/></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Data")}</label><input type="date" value={settlementDate} onChange={function(e){setSettlementDate(e.target.value);}} style={sinp}/></div></div><Btn onClick={function(){if(!settlementAmount||parseFloat(settlementAmount)<=0){setToast(L("Inserisci un importo valido."));return;}if(String(settlementFrom)===String(settlementTo||"me")){setToast({text:L("Non puoi registrare un saldo/rimborso con la stessa persona in Da e A."),type:"error",color:"#E24B4A",icon:"🚫"});return;}addSettlement();setSettlementPopupOpen(false);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra")}</Btn></div></div>}{shareProjectTab==="saldi"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
+        {settlementPopupOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setSettlementPopupOpen(false);}}><div style={{background:dark?"#181827":"#fff",border:"1px solid "+borderC,borderRadius:22,padding:16,width:"100%",maxWidth:430,boxShadow:dark?"none":"0 18px 42px rgba(15,23,42,.18)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div><div style={{fontSize:17,fontWeight:950,color:textC}}>↔️ {L("Registra saldo/rimborso")}</div><div style={{fontSize:12,color:subC,marginTop:3}}>{L("Registra un pagamento tra partecipanti del progetto.")}</div></div><button onClick={function(){setSettlementPopupOpen(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Da")}</label><select value={settlementFrom} onChange={function(e){setSettlementFrom(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("A")}</label><select value={settlementTo} onChange={function(e){setSettlementTo(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}><div style={{background:dark?"#1f1f31":"#FFF7F2",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Importo")}</label><input ref={settlementAmountInputRef} autoFocus type="text" inputMode="decimal" placeholder="_,__" value={settlementAmount} onChange={function(e){setSettlementAmount(e.target.value);}} style={{...sinp,fontSize:18,fontWeight:900}}/></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Data")}</label><input type="date" value={settlementDate} onChange={function(e){setSettlementDate(e.target.value);}} style={sinp}/></div></div><Btn onClick={function(){if(!settlementAmount||parseFloat(settlementAmount)<=0){setToast(L("Inserisci un importo valido."));return;}if(String(settlementFrom)===String(settlementTo||"me")){setToast({text:L("Non puoi registrare un saldo/rimborso con la stessa persona in Da e A."),type:"error",color:"#E24B4A",icon:"🚫"});return;}addSettlement();setSettlementPopupOpen(false);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra")}</Btn></div></div>}{shareProjectTab==="saldi"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
       </>}
     </div>;
   }
@@ -6833,15 +7448,18 @@ function parseShareVoiceCommand(text){
       <div style={{fontSize:11,color:subC,marginTop:12,lineHeight:1.35}}>{L("Se non ricordi il PIN, sblocca con biometria o password account e poi imposta un nuovo PIN in Sicurezza.")}</div>
     </div></div>;
   }
+  var movementEntryScreen=tab==="spese"&&speseSubTab==="add";
+  var showFloatingAIButton=!!aiFloatingEnabled&&tab!=="settings"&&!movementEntryScreen;
+
   return <AppCtx.Provider value={ctxValue}>
     {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
     isMobile?
     <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden"}}>
       {(showAppSummaryHeader&&!(tab==="consulenteAI"&&aiTab==="chat"))&&<div style={{background:headerBg,borderBottom:"1px solid "+borderC,padding:"10px 16px 8px",flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:subC,marginBottom:4}}>fAInance</div><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Uscite")}</div><div style={{fontSize:19,fontWeight:600,color:expenseColor}}>{fmt(curMonthExp)}</div></div><div style={{textAlign:"center"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Saldo")}</div><div style={{fontSize:17,fontWeight:600,color:BALANCE_COLOR}}>{fmt(curMonthInc-curMonthExp)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Entrate")}</div><div style={{fontSize:19,fontWeight:600,color:incomeColor}}>{fmt(curMonthInc)}</div></div></div></div>}
-      <TopAdBox/>
+      {!movementEntryScreen&&<TopAdBox/>}
       <div style={{flex:1,overflowY:"auto",padding:14}}><SectionErrorBoundary resetKey={tab+"|"+(settingsPage||"")} dark={dark} tr={translateUiRuntimeText} onHome={function(){setTab("home");setSettingsPage(null);setMobileMenu(false);}}>{panelContent()}</SectionErrorBoundary></div>
-      {aiFloatingEnabled&&tab!=="settings"&&<FloatingAIButton/>}
+      {showFloatingAIButton&&<FloatingAIButton/>}
       {voiceModal&&<VoiceEntryModal/>}
       <div style={{background:headerBg,borderTop:"1px solid "+borderC,display:"flex",flexShrink:0}}>{mobileMain.map(function(item){return <button key={item.id} onClick={function(){if(item.id==="voice"){openVoiceModal();setMobileMenu(false);}else if(item.id==="more"){setTab("more");setMobileMenu(function(s){return !s;});setSettingsPage(null);}else{setTab(item.id);setMobileMenu(false);setSettingsPage(null);}}} style={{flex:1,padding:"9px 2px",border:"none",background:"transparent",display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?textC:subC,borderTop:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?"2px solid "+(dark?"#eee":"#333"):"2px solid transparent"}}><span style={{fontSize:17}}>{item.icon}</span><span style={{fontSize:9,fontWeight:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?500:400}}>{item.label}</span></button>;})}</div>
       {mobileMenu&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:9998,display:"flex",alignItems:"flex-end",paddingBottom:8,boxSizing:"border-box"}} onClick={function(){setMobileMenu(false);}}><div style={{background:cardBg,borderRadius:"20px 20px 0 0",width:"100%",padding:"10px 16px 14px",maxHeight:"72vh",overflowY:"auto",WebkitOverflowScrolling:"touch",boxShadow:dark?"none":"0 -8px 30px rgba(0,0,0,0.18)"}} onClick={function(e){e.stopPropagation();}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"0 2px 8px",position:"sticky",top:0,background:cardBg,zIndex:1}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{translateUiRuntimeText("Altro")}</div><button onClick={function(){setMobileMenu(false);}} aria-label="Chiudi menu" style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div>{buildMobileMenuItems().map(function(item){return <button key={item.id} onClick={function(){setTab(item.id);setSettingsPage(null);setMobileMenu(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"12px 8px",border:"none",background:"transparent",borderBottom:"1px solid "+borderC,fontSize:15,cursor:"pointer",color:textC}}><span style={{fontSize:22}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{marginLeft:"auto",background:expenseColor,color:"#fff",borderRadius:"50%",width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{item.badge}</span>}</button>;})}</div></div>}
@@ -6857,13 +7475,15 @@ function parseShareVoiceCommand(text){
         <div style={{width:220,background:sideBg,borderRight:"1px solid "+borderC,display:"flex",flexDirection:"column",padding:"16px 0",flexShrink:0,overflowY:"auto"}}>{navItems.map(function(item){return <button key={item.id} onClick={function(){if(item.id==="voice"){openVoiceModal();}else{setTab(item.id);if(item.id!=="settings")setSettingsPage(null);}}} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 20px",border:"none",background:(tab===item.id||(item.id==="voice"&&voiceModal))?(dark?"#2a2a3e":"#f0f0f0"):"transparent",color:(tab===item.id||(item.id==="voice"&&voiceModal))?textC:subC,fontSize:14,cursor:"pointer",fontWeight:(tab===item.id||(item.id==="voice"&&voiceModal))?500:400,textAlign:"left",position:"relative"}}><span style={{fontSize:18}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{position:"absolute",right:14,background:expenseColor,color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:500}}>{item.badge}</span>}</button>;})}</div>
         <div style={{flex:1,overflowY:"auto",padding:24}}><div style={{maxWidth:960,margin:"0 auto"}}><SectionErrorBoundary resetKey={tab+"|"+(settingsPage||"")} dark={dark} tr={translateUiRuntimeText} onHome={function(){setTab("home");setSettingsPage(null);setMobileMenu(false);}}>{panelContent()}</SectionErrorBoundary></div></div>
       </div>
-      {aiFloatingEnabled&&tab!=="settings"&&<FloatingAIButton desktop/>}
+      {showFloatingAIButton&&<FloatingAIButton desktop/>}
       {voiceModal&&<VoiceEntryModal/>}
       {toast&&<Toast key={(toast&&toast.id)||String(toast)} msg={toast} onDone={function(){setToast(null);}}/>}
       {alertPopup&&alertPopup.length>0&&<AlertPopup newAlerts={alertPopup} onClose={function(list){markAlertsSeen(list||alertPopup);}}/>}
       {editingItem&&<EditModal item={editingItem.item} isExp={editingItem.isExp} onSave={function(updated){if(editingItem.isExp){setExpenses(expenses.map(function(e){return e.id===updated.id?updated:e;}));setToast("Spesa aggiornata");}else{setIncomes(incomes.map(function(i){return i.id===updated.id?updated:i;}));setToast("Entrata aggiornata");}setEditingItem(null);}} onClose={function(){setEditingItem(null);}}/>}
     </div>}
+    {onboardingGuideOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&<OnboardingGuideModal/>}
     {appUpdatePopup&&<AppUpdateModal/>}
+    {showPremiumTrialPrompt&&(!appLocked&&termsAccepted&&privacyAccepted&&currentPlan==="free")&&<PremiumTrialPromptModal/>}
     {(!appLocked&&(!termsAccepted||!privacyAccepted))&&<TermsAcceptanceModal/>}
   </AppCtx.Provider>;
 }
@@ -7097,5 +7717,76 @@ export default AppWithLogin;
     'Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova.':{en:'Unsupported Excel format. Save the file as .xlsx or CSV and try again.',es:'Formato Excel no compatible. Guarda el archivo como .xlsx o CSV e inténtalo de nuevo.',fr:'Format Excel non pris en charge. Enregistre le fichier en .xlsx ou CSV puis réessaie.',de:'Nicht unterstütztes Excel-Format. Speichere die Datei als .xlsx oder CSV und versuche es erneut.',pt:'Formato Excel não suportado. Guarda o ficheiro como .xlsx ou CSV e tenta novamente.',pl:'Nieobsługiwany format Excela. Zapisz plik jako .xlsx albo CSV i spróbuj ponownie.',nl:'Niet-ondersteund Excel-formaat. Sla het bestand op als .xlsx of CSV en probeer opnieuw.',ro:'Format Excel neacceptat. Salvează fișierul ca .xlsx sau CSV și încearcă din nou.',el:'Μη υποστηριζόμενη μορφή Excel. Αποθηκεύστε το αρχείο ως .xlsx ή CSV και δοκιμάστε ξανά.'}
   };
   Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance - popup prova gratuita Completo 2 mesi.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Prova GRATUITAMENTE la versione COMPLETA per 2 mesi',{en:'Try the FULL version FREE for 2 months',es:'Prueba GRATIS la versión COMPLETA durante 2 meses',fr:'Essayez GRATUITEMENT la version COMPLÈTE pendant 2 mois',de:'Teste die VOLLSTÄNDIGE Version 2 Monate KOSTENLOS',pt:'Experimente GRATUITAMENTE a versão COMPLETA durante 2 meses',pl:'Wypróbuj PEŁNĄ wersję ZA DARMO przez 2 miesiące',nl:'Probeer de VOLLEDIGE versie 2 maanden GRATIS',ro:'Încearcă GRATUIT versiunea COMPLETĂ timp de 2 luni',el:'Δοκίμασε ΔΩΡΕΑΝ την ΠΛΗΡΗ έκδοση για 2 μήνες'});
+  add('Offerta valida per i nuovi utenti',{en:'Offer valid for new users',es:'Oferta válida para nuevos usuarios',fr:'Offre valable pour les nouveaux utilisateurs',de:'Angebot gültig für neue Nutzer',pt:'Oferta válida para novos utilizadores',pl:'Oferta ważna dla nowych użytkowników',nl:'Aanbieding geldig voor nieuwe gebruikers',ro:'Ofertă valabilă pentru utilizatorii noi',el:'Προσφορά που ισχύει για νέους χρήστες'});
+  add('Con il piano Completo puoi usare tutte le funzioni senza limiti e senza annunci',{en:'With the Complete plan, you can use every feature with no limits and no ads',es:'Con el plan Completo puedes usar todas las funciones sin límites y sin anuncios',fr:'Avec le forfait Complet, vous pouvez utiliser toutes les fonctionnalités sans limites et sans publicité',de:'Mit dem Completo-Tarif kannst du alle Funktionen unbegrenzt und werbefrei nutzen',pt:'Com o plano Completo, podes usar todas as funções sem limites e sem anúncios',pl:'W planie Completo możesz korzystać ze wszystkich funkcji bez limitów i bez reklam',nl:'Met het Completo-abonnement kun je alle functies onbeperkt en zonder advertenties gebruiken',ro:'Cu planul Completo poți folosi toate funcțiile fără limite și fără reclame',el:'Με το πλάνο Completo μπορείς να χρησιμοποιείς όλες τις λειτουργίες χωρίς όρια και χωρίς διαφημίσεις'});
+  add('Inoltre hai a disposizione',{en:'You also get',es:'Además tienes a tu disposición',fr:'Vous disposez également de',de:'Außerdem stehen dir zur Verfügung',pt:'Além disso, tens à disposição',pl:'Dodatkowo otrzymujesz',nl:'Daarnaast heb je',ro:'În plus, ai la dispoziție',el:'Επιπλέον έχεις στη διάθεσή σου'});
+  add('Consigli AI illimitati',{en:'Unlimited AI tips',es:'Consejos de IA ilimitados',fr:'Conseils IA illimités',de:'Unbegrenzte KI-Tipps',pt:'Conselhos de IA ilimitados',pl:'Nielimitowane porady AI',nl:'Onbeperkte AI-tips',ro:'Recomandări AI nelimitate',el:'Απεριόριστες συμβουλές AI'});
+  add('Conversazioni AI illimitate',{en:'Unlimited AI conversations',es:'Conversaciones de IA ilimitadas',fr:'Conversations IA illimitées',de:'Unbegrenzte KI-Unterhaltungen',pt:'Conversas de IA ilimitadas',pl:'Nielimitowane rozmowy AI',nl:'Onbeperkte AI-gesprekken',ro:'Conversații AI nelimitate',el:'Απεριόριστες συνομιλίες AI'});
+  add('Statistiche e Impostazioni complete',{en:'Complete statistics and settings',es:'Estadísticas y ajustes completos',fr:'Statistiques et paramètres complets',de:'Vollständige Statistiken und Einstellungen',pt:'Estatísticas e definições completas',pl:'Pełne statystyki i ustawienia',nl:'Volledige statistieken en instellingen',ro:'Statistici și setări complete',el:'Πλήρη στατιστικά και ρυθμίσεις'});
+  add('Movimenti Singoli Multipli, Ricorrenti e Rateizzati senza limiti',{en:'Unlimited single, multiple, recurring and installment transactions',es:'Movimientos individuales, múltiples, recurrentes y a plazos sin límites',fr:'Mouvements simples, multiples, récurrents et échelonnés sans limites',de:'Unbegrenzte einzelne, mehrere, wiederkehrende und Raten-Transaktionen',pt:'Movimentos individuais, múltiplos, recorrentes e parcelados sem limites',pl:'Nielimitowane transakcje pojedyncze, wielokrotne, cykliczne i ratalne',nl:'Onbeperkte losse, meervoudige, terugkerende en gespreide transacties',ro:'Mișcări individuale, multiple, recurente și în rate fără limite',el:'Απεριόριστες μεμονωμένες, πολλαπλές, επαναλαμβανόμενες και τμηματικές κινήσεις'});
+  add('7 Widget',{en:'7 widgets',es:'7 widgets',fr:'7 widgets',de:'7 Widgets',pt:'7 widgets',pl:'7 widżetów',nl:'7 widgets',ro:'7 widgeturi',el:'7 widget'});
+  add('Progetti Share illimitati',{en:'Unlimited Share projects',es:'Proyectos Share ilimitados',fr:'Projets Share illimités',de:'Unbegrenzte Share-Projekte',pt:'Projetos Share ilimitados',pl:'Nielimitowane projekty Share',nl:'Onbeperkte Share-projecten',ro:'Proiecte Share nelimitate',el:'Απεριόριστα έργα Share'});
+  add('Se accetti, si aprirà lo store per attivare la prova gratuita. Dopo i 2 mesi l’abbonamento si rinnoverà automaticamente al prezzo indicato dallo store, salvo cancellazione prima della fine della prova.',{en:'If you accept, the store will open to activate the free trial. After 2 months, the subscription will renew automatically at the price shown by the store unless you cancel before the trial ends.',es:'Si aceptas, se abrirá la tienda para activar la prueba gratuita. Después de 2 meses, la suscripción se renovará automáticamente al precio indicado por la tienda, salvo cancelación antes de que termine la prueba.',fr:'Si vous acceptez, la boutique s’ouvrira pour activer l’essai gratuit. Après 2 mois, l’abonnement sera renouvelé automatiquement au prix indiqué par la boutique, sauf annulation avant la fin de l’essai.',de:'Wenn du akzeptierst, öffnet sich der Store, um die kostenlose Testphase zu aktivieren. Nach 2 Monaten verlängert sich das Abo automatisch zum im Store angezeigten Preis, sofern du es nicht vor Ende der Testphase kündigst.',pt:'Se aceitares, a loja será aberta para ativar o teste gratuito. Após 2 meses, a subscrição será renovada automaticamente pelo preço indicado na loja, salvo cancelamento antes do fim do teste.',pl:'Po akceptacji otworzy się sklep, aby aktywować bezpłatny okres próbny. Po 2 miesiącach subskrypcja odnowi się automatycznie w cenie pokazanej w sklepie, chyba że anulujesz ją przed końcem okresu próbnego.',nl:'Als je accepteert, wordt de store geopend om de gratis proefperiode te activeren. Na 2 maanden wordt het abonnement automatisch verlengd tegen de prijs die in de store wordt weergegeven, tenzij je vóór het einde van de proefperiode annuleert.',ro:'Dacă accepți, se va deschide magazinul pentru activarea perioadei gratuite. După 2 luni, abonamentul se va reînnoi automat la prețul afișat în magazin, dacă nu îl anulezi înainte de finalul perioadei de probă.',el:'Αν αποδεχτείς, θα ανοίξει το store για την ενεργοποίηση της δωρεάν δοκιμής. Μετά από 2 μήνες, η συνδρομή θα ανανεώνεται αυτόματα στην τιμή που εμφανίζει το store, εκτός αν την ακυρώσεις πριν το τέλος της δοκιμής.'});
+  add('Voglio continuare con la versione gratuita',{en:'I want to continue with the free version',es:'Quiero continuar con la versión gratuita',fr:'Je veux continuer avec la version gratuite',de:'Ich möchte mit der kostenlosen Version fortfahren',pt:'Quero continuar com a versão gratuita',pl:'Chcę kontynuować z wersją darmową',nl:'Ik wil doorgaan met de gratis versie',ro:'Vreau să continui cu versiunea gratuită',el:'Θέλω να συνεχίσω με τη δωρεάν έκδοση'});
+})();
+
+
+// fAInance - guida primo accesso.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Guida rapida',{en:'Quick guide',es:'Guía rápida',fr:'Guide rapide',de:'Kurzanleitung',pt:'Guia rápido',pl:'Szybki przewodnik',nl:'Snelle gids',ro:'Ghid rapid',el:'Γρήγορος οδηγός'});
+  add('Salta guida',{en:'Skip guide',es:'Saltar guía',fr:'Passer le guide',de:'Anleitung überspringen',pt:'Ignorar guia',pl:'Pomiń przewodnik',nl:'Gids overslaan',ro:'Omite ghidul',el:'Παράλειψη οδηγού'});
+  add('Vai alla schermata',{en:'Go to screen',es:'Ir a la pantalla',fr:'Aller à l’écran',de:'Zu Bildschirm wechseln',pt:'Ir para o ecrã',pl:'Przejdź do ekranu',nl:'Ga naar scherm',ro:'Mergi la ecranul',el:'Μετάβαση στην οθόνη'});
+  add('Indietro',{en:'Back',es:'Atrás',fr:'Retour',de:'Zurück',pt:'Voltar',pl:'Wstecz',nl:'Terug',ro:'Înapoi',el:'Πίσω'});
+  add('Avanti',{en:'Next',es:'Siguiente',fr:'Suivant',de:'Weiter',pt:'Seguinte',pl:'Dalej',nl:'Volgende',ro:'Înainte',el:'Επόμενο'});
+  add('Inizia ora',{en:'Start now',es:'Empezar ahora',fr:'Commencer',de:'Jetzt starten',pt:'Começar agora',pl:'Zacznij teraz',nl:'Nu starten',ro:'Începe acum',el:'Ξεκίνα τώρα'});
+  add('Salta',{en:'Skip',es:'Saltar',fr:'Ignorer',de:'Überspringen',pt:'Ignorar',pl:'Pomiń',nl:'Overslaan',ro:'Omite',el:'Παράλειψη'});
+  add('Le tue finanze in un unico posto',{en:'Your finances in one place',es:'Tus finanzas en un solo lugar',fr:'Vos finances au même endroit',de:'Deine Finanzen an einem Ort',pt:'As tuas finanças num único lugar',pl:'Twoje finanse w jednym miejscu',nl:'Je financiën op één plek',ro:'Finanțele tale într-un singur loc',el:'Τα οικονομικά σου σε ένα μέρος'});
+  add('Registra entrate, uscite, patrimonio, budget e obiettivi. Tutto resta ordinato e sincronizzato sul tuo account.',{en:'Track income, expenses, assets, budgets and goals. Everything stays organized and synced to your account.',es:'Registra ingresos, gastos, patrimonio, presupuestos y objetivos. Todo queda ordenado y sincronizado con tu cuenta.',fr:'Enregistrez revenus, dépenses, patrimoine, budgets et objectifs. Tout reste organisé et synchronisé avec votre compte.',de:'Erfasse Einnahmen, Ausgaben, Vermögen, Budgets und Ziele. Alles bleibt geordnet und mit deinem Konto synchronisiert.',pt:'Regista entradas, saídas, património, orçamentos e objetivos. Tudo fica organizado e sincronizado na tua conta.',pl:'Rejestruj przychody, wydatki, majątek, budżety i cele. Wszystko pozostaje uporządkowane i zsynchronizowane z kontem.',nl:'Registreer inkomsten, uitgaven, vermogen, budgetten en doelen. Alles blijft georganiseerd en gesynchroniseerd met je account.',ro:'Înregistrează venituri, cheltuieli, patrimoniu, bugete și obiective. Totul rămâne organizat și sincronizat în contul tău.',el:'Κατέγραψε έσοδα, έξοδα, περιουσία, προϋπολογισμούς και στόχους. Όλα μένουν οργανωμένα και συγχρονισμένα στον λογαριασμό σου.'});
+  add('Tieni traccia dei movimenti',{en:'Track your transactions',es:'Haz seguimiento de tus movimientos',fr:'Suivez vos mouvements',de:'Behalte deine Bewegungen im Blick',pt:'Acompanha os teus movimentos',pl:'Śledź swoje transakcje',nl:'Volg je transacties',ro:'Urmărește mișcările tale',el:'Παρακολούθησε τις κινήσεις σου'});
+  add('Aggiungi spese ed entrate manualmente, con la voce o dallo scontrino. Lo storico ti aiuta a ritrovare ogni movimento.',{en:'Add expenses and income manually, by voice or from a receipt. History helps you find every transaction again.',es:'Añade gastos e ingresos manualmente, con la voz o desde un recibo. El historial te ayuda a encontrar cada movimiento.',fr:'Ajoutez dépenses et revenus manuellement, par la voix ou depuis un ticket. L’historique vous aide à retrouver chaque mouvement.',de:'Füge Ausgaben und Einnahmen manuell, per Sprache oder über einen Beleg hinzu. Der Verlauf hilft dir, jede Bewegung wiederzufinden.',pt:'Adiciona despesas e receitas manualmente, por voz ou a partir de um recibo. O histórico ajuda-te a encontrar cada movimento.',pl:'Dodawaj wydatki i przychody ręcznie, głosem albo z paragonu. Historia pomaga odnaleźć każdą transakcję.',nl:'Voeg uitgaven en inkomsten handmatig, met spraak of via een bon toe. De geschiedenis helpt je elke transactie terug te vinden.',ro:'Adaugă cheltuieli și venituri manual, vocal sau din bon. Istoricul te ajută să găsești fiecare mișcare.',el:'Πρόσθεσε έξοδα και έσοδα χειροκίνητα, με φωνή ή από απόδειξη. Το ιστορικό σε βοηθά να βρίσκεις κάθε κίνηση.'});
+  add('Registra entrate, uscite, patrimonio, budget e obiettivi.\nTutto resta ordinato e sincronizzato sul tuo account.',{en:'Track income, expenses, assets, budgets and goals.\nEverything stays organized and synced to your account.',es:'Registra ingresos, gastos, patrimonio, presupuestos y objetivos.\nTodo queda ordenado y sincronizado con tu cuenta.',fr:'Enregistrez revenus, dépenses, patrimoine, budgets et objectifs.\nTout reste organisé et synchronisé avec votre compte.',de:'Erfasse Einnahmen, Ausgaben, Vermögen, Budgets und Ziele.\nAlles bleibt geordnet und mit deinem Konto synchronisiert.',pt:'Regista entradas, saídas, património, orçamentos e objetivos.\nTudo fica organizado e sincronizado na tua conta.',pl:'Rejestruj przychody, wydatki, majątek, budżety i cele.\nWszystko pozostaje uporządkowane i zsynchronizowane z kontem.',nl:'Registreer inkomsten, uitgaven, vermogen, budgetten en doelen.\nAlles blijft georganiseerd en gesynchroniseerd met je account.',ro:'Înregistrează venituri, cheltuieli, patrimoniu, bugete și obiective.\nTotul rămâne organizat și sincronizat în contul tău.',el:'Κατέγραψε έσοδα, έξοδα, περιουσία, προϋπολογισμούς και στόχους.\nΌλα μένουν οργανωμένα και συγχρονισμένα στον λογαριασμό σου.'});
+  add('Aggiungi Spese ed Entrate manualmente, vocalmente e con lo scontrino.\nAutomatizza le entrate e le uscite periodiche.',{en:'Add Expenses and Income manually, by voice and with a receipt.\nAutomate recurring income and expenses.',es:'Añade Gastos e Ingresos manualmente, por voz y con el recibo.\nAutomatiza ingresos y gastos periódicos.',fr:'Ajoutez Dépenses et Revenus manuellement, vocalement et avec le ticket.\nAutomatisez les revenus et dépenses périodiques.',de:'Füge Ausgaben und Einnahmen manuell, per Sprache und mit dem Beleg hinzu.\nAutomatisiere regelmäßige Einnahmen und Ausgaben.',pt:'Adiciona Despesas e Receitas manualmente, por voz e com o recibo.\nAutomatiza receitas e despesas periódicas.',pl:'Dodawaj Wydatki i Przychody ręcznie, głosowo oraz z paragonu.\nAutomatyzuj okresowe przychody i wydatki.',nl:'Voeg Uitgaven en Inkomsten handmatig, met spraak en met een bon toe.\nAutomatiseer periodieke inkomsten en uitgaven.',ro:'Adaugă Cheltuieli și Venituri manual, vocal și cu bonul.\nAutomatizează veniturile și cheltuielile periodice.',el:'Πρόσθεσε Έξοδα και Έσοδα χειροκίνητα, φωνητικά και με απόδειξη.\nΑυτοματοποίησε τα περιοδικά έσοδα και έξοδα.'});
+  add('Controlla budget e statistiche',{en:'Control budgets and statistics',es:'Controla presupuestos y estadísticas',fr:'Contrôlez budgets et statistiques',de:'Kontrolliere Budgets und Statistiken',pt:'Controla orçamentos e estatísticas',pl:'Kontroluj budżety i statystyki',nl:'Beheer budgetten en statistieken',ro:'Controlează bugete și statistici',el:'Έλεγξε προϋπολογισμούς και στατιστικά'});
+  add('Imposta limiti, guarda grafici chiari e capisci dove vanno i tuoi soldi mese per mese.',{en:'Set limits, view clear charts and understand where your money goes month by month.',es:'Define límites, consulta gráficos claros y entiende adónde va tu dinero mes a mes.',fr:'Définissez des limites, consultez des graphiques clairs et comprenez où va votre argent mois après mois.',de:'Setze Limits, sieh klare Diagramme und verstehe Monat für Monat, wohin dein Geld geht.',pt:'Define limites, vê gráficos claros e percebe para onde vai o teu dinheiro mês a mês.',pl:'Ustawiaj limity, oglądaj czytelne wykresy i rozumiej, dokąd trafiają Twoje pieniądze z miesiąca na miesiąc.',nl:'Stel limieten in, bekijk duidelijke grafieken en begrijp maand na maand waar je geld naartoe gaat.',ro:'Setează limite, vezi grafice clare și înțelege unde se duc banii tăi lună de lună.',el:'Όρισε όρια, δες καθαρά γραφήματα και κατάλαβε πού πηγαίνουν τα χρήματά σου κάθε μήνα.'});
+  add('Organizza obiettivi, patrimonio e Share',{en:'Organize goals, assets and Share',es:'Organiza objetivos, patrimonio y Share',fr:'Organisez objectifs, patrimoine et Share',de:'Organisiere Ziele, Vermögen und Share',pt:'Organiza objetivos, património e Share',pl:'Organizuj cele, majątek i Share',nl:'Organiseer doelen, vermogen en Share',ro:'Organizează obiective, patrimoniu și Share',el:'Οργάνωσε στόχους, περιουσία και Share'});
+  add('Tieni sotto controllo risparmi, debiti, crediti, liste della spesa, appunti e spese condivise.',{en:'Keep savings, debts, credits, shopping lists, notes and shared expenses under control.',es:'Mantén bajo control ahorros, deudas, créditos, listas de la compra, notas y gastos compartidos.',fr:'Gardez sous contrôle épargne, dettes, crédits, listes de courses, notes et dépenses partagées.',de:'Behalte Ersparnisse, Schulden, Guthaben, Einkaufslisten, Notizen und gemeinsame Ausgaben im Griff.',pt:'Mantém sob controlo poupanças, dívidas, créditos, listas de compras, notas e despesas partilhadas.',pl:'Kontroluj oszczędności, długi, należności, listy zakupów, notatki i wspólne wydatki.',nl:'Houd spaargeld, schulden, tegoeden, boodschappenlijsten, notities en gedeelde uitgaven onder controle.',ro:'Ține sub control economiile, datoriile, creditele, listele de cumpărături, notițele și cheltuielile comune.',el:'Κράτα υπό έλεγχο αποταμιεύσεις, χρέη, πιστώσεις, λίστες αγορών, σημειώσεις και κοινά έξοδα.'});
+  add('Usa l’AI per migliorare',{en:'Use AI to improve',es:'Usa la IA para mejorar',fr:'Utilisez l’IA pour progresser',de:'Nutze KI zur Verbesserung',pt:'Usa a IA para melhorar',pl:'Korzystaj z AI, aby się poprawiać',nl:'Gebruik AI om te verbeteren',ro:'Folosește AI pentru a îmbunătăți',el:'Χρησιμοποίησε την AI για βελτίωση'});
+  add('Chiedi consigli, controlli e priorità per capire come ottimizzare le spese e risparmiare meglio.',{en:'Ask for tips, checks and priorities to understand how to optimize expenses and save better.',es:'Pide consejos, controles y prioridades para entender cómo optimizar gastos y ahorrar mejor.',fr:'Demandez conseils, contrôles et priorités pour comprendre comment optimiser vos dépenses et mieux épargner.',de:'Bitte um Tipps, Kontrollen und Prioritäten, um Ausgaben zu optimieren und besser zu sparen.',pt:'Pede conselhos, controlos e prioridades para perceber como otimizar despesas e poupar melhor.',pl:'Pytaj o wskazówki, kontrole i priorytety, aby lepiej optymalizować wydatki i oszczędzać.',nl:'Vraag om tips, controles en prioriteiten om te begrijpen hoe je uitgaven optimaliseert en beter spaart.',ro:'Cere sfaturi, verificări și priorități pentru a înțelege cum să optimizezi cheltuielile și să economisești mai bine.',el:'Ζήτησε συμβουλές, ελέγχους και προτεραιότητες για να καταλάβεις πώς να βελτιστοποιείς τα έξοδα και να αποταμιεύεις καλύτερα.'});
+  add('Conti',{en:'Accounts',es:'Cuentas',fr:'Comptes',de:'Konten',pt:'Contas',pl:'Konta',nl:'Rekeningen',ro:'Conturi',el:'Λογαριασμοί'});
+  add('Carte',{en:'Cards',es:'Tarjetas',fr:'Cartes',de:'Karten',pt:'Cartões',pl:'Karty',nl:'Kaarten',ro:'Carduri',el:'Κάρτες'});
+  add('Budget',{en:'Budget',es:'Presupuesto',fr:'Budget',de:'Budget',pt:'Orçamento',pl:'Budżet',nl:'Budget',ro:'Buget',el:'Προϋπολογισμός'});
+  add('Entrate',{en:'Income',es:'Ingresos',fr:'Revenus',de:'Einnahmen',pt:'Receitas',pl:'Przychody',nl:'Inkomsten',ro:'Venituri',el:'Έσοδα'});
+  add('Uscite',{en:'Expenses',es:'Gastos',fr:'Dépenses',de:'Ausgaben',pt:'Despesas',pl:'Wydatki',nl:'Uitgaven',ro:'Cheltuieli',el:'Έξοδα'});
+  add('Storico',{en:'History',es:'Historial',fr:'Historique',de:'Verlauf',pt:'Histórico',pl:'Historia',nl:'Geschiedenis',ro:'Istoric',el:'Ιστορικό'});
+  add('Grafici',{en:'Charts',es:'Gráficos',fr:'Graphiques',de:'Diagramme',pt:'Gráficos',pl:'Wykresy',nl:'Grafieken',ro:'Grafice',el:'Γραφήματα'});
+  add('Alert',{en:'Alerts',es:'Alertas',fr:'Alertes',de:'Alerts',pt:'Alertas',pl:'Alerty',nl:'Meldingen',ro:'Alerte',el:'Ειδοποιήσεις'});
+  add('Obiettivi',{en:'Goals',es:'Objetivos',fr:'Objectifs',de:'Ziele',pt:'Objetivos',pl:'Cele',nl:'Doelen',ro:'Obiective',el:'Στόχοι'});
+  add('Patrimonio',{en:'Assets',es:'Patrimonio',fr:'Patrimoine',de:'Vermögen',pt:'Património',pl:'Majątek',nl:'Vermogen',ro:'Patrimoniu',el:'Περιουσία'});
+  add('Consigli',{en:'Tips',es:'Consejos',fr:'Conseils',de:'Tipps',pt:'Conselhos',pl:'Wskazówki',nl:'Tips',ro:'Sfaturi',el:'Συμβουλές'});
+  add('Controlli',{en:'Checks',es:'Controles',fr:'Contrôles',de:'Kontrollen',pt:'Controlos',pl:'Kontrole',nl:'Controles',ro:'Verificări',el:'Έλεγχοι'});
+  add('Priorità',{en:'Priorities',es:'Prioridades',fr:'Priorités',de:'Prioritäten',pt:'Prioridades',pl:'Priorytety',nl:'Prioriteiten',ro:'Priorități',el:'Προτεραιότητες'});
+})();
+
+// fAInance - etichette barra superiore/inferiore.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Barra Superiore',{it:'Barra Superiore',en:'Top Bar',es:'Barra Superior',fr:'Barre Supérieure',de:'Obere Leiste',pt:'Barra Superior',pl:'Górny pasek',nl:'Bovenste balk',ro:'Bară superioară',el:'Επάνω γραμμή'});
+  add('Barra Inferiore',{it:'Barra Inferiore',en:'Bottom Bar',es:'Barra Inferior',fr:'Barre Inférieure',de:'Untere Leiste',pt:'Barra Inferior',pl:'Dolny pasek',nl:'Onderste balk',ro:'Bară inferioară',el:'Κάτω γραμμή'});
+  add('Barra superiore ed Inferiore',{it:'Barra superiore ed Inferiore',en:'Top and bottom bar',es:'Barra superior e inferior',fr:'Barre supérieure et inférieure',de:'Obere und untere Leiste',pt:'Barra superior e inferior',pl:'Górny i dolny pasek',nl:'Boven- en onderbalk',ro:'Bara de sus și de jos',el:'Επάνω και κάτω γραμμή'});
+  add('Aspetto / Barra superiore ed Inferiore',{it:'Aspetto / Barra superiore ed Inferiore',en:'Appearance / Top and bottom bar',es:'Aspecto / Barra superior e inferior',fr:'Apparence / Barre supérieure et inférieure',de:'Darstellung / Obere und untere Leiste',pt:'Aspeto / Barra superior e inferior',pl:'Wygląd / Górny i dolny pasek',nl:'Weergave / Boven- en onderbalk',ro:'Aspect / Bara de sus și de jos',el:'Εμφάνιση / Επάνω και κάτω γραμμή'});
+  add('Barra superiore e inferiore',{it:'Barra superiore ed Inferiore',en:'Top and bottom bar',es:'Barra superior e inferior',fr:'Barre supérieure et inférieure',de:'Obere und untere Leiste',pt:'Barra superior e inferior',pl:'Górny i dolny pasek',nl:'Boven- en onderbalk',ro:'Bara de sus și de jos',el:'Επάνω και κάτω γραμμή'});
+  add('Aspetto / Barra superiore e inferiore',{it:'Aspetto / Barra superiore ed Inferiore',en:'Appearance / Top and bottom bar',es:'Aspecto / Barra superior e inferior',fr:'Apparence / Barre supérieure et inférieure',de:'Darstellung / Obere und untere Leiste',pt:'Aspeto / Barra superior e inferior',pl:'Wygląd / Górny i dolny pasek',nl:'Weergave / Boven- en onderbalk',ro:'Aspect / Bara de sus și de jos',el:'Εμφάνιση / Επάνω και κάτω γραμμή'});
   try{fainanceTranslationCache={};}catch(e){}
 })();
