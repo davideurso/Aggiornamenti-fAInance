@@ -26,6 +26,7 @@ public class FainanceSpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin, SFSpe
     private var activeCall: CAPPluginCall?
     private var lastTranscript = ""
     private var partialResultsEnabled = false
+    private var autoStopSeconds: TimeInterval = 12.0
     private var stopTimer: DispatchWorkItem?
     private var isListeningFlag = false
     private var tapInstalled = false
@@ -104,6 +105,8 @@ public class FainanceSpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin, SFSpe
 
             let language = call.getString("language") ?? Locale.current.identifier
             self.partialResultsEnabled = call.getBool("partialResults") ?? false
+            let requestedTimeout = Double(call.getInt("timeoutSeconds") ?? 12)
+            self.autoStopSeconds = min(max(requestedTimeout, 7.0), 20.0)
             self.lastTranscript = ""
             self.activeCall = call
 
@@ -211,7 +214,7 @@ public class FainanceSpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin, SFSpe
             self?.stopInternal(resolveCurrentCall: true)
         }
         stopTimer = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 7.0, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + autoStopSeconds, execute: workItem)
     }
 
     private func finishWithSuccess() {
