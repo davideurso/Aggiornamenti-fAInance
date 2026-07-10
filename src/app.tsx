@@ -1684,11 +1684,15 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       if(snap.exists()){
         var d=snap.data();
         var pendingBackupImportTs=Number(backupImportPendingRef.current||0);
-        var pendingBackupImportId=String(backupImportIdRef.current||"");
         var cloudUpdatedAtMs=Number((d&&d.updatedAtMs)||0);
-        var cloudBackupImportId=String((d&&d._backupImportId)||"");
-        if(pendingBackupImportTs&&Date.now()-pendingBackupImportTs<30000){
-          if(pendingBackupImportId&&cloudBackupImportId===pendingBackupImportId){
+        /*
+          Dopo un ripristino JSON, il listener Firestore può ricevere ancora il vecchio snapshot cloud.
+          Non uso più un campo tecnico _backupImportId nel documento: alcune regole Firestore possono rifiutare
+          campi non previsti e bloccare tutto il salvataggio. Accetto solo snapshot cloud aggiornati dopo
+          l'avvio dell'import; quelli più vecchi vengono ignorati per evitare che cancellino subito i dati importati.
+        */
+        if(pendingBackupImportTs&&Date.now()-pendingBackupImportTs<120000){
+          if(cloudUpdatedAtMs&&cloudUpdatedAtMs>=pendingBackupImportTs-2000){
             backupImportPendingRef.current=0;
             backupImportIdRef.current="";
           }else{
@@ -2363,7 +2367,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [isMobile,setIsMobile]=useState(true);
   var [searchQuery,setSearchQuery]=useState("");
   var historySearchDraftRef=useRef("");
-  var backupJsonInputRef=useRef(null);
+  var backupJsonInputRef=useRef<any>(null);
+  var backupJsonPickerTimerRef=useRef<any>(null);
+  var backupJsonProcessingRef=useRef(false);
+  var backupJsonLastFileKeyRef=useRef("");
   var [filterCat,setFilterCat]=useState("all");
   var [filterCats,setFilterCats]=useState([]);
   var [filterCatExclude,setFilterCatExclude]=useState(false);
@@ -4577,7 +4584,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       {title:"Dati trattati",text:"fAInance può salvare i dati che inserisci nell’app, come entrate, uscite, categorie, metodi di pagamento, ricorrenze, budget, patrimonio, obiettivi, alert, appunti, documenti caricati e coordinate bancarie salvate volontariamente."},
       {title:"Account e accesso",text:"Se accedi con email/password, Google o Apple, vengono usati i dati necessari all’autenticazione, come identificativo utente, email e nome profilo. L’accesso è gestito tramite Firebase Authentication."},
       {title:"Salvataggio e sincronizzazione",text:"I dati dell’app possono essere salvati localmente sul dispositivo e, per gli utenti autenticati, sincronizzati su Firestore/Firebase per consentire backup e recupero dei dati collegati all’account."},
-      {title:"Uso dell’Agente AI",text:"Quando usi il Consulente AI, la domanda e i dati finanziari necessari all’analisi possono essere inviati al servizio AI collegato all’app per generare la risposta. È consigliabile non inserire dati non necessari o informazioni troppo sensibili nelle domande libere."},
+      {title:"Uso dell’Agente AI",text:"Quando usi il Consulente AI esterno, fAInance invia la domanda scritta nella chat, la lingua selezionata, il livello di analisi scelto e il contesto finanziario necessario al backend sicuro fAInance e al provider AI esterno OpenAI per generare la risposta."},
+      {title:"Dati condivisi con l’AI",text:"In base al livello scelto nelle impostazioni IA possono essere inviati riepiloghi finanziari, budget, categorie, ricorrenze, dati aggregati per area e, solo con Analisi completa, transazioni essenziali come data, importo, categoria o metodo, tipo entrata e descrizione."},
+      {title:"Dati non condivisi con l’AI",text:"Non vengono inviati all’Agente AI esterno CVV, dati biometrici, password, documenti caricati, immagini, fidelity card o dati delle carte di credito. Prima del primo invio l’app mostra un consenso dedicato che indica dati inviati, destinatari e finalità."},
       {title:"Finalità",text:"I dati vengono usati per fornire le funzionalità dell’app: registrazione movimenti, statistiche, budget, alert, patrimonio, backup, sincronizzazione e analisi tramite AI."},
       {title:"Responsabilità dell’utente",text:"L’utente decide quali dati inserire, caricare o cancellare. Prima di salvare documenti, note o coordinate bancarie, valuta se siano davvero necessari per l’uso personale dell’app."},
       {title:"Cancellazione dati",text:"L’app include funzioni per eliminare dati per sezione o cancellare informazioni salvate. Alcuni dati potrebbero restare in backup o cache tecniche fino ai normali tempi di aggiornamento dei servizi utilizzati."},
@@ -4594,7 +4603,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         <div style={{fontSize:13,color:subC,lineHeight:1.55}}>{L(r.text)}</div>
       </div>;})}
       <div style={{background:dark?"#24213a":"#F0EDFF",borderRadius:14,border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),padding:16}}>
-        <div style={{fontSize:13,color:dark?"#BEB8FF":"#534AB7",lineHeight:1.55,fontWeight:600}}>{L("Versione privacy: 1.0 · Ultimo aggiornamento: 25/05/2026")}</div>
+        <div style={{fontSize:13,color:dark?"#BEB8FF":"#534AB7",lineHeight:1.55,fontWeight:600}}>{L("Versione privacy: 1.1 · Ultimo aggiornamento: 10/07/2026")}</div>
       </div>
     </div>;
   }
@@ -5121,6 +5130,13 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
             </div>
             <Toggle label="" checked={aiFloatingEnabled} onChange={function(){setAiFloatingEnabled(!aiFloatingEnabled);setToast("Impostazioni IA aggiornate");}}/>
           </div>
+          <div style={{marginTop:14,background:dark?"#252535":"#F8FAFF",border:"1px solid "+borderC,borderRadius:12,padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:800,color:textC}}>🔐 {L("Consenso Agente AI esterno")}</div>
+              <div style={{fontSize:12,color:subC,marginTop:3,lineHeight:1.4}}>{L("Puoi reimpostare il consenso: alla prossima domanda l’app mostrerà di nuovo il dettaglio dei dati inviati al backend fAInance e a OpenAI.")}</div>
+            </div>
+            <Btn onClick={function(){try{localStorage.removeItem(userKey("ai_external_ai_consent_v1"));}catch(e){}setToast({text:L("Consenso AI esterno reimpostato"),type:"success",icon:"✅",color:"#1D9E75"});}} bg={secondaryButtonColor||"#378ADD"} style={{whiteSpace:"nowrap"}}>{L("Reimposta")}</Btn>
+          </div>
           <div style={{fontSize:11,color:subC,marginTop:10,lineHeight:1.45}}>{L("Questa impostazione viene applicata solo alle richieste inviate all’agente AI esterno. I consigli locali dell’app continuano a usare i dati già presenti sul dispositivo.")}</div>
         </div>
       </div>
@@ -5590,9 +5606,10 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       return normalizeBackupAliases(d);
     }
     function backupFirestorePayload(d,importId){
+      void importId;
       var out:any={};
       ["expenses","incomes","cats","methods","expenseGroups","incomeGroups","methodGroups","customIncomeTypes","incomeTypeOverrides","catOrder","methodOrder","catSortMode","methodSortMode","incomeTypeOrder","defaultExpenseArea","defaultExpenseCat","defaultExpenseMethod","defaultIncomeArea","defaultIncomeType","defaultMethodArea","recurring","goals","alerts","budgetPlan","patrimonioValues","patrimonioAreas","patrimonioEntries","patrimonioHistory","patrimonioNotes","historyFutureMode","historySortDate","historySortDirection","historySortSecondary","historySortSecondaryDirection","firstDayOfWeek","homeBalanceView","statsView","currency","secondaryCurrency","showSecInHistory","showSecInStats","showSecInBudget","showSecInPatrimonio","showAppSummaryHeader","mobileNavOrder","mobileNavIconCount","mobileMenuOrder","mobileAllNavOrder","appuntiDocuments","appuntiNotes","bankCoords","creditCards","aiDataAccess","shareProjects","showShareInHistory","debtCredits","shoppingCards","shoppingItems","shoppingAreas","shoppingAreaIcons","shoppingBoughtColor","shoppingDefaultArea","shoppingLists","activeShoppingListId","shoppingProductSort","showDebtCreditsInPatrimonio","showDebtCreditsInExpenses","shareReceiptUploads","confirmButtonColor","secondaryButtonColor"].forEach(function(k){if(hasBackupKey(d,k)&&d[k]!==undefined)out[k]=d[k];});
-      if(importId)out._backupImportId=String(importId);
+      /* Non salvo campi tecnici extra: il documento Firestore resta composto solo dai dati applicativi consentiti. */
       out.updatedAt=new Date().toISOString();
       out.updatedAtMs=Date.now();
       return out;
@@ -5609,22 +5626,59 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
         return false;
       }
     }
+    function clearBackupPickerTimer(){
+      try{if(backupJsonPickerTimerRef.current){clearTimeout(backupJsonPickerTimerRef.current);backupJsonPickerTimerRef.current=null;}}catch(e){}
+    }
     function openBackupJsonPicker(){
       try{
         var node:any=backupJsonInputRef&&backupJsonInputRef.current;
-        if(node){
-          node.value="";
-          node.click();
-        }
-      }catch(e){setToast({text:L("Errore durante la lettura del file."),type:"error",icon:"🚫",color:"#E24B4A"});}
+        if(!node){setToast({text:L("Selettore file non disponibile"),type:"error",icon:"🚫",color:"#E24B4A"});return;}
+        backupJsonProcessingRef.current=false;
+        backupJsonLastFileKeyRef.current="";
+        node.value="";
+        /* Su alcune WebView l'evento React onChange del file input non viene sempre inoltrato.
+           Collego anche i listener nativi prima di aprire il selettore, così la selezione del JSON
+           arriva comunque alla stessa funzione di ripristino. */
+        node.onchange=function(ev){handleBackupJsonFile(ev);};
+        node.oninput=function(ev){handleBackupJsonFile(ev);};
+        setToast({text:L("Seleziona il backup JSON"),type:"info",icon:"📄",color:confirmButtonColor});
+        clearBackupPickerTimer();
+        backupJsonPickerTimerRef.current=setTimeout(function(){
+          if(!backupJsonProcessingRef.current){setToast({text:L("Nessun file ricevuto dal selettore"),type:"error",icon:"🚫",color:"#E24B4A"});}
+        },25000);
+        node.click();
+      }catch(e){clearBackupPickerTimer();setToast({text:L("Errore durante la lettura del file."),type:"error",icon:"🚫",color:"#E24B4A"});}
     }
     function readBackupFileAsText(f){
-      if(f&&typeof f.text==="function")return f.text();
-      return new Promise(function(resolve,reject){var r=new FileReader();r.onload=function(ev){resolve(String((ev&&ev.target&&ev.target.result)||""));};r.onerror=function(){reject(r.error||new Error("read error"));};r.onabort=function(){reject(new Error("read aborted"));};r.readAsText(f);});
+      return new Promise(function(resolve,reject){
+        var done=false;
+        var timer:any=null;
+        function finish(v){if(done)return;done=true;try{if(timer)clearTimeout(timer);}catch(_t){}resolve(String(v||""));}
+        function fail(err){if(done)return;done=true;try{if(timer)clearTimeout(timer);}catch(_t){}reject(err||new Error("read error"));}
+        function readWithFileReader(){
+          try{
+            var r=new FileReader();
+            r.onload=function(ev){finish((ev&&ev.target&&ev.target.result)||"");};
+            r.onerror=function(){fail(r.error||new Error("read error"));};
+            r.onabort=function(){fail(new Error("read aborted"));};
+            r.readAsText(f,"UTF-8");
+          }catch(err){fail(err);}
+        }
+        try{timer=setTimeout(function(){fail(new Error("read timeout"));},12000);}catch(_timerErr){}
+        try{
+          if(f&&typeof f.text==="function"){
+            f.text().then(finish).catch(function(){readWithFileReader();});
+            return;
+          }
+        }catch(_textErr){}
+        readWithFileReader();
+      });
     }
     async function importBackupJsonText(txt,fileName){
-      setToast({text:L("Lettura file"),type:"info",icon:"📄",color:confirmButtonColor});
-      var parsed=JSON.parse(String(txt||"{}").replace(/^\uFEFF/,""));
+      setToast({text:L("Analisi del backup JSON"),type:"info",icon:"📄",color:confirmButtonColor});
+      var rawText=String(txt||"").replace(/^\uFEFF/,"");
+      if(!rawText.trim())throw new Error("empty json");
+      var parsed=JSON.parse(rawText);
       var d=normalizeBackupDataRoot(parsed);
       if(!d||typeof d!=="object"||Array.isArray(d))throw new Error("invalid json");
       var importTs=Date.now();
@@ -5634,22 +5688,37 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       var summary=countBackupItems(d);
       var applied=applyBackupData(d,true);
       if(!applied){backupImportPendingRef.current=0;backupImportIdRef.current="";throw new Error("no supported keys");}
-      await persistBackupDataToFirestore(d,importId);
+      firestoreHydratedRef.current=true;
+      setFirestoreReady(true);
       setToast({text:L("Backup ripristinato")+(summary&&summary!=="0 voci"?" · "+summary:""),type:"success",icon:"✅",color:confirmButtonColor});
+      persistBackupDataToFirestore(d,importId).then(function(ok){
+        if(!ok)console.warn("Backup JSON salvato in locale; sincronizzazione cloud non confermata");
+      }).catch(function(err){console.error("Backup JSON Firestore async persist error",err);});
       return applied;
     }
     async function handleBackupJsonFile(e){
       var input=e&&((e.currentTarget)||(e.target));
-      var f=input&&input.files&&input.files[0];
-      if(!f)return;
+      var files=input&&input.files;
+      var f=files&&files.length?files[0]:null;
+      if(!f){clearBackupPickerTimer();setToast({text:L("Nessun file ricevuto dal selettore"),type:"error",icon:"🚫",color:"#E24B4A"});return;}
+      var fileKey=String(f.name||"")+"|"+String(f.size||0)+"|"+String(f.lastModified||0);
+      if(backupJsonProcessingRef.current&&backupJsonLastFileKeyRef.current===fileKey)return;
+      backupJsonProcessingRef.current=true;
+      backupJsonLastFileKeyRef.current=fileKey;
+      clearBackupPickerTimer();
       try{
+        setToast({text:L("File selezionato")+": "+String(f.name||"backup.json"),type:"info",icon:"📄",color:confirmButtonColor});
         var txt=await readBackupFileAsText(f);
+        setToast({text:L("File letto")+" · "+String(txt||"").length+" "+L("caratteri"),type:"info",icon:"📄",color:confirmButtonColor});
         await importBackupJsonText(txt,f&&f.name);
       }catch(err){
         console.error("Backup JSON import error",err);
-        setToast({text:L("File JSON non valido"),type:"error",icon:"🚫",color:"#E24B4A"});
+        var errMsg=String((err&&err.message)||"");
+        var msg=errMsg==="no supported keys"?L("Il JSON non contiene dati fAInance riconosciuti"):(errMsg==="read timeout"?L("Lettura del file non completata"):(errMsg==="empty json"?L("Il file JSON è vuoto"):L("File JSON non valido")));
+        setToast({text:msg,type:"error",icon:"🚫",color:"#E24B4A"});
       }finally{
         try{if(input)input.value="";}catch(clearErr){}
+        backupJsonProcessingRef.current=false;
       }
     }
 
@@ -5733,7 +5802,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
             <div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:5}}>{L("Importa backup completo (Json)")}</div>
             <div style={{fontSize:12,color:subC,marginBottom:10}}>{L("Ripristina il JSON globale creato da Backup completo.")}</div>
             <button type="button" onClick={openBackupJsonPicker} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 16px",fontSize:13,fontWeight:900,cursor:"pointer",minHeight:42}}>{dataTitle("Ripristina JSON")}</button>
-            <input ref={backupJsonInputRef} type="file" accept="application/json,.json,.txt" style={{display:"none"}} onChange={handleBackupJsonFile}/>
+            <input ref={backupJsonInputRef} type="file" accept=".json,application/json,text/plain,.txt" aria-label={dataTitle("Ripristina JSON")} onClick={function(e){try{e.currentTarget.value="";}catch(_clearClickErr){}}} style={{position:"fixed",left:-9999,top:-9999,width:1,height:1,opacity:0,pointerEvents:"none"}} onInput={handleBackupJsonFile} onChange={handleBackupJsonFile}/>
           </div>
         </DataAccordionCard>
         <DataAccordionCard icon="📤" title="Esporta dati" desc="Scegli cosa scaricare e poi conferma l’esportazione." open={dataExportOpen} setOpen={setDataExportOpen}>
@@ -5861,8 +5930,8 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     if(settingsPage==="privacy_policy")return <div><PageHeader title="Info app / Informativa Privacy"/><PrivacyPolicyContent/></div>;
 
     function InfoSettingsPage(){
-      var APP_VERSION="1.6.66";
-      var APP_VERSION_CODE=155;
+      var APP_VERSION="1.6.67";
+      var APP_VERSION_CODE=171;
       var APP_WEBSITE="https://fainance.app";
       var PLAY_STORE_WEB_URL="https://play.google.com/store/apps/details?id=it.fainanceapp.app&showAllReviews=true";
       var PLAY_STORE_REVIEW_WEB_URL="https://play.google.com/store/apps/details?id=it.fainanceapp.app&reviewId=0&showAllReviews=true";
