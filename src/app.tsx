@@ -1331,8 +1331,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
   var firestoreHydratedRef=useRef(false);
   var applyingFirestoreRef=useRef(false);
-  var backupImportPendingRef=useRef(0);
-  var backupImportIdRef=useRef("");
   function beginRemoteApply(){applyingFirestoreRef.current=true;}
   function endRemoteApply(){setTimeout(function(){applyingFirestoreRef.current=false;},900);}
 
@@ -1415,6 +1413,16 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [dateFmt,setDateFmt]=useStorage(userKey("pref_datefmt"),getDefaultDateFormat());
   var [firstDayOfWeek,setFirstDayOfWeek]=useStorage(userKey("pref_first_day_week"),"mon");
   var [homeBalanceView,setHomeBalanceView]=useStorage(userKey("pref_home_balance"),"rateizzato");
+  var DEFAULT_HOME_WORKLETS=[
+    {id:"home_quick_actions",type:"quick_actions",size:"1x",color:"#F8FAFF",params:{showTitle:false}},
+    {id:"home_summary",type:"summary",size:"1x",color:"#FFFFFF",params:{showTitle:false}},
+    {id:"home_distribution_expenses",type:"distribution_expenses",size:"1x",color:"#FFFFFF",params:{range:12}},
+    {id:"home_income_vs_expense",type:"income_vs_expense",size:"1x",color:"#FFFFFF",params:{range:12}},
+    {id:"home_monthly_balance",type:"monthly_balance",size:"2x",color:"#FFFFFF",params:{range:12}},
+    {id:"home_latest_expenses",type:"latest_expenses",size:"1x",color:"#FFFFFF",params:{count:5}},
+    {id:"home_latest_incomes",type:"latest_incomes",size:"1x",color:"#FFFFFF",params:{count:5}}
+  ];
+  var [homeWorklets,setHomeWorklets]=useStorage(userKey("home_worklets_v1"),DEFAULT_HOME_WORKLETS);
   var [showAppSummaryHeader,setShowAppSummaryHeader]=useStorage(userKey("pref_show_app_summary_header_v1"),true);
   var [mobileNavOrder,setMobileNavOrder]=useStorage(userKey("pref_mobile_nav_order_v1"),["home","spese","history","voice","more","share"]);
   var [mobileNavIconCount,setMobileNavIconCount]=useStorage(userKey("pref_mobile_nav_icon_count_v1"),5);
@@ -1683,26 +1691,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       beginRemoteApply();
       if(snap.exists()){
         var d=snap.data();
-        var pendingBackupImportTs=Number(backupImportPendingRef.current||0);
-        var cloudUpdatedAtMs=Number((d&&d.updatedAtMs)||0);
-        /*
-          Dopo un ripristino JSON, il listener Firestore può ricevere ancora il vecchio snapshot cloud.
-          Non uso più un campo tecnico _backupImportId nel documento: alcune regole Firestore possono rifiutare
-          campi non previsti e bloccare tutto il salvataggio. Accetto solo snapshot cloud aggiornati dopo
-          l'avvio dell'import; quelli più vecchi vengono ignorati per evitare che cancellino subito i dati importati.
-        */
-        if(pendingBackupImportTs&&Date.now()-pendingBackupImportTs<120000){
-          if(cloudUpdatedAtMs&&cloudUpdatedAtMs>=pendingBackupImportTs-2000){
-            backupImportPendingRef.current=0;
-            backupImportIdRef.current="";
-          }else{
-            endRemoteApply();
-            return;
-          }
-        }else if(pendingBackupImportTs){
-          backupImportPendingRef.current=0;
-          backupImportIdRef.current="";
-        }
         var isFirstSnapshot=firstSnapshot;firstSnapshot=false;
         var cloudExpenses=Array.isArray(d.expenses)?d.expenses:[];
         var cloudIncomes=Array.isArray(d.incomes)?d.incomes:[];
@@ -1748,9 +1736,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.shoppingAreaIcons)setShoppingAreaIcons(d.shoppingAreaIcons);if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);restoreLocalJson("shopping_lists_v2",d.shoppingLists);restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId);restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);
         if(d.historySortDate)setHistorySortDate(d.historySortDate);
         if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
-        if(d.firstDayOfWeek)setFirstDayOfWeek(d.firstDayOfWeek);if(d.homeBalanceView)setHomeBalanceView(d.homeBalanceView);if(d.statsView)setStatsView(d.statsView);if(d.currency)setCurrency(d.currency);if(d.secondaryCurrency)setSecondaryCurrency(d.secondaryCurrency);
-        if(d.showSecInHistory!==undefined)setShowSecInHistory(!!d.showSecInHistory);if(d.showSecInStats!==undefined)setShowSecInStats(!!d.showSecInStats);if(d.showSecInBudget!==undefined)setShowSecInBudget(!!d.showSecInBudget);if(d.showSecInPatrimonio!==undefined)setShowSecInPatrimonio(!!d.showSecInPatrimonio);if(d.showAppSummaryHeader!==undefined)setShowAppSummaryHeader(!!d.showAppSummaryHeader);
-        if(Array.isArray(d.mobileNavOrder))setMobileNavOrder(d.mobileNavOrder);if(d.mobileNavIconCount!==undefined)setMobileNavIconCount(d.mobileNavIconCount);if(Array.isArray(d.mobileMenuOrder))setMobileMenuOrder(d.mobileMenuOrder);if(Array.isArray(d.mobileAllNavOrder))setMobileAllNavOrder(d.mobileAllNavOrder);
         if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);
         if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
         setAppuntiDocuments(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[]);
@@ -1779,7 +1764,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setPlanUsage(chooseCloudLocalObject(d.planUsage,planUsage,{}));
         setShownAlertIds(Array.isArray(d.shownAlertIds)?d.shownAlertIds:[]);
       } else {
-        if(backupImportPendingRef.current&&Date.now()-Number(backupImportPendingRef.current||0)<30000){endRemoteApply();return;}
         // Documento cloud mancante: mantieni il salvataggio locale del profilo corrente e lascialo risalire a Firestore.
         setExpenses(Array.isArray(localSnap.expenses)?localSnap.expenses:[]);setIncomes(Array.isArray(localSnap.incomes)?localSnap.incomes:[]);setRecurring(Array.isArray(localSnap.recurring)?localSnap.recurring:[]);setGoals(Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS);setAlerts(Array.isArray(localSnap.alerts)?localSnap.alerts:[]);setBudgetPlan(localSnap.budgetPlan||DEFAULT_BUDGET_PLAN);
         var restoredMethods=ensureReferencedMethods(chooseCloudLocalArray(null,localSnap.methods,DEFAULT_METHODS,false),localSnap.expenses,localSnap.recurring);
@@ -1810,7 +1794,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var catsTs=0,methodsTs=0;try{catsTs=Number(localStorage.getItem(userKey("cats_updated_at"))||0);}catch(e){}try{methodsTs=Number(localStorage.getItem(userKey("methods_updated_at"))||0);}catch(e){}
     var nowIso=new Date().toISOString();
     var safeMethodsToSave=ensureReferencedMethods(methods,expenses,recurring);
-    setDoc(docRef,{expenses,incomes,cats,methods:safeMethodsToSave,catsUpdatedAt:catsTs,methodsUpdatedAt:methodsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,homeBalanceView,statsView,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrder,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,creditCards:creditCardsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,onboardingGuideSeen,updatedAt:nowIso,updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
+    setDoc(docRef,{expenses,incomes,cats,methods:safeMethodsToSave,catsUpdatedAt:catsTs,methodsUpdatedAt:methodsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,creditCards:creditCardsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,onboardingGuideSeen,updatedAt:nowIso,updatedAtMs:Date.now()},{merge:true}).catch(function(e){console.error("Firestore save error",(e&&e.code)||"unknown");});
   }
 
   async function deleteCurrentAccount(){
@@ -2367,10 +2351,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [isMobile,setIsMobile]=useState(true);
   var [searchQuery,setSearchQuery]=useState("");
   var historySearchDraftRef=useRef("");
-  var backupJsonInputRef=useRef<any>(null);
-  var backupJsonPickerTimerRef=useRef<any>(null);
-  var backupJsonProcessingRef=useRef(false);
-  var backupJsonLastFileKeyRef=useRef("");
   var [filterCat,setFilterCat]=useState("all");
   var [filterCats,setFilterCats]=useState([]);
   var [filterCatExclude,setFilterCatExclude]=useState(false);
@@ -2584,8 +2564,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   } 
 
 
-  var FAINANCE_CURRENT_VERSION="1.6.66";
-  var FAINANCE_CURRENT_VERSION_CODE=155;
+  var FAINANCE_CURRENT_VERSION="1.6.67";
+  var FAINANCE_CURRENT_VERSION_CODE=177;
   function appUpdatePlatform(){
     try{
       var cap=(window as any).Capacitor;
@@ -2754,7 +2734,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return Date.now()-acceptedAt<=7*24*60*60*1000;
   }
 
-  useEffect(function(){if(!appLocked&&termsAccepted&&privacyAccepted&&!onboardingGuideOpen&&!onboardingGuideEligibleNow()){var t=setTimeout(checkAppUpdatePopup,1600);return function(){clearTimeout(t);};}},[appLocked,termsAccepted,privacyAccepted,lang,onboardingGuideSeen,onboardingGuideOpen,legalAcceptanceDate]);
+  useEffect(function(){if(!appLocked&&termsAccepted&&privacyAccepted&&!onboardingGuideOpen){var delay=onboardingGuideEligibleNow()?4200:1600;var t=setTimeout(checkAppUpdatePopup,delay);return function(){clearTimeout(t);};}},[appLocked,termsAccepted,privacyAccepted,lang,onboardingGuideSeen,onboardingGuideOpen,legalAcceptanceDate]);
 
   useEffect(function(){
     if(appLocked||!termsAccepted||!privacyAccepted)return;
@@ -3330,7 +3310,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   function isNativeAndroidApp(){return isNativeMobileApp()&&nativePlatform()==="android";}
   function isNativeIOSApp(){return isNativeMobileApp()&&nativePlatform()==="ios";}
   function appStoreName(){return isNativeIOSApp()?"App Store":"store";}
-  function platformStoreBillingName(){return isNativeIOSApp()?"App Store":"store del dispositivo";}
+  function platformStoreBillingName(){return isNativeIOSApp()?"App Store":(isNativeAndroidApp()?"Google Play":"store del dispositivo");}
   function currentRewardedAdUnitId(){return isNativeIOSApp()?ADMOB_REWARDED_AD_UNIT_ID_IOS:ADMOB_REWARDED_AD_UNIT_ID_ANDROID;}
   function currentBannerAdUnitId(){return isNativeIOSApp()?ADMOB_BANNER_AD_UNIT_ID_IOS:ADMOB_BANNER_AD_UNIT_ID_ANDROID;}
   var adConsentRequestedRef=useRef(false);
@@ -3727,7 +3707,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var curMonthInc=totalForMonth(incomes,curMonthKey,homeBalanceView==="reale"?"reale":"rateizzato");
   var yearExp=expenses.filter(function(e){return e.date.startsWith(String(curYear));}).reduce(function(a,e){return a+e.amount;},0);
   var yearInc=incomes.filter(function(i){return i.date.startsWith(String(curYear));}).reduce(function(a,i){return a+i.amount;},0);
-  var last12Balance=useMemo(function(){return balanceForMonths(expenses,incomes,last12MonthKeys(now),homeBalanceView==="reale"?"reale":"rateizzato");},[expenses,incomes,curMonthKey,homeBalanceView]);
+  var last12Balance=useMemo(function(){return balanceForMonths(expenses,incomes,last12MonthKeys(now));},[expenses,incomes,curMonthKey]);
   var localizedMonthShorts=useMemo(function(){return Array.from({length:12},function(_,i){return monthShortName(i);});},[lang]);
   var monthlyTotals=useMemo(function(){return monthlyTotalsForYear(expenses,incomes,curYear,statsView==="reale"?"reale":"rateizzato",localizedMonthShorts);},[expenses,incomes,curYear,statsView,localizedMonthShorts]);
   function recurringDueInCurrentMonth(r){
@@ -4043,7 +4023,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     // ── Voice ──────────────────────────────────────────────────────────────
     voiceModal,setVoiceModal,voiceListening,setVoiceListening,
     voiceText,setVoiceText,voiceError,setVoiceError,
-    voiceConfirm,setVoiceConfirm,voiceSaving,setVoiceSaving,voiceParsed,setVoiceParsed,
+    voiceConfirm,setVoiceConfirm,voiceSaving,setVoiceSaving,voiceParsed,setVoiceParsed,openVoiceModal,
     // ── Settings specifici ─────────────────────────────────────────────────
     defaultExpenseCat,setDefaultExpenseCat,defaultExpenseMethod,setDefaultExpenseMethod,
     defaultExpenseArea,setDefaultExpenseArea,defaultIncomeType,setDefaultIncomeType,
@@ -4051,7 +4031,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     incomeTypeOrder,setIncomeTypeOrder,
     deleteConfirmId,setDeleteConfirmId,
     mergeFrom,setMergeFrom,mergeTo,setMergeTo,
-    homeBalanceView,setHomeBalanceView,showAppSummaryHeader,setShowAppSummaryHeader,firstDayOfWeek,setFirstDayOfWeek,
+    homeBalanceView,setHomeBalanceView,homeWorklets,setHomeWorklets,showAppSummaryHeader,setShowAppSummaryHeader,firstDayOfWeek,setFirstDayOfWeek,
     mobileNavOrder,setMobileNavOrder,mobileNavIconCount,setMobileNavIconCount,mobileMenuOrder,setMobileMenuOrder,
     // ── AI floating ────────────────────────────────────────────────────────
     aiFloatingPos,setAiFloatingPos,aiFloatingDrag,setAiFloatingDrag,
@@ -4584,9 +4564,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       {title:"Dati trattati",text:"fAInance può salvare i dati che inserisci nell’app, come entrate, uscite, categorie, metodi di pagamento, ricorrenze, budget, patrimonio, obiettivi, alert, appunti, documenti caricati e coordinate bancarie salvate volontariamente."},
       {title:"Account e accesso",text:"Se accedi con email/password, Google o Apple, vengono usati i dati necessari all’autenticazione, come identificativo utente, email e nome profilo. L’accesso è gestito tramite Firebase Authentication."},
       {title:"Salvataggio e sincronizzazione",text:"I dati dell’app possono essere salvati localmente sul dispositivo e, per gli utenti autenticati, sincronizzati su Firestore/Firebase per consentire backup e recupero dei dati collegati all’account."},
-      {title:"Uso dell’Agente AI",text:"Quando usi il Consulente AI esterno, fAInance invia la domanda scritta nella chat, la lingua selezionata, il livello di analisi scelto e il contesto finanziario necessario al backend sicuro fAInance e al provider AI esterno OpenAI per generare la risposta."},
-      {title:"Dati condivisi con l’AI",text:"In base al livello scelto nelle impostazioni IA possono essere inviati riepiloghi finanziari, budget, categorie, ricorrenze, dati aggregati per area e, solo con Analisi completa, transazioni essenziali come data, importo, categoria o metodo, tipo entrata e descrizione."},
-      {title:"Dati non condivisi con l’AI",text:"Non vengono inviati all’Agente AI esterno CVV, dati biometrici, password, documenti caricati, immagini, fidelity card o dati delle carte di credito. Prima del primo invio l’app mostra un consenso dedicato che indica dati inviati, destinatari e finalità."},
+      {title:"Uso dell’Agente AI",text:"Quando usi il Consulente AI, fAInance invia la domanda e il contesto finanziario selezionato al backend sicuro fAInance e al provider AI esterno OpenAI per generare la risposta. I dati inviati possono includere lingua, livello di analisi, riepiloghi finanziari, budget, categorie, ricorrenze e, solo se scegli l’analisi completa, transazioni essenziali come data, importo, categoria o tipo e descrizione. Non vengono inviati CVV, dati biometrici, password, documenti caricati, immagini, fidelity card o dati completi delle carte di credito. Puoi non autorizzare o revocare il consenso e continuare a usare l’app senza inviare dati all’Agente AI esterno."},
       {title:"Finalità",text:"I dati vengono usati per fornire le funzionalità dell’app: registrazione movimenti, statistiche, budget, alert, patrimonio, backup, sincronizzazione e analisi tramite AI."},
       {title:"Responsabilità dell’utente",text:"L’utente decide quali dati inserire, caricare o cancellare. Prima di salvare documenti, note o coordinate bancarie, valuta se siano davvero necessari per l’uso personale dell’app."},
       {title:"Cancellazione dati",text:"L’app include funzioni per eliminare dati per sezione o cancellare informazioni salvate. Alcuni dati potrebbero restare in backup o cache tecniche fino ai normali tempi di aggiornamento dei servizi utilizzati."},
@@ -4603,7 +4581,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         <div style={{fontSize:13,color:subC,lineHeight:1.55}}>{L(r.text)}</div>
       </div>;})}
       <div style={{background:dark?"#24213a":"#F0EDFF",borderRadius:14,border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),padding:16}}>
-        <div style={{fontSize:13,color:dark?"#BEB8FF":"#534AB7",lineHeight:1.55,fontWeight:600}}>{L("Versione privacy: 1.1 · Ultimo aggiornamento: 10/07/2026")}</div>
+        <div style={{fontSize:13,color:dark?"#BEB8FF":"#534AB7",lineHeight:1.55,fontWeight:600}}>{L("Versione privacy: 1.0 · Ultimo aggiornamento: 25/05/2026")}</div>
       </div>
     </div>;
   }
@@ -5130,13 +5108,6 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
             </div>
             <Toggle label="" checked={aiFloatingEnabled} onChange={function(){setAiFloatingEnabled(!aiFloatingEnabled);setToast("Impostazioni IA aggiornate");}}/>
           </div>
-          <div style={{marginTop:14,background:dark?"#252535":"#F8FAFF",border:"1px solid "+borderC,borderRadius:12,padding:"12px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:800,color:textC}}>🔐 {L("Consenso Agente AI esterno")}</div>
-              <div style={{fontSize:12,color:subC,marginTop:3,lineHeight:1.4}}>{L("Puoi reimpostare il consenso: alla prossima domanda l’app mostrerà di nuovo il dettaglio dei dati inviati al backend fAInance e a OpenAI.")}</div>
-            </div>
-            <Btn onClick={function(){try{localStorage.removeItem(userKey("ai_external_ai_consent_v1"));}catch(e){}setToast({text:L("Consenso AI esterno reimpostato"),type:"success",icon:"✅",color:"#1D9E75"});}} bg={secondaryButtonColor||"#378ADD"} style={{whiteSpace:"nowrap"}}>{L("Reimposta")}</Btn>
-          </div>
           <div style={{fontSize:11,color:subC,marginTop:10,lineHeight:1.45}}>{L("Questa impostazione viene applicata solo alle richieste inviate all’agente AI esterno. I consigli locali dell’app continuano a usare i dati già presenti sul dispositivo.")}</div>
         </div>
       </div>
@@ -5420,22 +5391,22 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
 
     if(settingsPage==="appearance")return <div><PageHeader title="Aspetto"/><SettingsCards items={[
       {id:"appearance_app",icon:"🎨",label:"App",desc:"Tema, sfondo, stile e colori dei pulsanti dell’app"},
-      {id:"appearance_nav",icon:"📱",label:"Barra superiore ed Inferiore",desc:"Barra superiore, barra inferiore, numero icone e ordine delle sezioni"},
+      {id:"appearance_nav",icon:"📱",label:"Barra superiore e inferiore",desc:"Riepilogo alto, numero icone e ordine delle sezioni"},
       {id:"appearance_widget",icon:"🧩",label:"Widget",desc:"Configurazione separata del widget Android"}
     ]}/></div>;
 
-    if(settingsPage==="appearance_nav")return <div><PageHeader title="Aspetto / Barra superiore ed Inferiore"/>
+    if(settingsPage==="appearance_nav")return <div><PageHeader title="Aspetto / Barra superiore e inferiore"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>📊 {L("Barra Superiore")}</div>
+          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>📊 Mostra riepilogo in alto</div>
           <SettingHint>{translateUiRuntimeText("Attiva o rimuove la barra superiore con Uscite, Saldo ed Entrate.")}</SettingHint>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:14,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:"12px 14px"}}>
-            <div><div style={{fontSize:13,fontWeight:700,color:textC}}>{L("Barra Superiore")}</div><div style={{fontSize:12,color:subC,marginTop:3,lineHeight:1.35}}>Mostra o nasconde la parte alta dell'app.</div></div>
+            <div><div style={{fontSize:13,fontWeight:700,color:textC}}>Mostra riepilogo in alto</div><div style={{fontSize:12,color:subC,marginTop:3,lineHeight:1.35}}>Mostra o nasconde la parte alta dell'app.</div></div>
             <Toggle label="" checked={!!showAppSummaryHeader} onChange={function(){setShowAppSummaryHeader(!showAppSummaryHeader);setToast(L("Impostazioni aggiornate"));}}/>
           </div>
         </div>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>{"📱 "+L("Barra Inferiore")}</div>
+          <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>{"📱 "+L("Barra superiore e inferiore")}</div>
           <SettingHint>{L("Le prime sezioni dell'elenco entrano nella barra inferiore, in base al numero di icone scelto. Le altre restano nel menu Altro. L'icona Altro resta sempre disponibile.")}</SettingHint>
           <div style={{fontSize:13,fontWeight:700,color:textC,marginBottom:6}}>{L("Numero icone nella barra inferiore")}</div>
           <Segmented items={[3,4,5,6].map(function(n){return{id:String(n),label:String(n)};})} value={String(mobileNavIconCount||5)} onChange={function(v){setMobileNavIconCount(parseInt(v,10));setToast(L("Impostazioni aggiornate"));}}/>
@@ -5522,214 +5493,25 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
           <Segmented items={[{id:"untilToday",label:"Solo fino a oggi"},{id:"all",label:"Mostra anche future"}]} value={historyFutureMode} onChange={setHistoryFutureMode}/>
         </div>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{fontSize:14,fontWeight:600,color:textC,marginBottom:4}}>{L("Share nello storico")} {!baseSettingsAllowed&&<span style={{fontSize:11,color:subC}}> 🔒 Base</span>}</div>
+          <div style={{fontSize:14,fontWeight:600,color:textC,marginBottom:4}}>🤝 {L("Share nello storico")} {!baseSettingsAllowed&&<span style={{fontSize:11,color:subC}}> 🔒 Base</span>}</div>
           <SettingHint>Attiva questa opzione per mostrare nello storico anche la tua quota delle spese inserite nella sezione Share. La categoria Share comparirà nei filtri solo quando questa opzione è attiva.</SettingHint>
-          <Toggle label={dataTitle("Mostra transazioni Share nello storico")} checked={showShareInHistory} onChange={function(){setShowShareInHistory(!showShareInHistory);}} color={confirmButtonColor}/>
+          <Toggle label={L("Mostra transazioni Share nello storico")} checked={showShareInHistory} onChange={function(){setShowShareInHistory(!showShareInHistory);}} color={confirmButtonColor}/>
         </div>
       </div>
     </div>;
 
     function backupLocalJson(key,fallback){try{var raw=localStorage.getItem(userKey(key));return raw?JSON.parse(raw):fallback;}catch(e){return fallback;}}
     function restoreLocalJson(key,value){try{if(value!==undefined)localStorage.setItem(userKey(key),JSON.stringify(value));}catch(e){}}
-    function buildBackupPayload(){return {expenses,incomes,cats,methods,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder,methodOrder,catSortMode,methodSortMode,incomeTypeOrder,defaultExpenseArea,defaultExpenseCat,defaultExpenseMethod,defaultIncomeArea,defaultIncomeType,defaultMethodArea,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,homeBalanceView,statsView,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrder,appuntiDocuments,appuntiNotes,bankCoords,creditCards,aiDataAccess,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists:backupLocalJson("shopping_lists_v2",[]),activeShoppingListId:backupLocalJson("shopping_active_list_id_v2","main"),shoppingProductSort:backupLocalJson("shopping_product_sort_v1","custom"),showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor,secondaryButtonColor};}
+    function buildBackupPayload(){return {expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,firstDayOfWeek,appuntiDocuments,appuntiNotes,bankCoords,creditCards,aiDataAccess,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists:backupLocalJson("shopping_lists_v2",[]),activeShoppingListId:backupLocalJson("shopping_active_list_id_v2","main"),shoppingProductSort:backupLocalJson("shopping_product_sort_v1","custom"),showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor,secondaryButtonColor};}
     function countBackupItems(d){d=d||{};var parts=[];function add(label,n){n=Number(n||0);if(n>0)parts.push(n+" "+label);}add("uscite",(d.expenses||[]).length);add("entrate",(d.incomes||[]).length);add("ricorrenti",(d.recurring||[]).length);add("obiettivi",(d.goals||[]).length);add("alert",(d.alerts||[]).length);add("voci patrimonio",(d.patrimonioEntries||[]).length);add("mesi patrimonio",Object.keys(d.patrimonioHistory||{}).length);add("documenti",(d.appuntiDocuments||[]).length);add("appunti",(d.appuntiNotes||[]).length);add("coordinate",(d.bankCoords||[]).length);add("carte di credito",(d.creditCards||[]).length);add("progetti Share",(d.shareProjects||[]).length);add(L("debiti/crediti"),(d.debtCredits||[]).length);add(L("carte fidelity"),(d.shoppingCards||[]).length);add(L("prodotti spesa"),(d.shoppingItems||[]).length);add(L("aree spesa"),(d.shoppingAreas||[]).length);add(L("liste spesa"),(d.shoppingLists||[]).length);return parts.length?parts.join(" · "):"0 voci";}
-    function hasBackupKey(d,k){return !!d&&Object.prototype.hasOwnProperty.call(d,k);}
-    function backupStorageKeyMap(){return {
-      expenses:"exp_v10",incomes:"inc_v10",cats:"cats_v10",methods:"meth_v10",expenseGroups:"expense_groups_v1",incomeGroups:"income_groups_v1",methodGroups:"method_groups_v1",customIncomeTypes:"custom_income_types_v1",incomeTypeOverrides:"income_type_overrides_v1",catOrder:"cat_order_v1",methodOrder:"method_order_v1",catSortMode:"cat_sort_mode",methodSortMode:"method_sort_mode",incomeTypeOrder:"income_type_order_v1",
-      defaultExpenseArea:"default_expense_area_v1",defaultExpenseCat:"default_expense_cat_v1",defaultExpenseMethod:"default_expense_method_v1",defaultIncomeArea:"default_income_area_v1",defaultIncomeType:"default_income_type_v1",defaultMethodArea:"default_method_area_v1",
-      recurring:"rec_v10",goals:"goals_v1",alerts:"alerts_v1",budgetPlan:"budget_plan_v1",patrimonioValues:"patrimonio_values_v1",patrimonioAreas:"patrimonio_areas_v1",patrimonioEntries:"patrimonio_entries_v1",patrimonioHistory:"patrimonio_history_v1",patrimonioNotes:"patrimonio_notes_v1",
-      historyFutureMode:"history_future_mode_v1",historySortDate:"history_sort_date_v1",historySortDirection:"history_sort_direction_v1",historySortSecondary:"history_sort_secondary_v1",historySortSecondaryDirection:"history_sort_secondary_direction_v1",firstDayOfWeek:"pref_first_day_week",homeBalanceView:"pref_home_balance",statsView:"pref_statsview",currency:"pref_cur",secondaryCurrency:"pref_sec_cur",showSecInHistory:"pref_sec_history",showSecInStats:"pref_sec_stats",showSecInBudget:"pref_sec_budget",showSecInPatrimonio:"pref_sec_patrimonio",showAppSummaryHeader:"pref_show_app_summary_header_v1",mobileNavOrder:"pref_mobile_nav_order_v1",mobileNavIconCount:"pref_mobile_nav_icon_count_v1",mobileMenuOrder:"pref_mobile_menu_order_v1",mobileAllNavOrder:"pref_mobile_all_nav_order_v1",
-      appuntiDocuments:"appunti_documents_v1",appuntiNotes:"appunti_notes_v1",bankCoords:"bank_coords_v1",creditCards:"credit_cards_v1",aiDataAccess:"ai_data_access_v1",shareProjects:"share_projects_v1",showShareInHistory:"share_show_history_v1",debtCredits:"debt_credits_v1",shoppingCards:"shopping_cards_v1",shoppingItems:"shopping_items_v1",shoppingAreas:"shopping_areas_v1",shoppingAreaIcons:"shopping_area_icons_v1",shoppingBoughtColor:"shopping_bought_color_v1",shoppingDefaultArea:"shopping_default_area_v1",shoppingLists:"shopping_lists_v2",activeShoppingListId:"shopping_active_list_id_v2",shoppingProductSort:"shopping_product_sort_v1",showDebtCreditsInPatrimonio:"debt_credits_show_patrimonio_v1",showDebtCreditsInExpenses:"debt_credits_show_expenses_v1",shareReceiptUploads:"share_receipt_uploads_v1",confirmButtonColor:"pref_confirm_color",secondaryButtonColor:"pref_secondary_button_color_v1"
-    };}
-    function parseBackupStoredValue(v){if(typeof v==="string"){var t=v.trim();if((t.charAt(0)==="{"&&t.charAt(t.length-1)==="}")||(t.charAt(0)==="["&&t.charAt(t.length-1)==="]")||t==="true"||t==="false"||t==="null"||/^-?\d+(\.\d+)?$/.test(t)){try{return JSON.parse(t);}catch(e){return v;}}}return v;}
-    function readBackupStorageDumpValue(root,storageKey){
-      if(!root||typeof root!=="object"||Array.isArray(root))return undefined;
-      var keys=Object.keys(root);var exactUserKey="";try{exactUserKey=userKey(storageKey);}catch(e){}
-      var candidates=[storageKey,exactUserKey].filter(Boolean);
-      for(var i=0;i<keys.length;i++){var k=String(keys[i]);if(k===storageKey||k===exactUserKey||k.endsWith("_"+storageKey)||k.endsWith(":"+storageKey)||k.endsWith("/"+storageKey))candidates.push(k);}
-      for(var j=0;j<candidates.length;j++){var ck=candidates[j];if(ck&&Object.prototype.hasOwnProperty.call(root,ck))return parseBackupStoredValue(root[ck]);}
-      return undefined;
-    }
-    function backupFromStorageDump(root){
-      var map=backupStorageKeyMap();var out:any={};
-      Object.keys(map).forEach(function(k){var v=readBackupStorageDumpValue(root,map[k]);if(v!==undefined)out[k]=v;});
-      return Object.keys(out).length?out:null;
-    }
-    function normalizeBackupAliases(d){
-      if(!d||typeof d!=="object"||Array.isArray(d))return d;
-      var out={...d};
-      function alias(to,names){if(hasBackupKey(out,to))return;for(var i=0;i<names.length;i++){if(hasBackupKey(d,names[i])){out[to]=d[names[i]];return;}}}
-      alias("expenses",["exp_v10","uscite","spese","expenseList","expensesList"]);alias("incomes",["inc_v10","entrate","incomeList","incomesList"]);alias("recurring",["rec_v10","ricorrenti"]);alias("cats",["cats_v10","categorie","expenseCategories"]);alias("methods",["meth_v10","metodi","paymentMethods"]);alias("budgetPlan",["budget","budget_json"]);alias("patrimonioValues",["patrimonio","patrimonio_json","assetsValues"]);alias("debtCredits",["debt_credits","debt_credits_json","debitiCrediti"]);alias("shoppingCards",["fidelityCards","cardsFidelity"]);alias("shoppingItems",["shoppingProducts","prodottiSpesa"]);alias("shoppingLists",["shopping_lists","listeSpesa"]);
-      return out;
-    }
-    function restoreBackupLocalStorage(d){
-      if(!d||typeof d!=="object"||Array.isArray(d))return;
-      var map=backupStorageKeyMap();Object.keys(map).forEach(function(k){if(hasBackupKey(d,k))restoreLocalJson(map[k],d[k]);});
-      try{if(hasBackupKey(d,"cats"))markUserLocalChange("cats");if(hasBackupKey(d,"methods"))markUserLocalChange("methods");}catch(e){}
-    }
-    function applyBackupData(d,skipToast){
-      d=normalizeBackupAliases(d);
-      if(!d||typeof d!=="object"||Array.isArray(d))return 0;
-      restoreBackupLocalStorage(d);
-      var applied=0;
-      function arr(k,setter,fallback){if(hasBackupKey(d,k)){setter(Array.isArray(d[k])?d[k]:(fallback||[]));applied++;}}
-      function obj(k,setter,fallback){if(hasBackupKey(d,k)){setter(d[k]&&typeof d[k]==="object"&&!Array.isArray(d[k])?d[k]:(fallback||{}));applied++;}}
-      function val(k,setter){if(hasBackupKey(d,k)){setter(d[k]);applied++;}}
-      function bool(k,setter){if(hasBackupKey(d,k)){setter(!!d[k]);applied++;}}
-      arr("expenses",setExpenses,[]);arr("incomes",setIncomes,[]);arr("cats",setCats,DEFAULT_CATS);arr("methods",setMethods,DEFAULT_METHODS);arr("expenseGroups",setExpenseGroups,DEFAULT_EXPENSE_GROUPS);arr("incomeGroups",setIncomeGroups,DEFAULT_INCOME_GROUPS);arr("methodGroups",setMethodGroups,DEFAULT_METHOD_GROUPS);arr("customIncomeTypes",setCustomIncomeTypes,[]);obj("incomeTypeOverrides",setIncomeTypeOverrides,{});arr("catOrder",setCatOrder,[]);arr("methodOrder",setMethodOrder,[]);val("catSortMode",setCatSortMode);val("methodSortMode",setMethodSortMode);arr("incomeTypeOrder",setIncomeTypeOrder,[]);
-      val("defaultExpenseArea",setDefaultExpenseArea);val("defaultExpenseCat",setDefaultExpenseCat);val("defaultExpenseMethod",setDefaultExpenseMethod);val("defaultIncomeArea",setDefaultIncomeArea);val("defaultIncomeType",setDefaultIncomeType);val("defaultMethodArea",setDefaultMethodArea);
-      arr("recurring",setRecurring,[]);arr("goals",setGoals,DEFAULT_GOALS);arr("alerts",setAlerts,[]);obj("budgetPlan",setBudgetPlan,DEFAULT_BUDGET_PLAN);obj("patrimonioValues",setPatrimonioValues,{});arr("patrimonioAreas",setPatrimonioAreas,DEFAULT_PATRIMONIO_AREAS);arr("patrimonioEntries",setPatrimonioEntries,DEFAULT_PATRIMONIO_ENTRIES);obj("patrimonioHistory",setPatrimonioHistory,{});obj("patrimonioNotes",setPatrimonioNotes,{});
-      val("historyFutureMode",setHistoryFutureMode);val("historySortDate",setHistorySortDate);val("historySortDirection",setHistorySortDirection);val("historySortSecondary",setHistorySortSecondary);val("historySortSecondaryDirection",setHistorySortSecondaryDirection);val("firstDayOfWeek",setFirstDayOfWeek);val("homeBalanceView",setHomeBalanceView);val("statsView",setStatsView);val("currency",setCurrency);val("secondaryCurrency",setSecondaryCurrency);bool("showSecInHistory",setShowSecInHistory);bool("showSecInStats",setShowSecInStats);bool("showSecInBudget",setShowSecInBudget);bool("showSecInPatrimonio",setShowSecInPatrimonio);bool("showAppSummaryHeader",setShowAppSummaryHeader);arr("mobileNavOrder",setMobileNavOrder,[]);val("mobileNavIconCount",setMobileNavIconCount);arr("mobileMenuOrder",setMobileMenuOrder,[]);arr("mobileAllNavOrder",setMobileAllNavOrder,DEFAULT_MOBILE_ALL_NAV_ORDER);
-      arr("appuntiDocuments",setAppuntiDocuments,[]);arr("appuntiNotes",setAppuntiNotes,[]);arr("bankCoords",setBankCoords,[]);arr("creditCards",setCreditCards,[]);if(hasBackupKey(d,"aiDataAccess")){setAiDataAccess(d.aiDataAccess);applied++;}
-      arr("shareProjects",setShareProjects,[]);bool("showShareInHistory",setShowShareInHistory);arr("debtCredits",setDebtCredits,[]);arr("shoppingCards",setShoppingCards,[]);arr("shoppingItems",setShoppingItems,[]);arr("shoppingAreas",setShoppingAreas,DEFAULT_SHOPPING_AREAS);obj("shoppingAreaIcons",setShoppingAreaIcons,{});val("shoppingBoughtColor",setShoppingBoughtColor);val("shoppingDefaultArea",setShoppingDefaultArea);if(hasBackupKey(d,"shoppingLists")){var restoredLists=Array.isArray(d.shoppingLists)?d.shoppingLists:[];setShoppingLists(restoredLists);restoreLocalJson("shopping_lists_v2",restoredLists);applied++;}if(hasBackupKey(d,"activeShoppingListId")){setActiveShoppingListId(d.activeShoppingListId||"main");restoreLocalJson("shopping_active_list_id_v2",d.activeShoppingListId||"main");applied++;}if(hasBackupKey(d,"shoppingProductSort")){setShoppingProductSort(d.shoppingProductSort||"custom");restoreLocalJson("shopping_product_sort_v1",d.shoppingProductSort||"custom");applied++;}
-      bool("showDebtCreditsInPatrimonio",setShowDebtCreditsInPatrimonio);bool("showDebtCreditsInExpenses",setShowDebtCreditsInExpenses);arr("shareReceiptUploads",setShareReceiptUploads,[]);val("confirmButtonColor",setConfirmButtonColor);val("secondaryButtonColor",setSecondaryButtonColor);
-      if(applied>0&&!skipToast)setToast({text:L("Backup ripristinato"),type:"success",icon:"✅",color:confirmButtonColor});
-      return applied;
-    }
-    function normalizeBackupDataRoot(d){
-      if(!d||typeof d!=="object"||Array.isArray(d))return d;
-      var storageRoot=backupFromStorageDump(d);
-      if(storageRoot)return normalizeBackupAliases(storageRoot);
-      var roots=["data","backup","fainanceBackup","payload","userData","backupData","localStorage","storage"];
-      for(var i=0;i<roots.length;i++){
-        var key=roots[i];
-        if(d[key]&&typeof d[key]==="object"&&!Array.isArray(d[key])){
-          var fromStorage=backupFromStorageDump(d[key]);
-          if(fromStorage)return normalizeBackupAliases(fromStorage);
-          var normalized=normalizeBackupAliases(d[key]);
-          if(normalized&&typeof normalized==="object"&&!Array.isArray(normalized)){
-            var known=0;["expenses","incomes","recurring","cats","methods","budgetPlan","patrimonioValues","shareProjects","debtCredits","shoppingCards","shoppingItems","shoppingLists"].forEach(function(k){if(hasBackupKey(normalized,k))known++;});
-            if(known>0)return normalized;
-          }
-        }
-      }
-      return normalizeBackupAliases(d);
-    }
-    function backupFirestorePayload(d,importId){
-      void importId;
-      var out:any={};
-      ["expenses","incomes","cats","methods","expenseGroups","incomeGroups","methodGroups","customIncomeTypes","incomeTypeOverrides","catOrder","methodOrder","catSortMode","methodSortMode","incomeTypeOrder","defaultExpenseArea","defaultExpenseCat","defaultExpenseMethod","defaultIncomeArea","defaultIncomeType","defaultMethodArea","recurring","goals","alerts","budgetPlan","patrimonioValues","patrimonioAreas","patrimonioEntries","patrimonioHistory","patrimonioNotes","historyFutureMode","historySortDate","historySortDirection","historySortSecondary","historySortSecondaryDirection","firstDayOfWeek","homeBalanceView","statsView","currency","secondaryCurrency","showSecInHistory","showSecInStats","showSecInBudget","showSecInPatrimonio","showAppSummaryHeader","mobileNavOrder","mobileNavIconCount","mobileMenuOrder","mobileAllNavOrder","appuntiDocuments","appuntiNotes","bankCoords","creditCards","aiDataAccess","shareProjects","showShareInHistory","debtCredits","shoppingCards","shoppingItems","shoppingAreas","shoppingAreaIcons","shoppingBoughtColor","shoppingDefaultArea","shoppingLists","activeShoppingListId","shoppingProductSort","showDebtCreditsInPatrimonio","showDebtCreditsInExpenses","shareReceiptUploads","confirmButtonColor","secondaryButtonColor"].forEach(function(k){if(hasBackupKey(d,k)&&d[k]!==undefined)out[k]=d[k];});
-      /* Non salvo campi tecnici extra: il documento Firestore resta composto solo dai dati applicativi consentiti. */
-      out.updatedAt=new Date().toISOString();
-      out.updatedAtMs=Date.now();
-      return out;
-    }
-    async function persistBackupDataToFirestore(d,importId){
-      if(!userId||!fbDb)return false;
-      try{
-        var payload=backupFirestorePayload(d,importId);
-        if(!payload||Object.keys(payload).length<=2)return false;
-        await setDoc(doc(fbDb,"userData",userId),payload,{merge:true});
-        return true;
-      }catch(err){
-        console.error("Backup JSON Firestore persist error",err);
-        return false;
-      }
-    }
-    function clearBackupPickerTimer(){
-      try{if(backupJsonPickerTimerRef.current){clearTimeout(backupJsonPickerTimerRef.current);backupJsonPickerTimerRef.current=null;}}catch(e){}
-    }
-    function openBackupJsonPicker(){
-      try{
-        var node:any=backupJsonInputRef&&backupJsonInputRef.current;
-        if(!node){setToast({text:L("Selettore file non disponibile"),type:"error",icon:"🚫",color:"#E24B4A"});return;}
-        backupJsonProcessingRef.current=false;
-        backupJsonLastFileKeyRef.current="";
-        node.value="";
-        /* Su alcune WebView l'evento React onChange del file input non viene sempre inoltrato.
-           Collego anche i listener nativi prima di aprire il selettore, così la selezione del JSON
-           arriva comunque alla stessa funzione di ripristino. */
-        node.onchange=function(ev){handleBackupJsonFile(ev);};
-        node.oninput=function(ev){handleBackupJsonFile(ev);};
-        setToast({text:L("Seleziona il backup JSON"),type:"info",icon:"📄",color:confirmButtonColor});
-        clearBackupPickerTimer();
-        backupJsonPickerTimerRef.current=setTimeout(function(){
-          if(!backupJsonProcessingRef.current){setToast({text:L("Nessun file ricevuto dal selettore"),type:"error",icon:"🚫",color:"#E24B4A"});}
-        },25000);
-        node.click();
-      }catch(e){clearBackupPickerTimer();setToast({text:L("Errore durante la lettura del file."),type:"error",icon:"🚫",color:"#E24B4A"});}
-    }
-    function readBackupFileAsText(f){
-      return new Promise(function(resolve,reject){
-        var done=false;
-        var timer:any=null;
-        function finish(v){if(done)return;done=true;try{if(timer)clearTimeout(timer);}catch(_t){}resolve(String(v||""));}
-        function fail(err){if(done)return;done=true;try{if(timer)clearTimeout(timer);}catch(_t){}reject(err||new Error("read error"));}
-        function readWithFileReader(){
-          try{
-            var r=new FileReader();
-            r.onload=function(ev){finish((ev&&ev.target&&ev.target.result)||"");};
-            r.onerror=function(){fail(r.error||new Error("read error"));};
-            r.onabort=function(){fail(new Error("read aborted"));};
-            r.readAsText(f,"UTF-8");
-          }catch(err){fail(err);}
-        }
-        try{timer=setTimeout(function(){fail(new Error("read timeout"));},12000);}catch(_timerErr){}
-        try{
-          if(f&&typeof f.text==="function"){
-            f.text().then(finish).catch(function(){readWithFileReader();});
-            return;
-          }
-        }catch(_textErr){}
-        readWithFileReader();
-      });
-    }
-    async function importBackupJsonText(txt,fileName){
-      setToast({text:L("Analisi del backup JSON"),type:"info",icon:"📄",color:confirmButtonColor});
-      var rawText=String(txt||"").replace(/^\uFEFF/,"");
-      if(!rawText.trim())throw new Error("empty json");
-      var parsed=JSON.parse(rawText);
-      var d=normalizeBackupDataRoot(parsed);
-      if(!d||typeof d!=="object"||Array.isArray(d))throw new Error("invalid json");
-      var importTs=Date.now();
-      var importId="backup_json_"+importTs+"_"+Math.random().toString(36).slice(2,8);
-      backupImportPendingRef.current=importTs;
-      backupImportIdRef.current=importId;
-      var summary=countBackupItems(d);
-      var applied=applyBackupData(d,true);
-      if(!applied){backupImportPendingRef.current=0;backupImportIdRef.current="";throw new Error("no supported keys");}
-      firestoreHydratedRef.current=true;
-      setFirestoreReady(true);
-      setToast({text:L("Backup ripristinato")+(summary&&summary!=="0 voci"?" · "+summary:""),type:"success",icon:"✅",color:confirmButtonColor});
-      persistBackupDataToFirestore(d,importId).then(function(ok){
-        if(!ok)console.warn("Backup JSON salvato in locale; sincronizzazione cloud non confermata");
-      }).catch(function(err){console.error("Backup JSON Firestore async persist error",err);});
-      return applied;
-    }
-    async function handleBackupJsonFile(e){
-      var input=e&&((e.currentTarget)||(e.target));
-      var files=input&&input.files;
-      var f=files&&files.length?files[0]:null;
-      if(!f){clearBackupPickerTimer();setToast({text:L("Nessun file ricevuto dal selettore"),type:"error",icon:"🚫",color:"#E24B4A"});return;}
-      var fileKey=String(f.name||"")+"|"+String(f.size||0)+"|"+String(f.lastModified||0);
-      if(backupJsonProcessingRef.current&&backupJsonLastFileKeyRef.current===fileKey)return;
-      backupJsonProcessingRef.current=true;
-      backupJsonLastFileKeyRef.current=fileKey;
-      clearBackupPickerTimer();
-      try{
-        setToast({text:L("File selezionato")+": "+String(f.name||"backup.json"),type:"info",icon:"📄",color:confirmButtonColor});
-        var txt=await readBackupFileAsText(f);
-        setToast({text:L("File letto")+" · "+String(txt||"").length+" "+L("caratteri"),type:"info",icon:"📄",color:confirmButtonColor});
-        await importBackupJsonText(txt,f&&f.name);
-      }catch(err){
-        console.error("Backup JSON import error",err);
-        var errMsg=String((err&&err.message)||"");
-        var msg=errMsg==="no supported keys"?L("Il JSON non contiene dati fAInance riconosciuti"):(errMsg==="read timeout"?L("Lettura del file non completata"):(errMsg==="empty json"?L("Il file JSON è vuoto"):L("File JSON non valido")));
-        setToast({text:msg,type:"error",icon:"🚫",color:"#E24B4A"});
-      }finally{
-        try{if(input)input.value="";}catch(clearErr){}
-        backupJsonProcessingRef.current=false;
-      }
-    }
+    function applyBackupData(d){if(d.expenses)setExpenses(d.expenses);if(d.incomes)setIncomes(d.incomes);if(d.cats)setCats(d.cats);if(d.methods)setMethods(d.methods);if(d.recurring)setRecurring(d.recurring);if(d.goals)setGoals(d.goals);if(d.alerts)setAlerts(d.alerts);if(d.budgetPlan!==undefined)setBudgetPlan(d.budgetPlan);if(d.patrimonioValues)setPatrimonioValues(d.patrimonioValues);if(d.patrimonioAreas)setPatrimonioAreas(d.patrimonioAreas);if(d.patrimonioEntries)setPatrimonioEntries(d.patrimonioEntries);if(d.patrimonioHistory)setPatrimonioHistory(d.patrimonioHistory);if(d.patrimonioNotes)setPatrimonioNotes(d.patrimonioNotes);if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.shareProjects)setShareProjects(d.shareProjects);if(d.debtCredits)setDebtCredits(d.debtCredits);if(d.shoppingCards)setShoppingCards(d.shoppingCards);if(d.shoppingItems)setShoppingItems(d.shoppingItems);if(d.shoppingAreas)setShoppingAreas(d.shoppingAreas);if(d.shareReceiptUploads)setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);if(d.historySortDate)setHistorySortDate(d.historySortDate);if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);if(d.appuntiDocuments)setAppuntiDocuments(d.appuntiDocuments);if(d.appuntiNotes)setAppuntiNotes(d.appuntiNotes);if(d.bankCoords)setBankCoords(d.bankCoords);if(d.creditCards)setCreditCards(d.creditCards);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);setToast("Backup ripristinato");}
+    function handleBackupJsonFile(e){var f=e.target.files&&e.target.files[0];if(!f)return;e.target.value="";var r=new FileReader();r.onload=function(ev){try{var d=JSON.parse(String(ev.target.result||"{}"));var summary=countBackupItems(d);var ok=window.confirm(L("Stai per ripristinare questo backup.\nVoci che verranno importate: ")+summary+L(".\n\nContinuare?"));if(!ok)return;applyBackupData(d);}catch(err){setToast({text:"File JSON non valido",type:"error",icon:"🚫",color:"#E24B4A"});}};r.readAsText(f);} 
 
-    function dataTitle(label){var s=String(L(label)||label||"").trim();function strip(v){var out=String(v||"").trim();try{out=out.replace(/^(📥|📤|🗑️|🗑|🧺|📦|💾|✅|⚠️|⚠|🚫)\s*/g,"");while(out.length){var cp=out.codePointAt(0)||0;var ch=String.fromCodePoint(cp);var isIcon=(cp>=0x1F000&&cp<=0x1FAFF)||(cp>=0x2600&&cp<=0x27BF)||cp===0xFE0F||cp===0xFE0E||cp===0x200D||/\s/.test(ch);if(!isIcon)break;out=out.slice(ch.length).trimStart();}}catch(e){}return out.replace(/^[^A-Za-z0-9À-ÖØ-öø-ÿΑ-ωΆ-ώ]+/g,"").trim();}return strip(s)||strip(label)||String(label||"");}
+    function dataTitle(label){var s=String(L(label)||label||"").trim();function strip(v){var out=String(v||"").trim();try{while(out.length){var cp=out.codePointAt(0)||0;var ch=String.fromCodePoint(cp);var isIcon=(cp>=0x1F000&&cp<=0x1FAFF)||(cp>=0x2600&&cp<=0x27BF)||cp===0xFE0F||cp===0xFE0E||cp===0x200D||/\s/.test(ch);if(!isIcon)break;out=out.slice(ch.length).trimStart();}}catch(e){}return out.replace(/^[^A-Za-z0-9À-ÖØ-öø-ÿΑ-ωΆ-ώ]+/g,"").trim();}return strip(s)||String(label||"");}
     function DataAccordionCard(props){return <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
       <button type="button" onClick={function(){props.setOpen(!props.open);}} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,border:"none",background:"transparent",padding:0,cursor:"pointer",textAlign:"left"}}>
-        <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:0,flex:1}}>
-          {props.icon&&<span data-no-translate="true" aria-hidden="true" style={{fontSize:17,lineHeight:"20px",width:24,flexShrink:0,textAlign:"center",display:"inline-block"}}>{props.icon}</span>}
-          <div style={{minWidth:0,flex:1}}><div data-no-translate="true" className="notranslate" style={{fontSize:16,fontWeight:900,color:props.danger?"#E24B4A":textC}}>{dataTitle(props.title)}</div>{props.desc&&<div data-no-translate="true" className="notranslate" style={{fontSize:12,color:subC,marginTop:4}}>{L(props.desc)}</div>}</div>
-        </div>
-        <span style={{fontSize:22,color:subC,transform:props.open?"rotate(180deg)":"rotate(0deg)",transition:"transform .18s",flexShrink:0}}>⌄</span>
+        <div><div style={{fontSize:16,fontWeight:900,color:props.danger?"#E24B4A":textC}}>{dataTitle(props.title)}</div>{props.desc&&<div style={{fontSize:12,color:subC,marginTop:4}}>{L(props.desc)}</div>}</div>
+        <span style={{fontSize:22,color:subC,transform:props.open?"rotate(180deg)":"rotate(0deg)",transition:"transform .18s"}}>⌄</span>
       </button>
       {props.open&&<div style={{marginTop:16,display:"flex",flexDirection:"column",gap:14}}>{props.children}</div>}
     </div>;}
@@ -5793,25 +5575,27 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
 
     if(settingsPage==="delete")return <div><PageHeader title="Dati"/>
       <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <DataAccordionCard icon="📥" title="Importa Dati" desc="Carica file CSV, Excel o un backup completo JSON." open={dataImportOpen} setOpen={setDataImportOpen}>
+        <DataAccordionCard title="Importa Dati" desc="Carica file CSV, Excel o un backup completo JSON." open={dataImportOpen} setOpen={setDataImportOpen}>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",border:"1px solid "+borderC,borderRadius:14,padding:14}}>
             <div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:8}}>{L("Importa movimenti da file")}</div>
-            <ImportData onBackupJsonText={importBackupJsonText}/>
+            <ImportData/>
           </div>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",border:"1px solid "+borderC,borderRadius:14,padding:14}}>
             <div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:5}}>{L("Importa backup completo (Json)")}</div>
             <div style={{fontSize:12,color:subC,marginBottom:10}}>{L("Ripristina il JSON globale creato da Backup completo.")}</div>
-            <button type="button" onClick={openBackupJsonPicker} style={{display:"inline-flex",alignItems:"center",justifyContent:"center",background:confirmButtonColor,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 16px",fontSize:13,fontWeight:900,cursor:"pointer",minHeight:42}}>{dataTitle("Ripristina JSON")}</button>
-            <input ref={backupJsonInputRef} type="file" accept=".json,application/json,text/plain,.txt" aria-label={dataTitle("Ripristina JSON")} onClick={function(e){try{e.currentTarget.value="";}catch(_clearClickErr){}}} style={{position:"fixed",left:-9999,top:-9999,width:1,height:1,opacity:0,pointerEvents:"none"}} onInput={handleBackupJsonFile} onChange={handleBackupJsonFile}/>
+            <label style={{display:"inline-flex",alignItems:"center",justifyContent:"center",background:confirmButtonColor,color:"#fff",borderRadius:btnRadius,padding:"10px 16px",fontSize:13,fontWeight:900,cursor:"pointer",minHeight:42}}>
+              {dataTitle("Ripristina JSON")}
+              <input type="file" accept=".json" style={{display:"none"}} onChange={handleBackupJsonFile}/>
+            </label>
           </div>
         </DataAccordionCard>
-        <DataAccordionCard icon="📤" title="Esporta dati" desc="Scegli cosa scaricare e poi conferma l’esportazione." open={dataExportOpen} setOpen={setDataExportOpen}>
+        <DataAccordionCard title="Esporta dati" desc="Scegli cosa scaricare e poi conferma l’esportazione." open={dataExportOpen} setOpen={setDataExportOpen}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr auto",gap:10,alignItems:"end"}}>
             <select value={dataExportOption} onChange={function(e){setDataExportOption(e.target.value);}} style={{...sinp,width:"100%"}}>{exportDataOptions().map(function(o){return <option key={o.id} value={o.id}>{o.label}</option>;})}</select>
             <Btn onClick={runDataExport} bg={confirmButtonColor} style={{padding:"11px 18px",fontSize:14,fontWeight:900,minHeight:42}}>{L("Esporta")}</Btn>
           </div>
         </DataAccordionCard>
-        <DataAccordionCard icon="🗑️" title="Elimina dati" desc="Seleziona una o più sezioni da eliminare. L’operazione non è reversibile." open={dataDeleteOpen} setOpen={setDataDeleteOpen} danger={true}>
+        <DataAccordionCard title="Elimina dati" desc="Seleziona una o più sezioni da eliminare. L’operazione non è reversibile." open={dataDeleteOpen} setOpen={setDataDeleteOpen} danger={true}>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10}}>
             {deleteDataOptions().map(function(o){var checked=(Array.isArray(dataDeleteSelection)?dataDeleteSelection:[]).indexOf(o.id)>=0;var isAll=o.id==="all";return <label key={o.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:14,border:"1px solid "+(checked?(isAll?"#E24B4A":confirmButtonColor):borderC),background:checked?(isAll?(dark?"#381c1c":"#FFF0F0"):(dark?"#24213a":"#F0EDFF")):(dark?"#1e1e30":"#f9f9f9"),cursor:"pointer",minHeight:48}}>
               <input type="checkbox" checked={checked} onChange={function(){toggleDataDeleteOption(o.id);}} style={{width:18,height:18,accentColor:isAll?"#E24B4A":confirmButtonColor,flexShrink:0}}/>
@@ -5878,6 +5662,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
                   ["AI Risposte",pid==="premium"?L("illimitate"):(limTxt(lim.aiDailyReplies)+plusAd(lim.rewardedExtraAiReplies)+"/"+day)],
                   ["Statistiche",L(lim.statsLevel)],
                   ["Impostazioni",L(lim.settingsLevel)],
+                  ["Personalizzazione Home",pid==="premium"?L("inclusa"):L("solo piano Completo")],
                   ["Widget",limTxt(lim.widgets)],
                   ["Annunci",lim.ads?L("sì"):L("no")]
                 ];
@@ -5888,16 +5673,19 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
                 </div>;
               })}
             </div>
-            <div style={{fontSize:11,color:subC,marginTop:10,lineHeight:1.45}}>{L("Gli acquisti Base e Completo vengono gestiti tramite lo store del dispositivo. Se l'acquisto viene annullato o non va a buon fine, il piano resta invariato.")}</div>
+            <div style={{fontSize:11,color:subC,marginTop:10,lineHeight:1.45}}>{L("Gli acquisti Base e Completo vengono gestiti tramite")} {platformStoreBillingName()}. {L("Se l'acquisto viene annullato o non va a buon fine, il piano resta invariato.")}</div>
             <button onClick={restorePurchases} disabled={!!planPurchaseLoading} style={{marginTop:10,background:dark?"#252535":"#F3F4FF",color:dark?"#D6D1FF":"#5A52B8",border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),borderRadius:btnRadius,padding:"9px 12px",fontSize:12,fontWeight:900,cursor:planPurchaseLoading?"not-allowed":"pointer",opacity:planPurchaseLoading?0.7:1}}>{L(planPurchaseLoading==="restore"?"Ripristino in corso...":"Ripristina acquisti")}</button>
           </div>
-          <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
+          {isNativeIOSApp()?<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16,display:"flex",alignItems:"flex-start",gap:12}}>
+            <span style={{fontSize:24}}></span>
+            <div style={{flex:1}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L("Acquisti gestiti da App Store")}</div><div style={{fontSize:12,color:subC,marginTop:2,lineHeight:1.45}}>{L("Su iOS, piani e abbonamenti sono disponibili solo tramite acquisto in-app su App Store. I dettagli principali sono mostrati direttamente in questa schermata.")}</div></div>
+          </div>:<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
             <button onClick={openPlansDetails} style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"none",border:"none",cursor:"pointer",padding:0,textAlign:"left"}}>
               <span style={{fontSize:24}}>🌐</span>
               <div style={{flex:1}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L("Scopri il dettaglio dei piani")}</div><div style={{fontSize:12,color:subC,marginTop:2}}>{L("Apri dettaglio piani sul sito")}</div></div>
               <span style={{fontSize:18,color:subC}}>›</span>
             </button>
-          </div>
+          </div>}
         </div>
       </div>;
     }
@@ -5910,11 +5698,13 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       return <div><PageHeader title="Supporto"/>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,overflow:"hidden"}}>
-            {[
+            {(isNativeIOSApp()?[
+              {icon:"✉️",label:"Contattaci",desc:"Apri il form di contatto interno",action:function(){setShowContactForm(function(v){return !v;});},badge:"Form"}
+            ]:[
               {icon:"🌐",label:"FAQ sul sito web",desc:"Apri le FAQ ufficiali su fainanceapp.it",action:function(){openExternal("https://fainanceapp.it/it/faq-ita/");},badge:"Apri"},
               {icon:"🌐",label:"Sito web ufficiale",desc:"fainanceapp.it",action:function(){openExternal("https://fainanceapp.it/");},badge:"Apri"},
               {icon:"✉️",label:"Contattaci",desc:"Apri il form di contatto interno",action:function(){setShowContactForm(function(v){return !v;});},badge:"Form"}
-            ].map(function(item,i,arr){return <button key={i} onClick={item.action} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"16px 20px",border:"none",borderBottom:i<arr.length-1?"1px solid "+borderC:"none",background:cardBg,cursor:"pointer",textAlign:"left"}}>
+            ]).map(function(item,i,arr){return <button key={i} onClick={item.action} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"16px 20px",border:"none",borderBottom:i<arr.length-1?"1px solid "+borderC:"none",background:cardBg,cursor:"pointer",textAlign:"left"}}>
               <span style={{fontSize:24,width:36,textAlign:"center"}}>{item.icon}</span><div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:textC}}>{L(item.label)}</div><div style={{fontSize:12,color:subC,marginTop:1}}>{L(item.desc)}</div></div><span style={{fontSize:12,background:"#e8f4ff",color:"#1a5fa8",borderRadius:20,padding:"3px 10px",fontWeight:500,flexShrink:0}}>{L(item.badge)}</span>
             </button>;})}
           </div>
@@ -5931,7 +5721,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
 
     function InfoSettingsPage(){
       var APP_VERSION="1.6.67";
-      var APP_VERSION_CODE=171;
+      var APP_VERSION_CODE=177;
       var APP_WEBSITE="https://fainance.app";
       var PLAY_STORE_WEB_URL="https://play.google.com/store/apps/details?id=it.fainanceapp.app&showAllReviews=true";
       var PLAY_STORE_REVIEW_WEB_URL="https://play.google.com/store/apps/details?id=it.fainanceapp.app&reviewId=0&showAllReviews=true";
@@ -7517,18 +7307,15 @@ function parseShareVoiceCommand(text){
       <div style={{fontSize:11,color:subC,marginTop:12,lineHeight:1.35}}>{L("Se non ricordi il PIN, sblocca con biometria o password account e poi imposta un nuovo PIN in Sicurezza.")}</div>
     </div></div>;
   }
-  var movementEntryScreen=tab==="spese"&&speseSubTab==="add";
-  var showFloatingAIButton=!!aiFloatingEnabled&&tab!=="settings"&&!movementEntryScreen;
-
   return <AppCtx.Provider value={ctxValue}>
     {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
     isMobile?
     <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden"}}>
       {(showAppSummaryHeader&&!(tab==="consulenteAI"&&aiTab==="chat"))&&<div style={{background:headerBg,borderBottom:"1px solid "+borderC,padding:"10px 16px 8px",flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:subC,marginBottom:4}}>fAInance</div><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Uscite")}</div><div style={{fontSize:19,fontWeight:600,color:expenseColor}}>{fmt(curMonthExp)}</div></div><div style={{textAlign:"center"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Saldo")}</div><div style={{fontSize:17,fontWeight:600,color:BALANCE_COLOR}}>{fmt(curMonthInc-curMonthExp)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Entrate")}</div><div style={{fontSize:19,fontWeight:600,color:incomeColor}}>{fmt(curMonthInc)}</div></div></div></div>}
-      {!movementEntryScreen&&<TopAdBox/>}
+      <TopAdBox/>
       <div style={{flex:1,overflowY:"auto",padding:14}}><SectionErrorBoundary resetKey={tab+"|"+(settingsPage||"")} dark={dark} tr={translateUiRuntimeText} onHome={function(){setTab("home");setSettingsPage(null);setMobileMenu(false);}}>{panelContent()}</SectionErrorBoundary></div>
-      {showFloatingAIButton&&<FloatingAIButton/>}
+      {aiFloatingEnabled&&tab!=="settings"&&<FloatingAIButton/>}
       {voiceModal&&<VoiceEntryModal/>}
       <div style={{background:headerBg,borderTop:"1px solid "+borderC,display:"flex",flexShrink:0}}>{mobileMain.map(function(item){return <button key={item.id} onClick={function(){if(item.id==="voice"){openVoiceModal();setMobileMenu(false);}else if(item.id==="more"){setTab("more");setMobileMenu(function(s){return !s;});setSettingsPage(null);}else{setTab(item.id);setMobileMenu(false);setSettingsPage(null);}}} style={{flex:1,padding:"9px 2px",border:"none",background:"transparent",display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?textC:subC,borderTop:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?"2px solid "+(dark?"#eee":"#333"):"2px solid transparent"}}><span style={{fontSize:17}}>{item.icon}</span><span style={{fontSize:9,fontWeight:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?500:400}}>{item.label}</span></button>;})}</div>
       {mobileMenu&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:9998,display:"flex",alignItems:"flex-end",paddingBottom:8,boxSizing:"border-box"}} onClick={function(){setMobileMenu(false);}}><div style={{background:cardBg,borderRadius:"20px 20px 0 0",width:"100%",padding:"10px 16px 14px",maxHeight:"72vh",overflowY:"auto",WebkitOverflowScrolling:"touch",boxShadow:dark?"none":"0 -8px 30px rgba(0,0,0,0.18)"}} onClick={function(e){e.stopPropagation();}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"0 2px 8px",position:"sticky",top:0,background:cardBg,zIndex:1}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{translateUiRuntimeText("Altro")}</div><button onClick={function(){setMobileMenu(false);}} aria-label="Chiudi menu" style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div>{buildMobileMenuItems().map(function(item){return <button key={item.id} onClick={function(){setTab(item.id);setSettingsPage(null);setMobileMenu(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"12px 8px",border:"none",background:"transparent",borderBottom:"1px solid "+borderC,fontSize:15,cursor:"pointer",color:textC}}><span style={{fontSize:22}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{marginLeft:"auto",background:expenseColor,color:"#fff",borderRadius:"50%",width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{item.badge}</span>}</button>;})}</div></div>}
@@ -7544,7 +7331,7 @@ function parseShareVoiceCommand(text){
         <div style={{width:220,background:sideBg,borderRight:"1px solid "+borderC,display:"flex",flexDirection:"column",padding:"16px 0",flexShrink:0,overflowY:"auto"}}>{navItems.map(function(item){return <button key={item.id} onClick={function(){if(item.id==="voice"){openVoiceModal();}else{setTab(item.id);if(item.id!=="settings")setSettingsPage(null);}}} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 20px",border:"none",background:(tab===item.id||(item.id==="voice"&&voiceModal))?(dark?"#2a2a3e":"#f0f0f0"):"transparent",color:(tab===item.id||(item.id==="voice"&&voiceModal))?textC:subC,fontSize:14,cursor:"pointer",fontWeight:(tab===item.id||(item.id==="voice"&&voiceModal))?500:400,textAlign:"left",position:"relative"}}><span style={{fontSize:18}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{position:"absolute",right:14,background:expenseColor,color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:500}}>{item.badge}</span>}</button>;})}</div>
         <div style={{flex:1,overflowY:"auto",padding:24}}><div style={{maxWidth:960,margin:"0 auto"}}><SectionErrorBoundary resetKey={tab+"|"+(settingsPage||"")} dark={dark} tr={translateUiRuntimeText} onHome={function(){setTab("home");setSettingsPage(null);setMobileMenu(false);}}>{panelContent()}</SectionErrorBoundary></div></div>
       </div>
-      {showFloatingAIButton&&<FloatingAIButton desktop/>}
+      {aiFloatingEnabled&&tab!=="settings"&&<FloatingAIButton desktop/>}
       {voiceModal&&<VoiceEntryModal/>}
       {toast&&<Toast key={(toast&&toast.id)||String(toast)} msg={toast} onDone={function(){setToast(null);}}/>}
       {alertPopup&&alertPopup.length>0&&<AlertPopup newAlerts={alertPopup} onClose={function(list){markAlertsSeen(list||alertPopup);}}/>}
@@ -7845,17 +7632,4 @@ export default AppWithLogin;
   add('Consigli',{en:'Tips',es:'Consejos',fr:'Conseils',de:'Tipps',pt:'Conselhos',pl:'Wskazówki',nl:'Tips',ro:'Sfaturi',el:'Συμβουλές'});
   add('Controlli',{en:'Checks',es:'Controles',fr:'Contrôles',de:'Kontrollen',pt:'Controlos',pl:'Kontrole',nl:'Controles',ro:'Verificări',el:'Έλεγχοι'});
   add('Priorità',{en:'Priorities',es:'Prioridades',fr:'Priorités',de:'Prioritäten',pt:'Prioridades',pl:'Priorytety',nl:'Prioriteiten',ro:'Priorități',el:'Προτεραιότητες'});
-})();
-
-// fAInance - etichette barra superiore/inferiore.
-(function(){
-  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
-  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
-  add('Barra Superiore',{it:'Barra Superiore',en:'Top Bar',es:'Barra Superior',fr:'Barre Supérieure',de:'Obere Leiste',pt:'Barra Superior',pl:'Górny pasek',nl:'Bovenste balk',ro:'Bară superioară',el:'Επάνω γραμμή'});
-  add('Barra Inferiore',{it:'Barra Inferiore',en:'Bottom Bar',es:'Barra Inferior',fr:'Barre Inférieure',de:'Untere Leiste',pt:'Barra Inferior',pl:'Dolny pasek',nl:'Onderste balk',ro:'Bară inferioară',el:'Κάτω γραμμή'});
-  add('Barra superiore ed Inferiore',{it:'Barra superiore ed Inferiore',en:'Top and bottom bar',es:'Barra superior e inferior',fr:'Barre supérieure et inférieure',de:'Obere und untere Leiste',pt:'Barra superior e inferior',pl:'Górny i dolny pasek',nl:'Boven- en onderbalk',ro:'Bara de sus și de jos',el:'Επάνω και κάτω γραμμή'});
-  add('Aspetto / Barra superiore ed Inferiore',{it:'Aspetto / Barra superiore ed Inferiore',en:'Appearance / Top and bottom bar',es:'Aspecto / Barra superior e inferior',fr:'Apparence / Barre supérieure et inférieure',de:'Darstellung / Obere und untere Leiste',pt:'Aspeto / Barra superior e inferior',pl:'Wygląd / Górny i dolny pasek',nl:'Weergave / Boven- en onderbalk',ro:'Aspect / Bara de sus și de jos',el:'Εμφάνιση / Επάνω και κάτω γραμμή'});
-  add('Barra superiore e inferiore',{it:'Barra superiore ed Inferiore',en:'Top and bottom bar',es:'Barra superior e inferior',fr:'Barre supérieure et inférieure',de:'Obere und untere Leiste',pt:'Barra superior e inferior',pl:'Górny i dolny pasek',nl:'Boven- en onderbalk',ro:'Bara de sus și de jos',el:'Επάνω και κάτω γραμμή'});
-  add('Aspetto / Barra superiore e inferiore',{it:'Aspetto / Barra superiore ed Inferiore',en:'Appearance / Top and bottom bar',es:'Aspecto / Barra superior e inferior',fr:'Apparence / Barre supérieure et inférieure',de:'Darstellung / Obere und untere Leiste',pt:'Aspeto / Barra superior e inferior',pl:'Wygląd / Górny i dolny pasek',nl:'Weergave / Boven- en onderbalk',ro:'Aspect / Bara de sus și de jos',el:'Εμφάνιση / Επάνω και κάτω γραμμή'});
-  try{fainanceTranslationCache={};}catch(e){}
 })();
