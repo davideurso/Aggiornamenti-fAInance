@@ -32,7 +32,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>179</string>
+	<string>180</string>
 	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
 	<true/>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
