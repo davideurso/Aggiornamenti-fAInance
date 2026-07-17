@@ -5,6 +5,7 @@
     <uses-permission android:name="com.android.vending.BILLING" />
     <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.CAMERA" />
 
         <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -73,6 +74,22 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/widget_quick_add_info" />
+
+        </receiver>
+
+        <receiver
+            android:name="com.fainance.widgets.VoiceAssistantWidgetProvider"
+            android:enabled="false"
+            android:exported="true"
+            android:label="@string/widget_voice_assistant_name">
+
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_voice_assistant_info" />
 
         </receiver>
 

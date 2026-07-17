@@ -2,6 +2,7 @@ package com.fainance.widgets
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import android.content.pm.PackageManager
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
@@ -9,6 +10,7 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.tracker.spese.app.QuickAddWidgetProvider
 import com.tracker.spese.app.ShareWidgetProvider
+import com.tracker.spese.app.WidgetPlanGuard
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -55,6 +57,7 @@ class WidgetBridge : Plugin() {
             val currentPlan = call.getString("currentPlan") ?: "free"
             WidgetUtils.save(context, "widget_current_plan", currentPlan)
             WidgetUtils.save(context, "widget_available_types", arrayString(call, "types"))
+            syncVoiceAssistantProviderAvailability(context)
             updateWidgets(context)
             val ret = JSObject()
             ret.put("updated", true)
@@ -96,6 +99,23 @@ class WidgetBridge : Plugin() {
         WidgetUtils.save(context, "widget_order", arrayString(call, "widgetOrder"))
         WidgetUtils.save(context, "widget_display_order", arrayString(call, "widgetOrder"))
         WidgetUtils.save(context, "widget_plan_availability", objectString(call, "planAvailability"))
+        syncVoiceAssistantProviderAvailability(context)
+    }
+
+    private fun syncVoiceAssistantProviderAvailability(context: android.content.Context) {
+        val component = ComponentName(context, VoiceAssistantWidgetProvider::class.java)
+        val desiredState = if (WidgetPlanGuard.isAllowed(context, "voiceAssistant")) {
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        } else {
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+        }
+        try {
+            context.packageManager.setComponentEnabledSetting(
+                component,
+                desiredState,
+                PackageManager.DONT_KILL_APP
+            )
+        } catch (_: Exception) { }
     }
 
     private fun arrayString(call: PluginCall, key: String): String {
@@ -131,6 +151,13 @@ class WidgetBridge : Plugin() {
         }
         manager.getAppWidgetIds(ComponentName(context, DebtCreditsWidgetProvider::class.java)).forEach {
             DebtCreditsWidgetProvider.update(context, manager, it)
+        }
+        manager.getAppWidgetIds(ComponentName(context, VoiceAssistantWidgetProvider::class.java)).forEach {
+            val updateIntent = android.content.Intent(AppWidgetManager.ACTION_APPWIDGET_UPDATE).apply {
+                component = ComponentName(context, VoiceAssistantWidgetProvider::class.java)
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, intArrayOf(it))
+            }
+            context.sendBroadcast(updateIntent)
         }
     }
 }

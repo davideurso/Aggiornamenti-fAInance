@@ -3,6 +3,7 @@ package com.fainance.widgets
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.net.Uri
 import android.view.View
 import android.util.TypedValue
 import android.widget.RemoteViews
@@ -69,21 +70,32 @@ class DebtCreditsWidgetProvider : AppWidgetProvider() {
             val net = credit - debt
             views.setTextViewText(titleId, cfg.optString("title", "Debiti / Crediti"))
             views.setTextViewText(summaryId, "Saldo ${WidgetUtils.money(net, currency)}")
+            fun openDebtIntentFor(debtId: String): android.app.PendingIntent {
+                val url = if (debtId.isNotBlank()) "fainance://open-debt-credit?debtId=${Uri.encode(debtId)}" else "fainance://open-debt-credits"
+                return WidgetUtils.openIntent(context, url)
+            }
+            val targetDebtId = if (items.length() > 0) (items.optJSONObject(0)?.optString("id") ?: "") else ""
+            val openDebtIntent = openDebtIntentFor(targetDebtId)
             for (i in lineNames.indices) {
                 val id = context.resources.getIdentifier(lineNames[i], "id", context.packageName)
                 if (i == 0) {
                     views.setViewVisibility(id, View.VISIBLE)
                     views.setTextViewText(id, "Debiti ${WidgetUtils.money(debt, currency)}  ·  Crediti ${WidgetUtils.money(credit, currency)}")
+                    if (id != 0) views.setOnClickPendingIntent(id, openDebtIntent)
                 } else {
                     val itemIndex = i - 1
                     if (itemIndex < items.length()) {
                         val obj = items.optJSONObject(itemIndex)
+                        val itemDebtId = obj?.optString("id") ?: ""
                         views.setViewVisibility(id, View.VISIBLE)
                         views.setTextViewText(id, (if (obj?.optString("kind") == "credit") "📈 " else "📉 ") + (obj?.optString("holder") ?: "") + " · " + WidgetUtils.money(obj?.optDouble("balance") ?: 0.0, currency))
+                        if (id != 0) views.setOnClickPendingIntent(id, openDebtIntentFor(itemDebtId))
                     } else views.setViewVisibility(id, View.GONE)
                 }
             }
-            views.setOnClickPendingIntent(rootId, WidgetUtils.openIntent(context, "fainance://open-debt-credits"))
+            views.setOnClickPendingIntent(rootId, openDebtIntent)
+            views.setOnClickPendingIntent(titleId, openDebtIntent)
+            views.setOnClickPendingIntent(summaryId, openDebtIntent)
             if (settingsId != 0) views.setOnClickPendingIntent(settingsId, WidgetUtils.configureDebtCreditsIntent(context, widgetId))
             manager.updateAppWidget(widgetId, views)
         }

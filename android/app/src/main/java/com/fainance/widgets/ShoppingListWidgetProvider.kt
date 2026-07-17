@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -117,6 +118,7 @@ class ShoppingListWidgetProvider : AppWidgetProvider() {
             val instance = WidgetUtils.instanceJson(context, "widget_shopping_list_instance", widgetId)
             val chosenListId = instance.optString("selectedListId", cfg.optString("selectedListId", "main"))
             val listTitle = instance.optString("selectedListTitle", cfg.optString("title", "Lista spesa"))
+            val openListUrl = "fainance://open-shopping-list?listId=${Uri.encode(chosenListId)}"
             views.setTextViewText(titleId, listTitle.ifBlank { cfg.optString("title", "Lista spesa") })
             views.setTextViewText(subtitleId, cfg.optString("subtitle", "Tocca un articolo quando è nel carrello"))
 
@@ -132,7 +134,10 @@ class ShoppingListWidgetProvider : AppWidgetProvider() {
             val clickIntent = Intent(context, ShoppingListWidgetProvider::class.java).apply { action = ACTION_TOGGLE_ITEM }
             val clickPending = PendingIntent.getBroadcast(context, widgetId + 300000, clickIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE)
             views.setPendingIntentTemplate(listId, clickPending)
-            views.setOnClickPendingIntent(rootId, WidgetUtils.openIntent(context, "fainance://open-shopping"))
+            val openListIntent = WidgetUtils.openIntent(context, openListUrl)
+            views.setOnClickPendingIntent(rootId, openListIntent)
+            views.setOnClickPendingIntent(titleId, openListIntent)
+            views.setOnClickPendingIntent(subtitleId, openListIntent)
             if (settingsId != 0) views.setOnClickPendingIntent(settingsId, WidgetUtils.configureShoppingListIntent(context, widgetId))
             manager.updateAppWidget(widgetId, views)
             manager.notifyAppWidgetViewDataChanged(widgetId, listId)

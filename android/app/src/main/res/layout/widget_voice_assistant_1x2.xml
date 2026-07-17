@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/voiceAssistantWidgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_voice_assistant_bg"
+    android:clickable="true"
+    android:contentDescription="@string/widget_voice_assistant_description"
+    android:focusable="true"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="4dp">
+
+    <ImageView
+        android:layout_width="32dp"
+        android:layout_height="44dp"
+        android:adjustViewBounds="true"
+        android:contentDescription="@string/widget_voice_assistant_name"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ai_grillo_mascot_transparent" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="2"
+        android:text="@string/widget_voice_assistant_name"
+        android:textColor="#292642"
+        android:textSize="9sp"
+        android:textStyle="bold" />
+
+    <ImageView
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginTop="3dp"
+        android:background="@drawable/widget_voice_assistant_mic_bg"
+        android:contentDescription="@string/widget_voice_assistant_tap"
+        android:padding="4dp"
+        android:src="@drawable/ic_widget_voice_microphone" />
+</LinearLayout>

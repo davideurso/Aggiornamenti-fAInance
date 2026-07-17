@@ -13,6 +13,7 @@ public final class WidgetPlanGuard {
         String plan = readString(context, "widget_current_plan", "free").trim().toLowerCase(java.util.Locale.ROOT);
         boolean planAllowed = rank(plan) >= rank(requiredPlan(type));
         if (!planAllowed) return false;
+        if ("voiceAssistant".equals(type)) return true;
         JSONObject availability = readJson(context, "widget_plan_availability");
         if (availability.has(type)) return availability.optBoolean(type, false);
         JSONArray available = readArray(context, "widget_available_types");
@@ -36,6 +37,7 @@ public final class WidgetPlanGuard {
         if ("share".equals(type)) return "Share bloccato";
         if ("goal".equals(type)) return "Obiettivo bloccato";
         if ("note".equals(type)) return "Nota / Coordinata bloccato";
+        if ("voiceAssistant".equals(type)) return "Assistente vocale bloccato";
         return "Widget bloccato";
     }
 
@@ -44,7 +46,7 @@ public final class WidgetPlanGuard {
     }
 
     private static String requiredPlan(String type) {
-        if ("note".equals(type) || "goal".equals(type)) return "base";
+        if ("note".equals(type) || "goal".equals(type) || "voiceAssistant".equals(type)) return "base";
         if ("share".equals(type)) return "premium";
         return "free";
     }

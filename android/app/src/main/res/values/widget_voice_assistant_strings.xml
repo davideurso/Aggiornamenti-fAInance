@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_voice_assistant_name">Assistente vocale</string>
+    <string name="widget_voice_assistant_tap">Tocca e parla</string>
+    <string name="widget_voice_assistant_subtitle">Parla con fAInance</string>
+    <string name="widget_voice_assistant_description">Apre l’assistente vocale e avvia automaticamente il microfono.</string>
+</resources>

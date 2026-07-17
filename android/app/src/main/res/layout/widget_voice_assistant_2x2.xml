@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/voiceAssistantWidgetRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_voice_assistant_bg"
+    android:clickable="true"
+    android:contentDescription="@string/widget_voice_assistant_description"
+    android:focusable="true"
+    android:padding="5dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingBottom="3dp">
+
+        <ImageView
+            android:layout_width="46dp"
+            android:layout_height="54dp"
+            android:adjustViewBounds="true"
+            android:contentDescription="@string/widget_voice_assistant_name"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ai_grillo_mascot_transparent" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="@string/widget_voice_assistant_name"
+            android:textColor="#292642"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="@string/widget_voice_assistant_subtitle"
+            android:textColor="#6A6682"
+            android:textSize="9sp" />
+    </LinearLayout>
+
+    <ImageView
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="end|bottom"
+        android:background="@drawable/widget_voice_assistant_mic_bg"
+        android:contentDescription="@string/widget_voice_assistant_tap"
+        android:padding="5dp"
+        android:src="@drawable/ic_widget_voice_microphone" />
+</FrameLayout>

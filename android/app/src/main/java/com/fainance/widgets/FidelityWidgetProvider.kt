@@ -3,6 +3,7 @@ package com.fainance.widgets
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 
@@ -43,6 +44,8 @@ class FidelityWidgetProvider : AppWidgetProvider() {
                 }
             }
             val code = card?.optString("code") ?: ""
+            val cardId = card?.optString("id") ?: selectedId
+            val cardUrl = if (cardId.isNotBlank()) "fainance://open-fidelity-card?cardId=${Uri.encode(cardId)}" else "fainance://open-fidelity-card"
             val rawBg = WidgetUtils.parseColor(card?.optString("color") ?: cfg.optString("accentColor"), android.graphics.Color.rgb(15,159,118))
             val transparency = cfg.optInt("bgAlpha", 0).coerceIn(0, 100)
             val opacity = ((100 - transparency) * 255 / 100).coerceIn(0, 255)
@@ -59,7 +62,11 @@ class FidelityWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(barcodeId, WidgetUtils.barcodeVisual(code))
                 views.setViewVisibility(barcodeId, View.VISIBLE)
             }
-            views.setOnClickPendingIntent(rootId, WidgetUtils.openIntent(context, "fainance://open-shopping"))
+            val openCardIntent = WidgetUtils.openIntent(context, cardUrl)
+            views.setOnClickPendingIntent(rootId, openCardIntent)
+            if (barcodeImageId != 0) views.setOnClickPendingIntent(barcodeImageId, openCardIntent)
+            if (barcodeId != 0) views.setOnClickPendingIntent(barcodeId, openCardIntent)
+            if (codeId != 0) views.setOnClickPendingIntent(codeId, openCardIntent)
             if (settingsId != 0) views.setOnClickPendingIntent(settingsId, WidgetUtils.configureFidelityIntent(context, widgetId))
             manager.updateAppWidget(widgetId, views)
         }
