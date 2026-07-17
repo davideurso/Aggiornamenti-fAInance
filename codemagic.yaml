@@ -24,8 +24,8 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.68"
-        IOS_BUILD_NUMBER: "180"
+        APP_VERSION: "1.6.69"
+        IOS_BUILD_NUMBER: "181"
         VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -35,12 +35,11 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm install
+          npm ci
 
-      - name: Install Capacitor iOS platform
+      - name: Validate Capacitor iOS dependency
         script: |
-          CAP_VERSION=$(node -p "const p=require('./package.json'); const v=(p.dependencies && p.dependencies['@capacitor/core']) || (p.devDependencies && p.devDependencies['@capacitor/core']) || 'latest'; console.log(v)")
-          npm install @capacitor/ios@$CAP_VERSION
+          node -e "require.resolve('@capacitor/ios/package.json'); console.log('@capacitor/ios disponibile')"
 
       - name: Add iOS platform if missing
         script: |
@@ -72,6 +71,9 @@ workflows:
               "FainanceBillingPlugin.m",
               "FainanceAdsPlugin.swift",
               "FainanceAdsPlugin.m",
+              "FainanceAudioPlugin.swift",
+              "FainanceFilePlugin.swift",
+              "MainViewController.swift",
           ]
 
           if not config_path.exists():
@@ -93,6 +95,18 @@ workflows:
           missing_project_refs = [name for name in required_files if name not in pbx]
           if missing_project_refs:
               raise SystemExit("Local iOS plugin files are not referenced in the Xcode project: " + ", ".join(missing_project_refs))
+
+          main_controller = (app_dir / "MainViewController.swift").read_text(encoding="utf-8")
+          for registration in ["FainanceAudioPlugin()", "FainanceFilePlugin()"]:
+              if registration not in main_controller:
+                  raise SystemExit("Missing local plugin registration in MainViewController.swift: " + registration)
+          if "FainanceSpeechRecognitionPlugin()" in main_controller:
+              raise SystemExit("The obsolete custom speech plugin is still registered and would conflict with the Capgo plugin.")
+
+          package_swift = Path("ios/App/CapApp-SPM/Package.swift").read_text(encoding="utf-8")
+          for package_name in ["CapgoCapacitorSpeechRecognition", "CapacitorCommunityTextToSpeech"]:
+              if package_name not in package_swift:
+                  raise SystemExit("Missing iOS Swift package after cap sync: " + package_name)
 
           print("Registered local iOS plugins in capacitor.config.json:")
           for plugin in required_plugins:
@@ -120,7 +134,7 @@ workflows:
         script: |
           cd ios/App
 
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:-180}"
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:-181}"
           echo "Using iOS marketing version: $APP_VERSION"
           echo "Using iOS build number: $BUILD_NUMBER"
 
@@ -130,19 +144,66 @@ workflows:
 
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" App/Info.plist || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string fAInance needs access to your photo library so you can select receipt images and import documents into the app." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription fAInance needs access to your photo library so you can select receipt images and import documents into the app." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string fAInance uses your photo library only when you choose a receipt, invoice or financial document to analyse or attach." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription fAInance uses your photo library only when you choose a receipt, invoice or financial document to analyse or attach." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string fAInance needs permission to save exported files or generated images to your photo library when you choose to do so." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription fAInance needs permission to save exported files or generated images to your photo library when you choose to do so." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string fAInance saves exported files or generated images to your photo library only when you request it." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription fAInance saves exported files or generated images to your photo library only when you request it." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string fAInance needs access to the camera so you can scan receipts and attach images to your transactions." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription fAInance needs access to the camera so you can scan receipts and attach images to your transactions." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string fAInance uses the camera to scan receipts, invoices and financial documents that you choose to analyse or attach." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription fAInance uses the camera to scan receipts, invoices and financial documents that you choose to analyse or attach." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string fAInance needs access to the microphone so you can add expenses and income using your voice." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription fAInance needs access to the microphone so you can add expenses and income using your voice." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string fAInance uses the microphone for voice entry and for conversations with the financial voice assistant." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription fAInance uses the microphone for voice entry and for conversations with the financial voice assistant." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string fAInance converts your spoken requests into text for voice entry and the financial assistant." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription fAInance converts your spoken requests into text for voice entry and the financial assistant." App/Info.plist
+
+          /usr/libexec/PlistBuddy -c "Add :NSFaceIDUsageDescription string fAInance uses Face ID only when you enable biometric protection for the app." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSFaceIDUsageDescription fAInance uses Face ID only when you enable biometric protection for the app." App/Info.plist
+
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          path = Path("App/Info.plist")
+          with path.open("rb") as handle:
+              plist = plistlib.load(handle)
+          entries = []
+          for entry in plist.get("CFBundleURLTypes", []):
+              schemes = [str(value) for value in entry.get("CFBundleURLSchemes", []) if str(value).lower() != "fainance"]
+              if schemes:
+                  updated = dict(entry)
+                  updated["CFBundleURLSchemes"] = schemes
+                  entries.append(updated)
+          entries.append({
+              "CFBundleTypeRole": "Editor",
+              "CFBundleURLName": "it.fainanceapp.app",
+              "CFBundleURLSchemes": ["fainance"],
+          })
+          plist["CFBundleURLTypes"] = entries
+          with path.open("wb") as handle:
+              plistlib.dump(plist, handle, fmt=plistlib.FMT_XML, sort_keys=False)
+          PY
 
           xcrun agvtool new-marketing-version "$APP_VERSION" || true
           xcrun agvtool new-version -all "$BUILD_NUMBER" || true
 
+          python3 - <<'PY_VERSION'
+          import re
+          from pathlib import Path
+
+          version = "1.6.69"
+          build = "181"
+          pbx = Path("App.xcodeproj/project.pbxproj")
+          text = pbx.read_text(encoding="utf-8", errors="ignore")
+          text = re.sub(r"CURRENT_PROJECT_VERSION = [^;]+;", f"CURRENT_PROJECT_VERSION = {build};", text)
+          text = re.sub(r"MARKETING_VERSION = [^;]+;", f"MARKETING_VERSION = {version};", text)
+          pbx.write_text(text, encoding="utf-8")
+          PY_VERSION
+
+          ACTUAL_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" App/Info.plist)
+          ACTUAL_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" App/Info.plist)
+          if [ "$ACTUAL_VERSION" != "$APP_VERSION" ] || [ "$ACTUAL_BUILD" != "$BUILD_NUMBER" ]; then
+            echo "Impostazione versione fallita: ${ACTUAL_VERSION} (${ACTUAL_BUILD})"
+            exit 1
+          fi
+
+          echo "File di progetto impostati su ${ACTUAL_VERSION} (${ACTUAL_BUILD})"
+          grep -n "CURRENT_PROJECT_VERSION\|MARKETING_VERSION" App.xcodeproj/project.pbxproj
           cat App/Info.plist
 
           cd ../..
@@ -269,23 +330,76 @@ workflows:
           grep -n "PROVISIONING_PROFILE_SPECIFIER\|CODE_SIGN_STYLE\|DEVELOPMENT_TEAM" ios/App/App.xcodeproj/project.pbxproj | head -120
 
 
-      - name: Build iOS IPA
+      - name: Build and verify iOS IPA
         script: |
+          set -euo pipefail
+
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:-181}"
+          EXPECTED_VERSION="${APP_VERSION:-1.6.69}"
+          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
+          EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
+
           rm -rf "$CM_BUILD_DIR/build/ios"
+
+          echo "Archiving fAInance ${EXPECTED_VERSION} (${BUILD_NUMBER})"
 
           xcodebuild \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -destination "generic/platform=iOS" \
-            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
+            -archivePath "$ARCHIVE_PATH" \
+            MARKETING_VERSION="$EXPECTED_VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            INFOPLIST_KEY_CFBundleShortVersionString="$EXPECTED_VERSION" \
+            INFOPLIST_KEY_CFBundleVersion="$BUILD_NUMBER" \
             archive
+
+          ARCHIVE_APP_PLIST="$ARCHIVE_PATH/Products/Applications/App.app/Info.plist"
+          if [ ! -f "$ARCHIVE_APP_PLIST" ]; then
+            echo "Info.plist dell'app archiviata non trovato: $ARCHIVE_APP_PLIST"
+            exit 1
+          fi
+
+          ARCHIVE_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ARCHIVE_APP_PLIST")
+          ARCHIVE_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$ARCHIVE_APP_PLIST")
+          echo "Archive verificato: ${ARCHIVE_VERSION} (${ARCHIVE_BUILD})"
+
+          if [ "$ARCHIVE_VERSION" != "$EXPECTED_VERSION" ] || [ "$ARCHIVE_BUILD" != "$BUILD_NUMBER" ]; then
+            echo "Versione archivio errata. Attesa ${EXPECTED_VERSION} (${BUILD_NUMBER}), trovata ${ARCHIVE_VERSION} (${ARCHIVE_BUILD})."
+            exit 1
+          fi
 
           xcodebuild \
             -exportArchive \
-            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
-            -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
             -exportOptionsPlist "$CM_BUILD_DIR/export_options.plist"
+
+          IPA_PATH=$(find "$EXPORT_PATH" -maxdepth 1 -name "*.ipa" | head -n 1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "Nessun file IPA generato."
+            exit 1
+          fi
+
+          VERIFY_DIR=$(mktemp -d)
+          unzip -q "$IPA_PATH" -d "$VERIFY_DIR"
+          IPA_APP_PLIST=$(find "$VERIFY_DIR/Payload" -maxdepth 2 -name Info.plist | head -n 1)
+          if [ -z "$IPA_APP_PLIST" ]; then
+            echo "Info.plist non trovato dentro l'IPA."
+            rm -rf "$VERIFY_DIR"
+            exit 1
+          fi
+
+          IPA_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$IPA_APP_PLIST")
+          IPA_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$IPA_APP_PLIST")
+          echo "IPA verificato: ${IPA_VERSION} (${IPA_BUILD})"
+          rm -rf "$VERIFY_DIR"
+
+          if [ "$IPA_VERSION" != "$EXPECTED_VERSION" ] || [ "$IPA_BUILD" != "$BUILD_NUMBER" ]; then
+            echo "Versione IPA errata. Upload bloccato. Attesa ${EXPECTED_VERSION} (${BUILD_NUMBER}), trovata ${IPA_VERSION} (${IPA_BUILD})."
+            exit 1
+          fi
 
     artifacts:
       - build/ios/ipa/*.ipa
