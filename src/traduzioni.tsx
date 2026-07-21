@@ -23692,6 +23692,88 @@ function fainanceCleanTranslation(value){
   return out.indexOf("�")>=0?null:out;
 }
 
+// Mantiene le icone decorative coerenti con il testo sorgente.
+// Le tabelle legacy contengono alcune chiavi equivalenti con e senza emoji:
+// la ricerca normalizzata non deve quindi aggiungere un'icona a un testo che
+// la UI mostra già separatamente, né ripetere due volte la stessa icona.
+function fainanceIsIconBaseCodePoint(cp){
+  return (cp>=0x1F000&&cp<=0x1FAFF)||
+    (cp>=0x1FC00&&cp<=0x1FFFF)||
+    (cp>=0x2190&&cp<=0x21FF)||
+    (cp>=0x2300&&cp<=0x23FF)||
+    (cp>=0x2500&&cp<=0x27BF)||
+    (cp>=0x2B00&&cp<=0x2BFF)||
+    cp===0x00A9||cp===0x00AE||cp===0x203C||cp===0x2049||
+    cp===0x2122||cp===0x2139||cp===0x3030||cp===0x303D||
+    cp===0x3297||cp===0x3299;
+}
+function fainanceCodePointSize(cp){return cp>0xFFFF?2:1;}
+function fainanceReadLeadingIcon(value){
+  var text=String(value==null?"":value);
+  var i=0;
+  while(i<text.length&&/\s/.test(text.charAt(i)))i++;
+  var start=i;
+  if(i>=text.length)return null;
+  var cp=text.codePointAt(i);
+  if(!fainanceIsIconBaseCodePoint(cp))return null;
+  i+=fainanceCodePointSize(cp);
+  // Le bandiere sono composte da due indicatori regionali.
+  if(cp>=0x1F1E6&&cp<=0x1F1FF&&i<text.length){
+    var flagCp=text.codePointAt(i);
+    if(flagCp>=0x1F1E6&&flagCp<=0x1F1FF)i+=fainanceCodePointSize(flagCp);
+  }
+  function consumeModifiers(){
+    while(i<text.length){
+      var mod=text.codePointAt(i);
+      if(mod===0xFE0E||mod===0xFE0F||mod===0x20E3||(mod>=0x1F3FB&&mod<=0x1F3FF)){i+=fainanceCodePointSize(mod);continue;}
+      break;
+    }
+  }
+  consumeModifiers();
+  while(i<text.length&&text.codePointAt(i)===0x200D){
+    var joinerSize=fainanceCodePointSize(0x200D);
+    var nextIndex=i+joinerSize;
+    if(nextIndex>=text.length)break;
+    var joined=text.codePointAt(nextIndex);
+    if(!fainanceIsIconBaseCodePoint(joined))break;
+    i=nextIndex+fainanceCodePointSize(joined);
+    consumeModifiers();
+  }
+  var end=i;
+  while(i<text.length&&/\s/.test(text.charAt(i)))i++;
+  return {icon:text.slice(start,end),start:start,end:end,after:i};
+}
+function fainanceComparableIcon(value){return String(value||"").replace(/[\uFE0E\uFE0F]/g,"");}
+export function normalizeFainanceTranslatedIcons(source, translated){
+  var sourceRaw=String(source==null?"":source);
+  var outputRaw=String(translated==null?"":translated);
+  if(!outputRaw)return outputRaw;
+  var outputLeading=(outputRaw.match(/^\s*/)||[""])[0];
+  var outputBody=outputRaw.slice(outputLeading.length);
+  var sourceIcon=fainanceReadLeadingIcon(sourceRaw);
+  var firstOutputIcon=fainanceReadLeadingIcon(outputBody);
+  if(!firstOutputIcon)return outputRaw;
+  if(!sourceIcon){
+    // Il sorgente non contiene icone: elimina quelle introdotte soltanto
+    // dall'alias di traduzione, perché il componente può mostrarle a parte.
+    var cleanBody=outputBody;
+    var added=fainanceReadLeadingIcon(cleanBody);
+    while(added){cleanBody=cleanBody.slice(added.after);added=fainanceReadLeadingIcon(cleanBody);}
+    return outputLeading+cleanBody;
+  }
+  var firstComparable=fainanceComparableIcon(firstOutputIcon.icon);
+  var rest=outputBody.slice(firstOutputIcon.after);
+  var duplicate=fainanceReadLeadingIcon(rest);
+  var removed=false;
+  while(duplicate&&fainanceComparableIcon(duplicate.icon)===firstComparable){
+    rest=rest.slice(duplicate.after);
+    duplicate=fainanceReadLeadingIcon(rest);
+    removed=true;
+  }
+  if(!removed)return outputRaw;
+  return outputLeading+outputBody.slice(0,firstOutputIcon.end)+(rest?" "+rest:"");
+}
+
 function buildFainanceTranslationLookup(code){
   var targetTable=TRANSLATIONS[code]||TRANSLATIONS.en||{};
   var exact={};
@@ -23743,6 +23825,7 @@ function getFainanceTranslationLookup(code){
 export function translateFainanceText(value, lang){
   var raw=repairFainanceEncoding(String(value==null?"":value));
   var code=lang||"it";
+  function finish(candidate){return normalizeFainanceTranslatedIcons(raw,candidate);}
   if(!raw||code==="it")return raw;
   var leading=(raw.match(/^\s*/)||[""])[0];
   var trailing=(raw.match(/\s*$/)||[""])[0];
@@ -23750,13 +23833,13 @@ export function translateFainanceText(value, lang){
   if(!text)return raw;
   if(/^[\d\s.,:;€$%+\-()\/]+$/.test(text))return raw;
   var lookup=getFainanceTranslationLookup(code);
-  if(lookup.exact[text]!==undefined)return fainancePostProcessTranslation(leading+lookup.exact[text]+trailing, code);
+  if(lookup.exact[text]!==undefined)return finish(fainancePostProcessTranslation(leading+lookup.exact[text]+trailing, code));
   var wanted=fainanceNormPhrase(text);
-  if(wanted&&lookup.normalized[wanted]!==undefined)return fainancePostProcessTranslation(leading+lookup.normalized[wanted]+trailing, code);
+  if(wanted&&lookup.normalized[wanted]!==undefined)return finish(fainancePostProcessTranslation(leading+lookup.normalized[wanted]+trailing, code));
   var pref=text.match(/^([^A-Za-zÀ-ÿ0-9]+\s*)([\s\S]+)$/);
   if(pref&&pref[2]&&pref[2]!==text){
     var sub=translateFainanceText(pref[2],code);
-    if(sub!==pref[2])return fainancePostProcessTranslation(leading+pref[1]+sub+trailing, code);
+    if(sub!==pref[2])return finish(fainancePostProcessTranslation(leading+pref[1]+sub+trailing, code));
   }
   // 1.6.53: translate composed labels such as "Distribuzione uscite – Giugno",
   // "di € 2000,00" or mixed-language fragments produced by previous dictionaries.
@@ -23776,9 +23859,9 @@ export function translateFainanceText(value, lang){
       var replaced=text.slice(0,idx)+lookup.exact[k]+text.slice(afterIdx);
       if(replaced!==text){text=replaced;i=-1;continue;}
     }
-    if(text!==raw.trim())return fainancePostProcessTranslation(leading+text+trailing, code);
+    if(text!==raw.trim())return finish(fainancePostProcessTranslation(leading+text+trailing, code));
   }catch(e){}
-  return fainancePostProcessTranslation(raw, code);
+  return finish(fainancePostProcessTranslation(raw, code));
 }
 
 // fAInance 1.6.54 - final post-processor for mixed-language leftovers and source-wide labels.

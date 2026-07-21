@@ -5,7 +5,7 @@
 // I pannelli principali sono in sezioni.tsx e statistiche.tsx.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useRef, useCallback, useMemo, createContext, Component } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, Component } from 'react';
 import { registerPlugin } from '@capacitor/core';
 import { AppCtx, useApp, fbAuth, fbDb, googleProvider, doc, setDoc, getDoc, getDocs, addDoc,
   deleteDoc, collection, query, where, limit, onSnapshot,
@@ -27,7 +27,7 @@ import { AppCtx, useApp, fbAuth, fbDb, googleProvider, doc, setDoc, getDoc, getD
   PLAN_IDS, PLAN_LABELS, PLAN_PRICES, PLAN_LIMITS, planLabel, planLimitLabel, todayUsageKey, monthUsageKey,
   appLogo, appBanner, aiGrilloMascot
 } from './core';
-import { TRANSLATIONS, translateFainanceText } from './traduzioni';
+import { TRANSLATIONS, translateFainanceText, normalizeFainanceTranslatedIcons } from './traduzioni';
 import { totalForMonth, last12MonthKeys, balanceForMonths, monthlyTotalsForYear } from './financeCalculations';
 import { Btn, Badge, Toggle, Toast, StatCard, DonutChart, BarChart, LineChart,
   AlertPopup, EditModal, SettingsList, AreasEditor, SortableRows,
@@ -2622,7 +2622,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [shownAlertIds,setShownAlertIds]=useStorage(userKey("shown_alert_ids_v2"),[]); // alert keys already acknowledged
   var [toast,setToastState]=useState<any>(null);
   var [appUpdatePopup,setAppUpdatePopup]=useState<any>(null);
+  var [appUpdateManualStatus,setAppUpdateManualStatus]=useState<any>(null);
   var [installedAppInfo,setInstalledAppInfo]=useState<any>({version:"1.3.12",code:168,platform:"web"});
+  var appUpdateStoreCacheRef=useRef<any>({});
+  var appUpdateCheckPromiseRef=useRef<any>(null);
   function buildRuntimeTranslationMap(){
     var current=(TRANSLATIONS[lang]||TRANSLATIONS.it||{});
     var map={...(current||{})};
@@ -2657,22 +2660,25 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
 
   function translateUiRuntimeText(value){
-    var forced=translateCriticalUiText(value, lang);
-    if(forced!==String(value==null?"":value))return forced;
-    return translateFainanceText(value, lang);
+    var raw=String(value==null?"":value);
+    var forced=translateCriticalUiText(raw, lang);
+    if(forced!==raw)return normalizeFainanceTranslatedIcons(raw,forced);
+    return normalizeFainanceTranslatedIcons(raw,translateFainanceText(raw, lang));
   }
   useEffect(function(){
     try{(window as any).fainanceTranslateUi=function(value){return translateUiRuntimeText(value);};}catch(e){}
     return function(){try{delete (window as any).fainanceTranslateUi;}catch(e){}};
   },[lang]);
-  useEffect(function(){
-    // 1.6.61: traduzione runtime esatta sui nodi nuovi, senza osservare le modifiche di testo/attributi che crea essa stessa.
-    // Mantiene le traduzioni legacy senza innescare sfarfallii continui.
+  useLayoutEffect(function(){
+    // Le traduzioni legacy vengono applicate prima del rendering visibile e ai soli nodi modificati.
+    // In questo modo React non mostra prima il testo originale e poi quello tradotto, evitando lo sfarfallio.
     if(typeof document==="undefined")return;
     var root=document.getElementById("root");
     if(!root)return;
     var map=runtimeTranslationMap||{};
     var normalizedMap={};
+    var translatedTextValues=new WeakMap();
+    var translatedAttributeValues=new WeakMap();
     function repairMojibake(value){
       var raw=String(value==null?"":value);
       if(!/[������]/.test(raw))return raw;
@@ -2692,17 +2698,17 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       if(/^[\d\s.,:;€$%+\-()\/]+$/.test(trimmed))return raw;
       if(lang==="it"){
         var forcedIt=translateCriticalUiText(trimmed,"it");
-        if(forcedIt&&forcedIt!==trimmed)return raw.replace(trimmed,forcedIt);
+        if(forcedIt&&forcedIt!==trimmed)return normalizeFainanceTranslatedIcons(raw,raw.replace(trimmed,forcedIt));
         var directIt=translateFainanceText(trimmed,"it");
-        if(directIt&&directIt!==trimmed)return raw.replace(trimmed,directIt);
+        if(directIt&&directIt!==trimmed)return normalizeFainanceTranslatedIcons(raw,raw.replace(trimmed,directIt));
         var nextIt=map[trimmed]||normalizedMap[norm(trimmed)];
-        if(nextIt&&nextIt!==trimmed&&String(nextIt).indexOf("�")<0)return raw.replace(trimmed,repairMojibake(String(nextIt)));
+        if(nextIt&&nextIt!==trimmed&&String(nextIt).indexOf("�")<0)return normalizeFainanceTranslatedIcons(raw,raw.replace(trimmed,repairMojibake(String(nextIt))));
         return raw;
       }
       var forced=translateCriticalUiText(trimmed,lang);
-      if(forced&&forced!==trimmed)return raw.replace(trimmed,forced);
+      if(forced&&forced!==trimmed)return normalizeFainanceTranslatedIcons(raw,raw.replace(trimmed,forced));
       var direct=translateFainanceText(trimmed,lang);
-      if(direct&&direct!==trimmed)return raw.replace(trimmed,direct);
+      if(direct&&direct!==trimmed)return normalizeFainanceTranslatedIcons(raw,raw.replace(trimmed,direct));
       var next=map[trimmed]||normalizedMap[norm(trimmed)];
       if(!next){
         var pref=trimmed.match(/^([^A-Za-zÀ-ÿ0-9]+)\s*([\s\S]+)$/);
@@ -2712,7 +2718,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         }
       }
       if(!next||next===trimmed||String(next).indexOf("�")>=0)return raw;
-      return raw.replace(trimmed,repairMojibake(String(next)));
+      return normalizeFainanceTranslatedIcons(raw,raw.replace(trimmed,repairMojibake(String(next))));
     }
     function skip(el){
       if(!el||!el.tagName)return true;
@@ -2720,31 +2726,65 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       if(el.closest&&el.closest('[data-no-translate="true"]'))return true;
       return false;
     }
-    function applyExactTranslations(){
+    function translateTextNode(node){
       try{
-        var walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:function(node){
-          if(!node.nodeValue||!node.nodeValue.trim())return NodeFilter.FILTER_REJECT;
-          var p=node.parentElement;if(skip(p))return NodeFilter.FILTER_REJECT;
-          return NodeFilter.FILTER_ACCEPT;
-        }});
-        var nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
-        nodes.forEach(function(node){var next=tx(node.nodeValue);if(next!==node.nodeValue)node.nodeValue=next;});
-        root.querySelectorAll("input[placeholder],textarea[placeholder],[title],[aria-label],option[label]").forEach(function(el){
-          if(skip(el))return;
-          ["placeholder","title","aria-label","label"].forEach(function(attr){var v=el.getAttribute(attr);if(v){var next=tx(v);if(next!==v)el.setAttribute(attr,next);}});
-        });
+        if(!node||!node.nodeValue||!node.nodeValue.trim())return;
+        var parent=node.parentElement;
+        if(skip(parent))return;
+        var current=String(node.nodeValue);
+        if(translatedTextValues.get(node)===current)return;
+        var next=tx(current);
+        if(next!==current){
+          translatedTextValues.set(node,next);
+          node.nodeValue=next;
+        }else translatedTextValues.set(node,current);
       }catch(e){}
     }
-    // 1.6.73: niente MutationObserver continuo.
-    // Esegue pochi passaggi schedulati quando cambia schermata/lingua/stato rilevante.
-    // Questo mantiene le traduzioni legacy senza causare loop, sfarfallii o rallentamenti progressivi.
-    var timers=[];
-    function schedule(ms){timers.push(setTimeout(applyExactTranslations,ms));}
-    schedule(20);
-    schedule(180);
-    schedule(650);
-    return function(){timers.forEach(function(timer){clearTimeout(timer);});};
-  },[lang,tab,settingsPage,speseSubTab,addSubTab,historyTab,shareProjectTab,patrimonioMode,aiTab,statsView]);
+    function translateAttributes(el){
+      try{
+        if(!el||!el.getAttribute||skip(el))return;
+        var saved=translatedAttributeValues.get(el)||{};
+        ["placeholder","title","aria-label","label"].forEach(function(attr){
+          var value=el.getAttribute(attr);
+          if(!value||saved[attr]===value)return;
+          var next=tx(value);
+          saved[attr]=next;
+          if(next!==value)el.setAttribute(attr,next);
+        });
+        translatedAttributeValues.set(el,saved);
+      }catch(e){}
+    }
+    function translateSubtree(node){
+      try{
+        if(!node)return;
+        if(node.nodeType===Node.TEXT_NODE){translateTextNode(node);return;}
+        if(node.nodeType!==Node.ELEMENT_NODE&&node!==root)return;
+        var el=node;
+        if(el!==root&&skip(el))return;
+        if(el!==root)translateAttributes(el);
+        var walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,{acceptNode:function(textNode){
+          if(!textNode.nodeValue||!textNode.nodeValue.trim())return NodeFilter.FILTER_REJECT;
+          var parent=textNode.parentElement;
+          return skip(parent)?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;
+        }});
+        while(walker.nextNode())translateTextNode(walker.currentNode);
+        if(el.querySelectorAll)el.querySelectorAll("input[placeholder],textarea[placeholder],[title],[aria-label],option[label]").forEach(translateAttributes);
+      }catch(e){}
+    }
+    translateSubtree(root);
+    var observer=null;
+    try{
+      observer=new MutationObserver(function(records){
+        records.forEach(function(record){
+          if(record.type==="childList")Array.prototype.forEach.call(record.addedNodes||[],translateSubtree);
+          else if(record.type==="characterData")translateTextNode(record.target);
+          else if(record.type==="attributes")translateAttributes(record.target);
+        });
+      });
+      observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["placeholder","title","aria-label","label"]});
+    }catch(e){}
+    return function(){try{if(observer)observer.disconnect();}catch(e){}};
+  },[lang,runtimeTranslationMap]);
   function monthShortName(index){
     var names={
       it:["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"],
@@ -2819,6 +2859,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   var FAINANCE_CURRENT_VERSION="1.3.12";
   var FAINANCE_CURRENT_VERSION_CODE=168;
+  var FAINANCE_ANDROID_PACKAGE_ID="it.fainanceapp.app";
+  var FAINANCE_PLAY_STORE_MARKET_URL="market://details?id="+FAINANCE_ANDROID_PACKAGE_ID;
+  var FAINANCE_PLAY_STORE_WEB_URL="https://play.google.com/store/apps/details?id="+FAINANCE_ANDROID_PACKAGE_ID;
+  var FAINANCE_APP_STORE_SEARCH_URL="https://apps.apple.com/it/search?term=fAInance";
   function appUpdatePlatform(){
     try{
       var cap=(window as any).Capacitor;
@@ -2848,6 +2892,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
     return 0;
   }
+  function appUpdateAppleId(value:any){
+    var match=String(value||"").match(/(?:\/id|id=)(\d{6,})/i);
+    return match?match[1]:"";
+  }
+  function appUpdateIosDeepLink(url:any,trackId?:any){
+    var id=String(trackId||appUpdateAppleId(url)||"");
+    return id?"itms-apps://apps.apple.com/app/id"+id:String(url||"");
+  }
   async function appUpdateCurrentInfo(){
     var info:any={version:FAINANCE_CURRENT_VERSION,code:FAINANCE_CURRENT_VERSION_CODE,platform:appUpdatePlatform()};
     try{
@@ -2871,19 +2923,68 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     try{
       var plugin=nativePlugin("FainanceAppUpdate");
       if(!plugin||!plugin.checkForUpdate)return null;
-      var nativeResult:any=await fainancePromiseTimeout(plugin.checkForUpdate(),9000,"Controllo aggiornamenti Google Play scaduto.").catch(function(){return null;});
-      if(!nativeResult||nativeResult.updateAvailable!==true)return null;
-      var availableCode=appUpdateCode(nativeResult.availableVersionCode||nativeResult.latestVersionCode);
-      if(availableCode>0&&availableCode<=appUpdateCode(current.code))return null;
+      var nativeResult:any=await fainancePromiseTimeout(plugin.checkForUpdate(),5500,"Controllo aggiornamenti Google Play scaduto.").catch(function(){return null;});
+      if(!nativeResult)return null;
+      var availability=Number(nativeResult.updateAvailability||nativeResult.availability||0)||0;
+      var updateFlag=nativeResult.updateAvailable===true||String(nativeResult.updateAvailable||"").toLowerCase()==="true"||availability===2||availability===3||String(nativeResult.status||nativeResult.updateStatus||"").toUpperCase().indexOf("UPDATE_AVAILABLE")>=0;
+      var availableCode=appUpdateCode(nativeResult.availableVersionCode||nativeResult.latestVersionCode||nativeResult.versionCode);
+      var availableVersion=String(nativeResult.availableVersionName||nativeResult.latestVersionName||nativeResult.latestVersion||"");
+      var newerByCode=availableCode>0&&availableCode>appUpdateCode(current.code);
+      var newerByVersion=availableVersion&&appUpdateCompareVersion(availableVersion,current.version)>0;
+      if(!updateFlag&&!newerByCode&&!newerByVersion)return null;
+      if(availableCode>0&&availableCode<=appUpdateCode(current.code)&&!newerByVersion)return null;
       return {
         enabled:true,
+        confirmedUpdateAvailable:true,
         androidLatestVersionCode:availableCode,
-        androidStoreUrl:"market://details?id=it.fainanceapp.app",
+        androidLatestVersion:availableVersion,
+        androidStoreUrl:FAINANCE_PLAY_STORE_MARKET_URL,
+        androidStoreWebUrl:FAINANCE_PLAY_STORE_WEB_URL,
         titleIt:"Aggiornamento disponibile",
         messageIt:"È disponibile una nuova versione di fAInance su Google Play. Aggiorna l'app per ricevere le ultime correzioni e miglioramenti.",
-        displayLatestVersion:false,
+        displayLatestVersion:!!availableVersion||availableCode>0,
         source:"google_play"
       };
+    }catch(e){return null;}
+  }
+  async function appUpdateIosStoreConfig(current:any){
+    if(!current||current.platform!=="ios"||!isNativePlatform())return null;
+    var bundleId=String(current.id||"").trim();
+    if(!bundleId)return null;
+    var cached=appUpdateStoreCacheRef.current&&appUpdateStoreCacheRef.current.iosLookup;
+    if(cached&&cached.bundleId===bundleId&&Date.now()-Number(cached.savedAt||0)<15*60*1000)return cached.config||null;
+    var encoded=encodeURIComponent(bundleId);
+    var urls=[
+      "https://itunes.apple.com/lookup?bundleId="+encoded+"&country=it",
+      "https://itunes.apple.com/lookup?bundleId="+encoded
+    ];
+    try{
+      var responses:any[]=await Promise.all(urls.map(function(url){
+        return fainancePromiseTimeout(fetch(url,{cache:"no-store",headers:{"Accept":"application/json"}}),6500,"Controllo aggiornamenti App Store scaduto.").catch(function(){return null;});
+      }));
+      var result:any=null;
+      for(var i=0;i<responses.length&&!result;i++){
+        var response=responses[i];
+        if(!response||!response.ok)continue;
+        var json:any=await response.json().catch(function(){return null;});
+        var list=json&&Array.isArray(json.results)?json.results:[];
+        result=list.find(function(item){return String(item&&item.bundleId||"")===bundleId;})||list[0]||null;
+      }
+      if(!result)return null;
+      var webUrl=String(result.trackViewUrl||"");
+      var trackId=String(result.trackId||appUpdateAppleId(webUrl)||"");
+      var cfg:any={
+        enabled:true,
+        iosLatestVersion:String(result.version||""),
+        iosStoreUrl:appUpdateIosDeepLink(webUrl,trackId),
+        iosStoreWebUrl:webUrl,
+        appStoreId:trackId,
+        titleIt:"Aggiornamento disponibile",
+        messageIt:"È disponibile una nuova versione di fAInance su App Store. Aggiorna l'app per ricevere le ultime correzioni e miglioramenti.",
+        source:"app_store_lookup"
+      };
+      appUpdateStoreCacheRef.current.iosLookup={bundleId:bundleId,savedAt:Date.now(),config:cfg};
+      return cfg;
     }catch(e){return null;}
   }
   async function appUpdateRemoteConfigs(){
@@ -2893,39 +2994,61 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       try{var key=JSON.stringify(value);if(sources.some(function(x){try{return JSON.stringify(x)===key;}catch(e){return x===value;}}))return;}catch(e){}
       sources.push(value);
     }
-    var firestoreReads=[
+    var tasks:any[]=[];
+    [
       function(){return getDoc(doc(fbDb,"appConfig","version"));},
       function(){return getDoc(doc(fbDb,"config","appVersion"));}
-    ];
-    for(var f=0;f<firestoreReads.length;f++){
-      try{
-        var snap:any=await fainancePromiseTimeout(firestoreReads[f](),4500,"Lettura configurazione aggiornamenti scaduta.").catch(function(){return null;});
-        if(snap&&snap.exists&&snap.exists())addSource(snap.data());
-      }catch(e){}
-    }
-    var urls=["https://fainanceapp.it/app-version.json","https://fainanceapp.it/version.json"];
-    for(var i=0;i<urls.length;i++){
-      try{
-        var res:any=await fainancePromiseTimeout(fetch(urls[i],{cache:"no-store",headers:{"Accept":"application/json"}}),4500,"Controllo aggiornamenti web scaduto.").catch(function(){return null;});
-        if(res&&res.ok){var json:any=await res.json().catch(function(){return null;});addSource(json);}
-      }catch(e){}
-    }
+    ].forEach(function(read){
+      tasks.push((async function(){
+        try{
+          var snap:any=await fainancePromiseTimeout(read(),4500,"Lettura configurazione aggiornamenti scaduta.").catch(function(){return null;});
+          if(snap&&snap.exists&&snap.exists())addSource(snap.data());
+        }catch(e){}
+      })());
+    });
+    ["https://fainanceapp.it/app-version.json","https://fainanceapp.it/version.json"].forEach(function(url){
+      tasks.push((async function(){
+        try{
+          var res:any=await fainancePromiseTimeout(fetch(url,{cache:"no-store",headers:{"Accept":"application/json"}}),4500,"Controllo aggiornamenti web scaduto.").catch(function(){return null;});
+          if(res&&res.ok){var json:any=await res.json().catch(function(){return null;});addSource(json);}
+        }catch(e){}
+      })());
+    });
+    await Promise.all(tasks);
     return sources;
   }
+  function appUpdateScopedConfig(cfg:any,platform:string){
+    if(!cfg||typeof cfg!=="object")return cfg||{};
+    var base:any=cfg;
+    [cfg.data,cfg.update,cfg.appUpdate,cfg.appVersion,cfg.versionConfig].some(function(candidate){
+      if(candidate&&typeof candidate==="object"&&!Array.isArray(candidate)){base={...cfg,...candidate};return true;}
+      return false;
+    });
+    var nested=base[platform]||(base.platforms&&base.platforms[platform])||(base.platform&&typeof base.platform==="object"&&base.platform[platform]);
+    if(nested&&typeof nested==="object"&&!Array.isArray(nested))return {...base,...nested};
+    return base;
+  }
   function appUpdateStoreUrl(platform:string,cfg:any){
-    cfg=cfg||{};
+    cfg=appUpdateScopedConfig(cfg||{},platform);
     if(platform==="ios"){
-      return String(appUpdatePick(cfg,["iosStoreUrl","appStoreUrl","storeUrl"],""));
+      return String(appUpdatePick(cfg,["iosStoreUrl","appStoreUrl","iosStoreWebUrl","trackViewUrl","storeUrl"],FAINANCE_APP_STORE_SEARCH_URL));
     }
     if(platform==="android"){
-      return String(appUpdatePick(cfg,["androidStoreUrl","playStoreUrl","googlePlayUrl","storeUrl"],"market://details?id=it.fainanceapp.app"));
+      return String(appUpdatePick(cfg,["androidStoreUrl","playStoreUrl","googlePlayUrl","storeUrl"],FAINANCE_PLAY_STORE_MARKET_URL));
     }
     return String(appUpdatePick(cfg,["webStoreUrl","websiteUrl","storeUrl"],"https://fainanceapp.it/"));
   }
+  function appUpdateStoreWebUrl(platform:string,cfg:any){
+    cfg=appUpdateScopedConfig(cfg||{},platform);
+    if(platform==="ios")return String(appUpdatePick(cfg,["iosStoreWebUrl","trackViewUrl","appStoreUrl","iosStoreUrl","storeUrl"],FAINANCE_APP_STORE_SEARCH_URL)).replace(/^itms-apps:/i,"https:");
+    if(platform==="android")return String(appUpdatePick(cfg,["androidStoreWebUrl","playStoreUrl","googlePlayUrl","androidStoreUrl","storeUrl"],FAINANCE_PLAY_STORE_WEB_URL)).replace(/^market:\/\/details/i,"https://play.google.com/store/apps/details");
+    return String(appUpdatePick(cfg,["webStoreUrl","websiteUrl","storeUrl"],"https://fainanceapp.it/"));
+  }
   function appUpdateDismissKey(targetCode:any){return "fainance_update_popup_dismissed_"+String(targetCode||"latest");}
-  function appUpdateShouldShow(cfg:any,current:any){
+  function appUpdateShouldShow(cfg:any,current:any,options?:any){
     if(!cfg||cfg.enabled===false||cfg.active===false)return null;
     var platform=current.platform||appUpdatePlatform();
+    cfg=appUpdateScopedConfig(cfg,platform);
     var prefix=platform==="ios"?"ios":platform==="android"?"android":"web";
     var latestCode=appUpdateCode(appUpdatePick(cfg,[prefix+"LatestVersionCode","latest"+prefix.charAt(0).toUpperCase()+prefix.slice(1)+"VersionCode",prefix+"VersionCode","latestVersionCode"+prefix.charAt(0).toUpperCase()+prefix.slice(1),"latestVersionCode","versionCode"]));
     var minCode=appUpdateCode(appUpdatePick(cfg,[prefix+"MinVersionCode",prefix+"MinimumVersionCode","minimum"+prefix.charAt(0).toUpperCase()+prefix.slice(1)+"VersionCode","minVersionCode"+prefix.charAt(0).toUpperCase()+prefix.slice(1),"minimumVersionCode","minVersionCode","requiredVersionCode"]));
@@ -2935,9 +3058,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var byCode=latestCode>0&&currentCode>0&&latestCode>currentCode;
     var byVersion=!byCode&&latestVersion&&currentVersion&&appUpdateCompareVersion(latestVersion,currentVersion)>0;
     var force=minCode>0&&currentCode>0&&currentCode<minCode;
-    if(!byCode&&!byVersion&&!force)return null;
-    var targetCode=latestCode||latestVersion||"latest";
-    if(!force){
+    var confirmed=cfg.confirmedUpdateAvailable===true;
+    if(!byCode&&!byVersion&&!force&&!confirmed)return null;
+    var targetCode=latestCode||latestVersion||(confirmed?platform+"_after_"+String(currentCode||currentVersion||"current"):"latest");
+    if(!force&&!(options&&options.ignoreDismissed)){
       try{
         var dismissed=localStorage.getItem(appUpdateDismissKey(targetCode));
         if(dismissed==="never"||dismissed==="1"||dismissed==="true")return null;
@@ -2951,6 +3075,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       latestVersion:appUpdatePick(cfg,["displayLatestVersion"],true)===false?"":(latestVersion||String(latestCode||"")),
       latestCode:latestCode,
       storeUrl:appUpdateStoreUrl(platform,cfg),
+      storeWebUrl:appUpdateStoreWebUrl(platform,cfg),
       title:String(appUpdatePick(cfg,["title_"+lang,"titleIt","title"],L("Aggiornamento disponibile"))),
       message:String(appUpdatePick(cfg,["message_"+lang,"messageIt","message"],L("È disponibile una nuova versione di fAInance. Aggiorna l'app per avere le ultime correzioni e miglioramenti."))),
       targetCode:targetCode
@@ -2965,24 +3090,71 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       return appUpdateCompareVersion(b.latestVersion||"",a.latestVersion||"");
     })[0];
   }
-  async function checkAppUpdatePopup(){
-    try{
-      var current=await appUpdateCurrentInfo();
-      setInstalledAppInfo(current);
-      var nativeCfg=await appUpdateNativePlayConfig(current);
-      if(nativeCfg){
-        var nativeInfo=appUpdateShouldShow(nativeCfg,current);
-        if(nativeInfo){
-          setAppUpdatePopup(function(prev){return prev&&String(prev.targetCode)===String(nativeInfo.targetCode)?prev:nativeInfo;});
-          return nativeInfo;
-        }
+  async function checkAppUpdatePopup(options?:any){
+    if(appUpdateCheckPromiseRef.current)return appUpdateCheckPromiseRef.current;
+    var check=(async function(){
+      try{
+        var current=await appUpdateCurrentInfo();
+        setInstalledAppInfo(current);
+        var results:any[]=await Promise.all([
+          appUpdateNativePlayConfig(current).catch(function(){return null;}),
+          appUpdateIosStoreConfig(current).catch(function(){return null;}),
+          appUpdateRemoteConfigs().catch(function(){return [];})
+        ]);
+        var configs:any[]=[];
+        if(results[0])configs.push(results[0]);
+        if(results[1])configs.push(results[1]);
+        (results[2]||[]).forEach(function(cfg){if(cfg)configs.push(cfg);});
+        var candidates=configs.map(function(cfg){return appUpdateShouldShow(cfg,current,options);}).filter(Boolean);
+        var info=bestAppUpdateCandidate(candidates);
+        if(info)setAppUpdatePopup(function(prev){return prev&&String(prev.targetCode)===String(info.targetCode)&&String(prev.platform)===String(info.platform)?prev:info;});
+        return info||null;
+      }catch(e){return null;}
+    })();
+    appUpdateCheckPromiseRef.current=check;
+    try{return await check;}finally{if(appUpdateCheckPromiseRef.current===check)appUpdateCheckPromiseRef.current=null;}
+  }
+  async function appUpdatePreferredStore(current?:any){
+    var info=current||await appUpdateCurrentInfo();
+    var platform=String(info&&info.platform||appUpdatePlatform()||"web");
+    if(platform==="android")return {platform:platform,url:FAINANCE_PLAY_STORE_MARKET_URL,webUrl:FAINANCE_PLAY_STORE_WEB_URL};
+    if(platform==="ios"){
+      var iosCfg=await appUpdateIosStoreConfig(info).catch(function(){return null;});
+      if(iosCfg)return {platform:platform,url:appUpdateStoreUrl(platform,iosCfg),webUrl:appUpdateStoreWebUrl(platform,iosCfg)};
+      var remotes:any[]=await appUpdateRemoteConfigs().catch(function(){return [];});
+      for(var i=0;i<remotes.length;i++){
+        var candidate=appUpdateStoreUrl(platform,remotes[i]);
+        if(candidate&&candidate!==FAINANCE_APP_STORE_SEARCH_URL)return {platform:platform,url:candidate,webUrl:appUpdateStoreWebUrl(platform,remotes[i])};
       }
-      var remoteCfgs=await appUpdateRemoteConfigs();
-      var candidates=(remoteCfgs||[]).map(function(cfg){return appUpdateShouldShow(cfg,current);}).filter(Boolean);
-      var info=bestAppUpdateCandidate(candidates);
-      if(info)setAppUpdatePopup(function(prev){return prev&&String(prev.targetCode)===String(info.targetCode)?prev:info;});
-      return info||null;
-    }catch(e){return null;}
+      return {platform:platform,url:FAINANCE_APP_STORE_SEARCH_URL,webUrl:FAINANCE_APP_STORE_SEARCH_URL};
+    }
+    return {platform:platform,url:"https://fainanceapp.it/",webUrl:"https://fainanceapp.it/"};
+  }
+  function openFainanceStoreUrl(url:any,platform?:string,webFallback?:any){
+    var target=String(url||"");
+    var p=String(platform||appUpdatePlatform()||"web");
+    var fallback=String(webFallback||"");
+    if(!target)return false;
+    try{
+      if(isNativePlatform()&&(p==="ios"||p==="android")){
+        if(p==="ios"&&/^https:\/\/apps\.apple\.com\//i.test(target))target=appUpdateIosDeepLink(target);
+        window.location.href=target;
+        if(fallback&&fallback!==target){
+          setTimeout(function(){
+            try{
+              if(typeof document!=="undefined"&&document.visibilityState==="visible")window.open(fallback,"_blank");
+            }catch(e){}
+          },1300);
+        }
+        return true;
+      }
+      if(window&&window.open){window.open(fallback||target,"_blank");return true;}
+      window.location.href=fallback||target;
+      return true;
+    }catch(e){
+      try{if(fallback){window.open(fallback,"_blank");return true;}}catch(e2){}
+      return false;
+    }
   }
   function dismissAppUpdatePopup(){
     try{
@@ -2990,19 +3162,15 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }catch(e){}
     setAppUpdatePopup(null);
   }
-  function openAppUpdateStore(){
+  async function openAppUpdateStore(){
+    var platform=String(appUpdatePopup&&appUpdatePopup.platform||appUpdatePlatform()||"web");
     var url=appUpdatePopup&&appUpdatePopup.storeUrl?String(appUpdatePopup.storeUrl):"";
-    try{
-      if(url){
-        if(isNativePlatform()&&url.indexOf("market://")===0){
-          window.location.href=url;
-          setTimeout(function(){try{window.open("https://play.google.com/store/apps/details?id=it.fainanceapp.app","_blank");}catch(e){}},700);
-        }else if(window&&window.open)window.open(url,"_blank");
-        else window.location.href=url;
-      }
-    }catch(e){
-      try{window.open("https://play.google.com/store/apps/details?id=it.fainanceapp.app","_blank");}catch(e2){}
+    var webUrl=appUpdatePopup&&appUpdatePopup.storeWebUrl?String(appUpdatePopup.storeWebUrl):"";
+    if(!url){
+      var store=await appUpdatePreferredStore();
+      platform=store.platform;url=store.url;webUrl=store.webUrl;
     }
+    openFainanceStoreUrl(url,platform,webUrl);
   }
   function AppUpdateModal(){
     if(!appUpdatePopup)return null;
@@ -3360,8 +3528,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(typeof document!=="undefined")document.documentElement.removeAttribute("data-fainance-i18n");
   }catch(e){}
   useEffect(function(){
-    // 1.6.51: niente MutationObserver per le traduzioni.
-    // Evita ritardi nelle aperture delle sezioni e regressioni su testi già corretti.
+    // Il traduttore incrementale non nasconde mai l'interfaccia durante il cambio lingua.
     try{
       if(typeof document!=="undefined")document.documentElement.removeAttribute("data-fainance-i18n");
     }catch(e){}
@@ -7793,35 +7960,43 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       var APP_VERSION_CODE=Number(installedAppInfo.code||FAINANCE_CURRENT_VERSION_CODE)||FAINANCE_CURRENT_VERSION_CODE;
       var APP_PLATFORM=String(installedAppInfo.platform||appUpdatePlatform()||"web");
       var APP_PLATFORM_LABEL=APP_PLATFORM==="android"?"Android":APP_PLATFORM==="ios"?"iOS":"Web";
-      var APP_WEBSITE="https://fainance.app";
-      var PLAY_STORE_WEB_URL="https://play.google.com/store/apps/details?id=it.fainanceapp.app&showAllReviews=true";
-      var PLAY_STORE_REVIEW_WEB_URL="https://play.google.com/store/apps/details?id=it.fainanceapp.app&reviewId=0&showAllReviews=true";
-      var PLAY_STORE_MARKET_URL="market://details?id=it.fainanceapp.app&showAllReviews=true";
-      var [updateStatus,setUpdateStatus]=useState(null);
-      var [updateInfo,setUpdateInfo]=useState(null);
-      function checkForUpdates(){
-        setUpdateStatus("playstore");
+      var updateStatus=appUpdateManualStatus;
+      var setUpdateStatus=setAppUpdateManualStatus;
+      async function checkForUpdates(){
+        if(updateStatus==="checking")return;
+        setUpdateStatus("checking");
         try{
-          if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
-            window.location.href=PLAY_STORE_MARKET_URL;
-            setTimeout(function(){try{window.open(PLAY_STORE_WEB_URL,"_blank");}catch(e){}},700);
-          }else{
-            window.open(PLAY_STORE_WEB_URL,"_blank");
-          }
+          var available=await checkAppUpdatePopup({ignoreDismissed:true});
+          if(available){setUpdateStatus("available");return;}
+          var current=await appUpdateCurrentInfo();
+          setInstalledAppInfo(current);
+          var store=await appUpdatePreferredStore(current);
+          setUpdateStatus("store");
+          if(!openFainanceStoreUrl(store.url,store.platform,store.webUrl))throw new Error("Store non disponibile");
         }catch(e){
-          try{window.open(PLAY_STORE_WEB_URL,"_blank");}catch(e2){}
+          setUpdateStatus("error");
+          setToast({text:"Impossibile aprire lo store. Riprova tra poco.",type:"error",icon:"🚫",color:"#E24B4A"});
         }
       }
-      function openStoreRating(){
+      async function openStoreRating(){
         try{
-          if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
-            window.location.href=PLAY_STORE_MARKET_URL;
-            setTimeout(function(){try{window.open(PLAY_STORE_REVIEW_WEB_URL,"_blank");}catch(e){}},700);
-          }else{
-            window.open(PLAY_STORE_REVIEW_WEB_URL,"_blank");
+          var current=await appUpdateCurrentInfo();
+          var store=await appUpdatePreferredStore(current);
+          var ratingUrl=store.url;
+          var ratingWebUrl=store.webUrl;
+          if(store.platform==="android"){
+            ratingUrl=FAINANCE_PLAY_STORE_MARKET_URL+"&showAllReviews=true";
+            ratingWebUrl=FAINANCE_PLAY_STORE_WEB_URL+"&showAllReviews=true";
+          }else if(store.platform==="ios"){
+            var appleId=appUpdateAppleId(store.url)||appUpdateAppleId(store.webUrl);
+            if(appleId){
+              ratingUrl="itms-apps://itunes.apple.com/app/id"+appleId+"?action=write-review";
+              ratingWebUrl="https://apps.apple.com/app/id"+appleId+"?action=write-review";
+            }
           }
+          if(!openFainanceStoreUrl(ratingUrl,store.platform,ratingWebUrl))throw new Error("Store non disponibile");
         }catch(e){
-          try{window.open(PLAY_STORE_WEB_URL,"_blank");}catch(e2){}
+          setToast({text:"Impossibile aprire la pagina delle recensioni.",type:"error",icon:"🚫",color:"#E24B4A"});
         }
       }
       return <div><PageHeader title="Info"/>
@@ -7852,12 +8027,12 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
           <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
             <div style={{fontSize:14,fontWeight:600,color:textC,marginBottom:4}}>{"🔄 "+translateUiRuntimeText("Aggiornamenti")}</div>
             <div style={{fontSize:12,color:subC,marginBottom:14}}>Versione installata: <strong>{APP_VERSION}</strong></div>
-            {updateStatus==="playstore"&&<div style={{background:dark?"#1a2a1e":"#edfaf3",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #1D9E75",display:"flex",alignItems:"center",gap:10}}>
-              <span style={{fontSize:20}}>✅</span>
-              <span style={{fontSize:13,color:"#1D9E75",fontWeight:500}}>{L("Si aprirà la pagina dello store di fAInance per verificare eventuali aggiornamenti.")}</span>
-            </div>}
+            {updateStatus==="checking"&&<div style={{background:dark?"#252535":"#f5f5f5",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid "+borderC,display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:20}}>⏳</span><span style={{fontSize:13,color:subC,fontWeight:500}}>{L("Controllo aggiornamenti in corso...")}</span></div>}
+            {updateStatus==="store"&&<div style={{background:dark?"#1a2a1e":"#edfaf3",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #1D9E75",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:20}}>✅</span><span style={{fontSize:13,color:"#1D9E75",fontWeight:500}}>{L("È stato aperto lo store corretto per il dispositivo.")}</span></div>}
+            {updateStatus==="available"&&<div style={{background:dark?"#252044":"#F0EEFF",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #7F77DD",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:20}}>🚀</span><span style={{fontSize:13,color:dark?"#C9C4FF":"#534AB7",fontWeight:600}}>{L("Aggiornamento disponibile: usa il popup per aprire lo store.")}</span></div>}
+            {updateStatus==="error"&&<div style={{background:dark?"#321d23":"#fff0f0",borderRadius:10,padding:"12px 16px",marginBottom:12,border:"1px solid #E24B4A",display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:20}}>🚫</span><span style={{fontSize:13,color:"#E24B4A",fontWeight:500}}>{L("Impossibile controllare gli aggiornamenti.")}</span></div>}
             <button onClick={checkForUpdates} disabled={updateStatus==="checking"} style={{width:"100%",background:dark?"#252535":"#f5f5f5",color:textC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"11px",fontSize:14,cursor:updateStatus==="checking"?"not-allowed":"pointer",fontWeight:500,opacity:updateStatus==="checking"?0.6:1}}>
-              {L("Apri store")}
+              {updateStatus==="checking"?L("Controllo in corso..."):L("Controlla aggiornamenti")}
             </button>
           </div>
 
@@ -8805,8 +8980,8 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     var sinp={width:"100%",borderRadius:10,border:"1px solid "+borderC,padding:"9px 11px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:textC,boxSizing:"border-box"};
     useEffect(function(){setProjectNameDraft(selected?selected.name||"":"");setProjectDescDraft(selected?selected.description||"":"");setProjectIconDraft(selected?(selected.icon||"🤝"):"🤝");setProjectColorDraft(selected?(selected.color||"#4F8FF7"):"#4F8FF7");setProjectEditingDetails(false);setShareEditingActivityId(null);},[selected?selected.id:null]);
     useEffect(function(){var ids=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(function(list){var clean=(list||[]).filter(function(id){return ids.includes(id);});return clean.length?clean:ids;});},[selected?selected.id:null,activeParticipants.map(function(p){return p.id;}).join("|")]);
-    function resetShareExpenseForm(){try{localStorage.removeItem("fainance_share_receipt_draft_v2");localStorage.removeItem("fainance_share_receipt_flow_v2");}catch(e){}setShareAmount("");setShareDesc("");setShareDate(todayStr());setSplitDraft({});setShareSplitTouched(false);setShareEditingActivityId(null);setShareExpenseFormOpen(false);setShareReceiptOpen(false);setShareReceiptReady(false);setShareExpenseMode("simple");setShareVoiceText("");setShareParticipantIds(activeParticipants.map(function(p){return p.id;}));}
-    function closeShareExpensePopup(){try{localStorage.removeItem("fainance_share_receipt_flow_v2");}catch(e){}setShareExpenseFormOpen(false);setShareEditingActivityId(null);setShareReceiptOpen(false);setShareReceiptReady(false);setShareExpenseMode("simple");}
+    function resetShareExpenseForm(){try{localStorage.removeItem("fainance_share_receipt_draft_v2");localStorage.removeItem("fainance_share_receipt_flow_v2");localStorage.removeItem("fainance_share_widget_action_v1");localStorage.removeItem("fainance_share_open_expense_mode");}catch(e){}setShareAmount("");setShareDesc("");setShareDate(todayStr());setSplitDraft({});setShareSplitTouched(false);setShareEditingActivityId(null);setShareExpenseFormOpen(false);setShareReceiptOpen(false);setShareReceiptReady(false);setShareExpenseMode("simple");setShareVoiceText("");setShareParticipantIds(activeParticipants.map(function(p){return p.id;}));}
+    function closeShareExpensePopup(){try{localStorage.removeItem("fainance_share_receipt_flow_v2");localStorage.removeItem("fainance_share_widget_action_v1");localStorage.removeItem("fainance_share_open_expense_mode");}catch(e){}setShareExpenseFormOpen(false);setShareEditingActivityId(null);setShareReceiptOpen(false);setShareReceiptReady(false);setShareExpenseMode("simple");}
     function openShareExpensePopup(mode){
       setShareProjectTab("attivita");
       setShareReceiptReady(false);
@@ -9312,8 +9487,8 @@ function parseShareVoiceCommand(text){
         <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,boxShadow:dark?"none":"0 10px 26px rgba(83,74,183,0.08)"}}>
           {function(){var theme=projectTheme(selected);return <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
             <div style={{width:54,height:54,borderRadius:16,background:theme.color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0,boxShadow:dark?"none":"0 8px 18px "+theme.color+"44"}}>{theme.icon}</div>
-            <div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{fontSize:18,fontWeight:900,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selected.name||"Progetto"}</div></div><div style={{fontSize:12,color:subC,marginTop:4,whiteSpace:"pre-wrap"}}>{selected.description||L("Progetti, spese condivise e saldi")}</div></div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}><div style={{display:"flex",gap:8}}><button onClick={function(){setProjectNameDraft(selected?selected.name||"":"");setProjectDescDraft(selected?selected.description||"":"");setProjectIconDraft(selected?(selected.icon||"🤝"):"🤝");setProjectColorDraft(selected?(selected.color||"#4F8FF7"):"#4F8FF7");setProjectEditingDetails(true);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",color:confirmButtonColor,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>✏</button><button onClick={function(){requestDeleteProject(selected.id);}} style={{background:"#fff0f0",border:"1px solid #ffd0d0",color:expenseColor,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>🗑</button></div><span style={{display:"inline-flex",alignItems:"center",padding:"4px 10px",borderRadius:999,background:theme.color+"18",color:theme.color,fontSize:11,fontWeight:900}}>{L("Progetto attivo")}</span></div>
+            <div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}><div style={{fontSize:18,fontWeight:900,color:textC,lineHeight:1.18,whiteSpace:"normal",overflowWrap:"anywhere",wordBreak:"break-word"}}>{selected.name||"Progetto"}</div></div><div style={{fontSize:12,color:subC,marginTop:4,whiteSpace:"pre-wrap"}}>{selected.description||L("Progetti, spese condivise e saldi")}</div></div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}><div style={{display:"flex",gap:8}}><button onClick={function(){setProjectNameDraft(selected?selected.name||"":"");setProjectDescDraft(selected?selected.description||"":"");setProjectIconDraft(selected?(selected.icon||"🤝"):"🤝");setProjectColorDraft(selected?(selected.color||"#4F8FF7"):"#4F8FF7");setProjectEditingDetails(true);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",color:confirmButtonColor,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>✏</button><button onClick={function(){requestDeleteProject(selected.id);}} style={{background:"#fff0f0",border:"1px solid #ffd0d0",color:expenseColor,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>🗑</button></div><span style={{display:"inline-flex",alignItems:"center",padding:"4px 10px",borderRadius:999,background:theme.color+"18",color:theme.color,fontSize:11,fontWeight:900}}>{L("Progetto attivo")}</span></div>
           </div>; }()}
         </div>
         {projectEditingDetails&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setProjectEditingDetails(false);}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{L("Modifica progetto")}</div><button onClick={function(){setProjectEditingDetails(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><input value={projectNameDraft} onChange={function(e){setProjectNameDraft(e.target.value);}} style={{...sinp,fontSize:17,fontWeight:900}}/><textarea placeholder={L("Descrizione progetto (opzionale)")} value={projectDescDraft} onChange={function(e){setProjectDescDraft(e.target.value);}} style={{...sinp,minHeight:76,resize:"vertical",marginTop:10}}/><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Icona progetto")}</div><div style={{display:"flex",alignItems:"center",gap:10}}><EmojiPicker value={projectIconDraft} onChange={setProjectIconDraft}/><div style={{fontSize:12,color:subC,lineHeight:1.35}}>{L("Scegli l\'icona con lo stesso selettore usato nelle altre sezioni.")}</div></div><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Colore progetto")}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{shareProjectColors.map(function(clr){return <button key={clr} onClick={function(){setProjectColorDraft(clr);}} style={{width:32,height:32,borderRadius:999,border:"2px solid "+(projectColorDraft===clr?textC:"transparent"),background:clr,cursor:"pointer"}}/>;})}</div><div style={{display:"flex",gap:8,marginTop:14}}><Btn onClick={saveProjectDetails} disabled={!shareProjectDetailsValid} bg={shareProjectDetailsValid?confirmButtonColor:"#A8A8A8"} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Salva modifiche")}</Btn><Btn onClick={function(){setProjectEditingDetails(false);}} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Chiudi")}</Btn></div></div></div>}
@@ -9322,7 +9497,7 @@ function parseShareVoiceCommand(text){
         </div>
 {shareProjectTab==="attivita"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Btn onClick={function(){setShareEditingActivityId(null);openShareExpensePopup("simple");}} bg={confirmButtonColor} style={{width:"100%",padding:"14px 16px",fontSize:15,fontWeight:950}}>＋ {L("Aggiungi spesa")}</Btn>
-          {(shareExpenseFormOpen||shareEditingActivityId)&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)closeShareExpensePopup();}}><div id="share_expense_form" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L(shareEditingActivityId?"Modifica spesa condivisa":"+ Spesa condivisa")}</div><div style={{display:"flex",gap:8,alignItems:"center"}}>{shareEditingActivityId&&<button onClick={resetShareExpenseForm} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:9,padding:"6px 8px",fontSize:12,color:subC,cursor:"pointer"}}>{L("Annulla modifica")}</button>}<button onClick={closeShareExpensePopup} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>{[{id:"simple",label:L("Spesa semplice")},{id:"receipt",label:L("Scontrino")},{id:"voice",label:L("Vocale")}].map(function(tb){var active=shareExpenseMode===tb.id;return <button key={tb.id} type="button" onClick={function(){setShareReceiptReady(false);if(tb.id==="receipt"){startShareReceiptFlow();return;}setShareExpenseMode(tb.id);setShareReceiptOpen(false);setShareExpenseFormOpen(true);if(tb.id==="voice")setTimeout(function(){startShareVoiceCommand();},150);}} style={{border:"1px solid "+(active?secondaryButtonColor:borderC),background:active?secondaryButtonColor:(dark?"#333":"#f0f0f0"),color:active?"#fff":textC,borderRadius:btnRadius,padding:"10px 6px",fontSize:11,fontWeight:900,cursor:"pointer"}}>{tb.label}</button>;})}</div>{shareReceiptBusy&&<div style={{border:"1px solid "+borderC,borderRadius:16,padding:12,background:dark?"#252535":"#f9f9f9",fontSize:13,fontWeight:800,color:textC,marginBottom:10}}>🧾 {L("Sto leggendo lo scontrino...")}</div>}{(shareExpenseMode!=="receipt"||shareReceiptReady||String(shareAmount||"").trim()||String(shareDesc||"").trim())&&<>{shareExpenseMode==="voice"&&<div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,marginBottom:10}}><Btn onClick={startShareVoiceCommand} bg={secondaryButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950}}>🎙️ {L(shareVoiceListening?"Ascolto in corso...":"Avvia comando vocale")}</Btn>{shareVoiceText&&<div style={{fontSize:12,color:subC,marginTop:8,lineHeight:1.35}}>{shareVoiceText}</div>}</div>}<div style={{background:"linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)",borderRadius:18,padding:"14px 14px",display:"grid",gridTemplateColumns:"44px minmax(0,1fr)",gap:8,alignItems:"center",color:"#fff",boxShadow:dark?"none":"0 10px 24px rgba(83,74,183,.12)",marginBottom:10}}><div style={{width:34,height:34,borderRadius:"50%",background:"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",color:"#E24B4A",fontSize:18,boxShadow:"0 6px 16px rgba(0,0,0,.12)"}}>💳</div><div style={{minWidth:0,textAlign:"center"}}><div style={{fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:.8,color:"rgba(255,255,255,.70)",marginBottom:2}}>{L("Importo")}</div><div style={{position:"relative"}}>{!String(shareAmount||"").trim()&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,fontWeight:950,color:"#fff",lineHeight:1,pointerEvents:"none"}}>_,__</div>}<input ref={shareAmountInputRef} autoFocus type="text" inputMode="decimal" placeholder="" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={{width:"100%",border:"none",background:"transparent",padding:0,textAlign:"center",fontSize:34,fontWeight:950,color:"#fff",WebkitTextFillColor:"#fff",outline:"none",lineHeight:1}}/></div>{!String(shareAmount||"").trim()&&<div style={{fontSize:13,color:"rgba(255,255,255,.70)",fontWeight:600,marginTop:4}}>{L("Inserisci l\'importo")}</div>}</div></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("Descrizione")}</label><textarea placeholder={L("Descrizione")} value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={{...sinp,minHeight:72,height:72,resize:"none",padding:"11px 12px",lineHeight:1.25,fontFamily:"inherit"}}/></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:8}}>{L("Data")}</label><div style={{display:"grid",gridTemplateColumns:".58fr .58fr .92fr 2.28fr",gap:5,alignItems:"center"}}><button type="button" onClick={function(){setShareDate(todayStr());}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===todayStr()?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===todayStr()?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===todayStr()?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.today}</button><button type="button" onClick={function(){setShareDate(dateOffset(1));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(1)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(1)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(1)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.yesterday}</button><button type="button" onClick={function(){setShareDate(dateOffset(2));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(2)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(2)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(2)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.twoDaysAgo}</button><label style={{height:38,borderRadius:12,border:"1px solid "+(dark?"#3f3f52":"#E4E2F2"),background:dark?"#252535":"#fff",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",padding:"0 5px",gap:4,cursor:"pointer"}}><span style={{pointerEvents:"none",fontWeight:850,color:textC}}>{fmtDate(shareDate,dateFmt)}</span><span style={{pointerEvents:"none",fontSize:17}}>📅</span><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}}/></label></div></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.4fr",gap:8,marginTop:8}}><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagato da")} {personLabel(p)}</option>;})}</select><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{[{id:"equal",label:L("Equa")},{id:"percent",label:L("Percentuali")},{id:"amount",label:L("Importi")}].map(function(m){return <button key={m.id} onClick={function(){setSplitMode(m.id);setSplitDraft({});setShareSplitTouched(false);}} style={{border:"1px solid "+(splitMode===m.id?confirmButtonColor:borderC),background:splitMode===m.id?confirmButtonColor:"transparent",color:splitMode===m.id?"#fff":textC,borderRadius:10,padding:"8px 6px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{m.label}</button>;})}</div></div><div style={{marginTop:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:12,fontWeight:900,color:textC}}>{L("Condivisa con")}</div><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:subC,cursor:"pointer"}}><input type="checkbox" checked={activeParticipants.length>0&&shareParticipantIds.length===activeParticipants.length} onChange={function(){var all=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(shareParticipantIds.length===all.length?[]:all);}}/>{L("Tutti")}</label></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{activeParticipants.map(function(p){var checked=shareParticipantIds.includes(p.id);return <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,border:"1px solid "+(checked?confirmButtonColor:borderC),background:checked?confirmButtonColor+"22":"transparent",borderRadius:20,padding:"5px 9px",fontSize:12,color:checked?confirmButtonColor:textC,cursor:"pointer"}}><input type="checkbox" checked={checked} onChange={function(){setShareParticipantIds(function(list){return list.includes(p.id)?list.filter(function(x){return x!==p.id;}):list.concat([p.id]);});}}/>{personLabel(p)}</label>;})}</div></div>{splitMode!=="equal"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginTop:8}}>{activeParticipants.filter(function(p){return shareParticipantIds.includes(p.id);}).map(function(p){return <div key={p.id}><label style={{fontSize:11,color:subC}}>{personLabel(p)} {splitMode==="percent"?"%":"€"}</label><input type="text" inputMode={splitMode==="percent"?"numeric":"decimal"} placeholder={splitMode==="percent"?"%":"_,__"} value={splitDraft[p.id]||""} onChange={function(e){var v=e.target.value;setShareSplitTouched(true);setSplitDraft(function(d){return{...d,[p.id]:v};});}} style={sinp}/></div>;})}</div>}{showShareCheck&&<div style={{marginTop:10,background:dark?"#2f2a1e":"#fff8e6",border:"1px solid #F2C94C77",borderRadius:12,padding:"9px 10px",fontSize:12,color:dark?"#F2C94C":"#8A6500",fontWeight:600}}>💡 {shareCheck.message}</div>}<div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontSize:12,color:subC}}>{L("Quote")}: {Object.keys(computeShares()).map(function(id){var p=participants.find(function(x){return x.id===id;});return (p?personLabel(p):id)+" "+fmt(computeShares()[id]);}).join(" · ")}</div><Btn onClick={addSharedActivity} bg={shareExpenseFormValid?confirmButtonColor:"#A8A8A8"} disabled={!shareExpenseFormValid}>{L(shareEditingActivityId?"Aggiorna spesa":"Salva spesa")}</Btn></div></>}</div></div>}
+          {(shareExpenseFormOpen||shareEditingActivityId)&&<div style={{position:"fixed",inset:0,width:"100%",height:"100dvh",minHeight:"100%",background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,boxSizing:"border-box",overscrollBehavior:"contain",WebkitTransform:"translateZ(0)",transform:"translateZ(0)",WebkitBackfaceVisibility:"hidden",backfaceVisibility:"hidden"}} onClick={function(e){if(e.target===e.currentTarget)closeShareExpensePopup();}}><div id="share_expense_form" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,width:"100%",maxWidth:430,maxHeight:"calc(100dvh - 32px)",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",boxSizing:"border-box",WebkitTransform:"translateZ(0)",transform:"translateZ(0)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L(shareEditingActivityId?"Modifica spesa condivisa":"+ Spesa condivisa")}</div><div style={{display:"flex",gap:8,alignItems:"center"}}>{shareEditingActivityId&&<button onClick={resetShareExpenseForm} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:9,padding:"6px 8px",fontSize:12,color:subC,cursor:"pointer"}}>{L("Annulla modifica")}</button>}<button onClick={closeShareExpensePopup} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>{[{id:"simple",label:L("Spesa semplice")},{id:"receipt",label:L("Scontrino")},{id:"voice",label:L("Vocale")}].map(function(tb){var active=shareExpenseMode===tb.id;return <button key={tb.id} type="button" onClick={function(){setShareReceiptReady(false);if(tb.id==="receipt"){startShareReceiptFlow();return;}setShareExpenseMode(tb.id);setShareReceiptOpen(false);setShareExpenseFormOpen(true);if(tb.id==="voice")setTimeout(function(){startShareVoiceCommand();},150);}} style={{border:"1px solid "+(active?secondaryButtonColor:borderC),background:active?secondaryButtonColor:(dark?"#333":"#f0f0f0"),color:active?"#fff":textC,borderRadius:btnRadius,padding:"10px 6px",fontSize:11,fontWeight:900,cursor:"pointer"}}>{tb.label}</button>;})}</div>{shareReceiptBusy&&<div style={{border:"1px solid "+borderC,borderRadius:16,padding:12,background:dark?"#252535":"#f9f9f9",fontSize:13,fontWeight:800,color:textC,marginBottom:10}}>🧾 {L("Sto leggendo lo scontrino...")}</div>}{(shareExpenseMode!=="receipt"||shareReceiptReady||String(shareAmount||"").trim()||String(shareDesc||"").trim())&&<>{shareExpenseMode==="voice"&&<div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,marginBottom:10}}><Btn onClick={startShareVoiceCommand} bg={secondaryButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950}}>🎙️ {L(shareVoiceListening?"Ascolto in corso...":"Avvia comando vocale")}</Btn>{shareVoiceText&&<div style={{fontSize:12,color:subC,marginTop:8,lineHeight:1.35}}>{shareVoiceText}</div>}</div>}<div style={{background:"linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)",borderRadius:18,padding:"14px 14px",display:"grid",gridTemplateColumns:"44px minmax(0,1fr)",gap:8,alignItems:"center",color:"#fff",boxShadow:dark?"none":"0 10px 24px rgba(83,74,183,.12)",marginBottom:10}}><div style={{width:34,height:34,borderRadius:"50%",background:"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",color:"#E24B4A",fontSize:18,boxShadow:"0 6px 16px rgba(0,0,0,.12)"}}>💳</div><div style={{minWidth:0,textAlign:"center"}}><div style={{fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:.8,color:"rgba(255,255,255,.70)",marginBottom:2}}>{L("Importo")}</div><div style={{position:"relative"}}>{!String(shareAmount||"").trim()&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,fontWeight:950,color:"#fff",lineHeight:1,pointerEvents:"none"}}>_,__</div>}<input ref={shareAmountInputRef} type="text" inputMode="decimal" placeholder="" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={{width:"100%",border:"none",background:"transparent",padding:0,textAlign:"center",fontSize:34,fontWeight:950,color:"#fff",WebkitTextFillColor:"#fff",outline:"none",lineHeight:1}}/></div>{!String(shareAmount||"").trim()&&<div style={{fontSize:13,color:"rgba(255,255,255,.70)",fontWeight:600,marginTop:4}}>{L("Inserisci l\'importo")}</div>}</div></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("Descrizione")}</label><textarea placeholder={L("Descrizione")} value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={{...sinp,minHeight:72,height:72,resize:"none",padding:"11px 12px",lineHeight:1.25,fontFamily:"inherit"}}/></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:8}}>{L("Data")}</label><div style={{display:"grid",gridTemplateColumns:".58fr .58fr .92fr 2.28fr",gap:5,alignItems:"center"}}><button type="button" onClick={function(){setShareDate(todayStr());}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===todayStr()?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===todayStr()?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===todayStr()?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.today}</button><button type="button" onClick={function(){setShareDate(dateOffset(1));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(1)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(1)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(1)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.yesterday}</button><button type="button" onClick={function(){setShareDate(dateOffset(2));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(2)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(2)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(2)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.twoDaysAgo}</button><label style={{height:38,borderRadius:12,border:"1px solid "+(dark?"#3f3f52":"#E4E2F2"),background:dark?"#252535":"#fff",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",padding:"0 5px",gap:4,cursor:"pointer"}}><span style={{pointerEvents:"none",fontWeight:850,color:textC}}>{fmtDate(shareDate,dateFmt)}</span><span style={{pointerEvents:"none",fontSize:17}}>📅</span><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}}/></label></div></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.4fr",gap:8,marginTop:8}}><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagato da")} {personLabel(p)}</option>;})}</select><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{[{id:"equal",label:L("Equa")},{id:"percent",label:L("Percentuali")},{id:"amount",label:L("Importi")}].map(function(m){return <button key={m.id} onClick={function(){setSplitMode(m.id);setSplitDraft({});setShareSplitTouched(false);}} style={{border:"1px solid "+(splitMode===m.id?confirmButtonColor:borderC),background:splitMode===m.id?confirmButtonColor:"transparent",color:splitMode===m.id?"#fff":textC,borderRadius:10,padding:"8px 6px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{m.label}</button>;})}</div></div><div style={{marginTop:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:12,fontWeight:900,color:textC}}>{L("Condivisa con")}</div><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:subC,cursor:"pointer"}}><input type="checkbox" checked={activeParticipants.length>0&&shareParticipantIds.length===activeParticipants.length} onChange={function(){var all=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(shareParticipantIds.length===all.length?[]:all);}}/>{L("Tutti")}</label></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{activeParticipants.map(function(p){var checked=shareParticipantIds.includes(p.id);return <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,border:"1px solid "+(checked?confirmButtonColor:borderC),background:checked?confirmButtonColor+"22":"transparent",borderRadius:20,padding:"5px 9px",fontSize:12,color:checked?confirmButtonColor:textC,cursor:"pointer"}}><input type="checkbox" checked={checked} onChange={function(){setShareParticipantIds(function(list){return list.includes(p.id)?list.filter(function(x){return x!==p.id;}):list.concat([p.id]);});}}/>{personLabel(p)}</label>;})}</div></div>{splitMode!=="equal"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginTop:8}}>{activeParticipants.filter(function(p){return shareParticipantIds.includes(p.id);}).map(function(p){return <div key={p.id}><label style={{fontSize:11,color:subC}}>{personLabel(p)} {splitMode==="percent"?"%":"€"}</label><input type="text" inputMode={splitMode==="percent"?"numeric":"decimal"} placeholder={splitMode==="percent"?"%":"_,__"} value={splitDraft[p.id]||""} onChange={function(e){var v=e.target.value;setShareSplitTouched(true);setSplitDraft(function(d){return{...d,[p.id]:v};});}} style={sinp}/></div>;})}</div>}{showShareCheck&&<div style={{marginTop:10,background:dark?"#2f2a1e":"#fff8e6",border:"1px solid #F2C94C77",borderRadius:12,padding:"9px 10px",fontSize:12,color:dark?"#F2C94C":"#8A6500",fontWeight:600}}>💡 {shareCheck.message}</div>}<div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontSize:12,color:subC}}>{L("Quote")}: {Object.keys(computeShares()).map(function(id){var p=participants.find(function(x){return x.id===id;});return (p?personLabel(p):id)+" "+fmt(computeShares()[id]);}).join(" · ")}</div><Btn onClick={addSharedActivity} bg={shareExpenseFormValid?confirmButtonColor:"#A8A8A8"} disabled={!shareExpenseFormValid}>{L(shareEditingActivityId?"Aggiorna spesa":"Salva spesa")}</Btn></div></>}</div></div>}
           <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Attività del progetto")}</div>{(selected.activities||[]).length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"18px 0"}}>{L("Nessuna attività")}</div>}{(selected.activities||[]).map(function(a){var paid=participants.find(function(p){return p.id===a.paidBy;});var from=participants.find(function(p){return p.id===a.from;});var to=participants.find(function(p){return p.id===a.to;});var editing=shareEditingActivityId===a.id&&a.kind!=="settlement";return <div key={a.id} style={{borderBottom:"1px solid "+borderC,padding:"10px 0"}}>{editing?<div style={{background:dark?"#1e1e30":"#F7F8FF",border:"1px solid "+confirmButtonColor+"55",borderRadius:14,padding:12,display:"flex",flexDirection:"column",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Modifica spesa Share")}</div><button onClick={resetShareExpenseForm} style={{background:"transparent",border:"none",color:subC,cursor:"pointer",fontSize:18}}>×</button></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr 1fr",gap:8}}><input type="text" inputMode="decimal" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={sinp} placeholder="_,__"/><input value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={sinp} placeholder={L("Descrizione")}/><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={sinp}/></div><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagata da")} {personLabel(p)}</option>;})}</select><div style={{fontSize:11,color:subC}}>{L("La modifica viene salvata direttamente su questa transazione.")}</div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn onClick={resetShareExpenseForm} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn><Btn onClick={addSharedActivity} disabled={!shareExpenseFormValid} bg={shareExpenseFormValid?confirmButtonColor:"#A8A8A8"}>{L("Salva modifica")}</Btn></div></div>:<div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{fontSize:18}}>{a.kind==="settlement"?"↔️":"🧾"}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.kind==="settlement"?((from?personLabel(from):a.from)+" "+L("ha pagato")+" "+(to?personLabel(to):a.to)):a.desc}</div><div style={{fontSize:11,color:subC}}>{fmtDate(a.date,dateFmt)} · {a.time||"--:--"}</div>{a.kind!=="settlement"&&<div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}><div style={{fontSize:11,color:textC,fontWeight:700}}>{L("Pagata da")}: {paid?personLabel(paid):(a.paidBy||"—")}</div><div style={{fontSize:11,color:subC}}>{L("Condivisa con")}: {Object.keys(a.shares||{}).map(function(pid){var pp=participants.find(function(x){return x.id===pid;});return (pp?personLabel(pp):pid)+" "+fmt(a.shares[pid]);}).join(" · ")||"—"}</div></div>}</div><div style={{fontSize:13,fontWeight:900,color:a.kind==="settlement"?confirmButtonColor:expenseColor}}>{fmt(a.amount)}</div>{a.kind!=="settlement"&&<button onClick={function(){startEditSharedActivity(a);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",borderRadius:9,padding:"5px 8px",cursor:"pointer",color:confirmButtonColor,fontSize:12,fontWeight:800}}>{L("Modifica")}</button>}<button onClick={function(){deleteActivity(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:subC}}>×</button></div>}</div>;})}</div>
         </div>}
         {shareProjectTab==="partecipanti"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -9341,7 +9516,7 @@ function parseShareVoiceCommand(text){
             <div style={{fontSize:11,color:subC,marginTop:8,lineHeight:1.35}}>{L("Utente richiede solo l'email: quando l'account viene collegato, verrà mostrato il nome reale. Persona esterna usa solo il nome e non riceve inviti.")}</div>
           </div></div></div>}
         </div>}
-        {shareProjectTab==="riassunto"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Riassunto")}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10}}><StatCard title={L("Spese progetto")} value={fmt(totalSpent)} color={expenseColor} bg={expenseColor+"22"}/><StatCard title={L("Mi devono")} value={fmt(Math.max(0,myBalance))} color={incomeColor} bg={incomeColor+"22"}/><StatCard title={L("Devo")} value={fmt(Math.max(0,-myBalance))} color={expenseColor} bg={expenseColor+"22"}/></div></div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
+        {shareProjectTab==="riassunto"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Riassunto")}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:10}}><div style={{gridColumn:isMobile?"1/-1":"auto",minWidth:0}}><StatCard title={L("Spese progetto")} value={fmt(totalSpent)} color={expenseColor} bg={expenseColor+"22"}/></div><div style={{minWidth:0}}><StatCard title={L("Mi devono")} value={fmt(Math.max(0,myBalance))} color={incomeColor} bg={incomeColor+"22"}/></div><div style={{minWidth:0}}><StatCard title={L("Devo")} value={fmt(Math.max(0,-myBalance))} color={expenseColor} bg={expenseColor+"22"}/></div></div></div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
         {settlementPopupOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setSettlementPopupOpen(false);}}><div style={{background:dark?"#181827":"#fff",border:"1px solid "+borderC,borderRadius:22,padding:16,width:"100%",maxWidth:430,boxShadow:dark?"none":"0 18px 42px rgba(15,23,42,.18)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div><div style={{fontSize:17,fontWeight:950,color:textC}}>↔️ {L("Registra saldo/rimborso")}</div><div style={{fontSize:12,color:subC,marginTop:3}}>{L("Registra un pagamento tra partecipanti del progetto.")}</div></div><button onClick={function(){setSettlementPopupOpen(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Da")}</label><select value={settlementFrom} onChange={function(e){setSettlementFrom(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("A")}</label><select value={settlementTo} onChange={function(e){setSettlementTo(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}><div style={{background:dark?"#1f1f31":"#FFF7F2",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Importo")}</label><input ref={settlementAmountInputRef} autoFocus type="text" inputMode="decimal" placeholder="_,__" value={settlementAmount} onChange={function(e){setSettlementAmount(e.target.value);}} style={{...sinp,fontSize:18,fontWeight:900}}/></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Data")}</label><input type="date" value={settlementDate} onChange={function(e){setSettlementDate(e.target.value);}} style={sinp}/></div></div><Btn onClick={addSettlement} disabled={!settlementFormValid} bg={settlementFormValid?confirmButtonColor:"#A8A8A8"} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra")}</Btn></div></div>}{shareProjectTab==="saldi"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
       </>}
     </div>;
@@ -9359,7 +9534,7 @@ function parseShareVoiceCommand(text){
     if(tab==="spese")return <SpesePanel/>;
     if(tab==="history")return <HistoryPanel/>;
     if(tab==="more")return <MorePanel/>;
-    if(tab==="share")return <SharePanel/>;
+    if(tab==="share")return <StableNestedPanelHost key="share" render={SharePanel}/>;
     if(tab==="debtCredits")return <StableNestedPanelHost key="debtCredits" render={DebtCreditsPanel}/>;
     if(tab==="shopping")return <StableNestedPanelHost key="shopping" render={ShoppingPanel}/>;
     if(tab==="stats")return <StatsPanel/>;
@@ -9727,4 +9902,23 @@ export default AppWithLogin;
   var langs=['it','en','es','fr','de','pt','pl','nl','ro','el'];
   var values={it:'L’assistente vocale è disponibile dal piano Base.',en:'The voice assistant is available from the Plus plan.',es:'El asistente de voz está disponible a partir del plan Plus.',fr:'L’assistant vocal est disponible à partir de l’offre Plus.',de:'Der Sprachassistent ist ab dem Plus-Tarif verfügbar.',pt:'O assistente de voz está disponível a partir do plano Plus.',pl:'Asystent głosowy jest dostępny od planu Plus.',nl:'De spraakassistent is beschikbaar vanaf het Plus-abonnement.',ro:'Asistentul vocal este disponibil începând cu planul Plus.',el:'Ο φωνητικός βοηθός είναι διαθέσιμος από το πρόγραμμα Plus.'};
   langs.forEach(function(code){try{if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code]['L’assistente vocale è disponibile dal piano Base.']=values[code]||values.en;}catch(e){}});
+})();
+
+// fAInance - controllo aggiornamenti multipiattaforma.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var D={
+    'Controllo aggiornamenti in corso...':{en:'Checking for updates...',es:'Buscando actualizaciones...',fr:'Recherche de mises à jour...',de:'Suche nach Updates...',pt:'A procurar atualizações...',pl:'Sprawdzanie aktualizacji...',nl:'Controleren op updates...',ro:'Se verifică actualizările...',el:'Έλεγχος για ενημερώσεις...'},
+    'È stato aperto lo store corretto per il dispositivo.':{en:'The correct store for this device has been opened.',es:'Se ha abierto la tienda correcta para este dispositivo.',fr:'La boutique adaptée à cet appareil a été ouverte.',de:'Der richtige Store für dieses Gerät wurde geöffnet.',pt:'Foi aberta a loja correta para este dispositivo.',pl:'Otwarto właściwy sklep dla tego urządzenia.',nl:'De juiste store voor dit apparaat is geopend.',ro:'A fost deschis magazinul corect pentru acest dispozitiv.',el:'Άνοιξε το σωστό κατάστημα για αυτή τη συσκευή.'},
+    'Aggiornamento disponibile: usa il popup per aprire lo store.':{en:'Update available: use the pop-up to open the store.',es:'Actualización disponible: usa la ventana emergente para abrir la tienda.',fr:'Mise à jour disponible : utilisez la fenêtre pour ouvrir la boutique.',de:'Update verfügbar: Öffne den Store über das Pop-up.',pt:'Atualização disponível: usa a janela para abrir a loja.',pl:'Dostępna aktualizacja: użyj okna, aby otworzyć sklep.',nl:'Update beschikbaar: gebruik de pop-up om de store te openen.',ro:'Actualizare disponibilă: folosește fereastra pentru a deschide magazinul.',el:'Υπάρχει ενημέρωση: χρησιμοποίησε το αναδυόμενο παράθυρο για να ανοίξεις το κατάστημα.'},
+    'Impossibile controllare gli aggiornamenti.':{en:'Unable to check for updates.',es:'No se pueden comprobar las actualizaciones.',fr:'Impossible de rechercher les mises à jour.',de:'Updates konnten nicht geprüft werden.',pt:'Não foi possível verificar as atualizações.',pl:'Nie można sprawdzić aktualizacji.',nl:'Kan niet controleren op updates.',ro:'Actualizările nu au putut fi verificate.',el:'Δεν ήταν δυνατός ο έλεγχος ενημερώσεων.'},
+    'Impossibile aprire lo store. Riprova tra poco.':{en:'Unable to open the store. Try again shortly.',es:'No se puede abrir la tienda. Vuelve a intentarlo en breve.',fr:'Impossible d’ouvrir la boutique. Réessayez dans un instant.',de:'Der Store konnte nicht geöffnet werden. Versuche es gleich noch einmal.',pt:'Não foi possível abrir a loja. Tenta novamente dentro de instantes.',pl:'Nie można otworzyć sklepu. Spróbuj ponownie za chwilę.',nl:'De store kan niet worden geopend. Probeer het straks opnieuw.',ro:'Magazinul nu a putut fi deschis. Încearcă din nou în curând.',el:'Δεν ήταν δυνατό το άνοιγμα του καταστήματος. Δοκίμασε ξανά σε λίγο.'},
+    'Impossibile aprire la pagina delle recensioni.':{en:'Unable to open the reviews page.',es:'No se puede abrir la página de reseñas.',fr:'Impossible d’ouvrir la page des avis.',de:'Die Bewertungsseite konnte nicht geöffnet werden.',pt:'Não foi possível abrir a página de avaliações.',pl:'Nie można otworzyć strony opinii.',nl:'De beoordelingspagina kan niet worden geopend.',ro:'Pagina de recenzii nu a putut fi deschisă.',el:'Δεν ήταν δυνατό το άνοιγμα της σελίδας αξιολογήσεων.'},
+    "È disponibile una nuova versione di fAInance su Google Play. Aggiorna l'app per ricevere le ultime correzioni e miglioramenti.":{en:'A new version of fAInance is available on Google Play. Update the app to get the latest fixes and improvements.',es:'Hay una nueva versión de fAInance disponible en Google Play. Actualiza la app para obtener las últimas correcciones y mejoras.',fr:'Une nouvelle version de fAInance est disponible sur Google Play. Mettez l’app à jour pour profiter des dernières corrections et améliorations.',de:'Eine neue Version von fAInance ist bei Google Play verfügbar. Aktualisiere die App für die neuesten Korrekturen und Verbesserungen.',pt:'Está disponível uma nova versão do fAInance na Google Play. Atualiza a app para receber as correções e melhorias mais recentes.',pl:'Nowa wersja fAInance jest dostępna w Google Play. Zaktualizuj aplikację, aby otrzymać najnowsze poprawki i ulepszenia.',nl:'Er is een nieuwe versie van fAInance beschikbaar op Google Play. Werk de app bij voor de nieuwste oplossingen en verbeteringen.',ro:'O nouă versiune fAInance este disponibilă pe Google Play. Actualizează aplicația pentru cele mai recente corecții și îmbunătățiri.',el:'Μια νέα έκδοση του fAInance είναι διαθέσιμη στο Google Play. Ενημέρωσε την εφαρμογή για τις τελευταίες διορθώσεις και βελτιώσεις.'},
+    "È disponibile una nuova versione di fAInance su App Store. Aggiorna l'app per ricevere le ultime correzioni e miglioramenti.":{en:'A new version of fAInance is available on the App Store. Update the app to get the latest fixes and improvements.',es:'Hay una nueva versión de fAInance disponible en App Store. Actualiza la app para obtener las últimas correcciones y mejoras.',fr:'Une nouvelle version de fAInance est disponible sur l’App Store. Mettez l’app à jour pour profiter des dernières corrections et améliorations.',de:'Eine neue Version von fAInance ist im App Store verfügbar. Aktualisiere die App für die neuesten Korrekturen und Verbesserungen.',pt:'Está disponível uma nova versão do fAInance na App Store. Atualiza a app para receber as correções e melhorias mais recentes.',pl:'Nowa wersja fAInance jest dostępna w App Store. Zaktualizuj aplikację, aby otrzymać najnowsze poprawki i ulepszenia.',nl:'Er is een nieuwe versie van fAInance beschikbaar in de App Store. Werk de app bij voor de nieuwste oplossingen en verbeteringen.',ro:'O nouă versiune fAInance este disponibilă în App Store. Actualizează aplicația pentru cele mai recente corecții și îmbunătățiri.',el:'Μια νέα έκδοση του fAInance είναι διαθέσιμη στο App Store. Ενημέρωσε την εφαρμογή για τις τελευταίες διορθώσεις και βελτιώσεις.'},
+    "È disponibile una nuova versione di fAInance. Aggiorna l'app per avere le ultime correzioni e miglioramenti.":{en:'A new version of fAInance is available. Update the app to get the latest fixes and improvements.',es:'Hay una nueva versión de fAInance disponible. Actualiza la app para obtener las últimas correcciones y mejoras.',fr:'Une nouvelle version de fAInance est disponible. Mettez l’app à jour pour profiter des dernières corrections et améliorations.',de:'Eine neue Version von fAInance ist verfügbar. Aktualisiere die App für die neuesten Korrekturen und Verbesserungen.',pt:'Está disponível uma nova versão do fAInance. Atualiza a app para receber as correções e melhorias mais recentes.',pl:'Dostępna jest nowa wersja fAInance. Zaktualizuj aplikację, aby otrzymać najnowsze poprawki i ulepszenia.',nl:'Er is een nieuwe versie van fAInance beschikbaar. Werk de app bij voor de nieuwste oplossingen en verbeteringen.',ro:'Este disponibilă o nouă versiune fAInance. Actualizează aplicația pentru cele mai recente corecții și îmbunătățiri.',el:'Υπάρχει νέα έκδοση του fAInance. Ενημέρωσε την εφαρμογή για τις τελευταίες διορθώσεις και βελτιώσεις.'}
+  };
+  Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+  try{fainanceTranslationCache={};}catch(e){}
 })();

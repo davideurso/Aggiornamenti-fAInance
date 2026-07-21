@@ -7,10 +7,11 @@ class MainViewController: CAPBridgeViewController {
         super.capacitorDidLoad()
 
         // I plugin installati tramite Swift Package Manager vengono registrati
-        // automaticamente da Capacitor. Registriamo qui soltanto i due plugin
+        // automaticamente da Capacitor. Registriamo qui soltanto i plugin
         // locali specifici di fAInance.
         bridge?.registerPluginInstance(FainanceAudioPlugin())
         bridge?.registerPluginInstance(FainanceFilePlugin())
+        bridge?.registerPluginInstance(FainanceWidgetBridge())
 
         // La conversazione viene avviata da un’azione esplicita dell’utente.
         // Dopo tale azione, l’audio remoto può partire senza un secondo tocco.

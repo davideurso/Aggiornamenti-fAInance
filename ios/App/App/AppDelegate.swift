@@ -9,6 +9,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         configureFirebaseIfNeeded()
+        transferShoppingWidgetUpdatesIfNeeded()
         return true
     }
 
@@ -26,6 +27,22 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         FirebaseApp.configure()
     }
 
+    private func transferShoppingWidgetUpdatesIfNeeded() {
+        let key = "widget_shopping_list_item_updates_v1"
+        guard let shared = UserDefaults(suiteName: "group.it.fainanceapp.app"),
+              let updates = shared.string(forKey: key),
+              !updates.isEmpty,
+              updates != "[]" else {
+            return
+        }
+
+        // Capacitor Preferences usa il gruppo predefinito "CapacitorStorage"
+        // come prefisso delle chiavi salvate in UserDefaults.standard.
+        UserDefaults.standard.set(updates, forKey: "CapacitorStorage.\(key)")
+        shared.removeObject(forKey: key)
+        shared.synchronize()
+    }
+
     func applicationWillResignActive(_ application: UIApplication) {
         // Sent when the application is about to move from active to inactive state. This can occur for certain types of temporary interruptions (such as an incoming phone call or SMS message) or when the user quits the application and it begins the transition to the background state.
         // Use this method to pause ongoing tasks, disable timers, and invalidate graphics rendering callbacks. Games should use this method to pause the game.
@@ -41,7 +58,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ application: UIApplication) {
-        // Restart any tasks that were paused (or not yet started) while the application was inactive. If the application was previously in the background, optionally refresh the user interface.
+        transferShoppingWidgetUpdatesIfNeeded()
     }
 
     func applicationWillTerminate(_ application: UIApplication) {

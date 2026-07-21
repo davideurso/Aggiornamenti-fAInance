@@ -24,8 +24,8 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "1.6.69"
-        IOS_BUILD_NUMBER: "181"
+        APP_VERSION: "1.6.70"
+        IOS_BUILD_NUMBER: "182"
         VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -73,6 +73,7 @@ workflows:
               "FainanceAdsPlugin.m",
               "FainanceAudioPlugin.swift",
               "FainanceFilePlugin.swift",
+              "FainanceWidgetBridge.swift",
               "MainViewController.swift",
           ]
 
@@ -97,7 +98,7 @@ workflows:
               raise SystemExit("Local iOS plugin files are not referenced in the Xcode project: " + ", ".join(missing_project_refs))
 
           main_controller = (app_dir / "MainViewController.swift").read_text(encoding="utf-8")
-          for registration in ["FainanceAudioPlugin()", "FainanceFilePlugin()"]:
+          for registration in ["FainanceAudioPlugin()", "FainanceFilePlugin()", "FainanceWidgetBridge()"]:
               if registration not in main_controller:
                   raise SystemExit("Missing local plugin registration in MainViewController.swift: " + registration)
           if "FainanceSpeechRecognitionPlugin()" in main_controller:
@@ -134,7 +135,7 @@ workflows:
         script: |
           cd ios/App
 
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:-181}"
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:-182}"
           echo "Using iOS marketing version: $APP_VERSION"
           echo "Using iOS build number: $BUILD_NUMBER"
 
@@ -186,8 +187,8 @@ workflows:
           import re
           from pathlib import Path
 
-          version = "1.6.69"
-          build = "181"
+          version = "1.6.70"
+          build = "182"
           pbx = Path("App.xcodeproj/project.pbxproj")
           text = pbx.read_text(encoding="utf-8", errors="ignore")
           text = re.sub(r"CURRENT_PROJECT_VERSION = [^;]+;", f"CURRENT_PROJECT_VERSION = {build};", text)
@@ -212,54 +213,73 @@ workflows:
         script: |
           keychain initialize
 
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+          app-store-connect fetch-signing-files "it.fainanceapp.app" \
+            --type IOS_APP_STORE \
+            --create
+          app-store-connect fetch-signing-files "it.fainanceapp.app.widgets" \
             --type IOS_APP_STORE \
             --create
 
           keychain add-certificates
 
-          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -n 1)
+          APP_PROFILE_NAME=""
+          APP_PROFILE_UUID=""
+          WIDGET_PROFILE_NAME=""
+          WIDGET_PROFILE_UUID=""
 
-          if [ -z "$PROFILE_PATH" ]; then
-            echo "Nessun provisioning profile trovato."
+          while IFS= read -r PROFILE_PATH; do
+            PROFILE_PLIST=$(mktemp)
+            security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
+            PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" "$PROFILE_PLIST" 2>/dev/null || true)
+            PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$PROFILE_PLIST" 2>/dev/null || true)
+            PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$PROFILE_PLIST" 2>/dev/null || true)
+
+            case "$PROFILE_APP_ID" in
+              *.it.fainanceapp.app.widgets)
+                WIDGET_PROFILE_NAME="$PROFILE_NAME"
+                WIDGET_PROFILE_UUID="$PROFILE_UUID"
+                ;;
+              *.it.fainanceapp.app)
+                APP_PROFILE_NAME="$PROFILE_NAME"
+                APP_PROFILE_UUID="$PROFILE_UUID"
+                ;;
+            esac
+            rm -f "$PROFILE_PLIST"
+          done < <(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision")
+
+          if [ -z "$APP_PROFILE_NAME" ] || [ -z "$WIDGET_PROFILE_NAME" ]; then
+            echo "Profili di firma incompleti."
+            echo "APP_PROFILE_NAME=$APP_PROFILE_NAME"
+            echo "WIDGET_PROFILE_NAME=$WIDGET_PROFILE_NAME"
             exit 1
           fi
 
-          security cms -D -i "$PROFILE_PATH" > "$CM_BUILD_DIR/profile.plist"
+          echo "APP_PROFILE_NAME=$APP_PROFILE_NAME" >> "$CM_ENV"
+          echo "APP_PROFILE_UUID=$APP_PROFILE_UUID" >> "$CM_ENV"
+          echo "WIDGET_PROFILE_NAME=$WIDGET_PROFILE_NAME" >> "$CM_ENV"
+          echo "WIDGET_PROFILE_UUID=$WIDGET_PROFILE_UUID" >> "$CM_ENV"
 
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$CM_BUILD_DIR/profile.plist")
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$CM_BUILD_DIR/profile.plist")
-
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$CM_ENV"
-          echo "PROFILE_UUID=$PROFILE_UUID" >> "$CM_ENV"
-
-          echo "Provisioning profile trovato:"
-          echo "PROFILE_NAME=$PROFILE_NAME"
-          echo "PROFILE_UUID=$PROFILE_UUID"
+          echo "Profili trovati:"
+          echo "App: $APP_PROFILE_NAME ($APP_PROFILE_UUID)"
+          echo "Widget: $WIDGET_PROFILE_NAME ($WIDGET_PROFILE_UUID)"
 
       - name: Set up code signing
         script: |
           echo "Skipping automatic profile selection"
 
-      - name: Patch App target signing only
+      - name: Patch app and widget signing
         script: |
           python3 - <<'PY'
           import os
           import re
 
           pbxproj = "ios/App/App.xcodeproj/project.pbxproj"
-          bundle_id = os.environ["BUNDLE_ID"]
           team_id = os.environ["APPLE_TEAM_ID"]
-          profile_name = os.environ["PROFILE_NAME"]
+          app_profile = os.environ["APP_PROFILE_NAME"]
+          widget_profile = os.environ["WIDGET_PROFILE_NAME"]
 
           with open(pbxproj, "r", encoding="utf-8") as f:
               text = f.read()
-
-          text = re.sub(
-              r"PRODUCT_BUNDLE_IDENTIFIER = [^;]*;",
-              f"PRODUCT_BUNDLE_IDENTIFIER = {bundle_id};",
-              text
-          )
 
           def replace_or_add(block, key, value):
               pattern = rf"{key} = [^;]*;"
@@ -269,9 +289,14 @@ workflows:
               return block.replace("buildSettings = {", "buildSettings = {\n" + line, 1)
 
           blocks = re.findall(r"buildSettings = \{[\s\S]*?\n\s*\};", text)
-
           for block in blocks:
-              if "PRODUCT_BUNDLE_IDENTIFIER" not in block:
+              if "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;" in block:
+                  bundle_id = "it.fainanceapp.app.widgets"
+                  profile_name = widget_profile
+              elif "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;" in block:
+                  bundle_id = "it.fainanceapp.app"
+                  profile_name = app_profile
+              else:
                   continue
 
               new_block = block
@@ -280,16 +305,15 @@ workflows:
               new_block = replace_or_add(new_block, "CODE_SIGN_IDENTITY", '"Apple Distribution"')
               new_block = replace_or_add(new_block, "PROVISIONING_PROFILE_SPECIFIER", f'"{profile_name}"')
               new_block = replace_or_add(new_block, "PRODUCT_BUNDLE_IDENTIFIER", bundle_id)
-
               text = text.replace(block, new_block)
 
           with open(pbxproj, "w", encoding="utf-8") as f:
               f.write(text)
 
-          print("App target signing patched")
+          print("Firma configurata per app e widget")
           PY
 
-          grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE_SPECIFIER" ios/App/App.xcodeproj/project.pbxproj | head -100
+          grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE_SPECIFIER" ios/App/App.xcodeproj/project.pbxproj | head -140
 
       - name: Create export options
         script: |
@@ -309,9 +333,9 @@ workflows:
             <key>provisioningProfiles</key>
             <dict>
               <key>it.fainanceapp.app</key>
-              <string>fainance-appstore-profile</string>
+              <string>${APP_PROFILE_NAME}</string>
               <key>it.fainanceapp.app.widgets</key>
-              <string>fainance-widgets-appstore-profile</string>
+              <string>${WIDGET_PROFILE_NAME}</string>
             </dict>
             <key>stripSwiftSymbols</key>
             <true/>
@@ -323,19 +347,21 @@ workflows:
 
           cat "$CM_BUILD_DIR/export_options.plist"
 
-      - name: Force app provisioning profile
+      - name: Verify app and widget signing
         script: |
-          python3 -c 'from pathlib import Path; import re; p=Path("ios/App/App.xcodeproj/project.pbxproj"); s=p.read_text(encoding="utf-8", errors="ignore"); s=s.replace("fainance-widgets-appstore-profile","fainance-appstore-profile"); s=re.sub(r"CODE_SIGN_STYLE = [^;]+;","CODE_SIGN_STYLE = Manual;",s); s=re.sub(r"DEVELOPMENT_TEAM = [^;]+;","DEVELOPMENT_TEAM = SSV4P8694F;",s); s=re.sub(r"PROVISIONING_PROFILE_SPECIFIER = [^;]*;","PROVISIONING_PROFILE_SPECIFIER = \"fainance-appstore-profile\";",s); p.write_text(s, encoding="utf-8"); print("forced fainance-appstore-profile")'
-          grep -n "fainance-widgets-appstore-profile" ios/App/App.xcodeproj/project.pbxproj && exit 1 || true
-          grep -n "PROVISIONING_PROFILE_SPECIFIER\|CODE_SIGN_STYLE\|DEVELOPMENT_TEAM" ios/App/App.xcodeproj/project.pbxproj | head -120
+          grep -q "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;" ios/App/App.xcodeproj/project.pbxproj
+          grep -q "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;" ios/App/App.xcodeproj/project.pbxproj
+          grep -q "PROVISIONING_PROFILE_SPECIFIER = \"${APP_PROFILE_NAME}\";" ios/App/App.xcodeproj/project.pbxproj
+          grep -q "PROVISIONING_PROFILE_SPECIFIER = \"${WIDGET_PROFILE_NAME}\";" ios/App/App.xcodeproj/project.pbxproj
+          echo "Firma app e widget verificata"
 
 
       - name: Build and verify iOS IPA
         script: |
           set -euo pipefail
 
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:-181}"
-          EXPECTED_VERSION="${APP_VERSION:-1.6.69}"
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:-182}"
+          EXPECTED_VERSION="${APP_VERSION:-1.6.70}"
           ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
           EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
 
