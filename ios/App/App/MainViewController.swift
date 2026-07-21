@@ -5,6 +5,7 @@ import Capacitor
 class MainViewController: CAPBridgeViewController {
     private let widgetAppGroup = "group.it.fainanceapp.app"
     private var widgetRouteObserver: NSObjectProtocol?
+    private var widgetRouteDispatchToken = UUID()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -56,22 +57,49 @@ class MainViewController: CAPBridgeViewController {
         if timestamp > 0, Date().timeIntervalSince1970 - timestamp > 300 {
             defaults.removeObject(forKey: "widget_pending_route_v1")
             defaults.removeObject(forKey: "widget_pending_route_timestamp_v1")
+            defaults.synchronize()
             return
         }
-
-        defaults.removeObject(forKey: "widget_pending_route_v1")
-        defaults.removeObject(forKey: "widget_pending_route_timestamp_v1")
-        defaults.synchronize()
 
         guard let encoded = try? JSONEncoder().encode(route),
               let routeJSON = String(data: encoded, encoding: .utf8) else {
             return
         }
 
-        let script = "window.dispatchEvent(new CustomEvent('fainance-widget-route',{detail:{url:\(routeJSON)}}));"
-        [0.15, 0.55, 1.2, 2.0].forEach { delay in
+        // Ogni nuova azione annulla i tentativi ancora pianificati della precedente.
+        // In questo modo un vecchio tocco su Fotocamera non può riaprire la fotocamera
+        // dopo che l’utente ha premuto Nota, Debiti, Share o Impostazioni.
+        let token = UUID()
+        widgetRouteDispatchToken = token
+
+        let script = """
+        window.__fainancePendingWidgetRoute=\(routeJSON);
+        try{localStorage.setItem('fainance_pending_widget_route_v1',\(routeJSON));}catch(e){}
+        window.dispatchEvent(new CustomEvent('fainance-widget-route',{detail:{url:\(routeJSON)}}));
+        """
+
+        [0.10, 0.35, 0.80, 1.50, 2.50, 4.00, 6.00].forEach { delay in
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.webView?.evaluateJavaScript(script, completionHandler: nil)
+                guard let self,
+                      self.widgetRouteDispatchToken == token,
+                      defaults.string(forKey: "widget_pending_route_v1") == route else {
+                    return
+                }
+
+                self.webView?.evaluateJavaScript(script) { _, error in
+                    guard error == nil,
+                          self.widgetRouteDispatchToken == token,
+                          defaults.string(forKey: "widget_pending_route_v1") == route else {
+                        return
+                    }
+
+                    // Lo script ha già salvato il percorso nel localStorage della WebView.
+                    // Possiamo quindi rimuoverlo dall’App Group e annullare i tentativi successivi.
+                    defaults.removeObject(forKey: "widget_pending_route_v1")
+                    defaults.removeObject(forKey: "widget_pending_route_timestamp_v1")
+                    defaults.synchronize()
+                    self.widgetRouteDispatchToken = UUID()
+                }
             }
         }
     }

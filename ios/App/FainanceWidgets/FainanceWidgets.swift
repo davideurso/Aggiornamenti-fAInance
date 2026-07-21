@@ -168,21 +168,26 @@ private enum WidgetStore {
 
     static func shoppingListData(selectionId: String?) -> [String: Any] {
         var data = dictionary(forKey: FainanceWidgetKind.shoppingList.settingsKey)
-        guard let selectionId, !selectionId.isEmpty else { return data }
+        let resolvedId = {
+            if let selectionId, !selectionId.isEmpty { return selectionId }
+            return WidgetValue.string(data, "selectedListId", "main")
+        }()
+        guard !resolvedId.isEmpty else { return data }
         let lists = dictionaries(in: data, key: "lists")
-        let list = lists.first(where: { WidgetValue.string($0, "id") == selectionId })
+        let list = lists.first(where: { WidgetValue.string($0, "id") == resolvedId })
         let maxItems = max(1, WidgetValue.int(data, "maxItems", 8))
         let items = dictionaries(in: data, key: "allItems")
-            .filter { WidgetValue.string($0, "listId", "main") == selectionId }
+            .filter { WidgetValue.string($0, "listId", "main") == resolvedId }
             .sorted {
                 let leftBought = WidgetValue.bool($0, "bought")
                 let rightBought = WidgetValue.bool($1, "bought")
                 if leftBought != rightBought { return !leftBought }
                 return WidgetValue.string($0, "name").localizedCaseInsensitiveCompare(WidgetValue.string($1, "name")) == .orderedAscending
             }
-        data["selectedListId"] = selectionId
+        data["selectedListId"] = resolvedId
         data["selectedListTitle"] = list.map { WidgetValue.string($0, "title", WidgetText.text("Lista spesa")) } ?? WidgetText.text("Lista spesa")
-        data["items"] = Array(items.prefix(maxItems))
+        data["items"] = Array(items.prefix(max(60, maxItems)))
+        data["page"] = shoppingPage(listId: resolvedId)
         return data
     }
 
@@ -222,6 +227,10 @@ private enum WidgetStore {
 
     static func dictionaries(in data: [String: Any], key: String) -> [[String: Any]] {
         data[key] as? [[String: Any]] ?? (data[key] as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
+    }
+
+    static func shoppingPage(listId: String) -> Int {
+        max(0, defaults?.integer(forKey: "widget_shopping_page_\(listId)") ?? 0)
     }
 
     static func previewData(for kind: FainanceWidgetKind) -> [String: Any] {
@@ -756,6 +765,37 @@ private func fainanceURL(_ value: String) -> URL {
     URL(string: value) ?? URL(string: "fainance://widget-settings")!
 }
 
+private struct RouteAction<Content: View>: View {
+    @Environment(\.widgetFamily) private var family
+    let route: String
+    private let content: () -> Content
+
+    init(_ route: String, @ViewBuilder content: @escaping () -> Content) {
+        self.route = route
+        self.content = content
+    }
+
+    @ViewBuilder
+    var body: some View {
+#if canImport(AppIntents)
+        if #available(iOSApplicationExtension 17.0, *) {
+            Button(intent: OpenFainanceRouteIntent(route: route)) {
+                content()
+            }
+            .buttonStyle(.plain)
+        } else {
+            Link(destination: fainanceURL(route)) {
+                content()
+            }
+        }
+#else
+        Link(destination: fainanceURL(route)) {
+            content()
+        }
+#endif
+    }
+}
+
 private func money(_ value: Double, currency: String) -> String {
     let formatter = NumberFormatter()
     formatter.numberStyle = .decimal
@@ -791,33 +831,31 @@ private struct WidgetHeader: View {
     var settingsURL: String = "fainance://widget-settings"
 
     var body: some View {
-        HStack(spacing: 7) {
+        HStack(spacing: family == .systemSmall ? 5 : 7) {
             Image("logo_fainance")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 29, height: 29)
+                .frame(width: family == .systemSmall ? 25 : 29, height: family == .systemSmall ? 25 : 29)
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: family == .systemSmall ? 11.5 : 13, weight: .bold))
                     .foregroundColor(titleColor)
                     .lineLimit(1)
-                if let subtitle, !subtitle.isEmpty {
+                    .minimumScaleFactor(0.75)
+                if let subtitle, !subtitle.isEmpty, family != .systemSmall {
                     Text(subtitle)
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundColor(bodyColor)
                         .lineLimit(1)
                 }
             }
-            Spacer(minLength: 2)
-            if family != .systemSmall {
-                Button(intent: OpenFainanceRouteIntent(route: settingsURL)) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(titleColor)
-                        .frame(width: 29, height: 29)
-                        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                }
-                .buttonStyle(.plain)
+            Spacer(minLength: 1)
+            RouteAction(settingsURL) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: family == .systemSmall ? 11 : 13, weight: .bold))
+                    .foregroundColor(titleColor)
+                    .frame(width: family == .systemSmall ? 25 : 29, height: family == .systemSmall ? 25 : 29)
+                    .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
     }
@@ -828,7 +866,7 @@ private struct LockedWidgetView: View {
     let icon: String
 
     var body: some View {
-        Link(destination: fainanceURL("fainance://open-plan-info")) {
+        RouteAction("fainance://open-plan-info") {
             VStack(spacing: 7) {
                 HStack {
                     Image("logo_fainance").resizable().scaledToFit().frame(width: 31, height: 31)
@@ -864,25 +902,24 @@ private struct ActionTile: View {
     var vertical = false
 
     var body: some View {
-        Button(intent: OpenFainanceRouteIntent(route: url)) {
+        RouteAction(url) {
             Group {
                 if vertical {
                     VStack(spacing: 1) {
-                        Text(icon).font(.system(size: 22, weight: .bold))
-                        Text(label).font(.system(size: 11, weight: .bold)).lineLimit(1)
+                        Text(icon).font(.system(size: 20, weight: .bold))
+                        Text(label).font(.system(size: 10, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
                     }
                 } else {
                     HStack(spacing: 6) {
-                        Text(icon).font(.system(size: 21, weight: .bold))
-                        Text(label).font(.system(size: 12, weight: .bold)).lineLimit(1)
+                        Text(icon).font(.system(size: 20, weight: .bold))
+                        Text(label).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.72)
                     }
                 }
             }
             .foregroundColor(.white)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(color, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .background(color, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -916,34 +953,24 @@ private struct QuickAddWidgetView: View {
         let transparency = WidgetValue.int(data, "bgAlpha", 65)
         let expenseColor = Color(hex: WidgetValue.string(data, "expenseColor", "#E24B4A"))
         let incomeColor = Color(hex: WidgetValue.string(data, "incomeColor", "#1D9B6C"))
-        let showVoice = WidgetValue.bool(data, "showVoiceButton", true)
 
         ZStack {
             FainanceBackground(hex: background, transparency: transparency)
             if family == .systemSmall {
-                VStack(spacing: 7) {
-                    HStack(spacing: 7) {
-                        Button(intent: OpenFainanceRouteIntent(route: showVoice ? "fainance://open-voice?source=ios-widget&autostart=1" : "fainance://widget-settings")) {
-                            Image(systemName: showVoice ? "mic.fill" : "gearshape.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(width: 34, height: 34)
-                                .background(Color(hex: "#7F77DD"), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        Spacer()
-                        Image("logo_fainance").resizable().scaledToFit().frame(width: 30, height: 30)
-                    }
-                    HStack(spacing: 7) {
+                VStack(spacing: 6) {
+                    WidgetHeader(title: "fAInance", subtitle: nil, titleColor: .white, bodyColor: Color.white.opacity(0.75), settingsURL: "fainance://widget-settings?widget=quick")
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
                         ActionTile(url: "fainance://add-expense", icon: "−", label: expense, color: expenseColor, vertical: true)
                         ActionTile(url: "fainance://add-income", icon: "+", label: income, color: incomeColor, vertical: true)
+                        ActionTile(url: "fainance://open-voice?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), vertical: true)
+                        ActionTile(url: "fainance://open-receipt-camera", icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"), vertical: true)
                     }
                 }
-                .padding(10)
+                .padding(9)
             } else {
                 VStack(spacing: 7) {
                     if WidgetValue.bool(data, "showHeader", true) {
-                        WidgetHeader(title: title, subtitle: subtitle, titleColor: .white, bodyColor: Color.white.opacity(0.75))
+                        WidgetHeader(title: title, subtitle: subtitle, titleColor: .white, bodyColor: Color.white.opacity(0.75), settingsURL: "fainance://widget-settings?widget=quick")
                     }
                     HStack(spacing: 8) {
                         ActionTile(url: "fainance://add-expense", icon: "−", label: expense, color: expenseColor)
@@ -957,6 +984,7 @@ private struct QuickAddWidgetView: View {
                 .padding(10)
             }
         }
+        .unredacted()
         .fainanceContainerBackground(Color(hex: background))
     }
 }
@@ -978,25 +1006,28 @@ private struct NoteWidgetView: View {
             let transparency = WidgetValue.int(data, "bgAlpha", 65)
             ZStack {
                 FainanceBackground(hex: background, transparency: transparency)
-                VStack(alignment: .leading, spacing: 8) {
-                    WidgetHeader(title: title, subtitle: nil, titleColor: titleColor, bodyColor: bodyColor)
-                    Text(body)
-                        .font(.system(size: CGFloat(max(11, min(18, WidgetValue.int(data, "textSize", 14)))), weight: .medium))
-                        .foregroundColor(bodyColor)
-                        .lineLimit(family == .systemSmall ? 5 : 8)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(9)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 8) {
+                    WidgetHeader(title: title, subtitle: nil, titleColor: titleColor, bodyColor: bodyColor, settingsURL: "fainance://widget-settings?widget=note")
+                    RouteAction("fainance://open-appunti") {
+                        Text(body)
+                            .font(.system(size: CGFloat(max(10, min(family == .systemSmall ? 15 : 18, WidgetValue.int(data, "textSize", 14)))), weight: .medium))
+                            .foregroundColor(bodyColor)
+                            .lineLimit(family == .systemSmall ? 5 : 8)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .padding(family == .systemSmall ? 7 : 9)
+                            .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
                 }
-                .padding(11)
+                .padding(family == .systemSmall ? 9 : 11)
             }
-            .widgetURL(fainanceURL("fainance://open-appunti"))
+            .unredacted()
             .fainanceContainerBackground(Color(hex: background))
         }
     }
 }
 
 private struct GoalWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: FainanceWidgetEntry
 
     var body: some View {
@@ -1016,39 +1047,51 @@ private struct GoalWidgetView: View {
             let transparency = WidgetValue.int(data, "bgAlpha", 65)
             ZStack {
                 FainanceBackground(hex: "#1E1E30", transparency: transparency)
-                VStack(alignment: .leading, spacing: 9) {
-                    HStack {
-                        Image("logo_fainance").resizable().scaledToFit().frame(width: 30, height: 30)
-                        Text(icon).font(.system(size: 23))
-                        Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(textColor).lineLimit(1)
-                        Spacer(minLength: 2)
-                        Button(intent: OpenFainanceRouteIntent(route: "fainance://widget-settings")) {
-                            Image(systemName: "gearshape.fill").font(.system(size: 13, weight: .bold)).foregroundColor(textColor)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    if WidgetValue.bool(data, "showPercent", true) {
-                        Text("\(percent)%")
-                            .font(.system(size: 25, weight: .heavy))
-                            .foregroundColor(percentColor)
-                    }
-                    GeometryReader { proxy in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.white.opacity(0.14))
-                            Capsule().fill(accent).frame(width: proxy.size.width * CGFloat(percent) / 100)
-                        }
-                    }
-                    .frame(height: 9)
-                    if WidgetValue.bool(data, "showAmounts", true) {
-                        Text("\(money(saved, currency: currency)) / \(money(target, currency: currency))")
-                            .font(.system(size: 11, weight: .semibold))
+                VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 9) {
+                    HStack(spacing: 6) {
+                        Text(icon).font(.system(size: family == .systemSmall ? 19 : 23))
+                        Text(title)
+                            .font(.system(size: family == .systemSmall ? 12 : 14, weight: .bold))
                             .foregroundColor(textColor)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                        Spacer(minLength: 1)
+                        RouteAction("fainance://widget-settings?widget=goal") {
+                            Image(systemName: "gearshape.fill")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(textColor)
+                                .frame(width: 26, height: 26)
+                                .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        }
+                    }
+                    RouteAction("fainance://open-goals") {
+                        VStack(alignment: .leading, spacing: family == .systemSmall ? 6 : 9) {
+                            if WidgetValue.bool(data, "showPercent", true) {
+                                Text("\(percent)%")
+                                    .font(.system(size: family == .systemSmall ? 22 : 25, weight: .heavy))
+                                    .foregroundColor(percentColor)
+                            }
+                            GeometryReader { proxy in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.white.opacity(0.14))
+                                    Capsule().fill(accent).frame(width: proxy.size.width * CGFloat(percent) / 100)
+                                }
+                            }
+                            .frame(height: family == .systemSmall ? 8 : 9)
+                            if WidgetValue.bool(data, "showAmounts", true) {
+                                Text("\(money(saved, currency: currency)) / \(money(target, currency: currency))")
+                                    .font(.system(size: family == .systemSmall ? 9.5 : 11, weight: .semibold))
+                                    .foregroundColor(textColor)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.68)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                 }
-                .padding(11)
+                .padding(family == .systemSmall ? 10 : 11)
             }
-            .widgetURL(fainanceURL("fainance://open-goals"))
+            .unredacted()
             .fainanceContainerBackground(Color(hex: "#1E1E30"))
         }
     }
@@ -1062,39 +1105,54 @@ private struct FidelityWidgetView: View {
         let data = entry.data
         let card = WidgetValue.dictionary(data, "selectedCard").isEmpty ? (WidgetValue.dictionaries(data, "cards").first ?? [:]) : WidgetValue.dictionary(data, "selectedCard")
         let cardId = WidgetValue.string(card, "id")
-        let cardName = WidgetValue.string(card, "name", "Fidelity card")
         let code = WidgetValue.string(card, "code")
         let codeType = WidgetValue.string(card, "codeType", "barcode")
+        let isQR = codeType.lowercased().contains("qr")
         let accent = WidgetValue.string(data, "accentColor", WidgetValue.string(card, "color", "#0F9F76"))
         let titleColor = Color(hex: WidgetValue.string(data, "titleColor", "#FFFFFF"))
         let transparency = WidgetValue.int(data, "bgAlpha", 65)
-        ZStack {
+        ZStack(alignment: .topTrailing) {
             FainanceBackground(hex: accent, transparency: transparency)
-            VStack(spacing: 7) {
-                WidgetHeader(title: cardName, subtitle: "Fidelity card", titleColor: titleColor, bodyColor: titleColor.opacity(0.72))
-                if code.isEmpty {
-                    Spacer()
-                    Text(WidgetText.text("Apri fAInance per configurarlo"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(titleColor.opacity(0.82))
-                        .multilineTextAlignment(.center)
-                    Spacer()
-                } else if let image = BarcodeRenderer.image(code: code, type: codeType) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .interpolation(.none)
-                        .scaledToFit()
-                        .padding(family == .systemSmall ? 6 : 4)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            if code.isEmpty {
+                Text(WidgetText.text("Apri fAInance per configurarlo"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(titleColor)
+                    .multilineTextAlignment(.center)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let image = BarcodeRenderer.image(code: code, type: codeType) {
+                RouteAction("fainance://open-fidelity-card?cardId=\(cardId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
+                    GeometryReader { proxy in
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(Color.white)
+                            if isQR {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .interpolation(.none)
+                                    .scaledToFit()
+                                    .frame(width: proxy.size.width - 10, height: proxy.size.height - 10)
+                            } else {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .interpolation(.none)
+                                    .frame(width: proxy.size.width - 10, height: proxy.size.height - 10)
+                            }
+                        }
+                    }
                 }
-                if family != .systemSmall && !code.isEmpty {
-                    Text(code).font(.system(size: 10, weight: .medium, design: .monospaced)).foregroundColor(titleColor).lineLimit(1)
-                }
+                .padding(5)
             }
-            .padding(10)
+            RouteAction("fainance://widget-settings?widget=fidelity") {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 10.5, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 23, height: 23)
+                    .background(Color.black.opacity(0.58), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            }
+            .padding(6)
         }
-        .widgetURL(fainanceURL("fainance://open-fidelity-card?cardId=\(cardId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"))
+        .unredacted()
         .fainanceContainerBackground(Color(hex: accent))
     }
 }
@@ -1112,7 +1170,7 @@ private enum BarcodeRenderer {
             let filter = CIFilter.code128BarcodeGenerator()
             filter.message = Data(code.utf8)
             filter.quietSpace = 7
-            output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 3.2, y: 3.2))
+            output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 3.0, y: 10.0))
         }
         guard let output, let cgImage = context.createCGImage(output, from: output.extent) else { return nil }
         return UIImage(cgImage: cgImage)
@@ -1127,21 +1185,24 @@ private struct ShoppingListWidgetView: View {
         let data = entry.data
         let listId = WidgetValue.string(data, "selectedListId", "main")
         let title = WidgetValue.string(data, "selectedListTitle", WidgetValue.string(data, "title", WidgetText.text("Lista spesa")))
-        let subtitle = WidgetValue.string(data, "subtitle", WidgetText.text("Tocca un articolo quando è nel carrello"))
         let items = WidgetValue.dictionaries(data, "items")
         let accent = WidgetValue.string(data, "accentColor", "#EF9F27")
         let titleColor = Color(hex: WidgetValue.string(data, "titleColor", "#FFFFFF"))
         let textColor = Color(hex: WidgetValue.string(data, "textColor", "#EDEDF7"))
         let iconColor = Color(hex: WidgetValue.string(data, "iconColor", accent))
         let transparency = WidgetValue.int(data, "bgAlpha", 65)
-        let maxRows = family == .systemLarge ? 8 : (family == .systemMedium ? 4 : 3)
+        let maxRows = family == .systemLarge ? 9 : (family == .systemMedium ? 4 : 2)
+        let pageCount = max(1, Int(ceil(Double(items.count) / Double(maxRows))))
+        let requestedPage = WidgetValue.int(data, "page", WidgetStore.shoppingPage(listId: listId))
+        let page = min(max(0, requestedPage), pageCount - 1)
+        let visibleItems = Array(items.dropFirst(page * maxRows).prefix(maxRows))
 
         ZStack {
             FainanceBackground(hex: "#1E1E30", transparency: transparency)
-            VStack(alignment: .leading, spacing: 6) {
-                WidgetHeader(title: title, subtitle: subtitle, titleColor: titleColor, bodyColor: textColor)
+            VStack(alignment: .leading, spacing: 5) {
+                WidgetHeader(title: title, subtitle: nil, titleColor: titleColor, bodyColor: textColor, settingsURL: "fainance://widget-settings?widget=shoppingList")
                 if items.isEmpty {
-                    Link(destination: fainanceURL("fainance://open-shopping-list?listId=\(listId)")) {
+                    RouteAction("fainance://open-shopping-list?listId=\(listId)") {
                         Text(WidgetValue.string(data, "emptyText", WidgetText.text("Lista della spesa vuota")))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(textColor)
@@ -1149,15 +1210,38 @@ private struct ShoppingListWidgetView: View {
                     }
                 } else {
                     VStack(spacing: 4) {
-                        ForEach(Array(items.prefix(maxRows).enumerated()), id: \.offset) { _, item in
+                        ForEach(Array(visibleItems.enumerated()), id: \.offset) { _, item in
                             ShoppingRow(item: item, listId: listId, textColor: textColor, iconColor: iconColor)
                         }
                     }
                     Spacer(minLength: 0)
+                    if pageCount > 1 {
+                        HStack(spacing: 6) {
+                            Button(intent: ChangeShoppingPageIntent(listId: listId, delta: -1)) {
+                                Image(systemName: "chevron.left")
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                            .disabled(page == 0)
+                            Text("\(page + 1)/\(pageCount)")
+                                .font(.system(size: 9.5, weight: .bold))
+                                .foregroundColor(textColor)
+                                .frame(minWidth: 34)
+                            Button(intent: ChangeShoppingPageIntent(listId: listId, delta: 1)) {
+                                Image(systemName: "chevron.right")
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            }
+                            .disabled(page >= pageCount - 1)
+                        }
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(textColor)
+                        .frame(height: 20)
+                        .buttonStyle(.plain)
+                    }
                 }
             }
-            .padding(10)
+            .padding(9)
         }
+        .unredacted()
         .fainanceContainerBackground(Color(hex: "#1E1E30"))
     }
 }
@@ -1189,7 +1273,7 @@ private struct ShoppingRow: View {
     }
 
     private var shoppingLink: some View {
-        Link(destination: fainanceURL("fainance://open-shopping-list?listId=\(listId)")) {
+        RouteAction("fainance://open-shopping-list?listId=\(listId)") {
             rowContent
         }
     }
@@ -1207,12 +1291,40 @@ private struct ShoppingRow: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 7)
-        .frame(height: 25)
+        .frame(height: 22)
         .background(Color.white.opacity(bought ? 0.05 : 0.09), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 
 #if canImport(AppIntents)
+@available(iOSApplicationExtension 17.0, *)
+struct ChangeShoppingPageIntent: AppIntent {
+    static var title: LocalizedStringResource = "Cambia pagina lista"
+    static var openAppWhenRun = false
+
+    @Parameter(title: "Lista") var listId: String
+    @Parameter(title: "Direzione") var delta: Int
+
+    init() {
+        listId = "main"
+        delta = 1
+    }
+
+    init(listId: String, delta: Int) {
+        self.listId = listId
+        self.delta = delta
+    }
+
+    func perform() async throws -> some IntentResult {
+        guard let defaults = UserDefaults(suiteName: fainanceAppGroup) else { return .result() }
+        let key = "widget_shopping_page_\(listId)"
+        defaults.set(max(0, defaults.integer(forKey: key) + delta), forKey: key)
+        defaults.synchronize()
+        WidgetCenter.shared.reloadTimelines(ofKind: FainanceWidgetKind.shoppingList.rawValue)
+        return .result()
+    }
+}
+
 @available(iOSApplicationExtension 17.0, *)
 struct ToggleShoppingItemIntent: AppIntent {
     static var title: LocalizedStringResource = "Aggiorna articolo"
@@ -1304,49 +1416,56 @@ private struct DebtCreditsWidgetView: View {
             let textColor = Color(hex: WidgetValue.string(data, "textColor", "#EDEDF7"))
             let iconColor = Color(hex: WidgetValue.string(data, "iconColor", WidgetValue.string(data, "accentColor", "#7F77DD")))
             let transparency = WidgetValue.int(data, "bgAlpha", 65)
-            let maxRows = family == .systemLarge ? 6 : 4
+            let maxRows = family == .systemLarge ? 6 : (family == .systemMedium ? 4 : 2)
 
             ZStack {
                 FainanceBackground(hex: "#1E1E30", transparency: transparency)
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 7) {
-                        Image("logo_fainance").resizable().scaledToFit().frame(width: 29, height: 29)
+                VStack(alignment: .leading, spacing: family == .systemSmall ? 4 : 5) {
+                    HStack(spacing: 6) {
+                        Image("logo_fainance").resizable().scaledToFit().frame(width: family == .systemSmall ? 25 : 29, height: family == .systemSmall ? 25 : 29)
                         Text(WidgetValue.string(data, "title", WidgetText.text("Debiti / Crediti")))
-                            .font(.system(size: 13, weight: .bold)).foregroundColor(titleColor).lineLimit(1)
-                        Spacer(minLength: 3)
-                        Text("\(WidgetText.text("Saldo")) \(money(net, currency: currency))")
-                            .font(.system(size: 11.5, weight: .bold)).foregroundColor(textColor).lineLimit(1)
-                        Link(destination: fainanceURL("fainance://widget-settings")) {
-                            Image(systemName: "gearshape.fill").font(.system(size: 12, weight: .bold)).foregroundColor(iconColor)
+                            .font(.system(size: family == .systemSmall ? 11.5 : 13, weight: .bold)).foregroundColor(titleColor).lineLimit(1).minimumScaleFactor(0.72)
+                        Spacer(minLength: 1)
+                        RouteAction("fainance://widget-settings?widget=debtCredits") {
+                            Image(systemName: "gearshape.fill").font(.system(size: 11.5, weight: .bold)).foregroundColor(iconColor)
+                                .frame(width: 25, height: 25).background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                         }
                     }
-                    Link(destination: fainanceURL("fainance://open-debt-credits")) {
-                        Text("\(WidgetText.text("Devi")) \(money(debt, currency: currency))  ·  \(WidgetText.text("Ti devono")) \(money(credit, currency: currency))")
-                            .font(.system(size: 11, weight: .bold)).foregroundColor(textColor)
-                            .frame(maxWidth: .infinity, alignment: .leading).padding(6)
-                            .background(Color.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    RouteAction("fainance://open-debt-credits") {
+                        HStack(spacing: 5) {
+                            Text("\(WidgetText.text("Saldo")) \(money(net, currency: currency))")
+                            Spacer(minLength: 1)
+                            if family != .systemSmall {
+                                Text("\(WidgetText.text("Devi")) \(money(debt, currency: currency)) · \(WidgetText.text("Ti devono")) \(money(credit, currency: currency))")
+                            }
+                        }
+                        .font(.system(size: family == .systemSmall ? 10 : 11, weight: .bold)).foregroundColor(textColor)
+                        .lineLimit(1).minimumScaleFactor(0.65)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(6)
+                        .background(Color.white.opacity(0.13), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     ForEach(Array(items.prefix(maxRows).enumerated()), id: \.offset) { _, item in
                         let id = WidgetValue.string(item, "id")
                         let kind = WidgetValue.string(item, "kind", "debt")
-                        Link(destination: fainanceURL("fainance://open-debt-credit?debtId=\(id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")")) {
+                        RouteAction("fainance://open-debt-credit?debtId=\(id.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")") {
                             HStack(spacing: 5) {
                                 Text(kind == "credit" ? "📈" : "📉")
                                 Text(WidgetValue.string(item, "holder", "—")).lineLimit(1)
                                 Spacer(minLength: 2)
                                 Text(money(WidgetValue.double(item, "balance"), currency: currency)).lineLimit(1)
                             }
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: family == .systemSmall ? 9.5 : 11, weight: .semibold))
                             .foregroundColor(textColor)
                             .padding(.horizontal, 6)
-                            .frame(height: 24)
+                            .frame(height: family == .systemSmall ? 22 : 24)
                             .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                         }
                     }
                     Spacer(minLength: 0)
                 }
-                .padding(9)
+                .padding(family == .systemSmall ? 8 : 9)
             }
+            .unredacted()
             .fainanceContainerBackground(Color(hex: "#1E1E30"))
         }
     }
@@ -1360,7 +1479,7 @@ private struct ShareActionButton: View {
     var compact = true
 
     var body: some View {
-        Button(intent: OpenFainanceRouteIntent(route: route)) {
+        RouteAction(route) {
             Group {
                 if compact {
                     VStack(spacing: 2) {
@@ -1385,7 +1504,6 @@ private struct ShareActionButton: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(color, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -1419,10 +1537,11 @@ private struct ShareWidgetView: View {
                         title: "Share",
                         subtitle: WidgetValue.string(data, "projectName", "Nessun progetto selezionato"),
                         titleColor: titleColor,
-                        bodyColor: bodyColor
+                        bodyColor: bodyColor,
+                        settingsURL: "fainance://widget-settings?widget=share"
                     )
 
-                    Button(intent: OpenFainanceRouteIntent(route: "fainance://open-share\(projectParam)")) {
+                    RouteAction("fainance://open-share\(projectParam)") {
                         if family == .systemSmall {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(WidgetText.text("Saldo"))
@@ -1471,7 +1590,6 @@ private struct ShareWidgetView: View {
                             .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                         }
                     }
-                    .buttonStyle(.plain)
 
                     if family == .systemMedium {
                         HStack(spacing: 6) {
@@ -1504,7 +1622,7 @@ private struct ShareWidgetView: View {
                 }
                 .padding(9)
             }
-            .widgetURL(family == .systemSmall ? fainanceURL("fainance://open-share\(projectParam)") : nil)
+            .unredacted()
             .fainanceContainerBackground(Color(hex: background))
         }
     }
@@ -1518,7 +1636,7 @@ private struct VoiceAssistantWidgetView: View {
         if !entry.allowed {
             LockedWidgetView(type: "voiceAssistant", icon: "🎙")
         } else {
-            Button(intent: OpenFainanceRouteIntent(route: "fainance://open-voice?source=ios-widget&autostart=1")) {
+            RouteAction("fainance://open-voice?source=ios-widget&autostart=1") {
                 ZStack {
                     LinearGradient(colors: [Color(hex: "#F3F0FF"), Color(hex: "#DCD7FF")], startPoint: .topLeading, endPoint: .bottomTrailing)
                     if family == .systemSmall {
@@ -1606,7 +1724,7 @@ private struct VoiceAssistantWidgetView: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .unredacted()
             .fainanceContainerBackground(Color(hex: "#F3F0FF"))
         }
     }
@@ -1668,7 +1786,7 @@ private struct DebtCreditsWidget: Widget {
         AppIntentConfiguration(kind: kind, intent: DebtCreditsWidgetConfigurationIntent.self, provider: DebtCreditsAppIntentProvider()) { DebtCreditsWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Debiti / Crediti")
             .description("Mostra saldo e posizioni aperte.")
-            .supportedFamilies([.systemMedium, .systemLarge])
+            .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
