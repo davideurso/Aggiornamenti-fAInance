@@ -2494,6 +2494,19 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   useEffect(function(){
     var removeListener=null;
     var cancelled=false;
+    var lastWidgetRoute="";
+    var lastWidgetRouteAt=0;
+    function onWidgetRoute(event){
+      try{
+        var route=event&&event.detail&&event.detail.url?String(event.detail.url):"";
+        var now=Date.now();
+        if(!route||(route===lastWidgetRoute&&now-lastWidgetRouteAt<4000))return;
+        lastWidgetRoute=route;
+        lastWidgetRouteAt=now;
+        openQuickAddFromUrl(route);
+      }catch(e){}
+    }
+    try{window.addEventListener("fainance-widget-route",onWidgetRoute);}catch(e){}
 
     if(window&&window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform()){
       import("@capacitor/app").then(function(mod){
@@ -2517,6 +2530,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
     return function(){
       cancelled=true;
+      try{window.removeEventListener("fainance-widget-route",onWidgetRoute);}catch(e){}
       if(removeListener&&removeListener.remove)removeListener.remove();
     };
   },[]);

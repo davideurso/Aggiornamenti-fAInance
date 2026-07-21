@@ -130,6 +130,100 @@ private enum WidgetStore {
         }
     }
 
+
+    static func noteData(selectionId: String?) -> [String: Any] {
+        var data = dictionary(forKey: FainanceWidgetKind.note.settingsKey)
+        guard let selectionId, !selectionId.isEmpty else { return data }
+        let parts = selectionId.split(separator: "|", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return data }
+        let type = parts[0]
+        let id = parts[1]
+        let key: String
+        switch type {
+        case "bank": key = "bankItems"
+        case "creditCard": key = "creditCardItems"
+        default: key = "noteItems"
+        }
+        guard let item = dictionaries(in: data, key: key).first(where: { WidgetValue.string($0, "id") == id }) else { return data }
+        data["type"] = type
+        data["title"] = WidgetValue.string(item, "title", WidgetText.text("Nota"))
+        data["body"] = WidgetValue.string(item, "body", WidgetText.text("Apri fAInance per configurarlo"))
+        data["selectedNoteId"] = type == "note" ? id : ""
+        data["selectedBankId"] = type == "bank" ? id : ""
+        data["selectedCreditCardId"] = type == "creditCard" ? id : ""
+        data["selectionId"] = selectionId
+        return data
+    }
+
+    static func goalData(selectionId: String?) -> [String: Any] {
+        var data = dictionary(forKey: FainanceWidgetKind.goal.settingsKey)
+        guard let selectionId, !selectionId.isEmpty,
+              let item = dictionaries(in: data, key: "goalItems").first(where: { WidgetValue.string($0, "id") == selectionId }) else {
+            return data
+        }
+        for (key, value) in item { data[key] = value }
+        data["selectedGoalId"] = selectionId
+        return data
+    }
+
+    static func shoppingListData(selectionId: String?) -> [String: Any] {
+        var data = dictionary(forKey: FainanceWidgetKind.shoppingList.settingsKey)
+        guard let selectionId, !selectionId.isEmpty else { return data }
+        let lists = dictionaries(in: data, key: "lists")
+        let list = lists.first(where: { WidgetValue.string($0, "id") == selectionId })
+        let maxItems = max(1, WidgetValue.int(data, "maxItems", 8))
+        let items = dictionaries(in: data, key: "allItems")
+            .filter { WidgetValue.string($0, "listId", "main") == selectionId }
+            .sorted {
+                let leftBought = WidgetValue.bool($0, "bought")
+                let rightBought = WidgetValue.bool($1, "bought")
+                if leftBought != rightBought { return !leftBought }
+                return WidgetValue.string($0, "name").localizedCaseInsensitiveCompare(WidgetValue.string($1, "name")) == .orderedAscending
+            }
+        data["selectedListId"] = selectionId
+        data["selectedListTitle"] = list.map { WidgetValue.string($0, "title", WidgetText.text("Lista spesa")) } ?? WidgetText.text("Lista spesa")
+        data["items"] = Array(items.prefix(maxItems))
+        return data
+    }
+
+    static func fidelityData(selectionId: String?) -> [String: Any] {
+        var data = dictionary(forKey: FainanceWidgetKind.fidelity.settingsKey)
+        guard let selectionId, !selectionId.isEmpty,
+              let card = dictionaries(in: data, key: "cards").first(where: { WidgetValue.string($0, "id") == selectionId }) else {
+            return data
+        }
+        data["selectedCardId"] = selectionId
+        data["selectedCard"] = card
+        return data
+    }
+
+    static func debtCreditsData(selectionIds: [String]) -> [String: Any] {
+        var data = dictionary(forKey: FainanceWidgetKind.debtCredits.settingsKey)
+        guard !selectionIds.isEmpty else { return data }
+        let selected = dictionaries(in: data, key: "allItems").filter { selectionIds.contains(WidgetValue.string($0, "id")) }
+        data["selectedIds"] = selectionIds
+        data["items"] = selected
+        return data
+    }
+
+    static func shareData(selectionId: String?) -> [String: Any] {
+        var data = dictionary(forKey: FainanceWidgetKind.share.settingsKey)
+        guard let selectionId, !selectionId.isEmpty,
+              let project = dictionaries(in: data, key: "projectItems").first(where: {
+                  WidgetValue.string($0, "projectId", WidgetValue.string($0, "id")) == selectionId
+              }) else {
+            return data
+        }
+        for (key, value) in project { data[key] = value }
+        data["projectId"] = selectionId
+        data["projectName"] = WidgetValue.string(project, "projectName", WidgetValue.string(project, "name", "Progetto Share"))
+        return data
+    }
+
+    static func dictionaries(in data: [String: Any], key: String) -> [[String: Any]] {
+        data[key] as? [[String: Any]] ?? (data[key] as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
+    }
+
     static func previewData(for kind: FainanceWidgetKind) -> [String: Any] {
         switch kind {
         case .quick:
@@ -185,6 +279,415 @@ private enum WidgetValue {
         data[key] as? [[String: Any]] ?? (data[key] as? [Any])?.compactMap { $0 as? [String: Any] } ?? []
     }
 }
+
+
+#if canImport(AppIntents)
+@available(iOSApplicationExtension 17.0, *)
+struct OpenFainanceRouteIntent: AppIntent {
+    static var title: LocalizedStringResource = "Apri fAInance"
+    static var openAppWhenRun = true
+
+    @Parameter(title: "Percorso")
+    var route: String
+
+    init() {
+        route = "fainance://widget-settings"
+    }
+
+    init(route: String) {
+        self.route = route
+    }
+
+    func perform() async throws -> some IntentResult {
+        let defaults = UserDefaults(suiteName: fainanceAppGroup)
+        defaults?.set(route, forKey: "widget_pending_route_v1")
+        defaults?.set(Date().timeIntervalSince1970, forKey: "widget_pending_route_timestamp_v1")
+        defaults?.synchronize()
+        return .result()
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct NoteContentEntity: AppEntity, Hashable {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Nota, coordinata o carta")
+    static var defaultQuery = NoteContentQuery()
+
+    let id: String
+    let title: String
+    let category: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)", subtitle: "\(category)")
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct NoteContentQuery: EntityQuery {
+    func entities(for identifiers: [NoteContentEntity.ID]) async throws -> [NoteContentEntity] {
+        allEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [NoteContentEntity] {
+        allEntities()
+    }
+
+    private func allEntities() -> [NoteContentEntity] {
+        let data = WidgetStore.dictionary(forKey: FainanceWidgetKind.note.settingsKey)
+        var result: [NoteContentEntity] = []
+        result += WidgetStore.dictionaries(in: data, key: "noteItems").map {
+            NoteContentEntity(id: "note|\(WidgetValue.string($0, "id"))", title: WidgetValue.string($0, "title", WidgetText.text("Nota")), category: WidgetText.text("Nota"))
+        }
+        result += WidgetStore.dictionaries(in: data, key: "bankItems").map {
+            NoteContentEntity(id: "bank|\(WidgetValue.string($0, "id"))", title: WidgetValue.string($0, "title", "Coordinata bancaria"), category: "Coordinata bancaria")
+        }
+        result += WidgetStore.dictionaries(in: data, key: "creditCardItems").map {
+            NoteContentEntity(id: "creditCard|\(WidgetValue.string($0, "id"))", title: WidgetValue.string($0, "title", "Carta di credito"), category: "Carta di credito")
+        }
+        return result.filter { !$0.id.hasSuffix("|") }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct GoalEntity: AppEntity, Hashable {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Obiettivo")
+    static var defaultQuery = GoalEntityQuery()
+
+    let id: String
+    let title: String
+    let detail: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)", subtitle: "\(detail)")
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct GoalEntityQuery: EntityQuery {
+    func entities(for identifiers: [GoalEntity.ID]) async throws -> [GoalEntity] {
+        allEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [GoalEntity] {
+        allEntities()
+    }
+
+    private func allEntities() -> [GoalEntity] {
+        let data = WidgetStore.dictionary(forKey: FainanceWidgetKind.goal.settingsKey)
+        return WidgetStore.dictionaries(in: data, key: "goalItems").compactMap {
+            let id = WidgetValue.string($0, "id")
+            guard !id.isEmpty else { return nil }
+            let title = WidgetValue.string($0, "title", "Obiettivo")
+            let percent = WidgetValue.int($0, "percent")
+            return GoalEntity(id: id, title: title, detail: "\(percent)%")
+        }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct ShoppingListEntity: AppEntity, Hashable {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Lista della spesa")
+    static var defaultQuery = ShoppingListEntityQuery()
+
+    let id: String
+    let title: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)")
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct ShoppingListEntityQuery: EntityQuery {
+    func entities(for identifiers: [ShoppingListEntity.ID]) async throws -> [ShoppingListEntity] {
+        allEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [ShoppingListEntity] {
+        allEntities()
+    }
+
+    private func allEntities() -> [ShoppingListEntity] {
+        let data = WidgetStore.dictionary(forKey: FainanceWidgetKind.shoppingList.settingsKey)
+        return WidgetStore.dictionaries(in: data, key: "lists").compactMap {
+            let id = WidgetValue.string($0, "id")
+            guard !id.isEmpty else { return nil }
+            return ShoppingListEntity(id: id, title: WidgetValue.string($0, "title", WidgetText.text("Lista spesa")))
+        }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct FidelityCardEntity: AppEntity, Hashable {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Fidelity card")
+    static var defaultQuery = FidelityCardEntityQuery()
+
+    let id: String
+    let title: String
+    let detail: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)", subtitle: "\(detail)")
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct FidelityCardEntityQuery: EntityQuery {
+    func entities(for identifiers: [FidelityCardEntity.ID]) async throws -> [FidelityCardEntity] {
+        allEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [FidelityCardEntity] {
+        allEntities()
+    }
+
+    private func allEntities() -> [FidelityCardEntity] {
+        let data = WidgetStore.dictionary(forKey: FainanceWidgetKind.fidelity.settingsKey)
+        return WidgetStore.dictionaries(in: data, key: "cards").compactMap {
+            let id = WidgetValue.string($0, "id")
+            guard !id.isEmpty else { return nil }
+            let code = WidgetValue.string($0, "code")
+            let suffix = code.count > 4 ? String(code.suffix(4)) : code
+            return FidelityCardEntity(id: id, title: WidgetValue.string($0, "name", "Fidelity card"), detail: suffix.isEmpty ? "Fidelity card" : "•••• \(suffix)")
+        }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct DebtCreditEntity: AppEntity, Hashable {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Debito o credito")
+    static var defaultQuery = DebtCreditEntityQuery()
+
+    let id: String
+    let title: String
+    let detail: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)", subtitle: "\(detail)")
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct DebtCreditEntityQuery: EntityQuery {
+    func entities(for identifiers: [DebtCreditEntity.ID]) async throws -> [DebtCreditEntity] {
+        allEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [DebtCreditEntity] {
+        allEntities()
+    }
+
+    private func allEntities() -> [DebtCreditEntity] {
+        let data = WidgetStore.dictionary(forKey: FainanceWidgetKind.debtCredits.settingsKey)
+        let currency = WidgetValue.string(data, "currency", "€")
+        return WidgetStore.dictionaries(in: data, key: "allItems").compactMap {
+            let id = WidgetValue.string($0, "id")
+            guard !id.isEmpty else { return nil }
+            let kind = WidgetValue.string($0, "kind", "debt") == "credit" ? WidgetText.text("Ti devono") : WidgetText.text("Devi")
+            let detail = "\(kind): \(money(WidgetValue.double($0, "balance"), currency: currency))"
+            return DebtCreditEntity(id: id, title: WidgetValue.string($0, "holder", "—"), detail: detail)
+        }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct ShareProjectEntity: AppEntity, Hashable {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "Progetto Share")
+    static var defaultQuery = ShareProjectEntityQuery()
+
+    let id: String
+    let title: String
+    let detail: String
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(title: "\(title)", subtitle: "\(detail)")
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct ShareProjectEntityQuery: EntityQuery {
+    func entities(for identifiers: [ShareProjectEntity.ID]) async throws -> [ShareProjectEntity] {
+        allEntities().filter { identifiers.contains($0.id) }
+    }
+
+    func suggestedEntities() async throws -> [ShareProjectEntity] {
+        allEntities()
+    }
+
+    private func allEntities() -> [ShareProjectEntity] {
+        let data = WidgetStore.dictionary(forKey: FainanceWidgetKind.share.settingsKey)
+        let currency = WidgetValue.string(data, "currency", "€")
+        return WidgetStore.dictionaries(in: data, key: "projectItems").compactMap {
+            let id = WidgetValue.string($0, "projectId", WidgetValue.string($0, "id"))
+            guard !id.isEmpty else { return nil }
+            let title = WidgetValue.string($0, "projectName", WidgetValue.string($0, "name", "Progetto Share"))
+            let detail = "\(WidgetText.text("Saldo")): \(money(WidgetValue.double($0, "netAmount"), currency: currency))"
+            return ShareProjectEntity(id: id, title: title, detail: detail)
+        }
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct NoteWidgetConfigurationIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Nota / Dati"
+    static var description = IntentDescription("Scegli la nota, la coordinata bancaria o la carta di credito da mostrare.")
+
+    @Parameter(title: "Contenuto")
+    var content: NoteContentEntity?
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct GoalWidgetConfigurationIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Obiettivo"
+    static var description = IntentDescription("Scegli l’obiettivo da mostrare.")
+
+    @Parameter(title: "Obiettivo")
+    var goal: GoalEntity?
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct ShoppingListWidgetConfigurationIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Lista della spesa"
+    static var description = IntentDescription("Scegli la lista della spesa da mostrare.")
+
+    @Parameter(title: "Lista")
+    var list: ShoppingListEntity?
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct FidelityWidgetConfigurationIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Fidelity card"
+    static var description = IntentDescription("Scegli la carta da mostrare.")
+
+    @Parameter(title: "Carta")
+    var card: FidelityCardEntity?
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct DebtCreditsWidgetConfigurationIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Debiti / Crediti"
+    static var description = IntentDescription("Scegli uno o più debiti e crediti da mostrare.")
+
+    @Parameter(title: "Posizioni")
+    var positions: [DebtCreditEntity]
+
+    init() {
+        positions = []
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+struct ShareWidgetConfigurationIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Share"
+    static var description = IntentDescription("Scegli il progetto Share da mostrare.")
+
+    @Parameter(title: "Progetto")
+    var project: ShareProjectEntity?
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct NoteAppIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> FainanceWidgetEntry {
+        FainanceWidgetEntry(date: Date(), kind: .note, data: WidgetStore.previewData(for: .note), allowed: true)
+    }
+
+    func snapshot(for configuration: NoteWidgetConfigurationIntent, in context: Context) async -> FainanceWidgetEntry {
+        let data = context.isPreview ? WidgetStore.previewData(for: .note) : WidgetStore.noteData(selectionId: configuration.content?.id)
+        return FainanceWidgetEntry(date: Date(), kind: .note, data: data, allowed: WidgetStore.isAllowed(FainanceWidgetKind.note.typeKey))
+    }
+
+    func timeline(for configuration: NoteWidgetConfigurationIntent, in context: Context) async -> Timeline<FainanceWidgetEntry> {
+        let entry = FainanceWidgetEntry(date: Date(), kind: .note, data: WidgetStore.noteData(selectionId: configuration.content?.id), allowed: WidgetStore.isAllowed(FainanceWidgetKind.note.typeKey))
+        return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60)))
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct GoalAppIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> FainanceWidgetEntry {
+        FainanceWidgetEntry(date: Date(), kind: .goal, data: WidgetStore.previewData(for: .goal), allowed: true)
+    }
+
+    func snapshot(for configuration: GoalWidgetConfigurationIntent, in context: Context) async -> FainanceWidgetEntry {
+        let data = context.isPreview ? WidgetStore.previewData(for: .goal) : WidgetStore.goalData(selectionId: configuration.goal?.id)
+        return FainanceWidgetEntry(date: Date(), kind: .goal, data: data, allowed: WidgetStore.isAllowed(FainanceWidgetKind.goal.typeKey))
+    }
+
+    func timeline(for configuration: GoalWidgetConfigurationIntent, in context: Context) async -> Timeline<FainanceWidgetEntry> {
+        let entry = FainanceWidgetEntry(date: Date(), kind: .goal, data: WidgetStore.goalData(selectionId: configuration.goal?.id), allowed: WidgetStore.isAllowed(FainanceWidgetKind.goal.typeKey))
+        return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60)))
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct ShoppingListAppIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> FainanceWidgetEntry {
+        FainanceWidgetEntry(date: Date(), kind: .shoppingList, data: WidgetStore.previewData(for: .shoppingList), allowed: true)
+    }
+
+    func snapshot(for configuration: ShoppingListWidgetConfigurationIntent, in context: Context) async -> FainanceWidgetEntry {
+        let data = context.isPreview ? WidgetStore.previewData(for: .shoppingList) : WidgetStore.shoppingListData(selectionId: configuration.list?.id)
+        return FainanceWidgetEntry(date: Date(), kind: .shoppingList, data: data, allowed: WidgetStore.isAllowed(FainanceWidgetKind.shoppingList.typeKey))
+    }
+
+    func timeline(for configuration: ShoppingListWidgetConfigurationIntent, in context: Context) async -> Timeline<FainanceWidgetEntry> {
+        let entry = FainanceWidgetEntry(date: Date(), kind: .shoppingList, data: WidgetStore.shoppingListData(selectionId: configuration.list?.id), allowed: WidgetStore.isAllowed(FainanceWidgetKind.shoppingList.typeKey))
+        return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60)))
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct FidelityAppIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> FainanceWidgetEntry {
+        FainanceWidgetEntry(date: Date(), kind: .fidelity, data: WidgetStore.previewData(for: .fidelity), allowed: true)
+    }
+
+    func snapshot(for configuration: FidelityWidgetConfigurationIntent, in context: Context) async -> FainanceWidgetEntry {
+        let data = context.isPreview ? WidgetStore.previewData(for: .fidelity) : WidgetStore.fidelityData(selectionId: configuration.card?.id)
+        return FainanceWidgetEntry(date: Date(), kind: .fidelity, data: data, allowed: WidgetStore.isAllowed(FainanceWidgetKind.fidelity.typeKey))
+    }
+
+    func timeline(for configuration: FidelityWidgetConfigurationIntent, in context: Context) async -> Timeline<FainanceWidgetEntry> {
+        let entry = FainanceWidgetEntry(date: Date(), kind: .fidelity, data: WidgetStore.fidelityData(selectionId: configuration.card?.id), allowed: WidgetStore.isAllowed(FainanceWidgetKind.fidelity.typeKey))
+        return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60)))
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct DebtCreditsAppIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> FainanceWidgetEntry {
+        FainanceWidgetEntry(date: Date(), kind: .debtCredits, data: WidgetStore.previewData(for: .debtCredits), allowed: true)
+    }
+
+    func snapshot(for configuration: DebtCreditsWidgetConfigurationIntent, in context: Context) async -> FainanceWidgetEntry {
+        let ids = configuration.positions.map(\.id)
+        let data = context.isPreview ? WidgetStore.previewData(for: .debtCredits) : WidgetStore.debtCreditsData(selectionIds: ids)
+        return FainanceWidgetEntry(date: Date(), kind: .debtCredits, data: data, allowed: WidgetStore.isAllowed(FainanceWidgetKind.debtCredits.typeKey))
+    }
+
+    func timeline(for configuration: DebtCreditsWidgetConfigurationIntent, in context: Context) async -> Timeline<FainanceWidgetEntry> {
+        let ids = configuration.positions.map(\.id)
+        let entry = FainanceWidgetEntry(date: Date(), kind: .debtCredits, data: WidgetStore.debtCreditsData(selectionIds: ids), allowed: WidgetStore.isAllowed(FainanceWidgetKind.debtCredits.typeKey))
+        return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60)))
+    }
+}
+
+@available(iOSApplicationExtension 17.0, *)
+private struct ShareAppIntentProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> FainanceWidgetEntry {
+        FainanceWidgetEntry(date: Date(), kind: .share, data: WidgetStore.previewData(for: .share), allowed: true)
+    }
+
+    func snapshot(for configuration: ShareWidgetConfigurationIntent, in context: Context) async -> FainanceWidgetEntry {
+        let data = context.isPreview ? WidgetStore.previewData(for: .share) : WidgetStore.shareData(selectionId: configuration.project?.id)
+        return FainanceWidgetEntry(date: Date(), kind: .share, data: data, allowed: WidgetStore.isAllowed(FainanceWidgetKind.share.typeKey))
+    }
+
+    func timeline(for configuration: ShareWidgetConfigurationIntent, in context: Context) async -> Timeline<FainanceWidgetEntry> {
+        let entry = FainanceWidgetEntry(date: Date(), kind: .share, data: WidgetStore.shareData(selectionId: configuration.project?.id), allowed: WidgetStore.isAllowed(FainanceWidgetKind.share.typeKey))
+        return Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(15 * 60)))
+    }
+}
+#endif
 
 private enum WidgetText {
     static func text(_ italian: String) -> String {
@@ -280,6 +783,7 @@ private struct FainanceBackground: View {
 }
 
 private struct WidgetHeader: View {
+    @Environment(\.widgetFamily) private var family
     let title: String
     let subtitle: String?
     let titleColor: Color
@@ -305,12 +809,15 @@ private struct WidgetHeader: View {
                 }
             }
             Spacer(minLength: 2)
-            Link(destination: fainanceURL(settingsURL)) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundColor(titleColor)
-                    .frame(width: 29, height: 29)
-                    .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            if family != .systemSmall {
+                Button(intent: OpenFainanceRouteIntent(route: settingsURL)) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(titleColor)
+                        .frame(width: 29, height: 29)
+                        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -357,7 +864,7 @@ private struct ActionTile: View {
     var vertical = false
 
     var body: some View {
-        Link(destination: fainanceURL(url)) {
+        Button(intent: OpenFainanceRouteIntent(route: url)) {
             Group {
                 if vertical {
                     VStack(spacing: 1) {
@@ -375,6 +882,23 @@ private struct ActionTile: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(color, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct StaticActionTile: View {
+    let icon: String
+    let label: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(icon).font(.system(size: 20, weight: .bold))
+            Text(label).font(.system(size: 10, weight: .bold)).lineLimit(1)
+        }
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(color, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 }
 
@@ -399,13 +923,14 @@ private struct QuickAddWidgetView: View {
             if family == .systemSmall {
                 VStack(spacing: 7) {
                     HStack(spacing: 7) {
-                        Link(destination: fainanceURL(showVoice ? "fainance://open-voice?source=ios-widget&autostart=1" : "fainance://widget-settings")) {
+                        Button(intent: OpenFainanceRouteIntent(route: showVoice ? "fainance://open-voice?source=ios-widget&autostart=1" : "fainance://widget-settings")) {
                             Image(systemName: showVoice ? "mic.fill" : "gearshape.fill")
                                 .font(.system(size: 16, weight: .bold))
                                 .foregroundColor(.white)
                                 .frame(width: 34, height: 34)
                                 .background(Color(hex: "#7F77DD"), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         }
+                        .buttonStyle(.plain)
                         Spacer()
                         Image("logo_fainance").resizable().scaledToFit().frame(width: 30, height: 30)
                     }
@@ -497,9 +1022,10 @@ private struct GoalWidgetView: View {
                         Text(icon).font(.system(size: 23))
                         Text(title).font(.system(size: 14, weight: .bold)).foregroundColor(textColor).lineLimit(1)
                         Spacer(minLength: 2)
-                        Link(destination: fainanceURL("fainance://widget-settings")) {
+                        Button(intent: OpenFainanceRouteIntent(route: "fainance://widget-settings")) {
                             Image(systemName: "gearshape.fill").font(.system(size: 13, weight: .bold)).foregroundColor(textColor)
                         }
+                        .buttonStyle(.plain)
                     }
                     if WidgetValue.bool(data, "showPercent", true) {
                         Text("\(percent)%")
@@ -826,6 +1352,43 @@ private struct DebtCreditsWidgetView: View {
     }
 }
 
+private struct ShareActionButton: View {
+    let route: String
+    let systemImage: String
+    let label: String
+    let color: Color
+    var compact = true
+
+    var body: some View {
+        Button(intent: OpenFainanceRouteIntent(route: route)) {
+            Group {
+                if compact {
+                    VStack(spacing: 2) {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 14, weight: .bold))
+                        Text(label)
+                            .font(.system(size: 9.5, weight: .bold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                    }
+                } else {
+                    HStack(spacing: 7) {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 15, weight: .bold))
+                        Text(label)
+                            .font(.system(size: 12, weight: .bold))
+                            .lineLimit(1)
+                    }
+                }
+            }
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(color, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 private struct ShareWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: FainanceWidgetEntry
@@ -836,82 +1399,214 @@ private struct ShareWidgetView: View {
         } else {
             let data = entry.data
             let projectId = WidgetValue.string(data, "projectId")
-            let projectParam = projectId.isEmpty ? "" : "?project=\(projectId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+            let encodedProject = projectId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+            let projectParam = projectId.isEmpty ? "" : "?project=\(encodedProject)"
             let currency = WidgetValue.string(data, "currency", "€")
             let titleColor = Color(hex: WidgetValue.string(data, "titleColor", "#FFFFFF"))
             let bodyColor = Color(hex: WidgetValue.string(data, "bodyColor", "#D8D6F2"))
             let activityColor = Color(hex: WidgetValue.string(data, "activityColor", "#378ADD"))
+            let expenseColor = Color(hex: WidgetValue.string(data, "accentColor", "#E24B4A"))
             let background = WidgetValue.string(data, "bgColor", "#1E1E30")
             let transparency = WidgetValue.int(data, "bgAlpha", 65)
+            let net = WidgetValue.double(data, "netAmount")
+            let owed = WidgetValue.double(data, "owedAmount")
+            let owe = WidgetValue.double(data, "oweAmount")
 
             ZStack {
                 FainanceBackground(hex: background, transparency: transparency)
-                VStack(spacing: 7) {
-                    WidgetHeader(title: "Share", subtitle: WidgetValue.string(data, "projectName", "Nessun progetto selezionato"), titleColor: titleColor, bodyColor: bodyColor)
-                    Link(destination: fainanceURL("fainance://open-share\(projectParam)")) {
-                        HStack(spacing: 9) {
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(WidgetText.text("Saldo")).font(.system(size: 10, weight: .semibold)).foregroundColor(bodyColor)
-                                Text(money(WidgetValue.double(data, "netAmount"), currency: currency)).font(.system(size: 18, weight: .heavy)).foregroundColor(titleColor).lineLimit(1)
+                VStack(spacing: family == .systemSmall ? 5 : 6) {
+                    WidgetHeader(
+                        title: "Share",
+                        subtitle: WidgetValue.string(data, "projectName", "Nessun progetto selezionato"),
+                        titleColor: titleColor,
+                        bodyColor: bodyColor
+                    )
+
+                    Button(intent: OpenFainanceRouteIntent(route: "fainance://open-share\(projectParam)")) {
+                        if family == .systemSmall {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(WidgetText.text("Saldo"))
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                    .foregroundColor(bodyColor)
+                                Text(money(net, currency: currency))
+                                    .font(.system(size: 21, weight: .heavy))
+                                    .foregroundColor(titleColor)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
+                                HStack(spacing: 5) {
+                                    Text("+ \(money(owed, currency: currency))")
+                                    Spacer(minLength: 1)
+                                    Text("− \(money(owe, currency: currency))")
+                                }
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(bodyColor)
                             }
-                            Spacer(minLength: 1)
-                            VStack(alignment: .trailing, spacing: 2) {
-                                Text("\(WidgetText.text("Ti devono")): \(money(WidgetValue.double(data, "owedAmount"), currency: currency))")
-                                Text("\(WidgetText.text("Devi")): \(money(WidgetValue.double(data, "oweAmount"), currency: currency))")
+                            .padding(9)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        } else {
+                            HStack(spacing: 10) {
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(WidgetText.text("Saldo"))
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundColor(bodyColor)
+                                    Text(money(net, currency: currency))
+                                        .font(.system(size: family == .systemLarge ? 22 : 18, weight: .heavy))
+                                        .foregroundColor(titleColor)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.75)
+                                }
+                                Spacer(minLength: 2)
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text("\(WidgetText.text("Ti devono")): \(money(owed, currency: currency))")
+                                    Text("\(WidgetText.text("Devi")): \(money(owe, currency: currency))")
+                                }
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .foregroundColor(bodyColor)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.72)
                             }
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundColor(bodyColor)
+                            .padding(8)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                         }
-                        .padding(8)
-                        .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                     }
-                    if family != .systemSmall {
+                    .buttonStyle(.plain)
+
+                    if family == .systemMedium {
                         HStack(spacing: 6) {
-                            ActionTile(url: "fainance://share-add-expense\(projectParam)", icon: "+", label: WidgetText.text("Uscita"), color: Color(hex: "#E24B4A"))
-                            ActionTile(url: "fainance://share-receipt\(projectParam)", icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"))
-                            ActionTile(url: "fainance://share-voice\(projectParam)", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
-                            ActionTile(url: "fainance://open-share\(projectParam)", icon: "↗", label: WidgetText.text("Attività"), color: activityColor)
+                            ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "plus", label: "Spesa", color: expenseColor)
+                            ShareActionButton(route: "fainance://share-receipt\(projectParam)", systemImage: "camera.fill", label: "Foto", color: Color(hex: "#F29F3D"))
+                            ShareActionButton(route: "fainance://share-voice\(projectParam)", systemImage: "mic.fill", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
+                            ShareActionButton(route: "fainance://open-share\(projectParam)", systemImage: "arrow.up.right", label: "Apri", color: activityColor)
                         }
-                        .frame(height: 38)
+                        .frame(height: 39)
+                    } else if family == .systemLarge {
+                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                            ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "plus", label: "Aggiungi spesa", color: expenseColor, compact: false)
+                                .frame(height: 45)
+                            ShareActionButton(route: "fainance://share-receipt\(projectParam)", systemImage: "camera.fill", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"), compact: false)
+                                .frame(height: 45)
+                            ShareActionButton(route: "fainance://share-voice\(projectParam)", systemImage: "mic.fill", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), compact: false)
+                                .frame(height: 45)
+                            ShareActionButton(route: "fainance://open-share\(projectParam)", systemImage: "arrow.up.right", label: WidgetText.text("Attività"), color: activityColor, compact: false)
+                                .frame(height: 45)
+                        }
                     }
-                    Text(WidgetValue.string(data, "lastActivity", "Nessuna attività recente"))
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundColor(bodyColor)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if family != .systemSmall {
+                        Text(WidgetValue.string(data, "lastActivity", "Nessuna attività recente"))
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundColor(bodyColor)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 .padding(9)
             }
+            .widgetURL(family == .systemSmall ? fainanceURL("fainance://open-share\(projectParam)") : nil)
             .fainanceContainerBackground(Color(hex: background))
         }
     }
 }
 
 private struct VoiceAssistantWidgetView: View {
+    @Environment(\.widgetFamily) private var family
     let entry: FainanceWidgetEntry
 
     var body: some View {
         if !entry.allowed {
             LockedWidgetView(type: "voiceAssistant", icon: "🎙")
         } else {
-            Link(destination: fainanceURL("fainance://open-voice?source=ios-widget&autostart=1")) {
-                ZStack(alignment: .bottomTrailing) {
+            Button(intent: OpenFainanceRouteIntent(route: "fainance://open-voice?source=ios-widget&autostart=1")) {
+                ZStack {
                     LinearGradient(colors: [Color(hex: "#F3F0FF"), Color(hex: "#DCD7FF")], startPoint: .topLeading, endPoint: .bottomTrailing)
-                    VStack(spacing: 2) {
-                        Image("ai_grillo_mascot_transparent").resizable().scaledToFit().frame(maxHeight: 75)
-                        Text(WidgetText.text("Assistente vocale"))
-                            .font(.system(size: 12, weight: .bold)).foregroundColor(Color(hex: "#292642")).lineLimit(1)
-                        Text(WidgetText.text("Tocca per parlare"))
-                            .font(.system(size: 9, weight: .medium)).foregroundColor(Color(hex: "#6A6682")).lineLimit(1)
+                    if family == .systemSmall {
+                        ZStack(alignment: .bottomTrailing) {
+                            VStack(spacing: 2) {
+                                Image("ai_grillo_mascot_transparent")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(maxHeight: 72)
+                                Text(WidgetText.text("Assistente vocale"))
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundColor(Color(hex: "#292642"))
+                                    .lineLimit(1)
+                                Text(WidgetText.text("Tocca per parlare"))
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundColor(Color(hex: "#6A6682"))
+                                    .lineLimit(1)
+                            }
+                            .padding(10)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 29, height: 29)
+                                .background(Color(hex: "#7F77DD"), in: Circle())
+                                .padding(8)
+                        }
+                    } else if family == .systemMedium {
+                        HStack(spacing: 12) {
+                            Image("ai_grillo_mascot_transparent")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxWidth: 112, maxHeight: 122)
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(WidgetText.text("Assistente vocale"))
+                                    .font(.system(size: 19, weight: .heavy))
+                                    .foregroundColor(Color(hex: "#292642"))
+                                    .lineLimit(1)
+                                Text(WidgetText.text("Tocca per parlare"))
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(Color(hex: "#6A6682"))
+                                HStack(spacing: 8) {
+                                    Image(systemName: "mic.fill")
+                                    Text(WidgetText.text("Voce"))
+                                }
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 18)
+                                .frame(height: 40)
+                                .background(Color(hex: "#7F77DD"), in: Capsule())
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .padding(16)
+                    } else {
+                        VStack(spacing: 10) {
+                            HStack {
+                                Image("logo_fainance").resizable().scaledToFit().frame(width: 34, height: 34)
+                                Text("fAInance")
+                                    .font(.system(size: 17, weight: .heavy))
+                                    .foregroundColor(Color(hex: "#292642"))
+                                Spacer()
+                            }
+                            Image("ai_grillo_mascot_transparent")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 175)
+                            Text(WidgetText.text("Assistente vocale"))
+                                .font(.system(size: 24, weight: .heavy))
+                                .foregroundColor(Color(hex: "#292642"))
+                            Text(WidgetText.text("Tocca per parlare"))
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Color(hex: "#6A6682"))
+                            HStack(spacing: 9) {
+                                Image(systemName: "mic.fill")
+                                Text(WidgetText.text("Assistente vocale"))
+                            }
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 46)
+                            .background(Color(hex: "#7F77DD"), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                        .padding(18)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 12, weight: .bold)).foregroundColor(.white)
-                        .frame(width: 27, height: 27)
-                        .background(Color(hex: "#7F77DD"), in: Circle())
-                        .padding(8)
                 }
             }
+            .buttonStyle(.plain)
             .fainanceContainerBackground(Color(hex: "#F3F0FF"))
         }
     }
@@ -930,7 +1625,7 @@ private struct QuickAddWidget: Widget {
 private struct FidelityWidget: Widget {
     let kind = FainanceWidgetKind.fidelity.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .fidelity)) { FidelityWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: FidelityWidgetConfigurationIntent.self, provider: FidelityAppIntentProvider()) { FidelityWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Fidelity card")
             .description("Mostra rapidamente la carta selezionata.")
             .supportedFamilies([.systemSmall, .systemMedium])
@@ -940,7 +1635,7 @@ private struct FidelityWidget: Widget {
 private struct ShoppingListWidget: Widget {
     let kind = FainanceWidgetKind.shoppingList.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .shoppingList)) { ShoppingListWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: ShoppingListWidgetConfigurationIntent.self, provider: ShoppingListAppIntentProvider()) { ShoppingListWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Lista spesa")
             .description("Controlla la lista e segna gli articoli acquistati.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
@@ -950,7 +1645,7 @@ private struct ShoppingListWidget: Widget {
 private struct NoteWidget: Widget {
     let kind = FainanceWidgetKind.note.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .note)) { NoteWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: NoteWidgetConfigurationIntent.self, provider: NoteAppIntentProvider()) { NoteWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Nota / Dati")
             .description("Mostra una nota, un IBAN o una carta di credito.")
             .supportedFamilies([.systemSmall, .systemMedium])
@@ -960,7 +1655,7 @@ private struct NoteWidget: Widget {
 private struct GoalWidget: Widget {
     let kind = FainanceWidgetKind.goal.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .goal)) { GoalWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: GoalWidgetConfigurationIntent.self, provider: GoalAppIntentProvider()) { GoalWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Obiettivo")
             .description("Mostra avanzamento, percentuale e importi.")
             .supportedFamilies([.systemSmall, .systemMedium])
@@ -970,7 +1665,7 @@ private struct GoalWidget: Widget {
 private struct DebtCreditsWidget: Widget {
     let kind = FainanceWidgetKind.debtCredits.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .debtCredits)) { DebtCreditsWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: DebtCreditsWidgetConfigurationIntent.self, provider: DebtCreditsAppIntentProvider()) { DebtCreditsWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Debiti / Crediti")
             .description("Mostra saldo e posizioni aperte.")
             .supportedFamilies([.systemMedium, .systemLarge])
@@ -983,14 +1678,14 @@ private struct VoiceAssistantWidget: Widget {
         StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .voiceAssistant)) { VoiceAssistantWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Assistente vocale")
             .description("Apri direttamente la conversazione vocale.")
-            .supportedFamilies([.systemSmall])
+            .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
 private struct ShareWidget: Widget {
     let kind = FainanceWidgetKind.share.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .share)) { ShareWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: ShareWidgetConfigurationIntent.self, provider: ShareAppIntentProvider()) { ShareWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Share")
             .description("Controlla il saldo del progetto e aggiungi spese.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
