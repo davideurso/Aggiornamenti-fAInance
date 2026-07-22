@@ -786,6 +786,20 @@ private struct WidgetSettingsButton: View {
     }
 }
 
+private struct StaticSettingsIcon: View {
+    let foregroundColor: Color
+    var compact = false
+
+    var body: some View {
+        Image(systemName: "gearshape.fill")
+            .font(.system(size: compact ? 11 : 13, weight: .bold))
+            .foregroundColor(foregroundColor)
+            .frame(width: compact ? 25 : 29, height: compact ? 25 : 29)
+            .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityLabel("Scegli contenuto widget")
+    }
+}
+
 private func money(_ value: Double, currency: String) -> String {
     let formatter = NumberFormatter()
     formatter.numberStyle = .decimal
@@ -825,11 +839,12 @@ private struct WidgetHeader: View {
 
     var body: some View {
         HStack(spacing: family == .systemSmall ? 5 : 7) {
-            Image("logo_fainance")
-                .resizable()
-                
-                .scaledToFit()
-                .frame(width: family == .systemSmall ? 25 : 29, height: family == .systemSmall ? 25 : 29)
+            if family != .systemSmall {
+                Image("logo_fainance")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 29, height: 29)
+            }
             VStack(alignment: .leading, spacing: 0) {
                 Text(title)
                     .font(.system(size: family == .systemSmall ? 11.5 : 13, weight: .bold))
@@ -876,31 +891,32 @@ private struct LockedWidgetView: View {
     let icon: String
 
     var body: some View {
-        RouteAction("fainance://open-plan-info") {
-            VStack(spacing: 7) {
-                HStack {
-                    Image("logo_fainance").resizable().scaledToFit().frame(width: 31, height: 31)
-                    Spacer()
-                    Text(icon).font(.system(size: 24))
-                }
-                Spacer(minLength: 0)
-                Text("\(WidgetText.text("Widget disponibile dal piano")) \(WidgetStore.requiredPlanLabel(type))")
-                    .font(.system(size: 13, weight: .bold))
+        VStack(spacing: 7) {
+            HStack {
+                Text("fAInance")
+                    .font(.system(size: 13, weight: .heavy))
                     .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(3)
-                Text(WidgetText.text("Apri fAInance per configurarlo"))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(Color.white.opacity(0.72))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                Spacer(minLength: 0)
+                Spacer()
+                Text(icon).font(.system(size: 24))
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(FainanceBackground(hex: "#1E1E30", transparency: 35))
+            Spacer(minLength: 0)
+            Text("\(WidgetText.text("Widget disponibile dal piano")) \(WidgetStore.requiredPlanLabel(type))")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+            Text(WidgetText.text("Apri fAInance per configurarlo"))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(Color.white.opacity(0.72))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            Spacer(minLength: 0)
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(FainanceBackground(hex: "#1E1E30", transparency: 35))
         .fainanceContainerBackground(Color(hex: "#1E1E30"))
+        .widgetURL(fainanceURL("fainance://open-plan-info"))
     }
 }
 
@@ -968,20 +984,18 @@ private struct QuickAddWidgetView: View {
             FainanceBackground(hex: background, transparency: transparency)
             if family == .systemSmall {
                 VStack(spacing: 6) {
-                    WidgetHeader(
-                        title: "fAInance",
-                        subtitle: nil,
-                        titleColor: .white,
-                        bodyColor: Color.white.opacity(0.75),
-                        settingsURL: "fainance://widget-settings?widget=quick",
-                        settingsWidgetType: "quick",
-                        showSettingsButton: true
-                    )
+                    HStack {
+                        Text("fAInance")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundColor(.white)
+                        Spacer(minLength: 2)
+                        StaticSettingsIcon(foregroundColor: .white, compact: true)
+                    }
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                        ActionTile(url: "fainance://add-expense", icon: "−", label: expense, color: expenseColor, vertical: true)
-                        ActionTile(url: "fainance://add-income", icon: "+", label: income, color: incomeColor, vertical: true)
-                        ActionTile(url: "fainance://open-voice?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), vertical: true)
-                        ActionTile(url: "fainance://open-receipt-camera", icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"), vertical: true)
+                        StaticActionTile(icon: "−", label: expense, color: expenseColor)
+                        StaticActionTile(icon: "+", label: income, color: incomeColor)
+                        StaticActionTile(icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
+                        StaticActionTile(icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"))
                     }
                 }
                 .padding(9)
@@ -1035,8 +1049,8 @@ private struct NoteWidgetView: View {
                         bodyColor: bodyColor,
                         settingsURL: "fainance://widget-settings?widget=note",
                         settingsWidgetType: "note",
-                        showSettingsButton: true,
-                        showStaticSettingsIcon: false
+                        showSettingsButton: family != .systemSmall,
+                        showStaticSettingsIcon: family == .systemSmall
                     )
                     Text(body)
                         .font(.system(size: CGFloat(max(10, min(family == .systemSmall ? 15 : 18, WidgetValue.int(data, "textSize", 14)))), weight: .medium))
@@ -1051,7 +1065,7 @@ private struct NoteWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .unredacted()
             .fainanceContainerBackground(Color(hex: background))
-            .widgetURL(fainanceURL("fainance://open-appunti"))
+            .widgetURL(fainanceURL(family == .systemSmall ? "fainance://widget-settings?widget=note" : "fainance://open-appunti"))
         }
     }
 }
@@ -1087,7 +1101,11 @@ private struct GoalWidgetView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
                         Spacer(minLength: 1)
-                        WidgetSettingsButton(widgetType: "goal", foregroundColor: textColor, compact: family == .systemSmall)
+                        if family == .systemSmall {
+                            StaticSettingsIcon(foregroundColor: textColor, compact: true)
+                        } else {
+                            WidgetSettingsButton(widgetType: "goal", foregroundColor: textColor)
+                        }
                     }
                     goalContent(percent: percent, saved: saved, target: target, currency: currency, accent: accent, textColor: textColor, percentColor: percentColor, data: data)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1097,7 +1115,7 @@ private struct GoalWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .unredacted()
             .fainanceContainerBackground(Color(hex: "#1E1E30"))
-            .widgetURL(fainanceURL("fainance://open-goals"))
+            .widgetURL(fainanceURL(family == .systemSmall ? "fainance://widget-settings?widget=goal" : "fainance://open-goals"))
         }
     }
 
@@ -1161,7 +1179,11 @@ private struct FidelityWidgetView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
                     Spacer(minLength: 1)
-                    WidgetSettingsButton(widgetType: "fidelity", foregroundColor: .white, compact: family == .systemSmall)
+                    if family == .systemSmall {
+                        StaticSettingsIcon(foregroundColor: .white, compact: true)
+                    } else {
+                        WidgetSettingsButton(widgetType: "fidelity", foregroundColor: .white)
+                    }
                 }
 
                 if code.isEmpty {
@@ -1180,7 +1202,11 @@ private struct FidelityWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .unredacted()
         .fainanceContainerBackground(Color(hex: accent))
-        .widgetURL(fainanceURL("fainance://open-fidelity-card?cardId=\(cardId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"))
+        .widgetURL(fainanceURL(
+            family == .systemSmall
+                ? "fainance://widget-settings?widget=fidelity"
+                : "fainance://open-fidelity-card?cardId=\(cardId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        ))
     }
 
     private func barcodeView(image: UIImage, isQR: Bool) -> some View {
@@ -1251,8 +1277,8 @@ private struct ShoppingListWidgetView: View {
                     bodyColor: textColor,
                     settingsURL: "fainance://widget-settings?widget=shoppingList",
                     settingsWidgetType: "shoppingList",
-                    showSettingsButton: true,
-                    showStaticSettingsIcon: false
+                    showSettingsButton: family != .systemSmall,
+                    showStaticSettingsIcon: family == .systemSmall
                 )
 
                 if items.isEmpty {
@@ -1293,7 +1319,11 @@ private struct ShoppingListWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .unredacted()
         .fainanceContainerBackground(Color(hex: "#1E1E30"))
-        .widgetURL(fainanceURL("fainance://open-shopping-list?listId=\(listId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"))
+        .widgetURL(fainanceURL(
+            family == .systemSmall
+                ? "fainance://widget-settings?widget=shoppingList"
+                : "fainance://open-shopping-list?listId=\(listId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        ))
     }
 }
 
@@ -1448,17 +1478,23 @@ private struct DebtCreditsWidgetView: View {
                 FainanceBackground(hex: "#1E1E30", transparency: transparency)
                 VStack(alignment: .leading, spacing: family == .systemSmall ? 4 : 5) {
                     HStack(spacing: 6) {
-                        Image("logo_fainance")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: family == .systemSmall ? 25 : 29, height: family == .systemSmall ? 25 : 29)
+                        if family != .systemSmall {
+                            Image("logo_fainance")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 29, height: 29)
+                        }
                         Text(WidgetValue.string(data, "title", WidgetText.text("Debiti / Crediti")))
                             .font(.system(size: family == .systemSmall ? 11.5 : 13, weight: .bold))
                             .foregroundColor(titleColor)
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
                         Spacer(minLength: 1)
-                        WidgetSettingsButton(widgetType: "debtCredits", foregroundColor: iconColor, compact: family == .systemSmall)
+                        if family == .systemSmall {
+                            StaticSettingsIcon(foregroundColor: iconColor, compact: true)
+                        } else {
+                            WidgetSettingsButton(widgetType: "debtCredits", foregroundColor: iconColor)
+                        }
                     }
 
                     Group {
@@ -1496,7 +1532,7 @@ private struct DebtCreditsWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .unredacted()
             .fainanceContainerBackground(Color(hex: "#1E1E30"))
-            .widgetURL(fainanceURL("fainance://open-debt-credits"))
+            .widgetURL(fainanceURL(family == .systemSmall ? "fainance://widget-settings?widget=debtCredits" : "fainance://open-debt-credits"))
         }
     }
 
@@ -1584,7 +1620,8 @@ private struct ShareWidgetView: View {
                         bodyColor: bodyColor,
                         settingsURL: "fainance://widget-settings?widget=share",
                         settingsWidgetType: "share",
-                        showSettingsButton: true
+                        showSettingsButton: family != .systemSmall,
+                        showStaticSettingsIcon: family == .systemSmall
                     )
 
                     if family == .systemSmall {
@@ -1623,7 +1660,11 @@ private struct ShareWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .unredacted()
             .fainanceContainerBackground(Color(hex: background))
-            .widgetURL(fainanceURL("fainance://open-share-project\(projectParam)"))
+            .widgetURL(fainanceURL(
+                family == .systemSmall
+                    ? "fainance://widget-settings?widget=share"
+                    : "fainance://open-share-project\(projectParam)"
+            ))
         }
     }
 
@@ -1689,30 +1730,29 @@ private struct VoiceAssistantWidgetView: View {
             ZStack {
                 LinearGradient(colors: [Color(hex: "#F3F0FF"), Color(hex: "#DCD7FF")], startPoint: .topLeading, endPoint: .bottomTrailing)
                 if family == .systemSmall {
-                    VStack(spacing: 7) {
+                    VStack(spacing: 4) {
                         ZStack {
                             Circle()
                                 .fill(Color.white.opacity(0.72))
-                                .frame(width: 70, height: 70)
+                                .frame(width: 52, height: 52)
                             Image("ai_grillo_mascot_transparent")
                                 .resizable()
-                                
                                 .scaledToFit()
-                                .frame(width: 54, height: 54)
+                                .frame(width: 36, height: 36)
                             Image(systemName: "mic.fill")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(.system(size: 9, weight: .bold))
                                 .foregroundColor(.white)
-                                .frame(width: 25, height: 25)
+                                .frame(width: 20, height: 20)
                                 .background(Color(hex: "#7F77DD"), in: Circle())
-                                .offset(x: 25, y: 25)
+                                .offset(x: 18, y: 18)
                         }
                         Text(WidgetText.text("Assistente vocale"))
-                            .font(.system(size: 11.5, weight: .bold))
+                            .font(.system(size: 10.5, weight: .bold))
                             .foregroundColor(Color(hex: "#292642"))
                             .lineLimit(2)
                             .multilineTextAlignment(.center)
                     }
-                    .padding(8)
+                    .padding(6)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if family == .systemMedium {
                     HStack(spacing: 12) {
