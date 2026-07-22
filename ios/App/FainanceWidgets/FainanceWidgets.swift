@@ -740,14 +740,6 @@ private extension View {
         }
     }
 
-    @ViewBuilder
-    func fainanceFullColorImage() -> some View {
-        if #available(iOSApplicationExtension 18.0, *) {
-            self.widgetAccentedRenderingMode(.fullColor)
-        } else {
-            self
-        }
-    }
 }
 
 private func fainanceURL(_ value: String) -> URL {
@@ -835,7 +827,7 @@ private struct WidgetHeader: View {
         HStack(spacing: family == .systemSmall ? 5 : 7) {
             Image("logo_fainance")
                 .resizable()
-                .fainanceFullColorImage()
+                
                 .scaledToFit()
                 .frame(width: family == .systemSmall ? 25 : 29, height: family == .systemSmall ? 25 : 29)
             VStack(alignment: .leading, spacing: 0) {
@@ -887,7 +879,7 @@ private struct LockedWidgetView: View {
         RouteAction("fainance://open-plan-info") {
             VStack(spacing: 7) {
                 HStack {
-                    Image("logo_fainance").resizable().fainanceFullColorImage().scaledToFit().frame(width: 31, height: 31)
+                    Image("logo_fainance").resizable().scaledToFit().frame(width: 31, height: 31)
                     Spacer()
                     Text(icon).font(.system(size: 24))
                 }
@@ -1198,7 +1190,7 @@ private struct FidelityWidgetView: View {
                     .fill(Color.white)
                 Image(uiImage: image)
                     .resizable()
-                    .fainanceFullColorImage()
+                    
                     .interpolation(.none)
                     .aspectRatio(contentMode: isQR ? .fit : .fill)
                     .frame(
@@ -1704,7 +1696,7 @@ private struct VoiceAssistantWidgetView: View {
                                 .frame(width: 70, height: 70)
                             Image("ai_grillo_mascot_transparent")
                                 .resizable()
-                                .fainanceFullColorImage()
+                                
                                 .scaledToFit()
                                 .frame(width: 54, height: 54)
                             Image(systemName: "mic.fill")
@@ -1726,7 +1718,7 @@ private struct VoiceAssistantWidgetView: View {
                     HStack(spacing: 12) {
                         Image("ai_grillo_mascot_transparent")
                             .resizable()
-                            .fainanceFullColorImage()
+                            
                             .scaledToFit()
                             .frame(maxWidth: 112, maxHeight: 122)
                         VStack(alignment: .leading, spacing: 7) {
@@ -1753,7 +1745,7 @@ private struct VoiceAssistantWidgetView: View {
                 } else {
                     VStack(spacing: 10) {
                         HStack {
-                            Image("logo_fainance").resizable().fainanceFullColorImage().scaledToFit().frame(width: 34, height: 34)
+                            Image("logo_fainance").resizable().scaledToFit().frame(width: 34, height: 34)
                             Text("fAInance")
                                 .font(.system(size: 17, weight: .heavy))
                                 .foregroundColor(Color(hex: "#292642"))
@@ -1761,7 +1753,7 @@ private struct VoiceAssistantWidgetView: View {
                         }
                         Image("ai_grillo_mascot_transparent")
                             .resizable()
-                            .fainanceFullColorImage()
+                            
                             .scaledToFit()
                             .frame(maxHeight: 175)
                         Text(WidgetText.text("Assistente vocale"))
@@ -1799,7 +1791,6 @@ private struct QuickAddWidget: Widget {
             .description("Aggiungi uscite, entrate, voce e scontrini.")
             .supportedFamilies([.systemSmall, .systemMedium])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
@@ -1811,7 +1802,6 @@ private struct FidelityWidget: Widget {
             .description("Mostra rapidamente la carta selezionata.")
             .supportedFamilies([.systemSmall, .systemMedium])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
@@ -1823,7 +1813,6 @@ private struct ShoppingListWidget: Widget {
             .description("Controlla la lista e segna gli articoli acquistati.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
@@ -1835,7 +1824,6 @@ private struct NoteWidget: Widget {
             .description("Mostra una nota, un IBAN o una carta di credito.")
             .supportedFamilies([.systemSmall, .systemMedium])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
@@ -1847,7 +1835,6 @@ private struct GoalWidget: Widget {
             .description("Mostra avanzamento, percentuale e importi.")
             .supportedFamilies([.systemSmall, .systemMedium])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
@@ -1859,7 +1846,6 @@ private struct DebtCreditsWidget: Widget {
             .description("Mostra saldo e posizioni aperte.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
@@ -1871,7 +1857,6 @@ private struct VoiceAssistantWidget: Widget {
             .description("Apri direttamente la conversazione vocale.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
@@ -1883,7 +1868,6 @@ private struct ShareWidget: Widget {
             .description("Controlla il saldo del progetto e aggiungi spese.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
     }
 }
 
