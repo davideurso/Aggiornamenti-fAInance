@@ -989,13 +989,12 @@ private struct QuickAddWidgetView: View {
                             .font(.system(size: 13, weight: .heavy))
                             .foregroundColor(.white)
                         Spacer(minLength: 2)
-                        StaticSettingsIcon(foregroundColor: .white, compact: true)
                     }
                     LazyVGrid(columns: [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)], spacing: 6) {
-                        StaticActionTile(icon: "−", label: expense, color: expenseColor)
-                        StaticActionTile(icon: "+", label: income, color: incomeColor)
-                        StaticActionTile(icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
-                        StaticActionTile(icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"))
+                        ActionTile(url: "fainance://add-expense", icon: "−", label: expense, color: expenseColor, vertical: true)
+                        ActionTile(url: "fainance://add-income", icon: "+", label: income, color: incomeColor, vertical: true)
+                        ActionTile(url: "fainance://open-receipt-camera", icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"), vertical: true)
+                        ActionTile(url: "fainance://open-voice?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), vertical: true)
                     }
                 }
                 .padding(9)
@@ -1009,8 +1008,8 @@ private struct QuickAddWidgetView: View {
                         ActionTile(url: "fainance://add-income", icon: "+", label: income, color: incomeColor)
                     }
                     HStack(spacing: 8) {
-                        ActionTile(url: "fainance://open-voice?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
                         ActionTile(url: "fainance://open-receipt-camera", icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"))
+                        ActionTile(url: "fainance://open-voice?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
                     }
                 }
                 .padding(10)
@@ -1019,7 +1018,6 @@ private struct QuickAddWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .unredacted()
         .fainanceContainerBackground(Color(hex: background))
-        .widgetURL(fainanceURL("fainance://open-quick-add"))
     }
 }
 
@@ -1101,11 +1099,6 @@ private struct GoalWidgetView: View {
                             .lineLimit(1)
                             .minimumScaleFactor(0.72)
                         Spacer(minLength: 1)
-                        if family == .systemSmall {
-                            StaticSettingsIcon(foregroundColor: textColor, compact: true)
-                        } else {
-                            WidgetSettingsButton(widgetType: "goal", foregroundColor: textColor)
-                        }
                     }
                     goalContent(percent: percent, saved: saved, target: target, currency: currency, accent: accent, textColor: textColor, percentColor: percentColor, data: data)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1115,8 +1108,15 @@ private struct GoalWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .unredacted()
             .fainanceContainerBackground(Color(hex: "#1E1E30"))
-            .widgetURL(fainanceURL(family == .systemSmall ? "fainance://widget-settings?widget=goal" : "fainance://open-goals"))
+            .widgetURL(fainanceURL(goalURL(data: data)))
         }
+    }
+
+    private func goalURL(data: [String: Any]) -> String {
+        let goalId = WidgetValue.string(data, "selectedGoalId", WidgetValue.string(data, "id"))
+        guard !goalId.isEmpty else { return "fainance://open-goals" }
+        let encoded = goalId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return "fainance://open-goal?goalId=\(encoded)"
     }
 
     private func goalContent(
@@ -1179,11 +1179,6 @@ private struct FidelityWidgetView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.65)
                     Spacer(minLength: 1)
-                    if family == .systemSmall {
-                        StaticSettingsIcon(foregroundColor: .white, compact: true)
-                    } else {
-                        WidgetSettingsButton(widgetType: "fidelity", foregroundColor: .white)
-                    }
                 }
 
                 if code.isEmpty {
@@ -1203,8 +1198,8 @@ private struct FidelityWidgetView: View {
         .unredacted()
         .fainanceContainerBackground(Color(hex: accent))
         .widgetURL(fainanceURL(
-            family == .systemSmall
-                ? "fainance://widget-settings?widget=fidelity"
+            cardId.isEmpty
+                ? "fainance://open-shopping"
                 : "fainance://open-fidelity-card?cardId=\(cardId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
         ))
     }
@@ -1602,7 +1597,7 @@ private struct ShareWidgetView: View {
             let currency = WidgetValue.string(data, "currency", "€")
             let titleColor = Color(hex: WidgetValue.string(data, "titleColor", "#FFFFFF"))
             let bodyColor = Color(hex: WidgetValue.string(data, "bodyColor", "#D8D6F2"))
-            let activityColor = Color(hex: WidgetValue.string(data, "activityColor", "#378ADD"))
+            let incomeColor = Color(hex: WidgetValue.string(data, "activityColor", "#1D9B6C"))
             let expenseColor = Color(hex: WidgetValue.string(data, "accentColor", "#E24B4A"))
             let background = WidgetValue.string(data, "bgColor", "#1E1E30")
             let transparency = WidgetValue.int(data, "bgAlpha", 65)
@@ -1620,8 +1615,8 @@ private struct ShareWidgetView: View {
                         bodyColor: bodyColor,
                         settingsURL: "fainance://widget-settings?widget=share",
                         settingsWidgetType: "share",
-                        showSettingsButton: family != .systemSmall,
-                        showStaticSettingsIcon: family == .systemSmall
+                        showSettingsButton: false,
+                        showStaticSettingsIcon: false
                     )
 
                     if family == .systemSmall {
@@ -1632,18 +1627,18 @@ private struct ShareWidgetView: View {
 
                     if family == .systemMedium {
                         HStack(spacing: 6) {
-                            ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "plus", label: "Spesa", color: expenseColor)
-                            ShareActionButton(route: "fainance://share-receipt\(projectParam)", systemImage: "camera.fill", label: "Foto", color: Color(hex: "#F29F3D"))
+                            ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "minus", label: WidgetText.text("Uscita"), color: expenseColor)
+                            ShareActionButton(route: "fainance://share-add-income\(projectParam)", systemImage: "plus", label: WidgetText.text("Entrata"), color: incomeColor)
+                            ShareActionButton(route: "fainance://share-receipt\(projectParam)", systemImage: "camera.fill", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"))
                             ShareActionButton(route: "fainance://share-voice\(projectParam)", systemImage: "mic.fill", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
-                            ShareActionButton(route: "fainance://open-share-project\(projectParam)", systemImage: "arrow.up.right", label: "Apri", color: activityColor)
                         }
                         .frame(height: 39)
                     } else if family == .systemLarge {
                         LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
-                            ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "plus", label: "Aggiungi spesa", color: expenseColor, compact: false).frame(height: 45)
+                            ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "minus", label: WidgetText.text("Uscita"), color: expenseColor, compact: false).frame(height: 45)
+                            ShareActionButton(route: "fainance://share-add-income\(projectParam)", systemImage: "plus", label: WidgetText.text("Entrata"), color: incomeColor, compact: false).frame(height: 45)
                             ShareActionButton(route: "fainance://share-receipt\(projectParam)", systemImage: "camera.fill", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"), compact: false).frame(height: 45)
                             ShareActionButton(route: "fainance://share-voice\(projectParam)", systemImage: "mic.fill", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), compact: false).frame(height: 45)
-                            ShareActionButton(route: "fainance://open-share-project\(projectParam)", systemImage: "arrow.up.right", label: "Apri", color: activityColor, compact: false).frame(height: 45)
                         }
                     }
 
@@ -1660,11 +1655,7 @@ private struct ShareWidgetView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .unredacted()
             .fainanceContainerBackground(Color(hex: background))
-            .widgetURL(fainanceURL(
-                family == .systemSmall
-                    ? "fainance://widget-settings?widget=share"
-                    : "fainance://open-share-project\(projectParam)"
-            ))
+            .widgetURL(fainanceURL("fainance://open-share-project\(projectParam)"))
         }
     }
 
@@ -1837,7 +1828,7 @@ private struct QuickAddWidget: Widget {
 private struct FidelityWidget: Widget {
     let kind = FainanceWidgetKind.fidelity.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .fidelity)) { FidelityWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: FidelityWidgetConfigurationIntent.self, provider: FidelityAppIntentProvider()) { FidelityWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Fidelity card")
             .description("Mostra rapidamente la carta selezionata.")
             .supportedFamilies([.systemSmall, .systemMedium])
@@ -1848,7 +1839,7 @@ private struct FidelityWidget: Widget {
 private struct ShoppingListWidget: Widget {
     let kind = FainanceWidgetKind.shoppingList.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .shoppingList)) { ShoppingListWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: ShoppingListWidgetConfigurationIntent.self, provider: ShoppingListAppIntentProvider()) { ShoppingListWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Lista spesa")
             .description("Controlla la lista e segna gli articoli acquistati.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
@@ -1859,7 +1850,7 @@ private struct ShoppingListWidget: Widget {
 private struct NoteWidget: Widget {
     let kind = FainanceWidgetKind.note.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .note)) { NoteWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: NoteWidgetConfigurationIntent.self, provider: NoteAppIntentProvider()) { NoteWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Nota / Dati")
             .description("Mostra una nota, un IBAN o una carta di credito.")
             .supportedFamilies([.systemSmall, .systemMedium])
@@ -1870,7 +1861,7 @@ private struct NoteWidget: Widget {
 private struct GoalWidget: Widget {
     let kind = FainanceWidgetKind.goal.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .goal)) { GoalWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: GoalWidgetConfigurationIntent.self, provider: GoalAppIntentProvider()) { GoalWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Obiettivo")
             .description("Mostra avanzamento, percentuale e importi.")
             .supportedFamilies([.systemSmall, .systemMedium])
@@ -1881,7 +1872,7 @@ private struct GoalWidget: Widget {
 private struct DebtCreditsWidget: Widget {
     let kind = FainanceWidgetKind.debtCredits.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .debtCredits)) { DebtCreditsWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: DebtCreditsWidgetConfigurationIntent.self, provider: DebtCreditsAppIntentProvider()) { DebtCreditsWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Debiti / Crediti")
             .description("Mostra saldo e posizioni aperte.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
@@ -1903,7 +1894,7 @@ private struct VoiceAssistantWidget: Widget {
 private struct ShareWidget: Widget {
     let kind = FainanceWidgetKind.share.rawValue
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: FainanceTimelineProvider(kind: .share)) { ShareWidgetView(entry: $0) }
+        AppIntentConfiguration(kind: kind, intent: ShareWidgetConfigurationIntent.self, provider: ShareAppIntentProvider()) { ShareWidgetView(entry: $0) }
             .configurationDisplayName("fAInance · Share")
             .description("Controlla il saldo del progetto e aggiungi spese.")
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
