@@ -25,7 +25,7 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APP_VERSION: "1.6.70"
-        IOS_BUILD_NUMBER: "190"
+        APP_STORE_APPLE_ID: "6777812477"
         VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -131,11 +131,23 @@ workflows:
             echo "Nessun Podfile trovato. Continuo senza pod install."
           fi
 
+      - name: Determine next iOS build number from TestFlight
+        script: |
+          set -euo pipefail
+
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID")
+          NEXT_BUILD=$((LATEST_BUILD + 1))
+
+          echo "Latest TestFlight build: $LATEST_BUILD"
+          echo "Next iOS build: $NEXT_BUILD"
+
+          echo "IOS_BUILD_NUMBER=$NEXT_BUILD" >> "$CM_ENV"
+
       - name: Set iOS version, build number, privacy permissions and encryption compliance
         script: |
           cd ios/App
 
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:-190}"
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
           echo "Using iOS marketing version: $APP_VERSION"
           echo "Using iOS build number: $BUILD_NUMBER"
 
@@ -184,11 +196,12 @@ workflows:
           xcrun agvtool new-version -all "$BUILD_NUMBER" || true
 
           python3 - <<'PY_VERSION'
+          import os
           import re
           from pathlib import Path
 
-          version = "1.6.70"
-          build = "189"
+          version = os.environ["APP_VERSION"]
+          build = os.environ["IOS_BUILD_NUMBER"]
           pbx = Path("App.xcodeproj/project.pbxproj")
           text = pbx.read_text(encoding="utf-8", errors="ignore")
           text = re.sub(r"CURRENT_PROJECT_VERSION = [^;]+;", f"CURRENT_PROJECT_VERSION = {build};", text)
@@ -360,7 +373,7 @@ workflows:
         script: |
           set -euo pipefail
 
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:-190}"
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
           EXPECTED_VERSION="${APP_VERSION:-1.6.70}"
           ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
           EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
