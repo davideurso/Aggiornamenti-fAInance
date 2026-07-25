@@ -1184,6 +1184,74 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var userId=currentUser.id;
   function userKey(key){return userId?"user_"+userId+"_"+key:"no_user_"+key;}
 
+  // Migrazione una tantum dei dati salvati dalle versioni che usavano chiavi
+  // locali non associate all'account. Senza questa copia, dopo l'aggiornamento
+  // una nuova build può mostrare Share (sincronizzato separatamente) ma non i
+  // movimenti personali ancora presenti nelle vecchie chiavi locali.
+  function migrateLegacyLocalStorageForUser(uid){
+    if(!uid||typeof localStorage==="undefined")return;
+    var prefix="user_"+uid+"_";
+    var marker=prefix+"legacy_account_storage_migrated_v1";
+    try{
+      if(localStorage.getItem(marker)==="1")return;
+      function hasContent(key){
+        var raw=localStorage.getItem(key);
+        if(raw==null||raw==="")return false;
+        try{
+          var value=JSON.parse(raw);
+          if(Array.isArray(value))return value.length>0;
+          if(value&&typeof value==="object")return Object.keys(value).length>0;
+          return value!==null&&value!==false&&value!=="";
+        }catch(e){return true;}
+      }
+      var meaningfulKeys=[
+        "exp_v10","inc_v10","rec_v10","debt_credits_v1",
+        "appunti_documents_v1","appunti_notes_v1","bank_coords_v1","credit_cards_v1",
+        "shopping_items_v1","shopping_cards_v1","share_projects_v1"
+      ];
+      var legacyHasData=meaningfulKeys.some(function(key){return hasContent(key);});
+      var scopedHasData=meaningfulKeys.some(function(key){return hasContent(prefix+key);});
+      if(!legacyHasData){
+        if(scopedHasData)localStorage.setItem(marker,"1");
+        return;
+      }
+      if(!scopedHasData){
+        var keys=[
+          "exp_v10","inc_v10","cats_v10","meth_v10","rec_v10","goals_v1","alerts_v1","budget_plan_v1",
+          "expense_groups_v1","income_groups_v1","method_groups_v1","custom_income_types_v1","income_type_overrides_v1",
+          "cat_order_v1","method_order_v1","cat_sort_mode","method_sort_mode","income_type_order_v1",
+          "default_expense_cat_v1","default_expense_method_v1","default_income_type_v1",
+          "default_expense_area_v1","default_income_area_v1","default_method_area_v1",
+          "history_future_mode_v1","history_sort_date_v1","history_sort_direction_v1",
+          "history_sort_secondary_v1","history_sort_secondary_direction_v1",
+          "patrimonio_values_v1","patrimonio_areas_v1","patrimonio_entries_v1","patrimonio_history_v1",
+          "patrimonio_notes_v1","patrimonio_mode_v1","appunti_documents_v1","appunti_notes_v1",
+          "bank_coords_v1","credit_cards_v1","share_projects_v1","share_receipt_uploads_v1","share_show_history_v1",
+          "debt_credits_v1","debt_credits_show_patrimonio_v1","debt_credits_show_expenses_v1",
+          "shopping_cards_v1","shopping_items_v1","shopping_lists_v2","shopping_deleted_records_v2",
+          "shopping_areas_v1","shopping_area_icons_v1","shopping_bought_color_v1",
+          "shopping_default_area_v1","shopping_product_sort_v1","shopping_active_list_id_v2",
+          "notif_prefs_v1","custom_notifs_v1","shown_alert_ids_v2","onboarding_guide_seen_v1",
+          "terms_accepted_v1","privacy_accepted_v1","legal_acceptance_date_v1",
+          "ai_chat_v1","ai_data_access_v1","ai_dismissed_v1","ai_floating_enabled_v1","ai_tab_v1",
+          "pref_bg","pref_btn_style","pref_cur","pref_datefmt","pref_exp_color","pref_inc_color",
+          "pref_first_day_week","pref_home_balance","pref_statsview","pref_confirm_color",
+          "pref_secondary_button_color_v1","pref_sec_cur","pref_sec_history","pref_sec_stats",
+          "pref_sec_budget","pref_sec_patrimonio","home_worklets_v1","pref_show_app_summary_header_v1",
+          "pref_mobile_nav_order_v1","pref_mobile_nav_icon_count_v1","pref_mobile_menu_order_v1",
+          "pref_mobile_all_nav_order_v1"
+        ];
+        keys.forEach(function(key){
+          var source=localStorage.getItem(key);
+          if(source!=null&&localStorage.getItem(prefix+key)==null)localStorage.setItem(prefix+key,source);
+        });
+        localStorage.setItem("fainance_legacy_account_storage_migrated_uid_v1",String(uid));
+      }
+      localStorage.setItem(marker,"1");
+    }catch(e){}
+  }
+  migrateLegacyLocalStorageForUser(userId);
+
   function ensureArrayValue(value,fallback){return Array.isArray(value)?value:(Array.isArray(fallback)?fallback:[]);}
   function ensureObjectValue(value,fallback){return value&&typeof value==="object"&&!Array.isArray(value)?value:(fallback||{});}
   function mergeArrayByStableId(cloud,local){
@@ -1956,7 +2024,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         var backfill:any={accountSyncSchemaVersion:2};var needsBackfill=false;
         var latestLocalExpenses=readUserLocalJson("exp_v10",localSnap.expenses);var latestLocalIncomes=readUserLocalJson("inc_v10",localSnap.incomes);var latestLocalRecurring=readUserLocalJson("rec_v10",localSnap.recurring);var latestLocalGoals=readUserLocalJson("goals_v1",localSnap.goals);var latestLocalAlerts=readUserLocalJson("alerts_v1",localSnap.alerts);var latestLocalDebtCredits=readUserLocalJson("debt_credits_v1",localSnap.debtCredits);var latestLocalAppuntiDocuments=readUserLocalJson("appunti_documents_v1",localSnap.appuntiDocuments);var latestLocalAppuntiNotes=readUserLocalJson("appunti_notes_v1",localSnap.appuntiNotes);var latestLocalBankCoords=readUserLocalJson("bank_coords_v1",localSnap.bankCoords);var latestLocalCreditCards=readUserLocalJson("credit_cards_v1",localSnap.creditCards);var latestLocalCustomNotifs=readUserLocalJson("custom_notifs_v1",localSnap.customNotifs);var latestLocalShareProjects=readUserLocalJson("share_projects_v1",localSnap.shareProjects);var latestLocalShareReceiptUploads=readUserLocalJson("share_receipt_uploads_v1",localSnap.shareReceiptUploads);var latestLocalExpenseGroups=readUserLocalJson("expense_groups_v1",localSnap.expenseGroups);var latestLocalIncomeGroups=readUserLocalJson("income_groups_v1",localSnap.incomeGroups);var latestLocalMethodGroups=readUserLocalJson("method_groups_v1",localSnap.methodGroups);var latestLocalCustomIncomeTypes=readUserLocalJson("custom_income_types_v1",localSnap.customIncomeTypes);var latestLocalIncomeTypeOverrides=readUserLocalJson("income_type_overrides_v1",localSnap.incomeTypeOverrides);var latestLocalPatrimonioValues=readUserLocalJson("patrimonio_values_v1",localSnap.patrimonioValues);var latestLocalPatrimonioAreas=readUserLocalJson("patrimonio_areas_v1",localSnap.patrimonioAreas);var latestLocalPatrimonioEntries=readUserLocalJson("patrimonio_entries_v1",localSnap.patrimonioEntries);var latestLocalPatrimonioHistory=readUserLocalJson("patrimonio_history_v1",localSnap.patrimonioHistory);var latestLocalPatrimonioNotes=readUserLocalJson("patrimonio_notes_v1",localSnap.patrimonioNotes);var latestLocalCats=readUserLocalJson("cats_v10",localSnap.cats);var latestLocalMethods=readUserLocalJson("meth_v10",localSnap.methods);
         var localCatsTs=readUserLocalUpdatedAt("cats"),localMethodsTs=readUserLocalUpdatedAt("methods"),cloudCatsTs=Number(d.catsUpdatedAt||0),cloudMethodsTs=Number(d.methodsUpdatedAt||0);var preferLocalCats=localCatsTs>cloudCatsTs,preferLocalMethods=localMethodsTs>cloudMethodsTs;
-        var mergedExpenses=isFirstSnapshot?mergeArrayByStableId(Array.isArray(d.expenses)?d.expenses:[],latestLocalExpenses):(Array.isArray(d.expenses)?d.expenses:[]);var mergedIncomes=isFirstSnapshot?mergeArrayByStableId(Array.isArray(d.incomes)?d.incomes:[],latestLocalIncomes):(Array.isArray(d.incomes)?d.incomes:[]);var mergedRecurring=isFirstSnapshot?mergeArrayByStableId(Array.isArray(d.recurring)?d.recurring:[],latestLocalRecurring):(Array.isArray(d.recurring)?d.recurring:[]);
+        var cloudExpenses=Array.isArray(d.expenses)?d.expenses:[];var cloudIncomes=Array.isArray(d.incomes)?d.incomes:[];var cloudRecurring=Array.isArray(d.recurring)?d.recurring:[];
+        var mergedExpenses=isFirstSnapshot?mergeArrayByStableId(cloudExpenses,latestLocalExpenses):cloudExpenses;var mergedIncomes=isFirstSnapshot?mergeArrayByStableId(cloudIncomes,latestLocalIncomes):cloudIncomes;var mergedRecurring=isFirstSnapshot?mergeArrayByStableId(cloudRecurring,latestLocalRecurring):cloudRecurring;
+        if(isFirstSnapshot&&!syncJsonEqual(cloudExpenses,mergedExpenses)){backfill.expenses=mergedExpenses;needsBackfill=true;}if(isFirstSnapshot&&!syncJsonEqual(cloudIncomes,mergedIncomes)){backfill.incomes=mergedIncomes;needsBackfill=true;}if(isFirstSnapshot&&!syncJsonEqual(cloudRecurring,mergedRecurring)){backfill.recurring=mergedRecurring;needsBackfill=true;}
         var mergedCats=compactProtectedArray(mergeProtectedArrayByStableId(Array.isArray(d.cats)?d.cats:[],latestLocalCats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES,preferLocalCats),DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES);var mergedMethods=ensureReferencedMethods(mergeProtectedArrayByStableId(Array.isArray(d.methods)?d.methods:[],latestLocalMethods,DEFAULT_METHODS,DEFAULT_METHOD_NAMES,preferLocalMethods),mergedExpenses,mergedRecurring);
         setExpenses(mergedExpenses);setIncomes(mergedIncomes);setRecurring(mergedRecurring);setCats(mergedCats);setMethods(mergedMethods);setGoals(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.goals)?d.goals:[],latestLocalGoals):(Array.isArray(d.goals)?d.goals:localSnap.goals));setAlerts(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.alerts)?d.alerts:[],latestLocalAlerts):(Array.isArray(d.alerts)?d.alerts:localSnap.alerts));setBudgetPlan(preserveLatestLocalOnFirst?readUserLocalJson("budget_plan_v1",localSnap.budgetPlan):(d.budgetPlan!==undefined?d.budgetPlan:localSnap.budgetPlan));setExpenseGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.expenseGroups)?d.expenseGroups:[],latestLocalExpenseGroups):chooseCloudLocalArray(d.expenseGroups,localSnap.expenseGroups,DEFAULT_EXPENSE_GROUPS,false));setIncomeGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.incomeGroups)?d.incomeGroups:[],latestLocalIncomeGroups):chooseCloudLocalArray(d.incomeGroups,localSnap.incomeGroups,DEFAULT_INCOME_GROUPS,false));setMethodGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.methodGroups)?d.methodGroups:[],latestLocalMethodGroups):chooseCloudLocalArray(d.methodGroups,localSnap.methodGroups,DEFAULT_METHOD_GROUPS,false));setCustomIncomeTypes(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.customIncomeTypes)?d.customIncomeTypes:[],latestLocalCustomIncomeTypes):chooseCloudLocalArray(d.customIncomeTypes,localSnap.customIncomeTypes,[],true));setIncomeTypeOverrides(preserveLatestLocalOnFirst?{...ensureObjectValue(d.incomeTypeOverrides,{}),...ensureObjectValue(latestLocalIncomeTypeOverrides,{})}:chooseCloudLocalObject(d.incomeTypeOverrides,localSnap.incomeTypeOverrides,{}));
 
@@ -2364,6 +2434,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       openPlanInfo();
       return;
     }
+    if(url.indexOf("open-ai-assistant")>=0||url.indexOf("widget-ai-voice")>=0){
+      setTab("consulenteAI");
+      setAiTab("chat");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      setTimeout(function(){openVoiceModal(true,true);},80);
+      return;
+    }
     if(url.indexOf("open-receipt-camera")>=0||url.indexOf("receipt-camera")>=0){
       try{localStorage.setItem("fainance_receipt_auto_camera_once","1");}catch(e){}
       setTab("spese");
@@ -2382,10 +2460,11 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(url.indexOf("share-voice")>=0){
       if(shareProjectId)setShareSelectedProjectId(String(shareProjectId));
       try{localStorage.setItem("fainance_voice_share_context_v1",JSON.stringify({projectId:String(shareProjectId||""),ts:Date.now()}));}catch(e){}
-      setTab("voice");
+      setTab("consulenteAI");
+      setAiTab("chat");
       setSettingsPage(null);
       setMobileMenu(false);
-      setTimeout(function(){openVoiceModal();},80);
+      setTimeout(function(){openVoiceModal(true,true);},80);
       return;
     }
     if(url.indexOf("share-add-expense")>=0||url.indexOf("share-add-income")>=0||url.indexOf("share-receipt")>=0){
@@ -3511,12 +3590,19 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [voiceError,setVoiceError]=useState("");
   var [voiceConfirm,setVoiceConfirm]=useState(null);
   var [voiceSaving,setVoiceSaving]=useState(false);
-  function openVoiceModal(autoStart?:any){
+  function openVoiceModal(autoStart?:any,assistantOnly?:any){
     var realtimeAllowed=currentPlan==="base"||currentPlan==="premium";
+    if(assistantOnly&&!realtimeAllowed){
+      setTab("consulenteAI");
+      setAiTab("chat");
+      setVoiceModal(false);
+      setToast({text:translateUiRuntimeText("L’assistente vocale AI è disponibile dal piano Base."),type:"warning",color:"#EF9F27",icon:"🔒"});
+      return false;
+    }
     try{
       if(realtimeAllowed&&autoStart!==false)localStorage.setItem("fainance_voice_realtime_autostart_once","1");
       else localStorage.removeItem("fainance_voice_realtime_autostart_once");
-      if(!realtimeAllowed)localStorage.setItem("fainance_voice_quick_mode_once","1");
+      if(!realtimeAllowed&&!assistantOnly)localStorage.setItem("fainance_voice_quick_mode_once","1");
       else localStorage.removeItem("fainance_voice_quick_mode_once");
     }catch(e){}
     setVoiceModal(true);setVoiceText("");setVoiceParsed(null);setVoiceError("");setVoiceListening(false);return true;

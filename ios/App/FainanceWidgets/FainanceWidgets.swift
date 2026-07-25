@@ -994,7 +994,7 @@ private struct QuickAddWidgetView: View {
                         ActionTile(url: "fainance://add-expense", icon: "−", label: expense, color: expenseColor, vertical: true)
                         ActionTile(url: "fainance://add-income", icon: "+", label: income, color: incomeColor, vertical: true)
                         ActionTile(url: "fainance://open-receipt-camera", icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"), vertical: true)
-                        ActionTile(url: "fainance://open-voice?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), vertical: true)
+                        ActionTile(url: "fainance://open-ai-assistant?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), vertical: true)
                     }
                 }
                 .padding(9)
@@ -1009,7 +1009,7 @@ private struct QuickAddWidgetView: View {
                     }
                     HStack(spacing: 8) {
                         ActionTile(url: "fainance://open-receipt-camera", icon: "📷", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"))
-                        ActionTile(url: "fainance://open-voice?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
+                        ActionTile(url: "fainance://open-ai-assistant?source=ios-widget&autostart=1", icon: "🎙", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
                     }
                 }
                 .padding(10)
@@ -1597,7 +1597,6 @@ private struct ShareWidgetView: View {
             let currency = WidgetValue.string(data, "currency", "€")
             let titleColor = Color(hex: WidgetValue.string(data, "titleColor", "#FFFFFF"))
             let bodyColor = Color(hex: WidgetValue.string(data, "bodyColor", "#D8D6F2"))
-            let incomeColor = Color(hex: WidgetValue.string(data, "activityColor", "#1D9B6C"))
             let expenseColor = Color(hex: WidgetValue.string(data, "accentColor", "#E24B4A"))
             let background = WidgetValue.string(data, "bgColor", "#1E1E30")
             let transparency = WidgetValue.int(data, "bgAlpha", 65)
@@ -1628,15 +1627,17 @@ private struct ShareWidgetView: View {
                     if family == .systemMedium {
                         HStack(spacing: 6) {
                             ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "minus", label: WidgetText.text("Uscita"), color: expenseColor)
-                            ShareActionButton(route: "fainance://share-add-income\(projectParam)", systemImage: "plus", label: WidgetText.text("Entrata"), color: incomeColor)
                             ShareActionButton(route: "fainance://share-receipt\(projectParam)", systemImage: "camera.fill", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"))
                             ShareActionButton(route: "fainance://share-voice\(projectParam)", systemImage: "mic.fill", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"))
                         }
                         .frame(height: 39)
                     } else if family == .systemLarge {
-                        LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                        LazyVGrid(columns: [
+                            GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8),
+                            GridItem(.flexible(), spacing: 8)
+                        ], spacing: 8) {
                             ShareActionButton(route: "fainance://share-add-expense\(projectParam)", systemImage: "minus", label: WidgetText.text("Uscita"), color: expenseColor, compact: false).frame(height: 45)
-                            ShareActionButton(route: "fainance://share-add-income\(projectParam)", systemImage: "plus", label: WidgetText.text("Entrata"), color: incomeColor, compact: false).frame(height: 45)
                             ShareActionButton(route: "fainance://share-receipt\(projectParam)", systemImage: "camera.fill", label: WidgetText.text("Scontrino"), color: Color(hex: "#F29F3D"), compact: false).frame(height: 45)
                             ShareActionButton(route: "fainance://share-voice\(projectParam)", systemImage: "mic.fill", label: WidgetText.text("Voce"), color: Color(hex: "#7F77DD"), compact: false).frame(height: 45)
                         }
