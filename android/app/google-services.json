@@ -105,7 +105,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:739607555867:android:71344953299eec66cd6dbe",
         "android_client_info": {
-          "package_name": "it.fainanceapp.app.test"
+          "package_name": "it.fainanceapp.app"
         }
       },
       "oauth_client": [
@@ -113,7 +113,7 @@
           "client_id": "739607555867-6np9in0mlj7b7ro1e6lbhijha7k40bhv.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "it.fainanceapp.app.test",
+            "package_name": "it.fainanceapp.app",
             "certificate_hash": "901de57ff8d9c12e182db8ae895a43e6a4281247"
           }
         },

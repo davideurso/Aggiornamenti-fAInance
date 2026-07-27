@@ -30,6 +30,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(FainanceAppUpdatePlugin.class);
         registerPlugin(FainanceAudioPlugin.class);
         registerPlugin(FainanceFilePlugin.class);
+        registerPlugin(FainanceMetaEventsPlugin.class);
         registerPlugin(BiometricAuthNative.class);
         super.onCreate(savedInstanceState);
 

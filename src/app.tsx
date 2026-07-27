@@ -57,6 +57,77 @@ function FAI_TRANSLATE(value:any){
 function L(value:any){return FAI_TRANSLATE(value);}
 function PL(value:any){return FAI_TRANSLATE(value);}
 
+// Notifications are kept in a small external store so showing/hiding a toast
+// never rerenders App and never resets a form that the user is editing.
+var FAINANCE_TOAST_CURRENT:any=null;
+var FAINANCE_TOAST_LISTENERS=new Set<any>();
+function publishFainanceToast(value:any){
+  FAINANCE_TOAST_CURRENT=value;
+  FAINANCE_TOAST_LISTENERS.forEach(function(listener){try{listener(value);}catch(e){}});
+}
+function GlobalToastHost(){
+  var [value,setValue]=useState<any>(FAINANCE_TOAST_CURRENT);
+  useEffect(function(){
+    function listener(next:any){setValue(next);}
+    FAINANCE_TOAST_LISTENERS.add(listener);
+    return function(){FAINANCE_TOAST_LISTENERS.delete(listener);};
+  },[]);
+  return value?<Toast key={(value&&value.id)||String(value)} msg={value} onDone={function(){publishFainanceToast(null);}}/>:null;
+}
+
+// Numeric fields across the whole app automatically select the current reference
+// value when they receive focus (tap, click or Tab). The first typed digit therefore
+// replaces it immediately, without requiring the user to delete it manually.
+function GlobalNumericInputAssist(){
+  useEffect(function(){
+    function isNumericInput(target:any){
+      if(!target||String(target.tagName||'').toLowerCase()!=='input')return false;
+      if(target.disabled||target.readOnly)return false;
+      var type=String(target.getAttribute('type')||'text').toLowerCase();
+      var mode=String(target.getAttribute('inputmode')||'').toLowerCase();
+      if(type==='password'||type==='date'||type==='time'||type==='datetime-local'||type==='month'||type==='week'||type==='tel')return false;
+      return type==='number'||mode==='numeric'||mode==='decimal';
+    }
+    function selectNumericValue(event:any){
+      var el=event&&event.target;
+      if(!isNumericInput(el))return;
+      try{
+        setTimeout(function(){
+          try{
+            if(document.activeElement!==el)return;
+            if(typeof el.select==='function')el.select();
+          }catch(_e){}
+        },0);
+      }catch(_e){}
+    }
+    document.addEventListener('focusin',selectNumericValue,true);
+    return function(){document.removeEventListener('focusin',selectNumericValue,true);};
+  },[]);
+  return null;
+}
+
+function StableCurrencyPicker({value,onChange,exclude,allowNone,dark,textC,subC,borderC,translate}:any){
+  var [query,setQuery]=useState("");
+  var inputRef=useRef<any>(null);
+  var Lc=typeof translate==="function"?translate:function(v){return v;};
+  var normalized=String(query||"").toLowerCase().trim();
+  var list=useMemo(function(){
+    return CURRENCIES.filter(function(c){
+      if(exclude&&c.code===exclude)return false;
+      if(!normalized)return true;
+      return c.code.toLowerCase().indexOf(normalized)>=0||String(c.name||"").toLowerCase().indexOf(normalized)>=0||String(c.symbol||"").toLowerCase().indexOf(normalized)>=0;
+    }).slice(0,180);
+  },[normalized,exclude]);
+  var fieldStyle={width:"100%",borderRadius:12,border:"1px solid "+borderC,padding:"11px 12px",fontSize:13,background:dark?"#252535":"#fff",color:textC,boxSizing:"border-box",outline:"none"};
+  return <div onPointerDown={function(e){e.stopPropagation();}} onClick={function(e){e.stopPropagation();}} style={{display:"flex",flexDirection:"column",gap:8,position:"relative"}}>
+    <input ref={inputRef} autoComplete="off" inputMode="search" placeholder={Lc("Cerca valuta, es. euro, dollaro, yen...")} value={query} onChange={function(e){setQuery(e.currentTarget.value);}} onKeyDown={function(e){e.stopPropagation();}} style={fieldStyle}/>
+    <select value={value||""} onChange={function(e){onChange(e.currentTarget.value);}} style={fieldStyle}>
+      {allowNone&&<option value="">{Lc("Nessuna")}</option>}
+      {list.map(function(c){return <option key={c.code} value={c.code}>{c.symbol} {c.code} — {c.name}</option>;})}
+    </select>
+    <div style={{fontSize:11,color:subC}}>{list.length} {Lc("valute mostrate")}{normalized?Lc(" per la ricerca"):""}.</div>
+  </div>;
+}
 
 function focusFainanceInput(ref:any, delay?:number){
   try{
@@ -106,6 +177,17 @@ function fainanceIsNativePlatform(){
   }catch(e){}
   return false;
 }
+function fainanceMetaEventsPlugin(){
+  try{var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;return cap&&cap.Plugins?cap.Plugins.FainanceMetaEvents:null;}catch(e){return null;}
+}
+function fainanceSetMetaEventsConsent(granted:boolean){
+  try{var plugin=fainanceMetaEventsPlugin();if(plugin&&plugin.setConsent)return Promise.resolve(plugin.setConsent({granted:!!granted}));}catch(e){}
+  return Promise.resolve(null);
+}
+function fainanceLogMetaEvent(name:string,value?:number,params?:any){
+  try{var plugin=fainanceMetaEventsPlugin();if(plugin&&plugin.logEvent)return Promise.resolve(plugin.logEvent({name:String(name||""),value:typeof value==="number"?value:undefined,params:params||{}}));}catch(e){}
+  return Promise.resolve(null);
+}
 function fainanceBasicUserPayload(user:any,fallbackName?:string){
   user=user||{};
   return {id:user.uid||user.id||"",email:String(user.email||"").toLowerCase(),name:user.displayName||user.name||fallbackName||"Utente"};
@@ -113,6 +195,88 @@ function fainanceBasicUserPayload(user:any,fallbackName?:string){
 function fainanceMinimalAuthUser(payload:any){
   payload=payload||{};
   return {uid:payload.uid||payload.id||"",email:payload.email||"",displayName:payload.displayName||payload.name||"Utente"};
+}
+
+const FAINANCE_SENSITIVE_STORAGE_PREFIX="fainance_sensitive_v2:";
+function fainanceBytesToBase64(bytes:any){
+  var out="";var chunk=0x8000;
+  for(var i=0;i<bytes.length;i+=chunk)out+=String.fromCharCode.apply(null,Array.from(bytes.subarray(i,Math.min(i+chunk,bytes.length))));
+  return btoa(out);
+}
+function fainanceBase64ToBytes(value:string){
+  var raw=atob(String(value||""));var out=new Uint8Array(raw.length);
+  for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+async function fainanceDeriveSensitiveKey(uid:string){
+  if(!uid)throw new Error("Identificativo account mancante.");
+  if(typeof crypto==="undefined"||!crypto.subtle)throw new Error("Cifratura non disponibile su questo dispositivo.");
+  var enc=new TextEncoder();
+  var material=await crypto.subtle.importKey("raw",enc.encode("fainance_sensitive_"+uid),"PBKDF2",false,["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_sensitive_salt_v2"),iterations:150000,hash:"SHA-256"},material,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+}
+async function fainanceEncryptSensitiveData(data:any,uid:string){
+  var key=await fainanceDeriveSensitiveKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();
+  var encrypted=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data==null?[]:data)));
+  var payload=new Uint8Array(iv.length+encrypted.byteLength);payload.set(iv,0);payload.set(new Uint8Array(encrypted),iv.length);
+  return FAINANCE_SENSITIVE_STORAGE_PREFIX+fainanceBytesToBase64(payload);
+}
+async function fainanceDecryptSensitiveData(value:any,uid:string){
+  if(Array.isArray(value))return value;
+  if(value==null||value==="")return [];
+  if(typeof value!=="string")throw new Error("Formato dati sensibili non valido.");
+  var encoded=value.indexOf(FAINANCE_SENSITIVE_STORAGE_PREFIX)===0?value.slice(FAINANCE_SENSITIVE_STORAGE_PREFIX.length):value;
+  var payload=fainanceBase64ToBytes(encoded);
+  if(payload.length<=12)throw new Error("Dati cifrati non validi.");
+  var iv=payload.slice(0,12),cipher=payload.slice(12);var key=await fainanceDeriveSensitiveKey(uid);
+  var decrypted=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,cipher);
+  var parsed=JSON.parse(new TextDecoder().decode(decrypted));
+  if(!Array.isArray(parsed))throw new Error("Contenuto cifrato non valido.");
+  return parsed;
+}
+function syncJsonStableEqual(a:any,b:any){try{return JSON.stringify(a)===JSON.stringify(b);}catch(e){return false;}}
+function fainanceDispatchStorageWrite(key:string){
+  try{
+    if(typeof window!=="undefined"&&window.dispatchEvent){
+      var ev:any;try{ev=new CustomEvent("fainance-storage-write",{detail:{key:key}});}catch(_e){ev=new Event("fainance-storage-write");ev.detail={key:key};}
+      window.dispatchEvent(ev);
+    }
+  }catch(e){}
+}
+function useFainanceSensitiveStorage(key:string,dv:any,uid:string){
+  var [value,setValue]=useState(Array.isArray(dv)?dv:[]);var [ready,setReady]=useState(false);var writeRevision=useRef(0);
+  useEffect(function(){
+    var cancelled=false;setReady(false);writeRevision.current++;
+    (async function(){
+      try{
+        var raw=localStorage.getItem(key);
+        if(raw==null||raw===""){if(!cancelled)setValue(Array.isArray(dv)?dv:[]);return;}
+        var stored:any;try{stored=JSON.parse(raw);}catch(e){stored=raw;}
+        var decoded=await fainanceDecryptSensitiveData(stored,uid);
+        if(cancelled)return;
+        setValue(decoded);
+        if(Array.isArray(stored)){
+          var upgraded=await fainanceEncryptSensitiveData(decoded,uid);
+          if(!cancelled)localStorage.setItem(key,JSON.stringify(upgraded));
+        }
+      }catch(e){
+        console.error("Sensitive local storage read error",key,(e&&e.message)||e);
+        if(!cancelled)setValue(Array.isArray(dv)?dv:[]);
+      }finally{if(!cancelled)setReady(true);}
+    })();
+    return function(){cancelled=true;};
+  },[key,uid]);
+  var save=useCallback(function(next:any){
+    setValue(function(prev:any){
+      var resolved=typeof next==="function"?next(prev):next;var safe=Array.isArray(resolved)?resolved:[];if(syncJsonStableEqual(prev,safe))return prev;var revision=++writeRevision.current;
+      fainanceEncryptSensitiveData(safe,uid).then(function(encrypted){
+        if(revision!==writeRevision.current)return;
+        localStorage.setItem(key,JSON.stringify(encrypted));fainanceDispatchStorageWrite(key);
+      }).catch(function(err){console.error("Sensitive local storage write blocked",key,(err&&err.message)||err);});
+      return safe;
+    });
+  },[key,uid]);
+  return [value,save,ready];
 }
 
 async function getFainanceContactsPlugin(){
@@ -615,13 +779,13 @@ function LoginScreen({onLogin}){
           {mode==="register"&&<div><label style={{fontSize:12,color:"#888",display:"block",marginBottom:4}}>{L("Conferma password")} *</label><input type={showPwd?"text":"password"} placeholder={L("Ripeti password")} value={confirmPwd} onChange={function(e){setConfirmPwd(e.target.value);}} style={inp}/></div>}
           {mode==="login"&&<button onClick={function(){setResetOpen(!resetOpen);setResetSent(false);setError("");setResetEmail(email||"");}} disabled={loading} style={{background:"none",border:"none",padding:0,alignSelf:"flex-end",fontSize:12,color:"#7F77DD",fontWeight:700,cursor:loading?"not-allowed":"pointer"}}>{L("Password dimenticata?")}</button>}
           {mode==="login"&&resetOpen&&<div style={{background:"linear-gradient(135deg,#f0edff,#e8f4ff)",border:"1px solid rgba(127,119,221,0.25)",borderRadius:18,padding:16,boxShadow:"0 6px 20px rgba(127,119,221,0.12)",display:"flex",flexDirection:"column",gap:10}}>
-            <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:34,height:34,borderRadius:12,background:"linear-gradient(135deg,#7F77DD,#378ADD)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:17}}>🔐</div><div><div style={{fontSize:14,fontWeight:800,color:"#534AB7"}}>{L("Recupera password")}</div><div style={{fontSize:11,color:"#777",marginTop:2}}>{L("Ti invieremo un link sicuro per reimpostarla.")}</div></div></div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:34,height:34,borderRadius:12,background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:17}}>🔐</div><div><div style={{fontSize:14,fontWeight:800,color:"#534AB7"}}>{L("Recupera password")}</div><div style={{fontSize:11,color:"#777",marginTop:2}}>{L("Ti invieremo un link sicuro per reimpostarla.")}</div></div></div>
             <div><label style={{fontSize:12,color:"#777",display:"block",marginBottom:4}}>{L("Email dell’account")}</label><input type="email" value={resetEmail} onChange={function(e){setResetEmail(e.target.value);}} placeholder={L("nome@email.com")} style={{...inp,background:"#fff",border:"1px solid rgba(127,119,221,0.25)"}}/></div>
-            <div style={{display:"flex",gap:8}}><button onClick={doResetPassword} disabled={loading} style={{flex:1,background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:800,cursor:loading?"not-allowed":"pointer",opacity:loading?0.65:1}}>{loading?L("Invio..."):L("Invia email di recupero")}</button><button onClick={function(){setResetOpen(false);setResetSent(false);setError("");}} disabled={loading} style={{background:"#fff",color:"#666",border:"1px solid #e0e0e0",borderRadius:12,padding:"11px 13px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{L("Annulla")}</button></div>
+            <div style={{display:"flex",gap:8}}><button onClick={doResetPassword} disabled={loading} style={{flex:1,background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:12,padding:"11px",fontSize:13,fontWeight:800,cursor:loading?"not-allowed":"pointer",opacity:loading?0.65:1}}>{loading?L("Invio..."):L("Invia email di recupero")}</button><button onClick={function(){setResetOpen(false);setResetSent(false);setError("");}} disabled={loading} style={{background:"#fff",color:"#666",border:"1px solid #e0e0e0",borderRadius:12,padding:"11px 13px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{L("Annulla")}</button></div>
           </div>}
           {resetSent&&<div style={{background:"#e8f8f0",borderRadius:12,padding:"12px 14px",fontSize:13,color:"#1D9E75",border:"1px solid #a8e6c8",lineHeight:1.4}}>✅ {L("Email di recupero password inviata. Controlla la casella di posta.")}</div>}
           {error&&<div style={{background:"#fff0f0",borderRadius:10,padding:"10px 14px",fontSize:13,color:"#E24B4A",border:"1px solid #fcc"}}>⚠️ {error}</div>}
-          <button onClick={mode==="login"?doLogin:doRegister} disabled={loading} style={{background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",opacity:loading?0.7:1}}>
+          <button onClick={mode==="login"?doLogin:doRegister} disabled={loading} style={{background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:12,padding:"13px",fontSize:15,fontWeight:700,cursor:"pointer",opacity:loading?0.7:1}}>
             {loading?"...":(mode==="login"?L("Accedi"):L("Crea account"))}
           </button>
           <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{flex:1,height:1,background:"#eee"}}/><span style={{fontSize:12,color:"#aaa"}}>{L("oppure")}</span><div style={{flex:1,height:1,background:"#eee"}}/></div>
@@ -724,19 +888,19 @@ function ContactForm({currentUser}){
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Oggetto")}</label><input value={subject} onChange={function(e){setSubject(e.target.value);}} style={sinp} placeholder={PL("Oggetto del messaggio")}/></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Messaggio")} *</label><textarea value={message} onChange={function(e){setMessage(e.target.value);}} style={{...sinp,minHeight:110,resize:"vertical"}} placeholder={PL("Scrivi qui il messaggio...")}/></div>
       {status&&<div style={{fontSize:13,borderRadius:10,padding:"10px 12px",background:status.type==="ok"?"#e8f8f0":"#fff0f0",color:status.type==="ok"?"#1D9E75":"#E24B4A",border:"1px solid "+(status.type==="ok"?"#a8e6c8":"#fcc")}}>{status.type==="ok"?"✅ ":"⚠️ "}{status.text}</div>}
-      <button onClick={send} disabled={loading} style={{background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"12px 16px",fontSize:14,fontWeight:700,cursor:loading?"not-allowed":"pointer",opacity:loading?0.65:1}}>{loading?PL("Invio in corso..."):PL("Invia messaggio")}</button>
+      <button type="button" onClick={function(e){if(e){e.preventDefault();e.stopPropagation();}send();}} disabled={loading} style={{background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"12px 16px",fontSize:14,fontWeight:700,cursor:loading?"not-allowed":"pointer",opacity:loading?0.65:1}}>{loading?PL("Invio in corso..."):PL("Invia messaggio")}</button>
     </div>
   </div>;
 }
 
 // ── CHANGE PASSWORD ───────────────────────────────────────────────────────────
-function ChangePwdSection({dark,textC,subC,borderC,btnRadius,setToast}){
+function ChangePwdSection({dark,textC,subC,borderC,btnRadius,setToast,confirmButtonColor,secondaryButtonColor,inActionGrid}){
   var [open,setOpen]=useState(false);
   var [newPwd,setNewPwd]=useState("");
   var [confirmPwd,setConfirmPwd]=useState("");
   var [error,setError]=useState("");
   var [loading,setLoading]=useState(false);
-  var sinp={width:"100%",borderRadius:8,border:"1px solid "+borderC,padding:"8px 10px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:textC};
+  var sinp={width:"100%",borderRadius:12,border:"1px solid "+(dark?"#4a4a62":"#DDE4F2"),padding:"11px 12px",fontSize:13,background:dark?"#242437":"#fff",color:textC,boxSizing:"border-box",boxShadow:dark?"none":"0 3px 12px rgba(30,64,175,.06)",outline:"none"};
   function profileLang(){return readFainanceStoredLang();}
   function PL(s){return translateFainanceText(s,profileLang());}
   function authActionSettings(){
@@ -786,15 +950,16 @@ function ChangePwdSection({dark,textC,subC,borderC,btnRadius,setToast}){
       }
     }).finally(function(){setLoading(false);});
   }
-  return <div style={{borderTop:"1px solid "+borderC,paddingTop:12,marginTop:12}}>
-    <button onClick={function(){setOpen(!open);setError("");}} style={{background:"none",border:"none",cursor:"pointer",color:"#7F77DD",fontSize:13,fontWeight:500,padding:0}}>
+  var primaryC=confirmButtonColor||"#378ADD";var secondaryC=secondaryButtonColor||"#7FC8F8";
+  return <div style={inActionGrid?{display:"contents"}:{borderTop:"1px solid "+borderC,paddingTop:12,marginTop:12}}>
+    <button type="button" onClick={function(){setOpen(!open);setError("");}} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:dark?"#292940":secondaryC+"18",border:"1px solid "+secondaryC,borderRadius:btnRadius,cursor:"pointer",color:dark?"#E5ECFF":secondaryC,fontSize:13,fontWeight:800,padding:"10px 12px",boxSizing:"border-box"}}>
       🔑 {open?PL("Annulla"):PL("Cambia password")}
     </button>
-    {open&&<div style={{display:"flex",flexDirection:"column",gap:10,marginTop:12}}>
+    {open&&<div style={{display:"flex",flexDirection:"column",gap:10,marginTop:12,gridColumn:inActionGrid?"1 / -1":undefined,background:dark?"#202033":"#F8FAFF",border:"1px solid "+borderC,borderRadius:14,padding:12}}>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Nuova password")}</label><input type="password" value={newPwd} onChange={function(e){setNewPwd(e.target.value);}} style={sinp} placeholder={PL("Minimo 6 caratteri")}/></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Conferma password")}</label><input type="password" value={confirmPwd} onChange={function(e){setConfirmPwd(e.target.value);}} style={sinp}/></div>
       {error&&<div style={{fontSize:12,color:"#E24B4A",background:"#fff0f0",borderRadius:8,padding:"8px 10px"}}>{error}</div>}
-      <button onClick={save} disabled={loading} style={{background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:loading?0.7:1}}>{loading?"...":PL("Aggiorna password")}</button>
+      <button onClick={save} disabled={loading} style={{background:primaryC,color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer",opacity:loading?0.7:1}}>{loading?"...":PL("Aggiorna password")}</button>
     </div>}
   </div>;
 }
@@ -873,7 +1038,7 @@ function ProfileLocalPromptField({label,value,onChange,placeholder,options,subC,
       <span style={{fontSize:14,color:subC,flexShrink:0}}>⌄</span>
     </button>
     <div style={{fontSize:10,color:subC,marginTop:4}}>{PL("Tocca il campo e digita le prime lettere.")}</div>
-    {open&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.48)",zIndex:800,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setOpen(false);}}>
+    {open&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.48)",zIndex:800,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(17vh, calc(env(safe-area-inset-top, 0px) + 92px)) 16px calc(env(safe-area-inset-bottom, 0px) + 24px)",boxSizing:"border-box",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setOpen(false);}}>
       <div style={{background:dark?"#1e1e30":"#fff",borderRadius:18,width:"100%",maxWidth:460,maxHeight:"80vh",overflow:"hidden",boxShadow:"0 12px 44px rgba(0,0,0,.28)",border:"1px solid "+borderC}}>
         <div style={{padding:"16px 16px 12px",borderBottom:"1px solid "+borderC,display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1,fontSize:15,fontWeight:800,color:textC}}>{label}</div>
@@ -891,12 +1056,13 @@ function ProfileLocalPromptField({label,value,onChange,placeholder,options,subC,
   </div>;
 }
 // ── PROFILE CARD ─────────────────────────────────────────────────────────────
-function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRadius,dateFmt,setToast,fbDb:fbDbProp,onProfileUpdate,onDeleteAccount}){
+function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRadius,dateFmt,setToast,fbDb:fbDbProp,onProfileUpdate,onDeleteAccount,lang,confirmButtonColor,secondaryButtonColor}){
   var [edit,setEdit]=useState(false);
   var [deleteOpen,setDeleteOpen]=useState(false);
   var [deleteConfirm,setDeleteConfirm]=useState("");
   var [deleteLoading,setDeleteLoading]=useState(false);
   var [deleteError,setDeleteError]=useState("");
+  var [deletePassword,setDeletePassword]=useState("");
   var [emailOpen,setEmailOpen]=useState(false);
   var [newEmail,setNewEmail]=useState(String(currentUser.email||""));
   var [emailLoading,setEmailLoading]=useState(false);
@@ -907,8 +1073,8 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
   var [pPhonePrefix,setPPhonePrefix]=useState(currentUser.phonePrefix||"+39");
   var [pBirth,setPBirth]=useState(currentUser.birthDate||"");
   var [pGender,setPGender]=useState(currentUser.gender||"");
-  var [pNationality,setPNationality]=useState(currentUser.nationality||"");
-  var [pCountry,setPCountry]=useState(currentUser.country||"");
+  var [pNationality,setPNationality]=useState(localizeProfileCountryName(currentUser.nationality||"",String(lang||readFainanceStoredLang()||"it").split("-")[0]));
+  var [pCountry,setPCountry]=useState(localizeProfileCountryName(currentUser.country||"",String(lang||readFainanceStoredLang()||"it").split("-")[0]));
   var [pProvince,setPProvince]=useState(currentUser.province||"");
   var [pCity,setPCity]=useState(currentUser.city||"");
   var [pAddress,setPAddress]=useState(currentUser.address||"");
@@ -920,9 +1086,10 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
   var countryNames=getProfileCountryNames(profileLang());
   // Local saved values for display (updated on save)
   var [saved,setSaved]=useState({name:currentUser.name||"",phone:currentUser.phone||"",phonePrefix:currentUser.phonePrefix||"+39",birthDate:currentUser.birthDate||"",gender:currentUser.gender||"",nationality:currentUser.nationality||"",country:currentUser.country||"",province:currentUser.province||"",city:currentUser.city||"",address:currentUser.address||"",jobType:currentUser.jobType||"",appUseReason:currentUser.appUseReason||""});
-  useEffect(function(){var next={name:currentUser.name||"",phone:currentUser.phone||"",phonePrefix:currentUser.phonePrefix||"+39",birthDate:currentUser.birthDate||"",gender:currentUser.gender||"",nationality:currentUser.nationality||"",country:currentUser.country||"",province:currentUser.province||"",city:currentUser.city||"",address:currentUser.address||"",jobType:currentUser.jobType||"",appUseReason:currentUser.appUseReason||""};setSaved(next);setPName(next.name);setPPhone(next.phone);setPPhonePrefix(next.phonePrefix);setPBirth(next.birthDate);setPGender(next.gender);setPNationality(next.nationality);setPCountry(next.country);setPProvince(next.province);setPCity(next.city);setPAddress(next.address);setPJobType(next.jobType);setPAppUseReason(next.appUseReason);},[currentUser&&currentUser.id,currentUser&&currentUser.phone,currentUser&&currentUser.phonePrefix,currentUser&&currentUser.name,currentUser&&currentUser.birthDate,currentUser&&currentUser.gender,currentUser&&currentUser.nationality,currentUser&&currentUser.country,currentUser&&currentUser.province,currentUser&&currentUser.city,currentUser&&currentUser.address,currentUser&&currentUser.jobType,currentUser&&currentUser.appUseReason]);
-  var sinp={width:"100%",borderRadius:8,border:"1px solid "+borderC,padding:"8px 10px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:textC};
-  function profileLang(){return readFainanceStoredLang();}
+  useEffect(function(){var next={name:currentUser.name||"",phone:currentUser.phone||"",phonePrefix:currentUser.phonePrefix||"+39",birthDate:currentUser.birthDate||"",gender:currentUser.gender||"",nationality:currentUser.nationality||"",country:currentUser.country||"",province:currentUser.province||"",city:currentUser.city||"",address:currentUser.address||"",jobType:currentUser.jobType||"",appUseReason:currentUser.appUseReason||""};setSaved(next);setPName(next.name);setPPhone(next.phone);setPPhonePrefix(next.phonePrefix);setPBirth(next.birthDate);setPGender(next.gender);setPNationality(localizeProfileCountryName(next.nationality,profileLang()));setPCountry(localizeProfileCountryName(next.country,profileLang()));setPProvince(next.province);setPCity(next.city);setPAddress(next.address);setPJobType(next.jobType);setPAppUseReason(next.appUseReason);},[currentUser&&currentUser.id,currentUser&&currentUser.phone,currentUser&&currentUser.phonePrefix,currentUser&&currentUser.name,currentUser&&currentUser.birthDate,currentUser&&currentUser.gender,currentUser&&currentUser.nationality,currentUser&&currentUser.country,currentUser&&currentUser.province,currentUser&&currentUser.city,currentUser&&currentUser.address,currentUser&&currentUser.jobType,currentUser&&currentUser.appUseReason,lang]);
+  var primaryC=confirmButtonColor||"#378ADD";var secondaryC=secondaryButtonColor||"#7FC8F8";
+  var sinp={width:"100%",borderRadius:12,border:"1px solid "+(dark?"#4A4A64":"#D7E2F3"),padding:"10px 11px",fontSize:13,background:dark?"#242437":"#FFFFFF",color:textC,boxSizing:"border-box",outline:"none",boxShadow:dark?"none":"0 3px 12px rgba(31,64,120,.06)"};
+  function profileLang(){return String(lang||readFainanceStoredLang()||"it").split("-")[0];}
   function PL(s){return translateFainanceText(s,profileLang());}
   function authActionSettings(){
     var origin="https://fainanceapp.it";
@@ -954,11 +1121,10 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
     var cleanPhone=String(pPhone||"").replace(/[^0-9]/g,"");
     if(pPhone&&cleanPhone.length<6){if(setToast)setToast({text:PL("Numero di telefono non valido"),type:"warning",color:"#EF9F27",icon:"⚠️"});return;}
     var upd={name:pName.trim(),phone:cleanPhone,phonePrefix:pPhonePrefix,birthDate:pBirth,gender:pGender,nationality:pNationality.trim(),country:pCountry.trim(),province:pProvince.trim(),city:pCity.trim(),address:pAddress.trim(),jobType:pJobType,appUseReason:pAppUseReason};
-    function done(){setSaved(upd);if(onProfileUpdate)onProfileUpdate(upd);setEdit(false);if(setToast)setToast(PL("Profilo aggiornato"));}
+    setSaved(upd);if(onProfileUpdate)onProfileUpdate(upd);setEdit(false);
+    if(setToast)setToast({text:PL("Profilo aggiornato"),type:"success",icon:"✅"});
     if(currentUser.id&&fbDbProp){
-      setDoc(doc(fbDbProp,"users",currentUser.id),upd,{merge:true}).then(function(){try{var em=String(currentUser.email||"").trim().toLowerCase();if(em)setDoc(doc(fbDbProp,"userLookup","email:"+em.replace(/\//g,"_")),{uid:currentUser.id,email:em,phone:cleanPhone,name:pName.trim()||currentUser.name||"Utente",active:true,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});if(cleanPhone)setDoc(doc(fbDbProp,"userLookup","phone:"+cleanPhone),{uid:currentUser.id,email:em,phone:cleanPhone,name:pName.trim()||currentUser.name||"Utente",active:true,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});}catch(e){}done();}).catch(function(err){console.error("profile save error",(err&&err.code)||"unknown");if(setToast)setToast(PL("Errore salvataggio profilo"));});
-    } else {
-      done();
+      setDoc(doc(fbDbProp,"users",currentUser.id),upd,{merge:true}).then(function(){try{var em=String(currentUser.email||"").trim().toLowerCase();if(em)setDoc(doc(fbDbProp,"userLookup","email:"+em.replace(/\//g,"_")),{uid:currentUser.id,email:em,phone:cleanPhone,name:pName.trim()||currentUser.name||"Utente",active:true,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});if(cleanPhone)setDoc(doc(fbDbProp,"userLookup","phone:"+cleanPhone),{uid:currentUser.id,email:em,phone:cleanPhone,name:pName.trim()||currentUser.name||"Utente",active:true,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});}catch(e){}}).catch(function(err){console.error("profile save error",(err&&err.code)||"unknown");if(setToast)setToast({text:PL("Errore salvataggio profilo"),type:"error",icon:"⚠️",color:"#E24B4A"});});
     }
   }
   async function saveEmailChange(){
@@ -1000,21 +1166,21 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
   function requestDeleteAccount(){
     if(!onDeleteAccount||deleteConfirm!=="ELIMINA")return;
     setDeleteLoading(true);setDeleteError("");
-    Promise.resolve(onDeleteAccount()).catch(function(err){
+    Promise.resolve(onDeleteAccount(deletePassword)).catch(function(err){
       var msg=(err&&err.message)?err.message:"Errore durante l’eliminazione account.";
       setDeleteError(msg);
       if(setToast)setToast("Errore eliminazione account");
     }).finally(function(){setDeleteLoading(false);});
   }
   var d=saved;
-  return <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
+  return <div style={{background:dark?"radial-gradient(circle at 8% 4%,rgba(127,119,221,.20),transparent 34%),radial-gradient(circle at 95% 10%,rgba(55,138,221,.16),transparent 30%),linear-gradient(145deg,#1f1f31 0%,#25253b 62%,#30291e 100%)":"radial-gradient(circle at 8% 4%,rgba(127,119,221,.18),transparent 34%),radial-gradient(circle at 96% 12%,rgba(55,138,221,.15),transparent 32%),linear-gradient(145deg,#FFFFFF 0%,#F1F6FF 58%,#FFF4D7 100%)",borderRadius:24,border:"1.5px solid "+(dark?"#4C4C6A":primaryC+"55"),padding:18,boxShadow:dark?"0 18px 42px rgba(0,0,0,.28)":"0 18px 44px rgba(48,70,120,.16)",position:"relative",overflow:"hidden"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
       <div style={{fontSize:14,fontWeight:600,color:textC}}>{PL("👤 Profilo")}</div>
-      {!edit&&<button onClick={function(){setEdit(true);}} style={{background:"linear-gradient(135deg,#7F77DD,#378ADD)",border:"none",borderRadius:btnRadius,padding:"8px 14px",cursor:"pointer",color:"#fff",fontSize:13,fontWeight:800,boxShadow:dark?"none":"0 6px 16px rgba(83,74,183,0.22)",display:"inline-flex",alignItems:"center",gap:6}}>{PL("✏ Modifica")}</button>}
+      {!edit&&<button onClick={function(){setEdit(true);}} style={{background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",border:"none",borderRadius:btnRadius,padding:"8px 14px",cursor:"pointer",color:"#fff",fontSize:13,fontWeight:800,boxShadow:dark?"none":"0 6px 16px rgba(83,74,183,0.22)",display:"inline-flex",alignItems:"center",gap:6}}>{PL("✏ Modifica")}</button>}
     </div>
     {!edit?<>
       <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
-        <div style={{width:52,height:52,borderRadius:"50%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",flexShrink:0}}>
+        <div style={{width:52,height:52,borderRadius:"50%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,color:"#fff",flexShrink:0}}>
           {d.name?d.name[0].toUpperCase():"U"}
         </div>
         <div>
@@ -1024,57 +1190,59 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
         </div>
       </div>
       {<div style={{display:"flex",flexDirection:"column",gap:0,marginBottom:14}}>
-        {[["📞",d.phone?(d.phonePrefix||"+39")+" "+d.phone:"—",PL("Telefono")],["🌍",d.nationality||"—",PL("Nazionalità")],["🎂",d.birthDate?fmtDate(d.birthDate,dateFmt):"—",PL("Nascita")],["🏙",[d.country,d.province,d.city].filter(Boolean).join(" · ")||"—",PL("Località")],["📍",d.address||"—",PL("Indirizzo")],["💼",d.jobType?PL(d.jobType):"—",PL("Lavoro")],["🎯",d.appUseReason?PL(d.appUseReason):"—",PL("Uso principale")],["⚧",d.gender==="M"?PL("Maschile"):d.gender==="F"?PL("Femminile"):d.gender==="X"?PL("Non spec."):"—",PL("Sesso")]].map(function(r){return <div key={r[2]} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid "+borderC}}>
+        {[["📞",d.phone?(d.phonePrefix||"+39")+" "+d.phone:"—",PL("Telefono")],["🌍",localizeProfileCountryName(d.nationality,profileLang())||"—",PL("Nazionalità")],["🎂",d.birthDate?fmtDate(d.birthDate,dateFmt):"—",PL("Nascita")],["🏙",[localizeProfileCountryName(d.country,profileLang()),d.province,d.city].filter(Boolean).join(" · ")||"—",PL("Località")],["📍",d.address||"—",PL("Indirizzo")],["💼",d.jobType?PL(d.jobType):"—",PL("Lavoro")],["🎯",d.appUseReason?PL(d.appUseReason):"—",PL("Uso principale")],["⚧",d.gender==="M"?PL("Maschile"):d.gender==="F"?PL("Femminile"):d.gender==="X"?PL("Non spec."):"—",PL("Sesso")]].map(function(r){return <div key={r[2]} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 0",borderBottom:"1px solid "+borderC}}>
           <span style={{fontSize:15,width:22}}>{r[0]}</span>
           <span style={{fontSize:12,color:subC,minWidth:64}}>{r[2]}</span>
           <span style={{fontSize:13,color:textC}}>{r[1]}</span>
         </div>;})}
       </div>}
-      {<div style={{borderTop:"1px solid "+borderC,paddingTop:12,marginTop:12}}>
-        <button onClick={function(){setEmailOpen(!emailOpen);setEmailError("");setEmailOk(false);setNewEmail(String(currentUser.email||""));}} style={{background:"none",border:"none",cursor:"pointer",color:"#7F77DD",fontSize:13,fontWeight:700,padding:0}}>{PL("✉️ Cambia email di accesso")}</button>
-        {emailOpen&&<div style={{display:"flex",flexDirection:"column",gap:10,marginTop:12}}>
+      {<div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,1fr)",gap:10,borderTop:"1px solid "+borderC,paddingTop:12,marginTop:12}}>
+        <button type="button" onClick={function(){setEmailOpen(!emailOpen);setEmailError("");setEmailOk(false);setNewEmail(String(currentUser.email||""));}} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:dark?"#292940":primaryC+"16",border:"1px solid "+primaryC,borderRadius:btnRadius,cursor:"pointer",color:dark?"#E5ECFF":primaryC,fontSize:12,fontWeight:850,padding:"10px 8px",boxSizing:"border-box",minWidth:0}}>{PL("✉️ Cambia email di accesso")}</button>
+        {emailOpen&&<div style={{display:"flex",flexDirection:"column",gap:10,marginTop:12,gridColumn:"1 / -1",background:dark?"#202033":"#F8FAFF",border:"1px solid "+borderC,borderRadius:14,padding:12}}>
           <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Nuova email")}</label><input type="email" value={newEmail} onChange={function(e){setNewEmail(e.target.value);}} style={sinp} placeholder="nuova@email.com"/></div>
           <div style={{fontSize:11,color:subC,lineHeight:1.35}}>{PL("La nuova email diventerà l’indirizzo usato per accedere all’app.")}</div>
           {emailError&&<div style={{fontSize:12,color:"#E24B4A",background:dark?"#3a1d1d":"#fff0f0",borderRadius:8,padding:"8px 10px"}}>{emailError}</div>}
           <div style={{display:"flex",gap:8}}>
-            <button onClick={saveEmailChange} disabled={emailLoading} style={{flex:1,background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px",fontSize:13,fontWeight:700,cursor:emailLoading?"not-allowed":"pointer",opacity:emailLoading?0.65:1}}>{emailLoading?PL("Aggiornamento..."):PL("Aggiorna email")}</button>
+            <button onClick={saveEmailChange} disabled={emailLoading} style={{flex:1,background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px",fontSize:13,fontWeight:700,cursor:emailLoading?"not-allowed":"pointer",opacity:emailLoading?0.65:1}}>{emailLoading?PL("Aggiornamento..."):PL("Aggiorna email")}</button>
             <button onClick={function(){setEmailOpen(false);setEmailError("");}} disabled={emailLoading} style={{background:dark?"#333":"#f0f0f0",color:dark?"#eee":"#555",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontSize:13,cursor:"pointer"}}>{PL("Annulla")}</button>
           </div>
         </div>}
-        {emailOk&&<div style={{fontSize:12,color:"#1D9E75",marginTop:8}}>{PL("Email di verifica inviata. Apri il link ricevuto sulla nuova email per completare il cambio.")}</div>}
+        {emailOk&&<div style={{fontSize:12,color:"#1D9E75",marginTop:8,gridColumn:"1 / -1"}}>{PL("Email di verifica inviata. Apri il link ricevuto sulla nuova email per completare il cambio.")}</div>}
+        <ChangePwdSection dark={dark} textC={textC} subC={subC} borderC={borderC} btnRadius={btnRadius} setToast={setToast} confirmButtonColor={primaryC} secondaryButtonColor={secondaryC} inActionGrid/>
       </div>}
-      {<ChangePwdSection dark={dark} textC={textC} subC={subC} borderC={borderC} btnRadius={btnRadius} setToast={setToast}/>}
       {<div style={{borderTop:"1px solid "+borderC,paddingTop:12,marginTop:12,marginBottom:12}}>
-        <button onClick={function(){setDeleteOpen(!deleteOpen);setDeleteError("");setDeleteConfirm("");}} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",fontSize:13,fontWeight:700,padding:0}}>{PL("🗑 Elimina account e dati")}</button>
+        <button onClick={function(){setDeleteOpen(!deleteOpen);setDeleteError("");setDeleteConfirm("");setDeletePassword("");}} style={{background:"none",border:"none",cursor:"pointer",color:"#E24B4A",fontSize:13,fontWeight:700,padding:0}}>{PL("🗑 Elimina account e dati")}</button>
         {deleteOpen&&<div style={{marginTop:12,background:dark?"#2a1e1e":"#fff0f0",border:"1px solid #E24B4A",borderRadius:12,padding:12}}>
           <div style={{fontSize:13,fontWeight:800,color:"#E24B4A",marginBottom:6}}>{PL("Operazione permanente")}</div>
           <div style={{fontSize:12,color:dark?"#ddd":"#555",lineHeight:1.45,marginBottom:10}}>{PL("Verranno eliminati profilo, dati cloud, dati locali e account di accesso. Per confermare scrivi ELIMINA.")}</div>
           <input value={deleteConfirm} onChange={function(e){setDeleteConfirm(e.target.value);}} placeholder="ELIMINA" style={{...sinp,marginBottom:10,borderColor:deleteConfirm==="ELIMINA"?"#E24B4A":borderC}}/>
+          {((fbAuth.currentUser&&fbAuth.currentUser.providerData)||[]).some(function(p){return p&&p.providerId==="password";})&&<div style={{marginBottom:10}}><label style={{fontSize:11,color:dark?"#ddd":"#555",display:"block",marginBottom:4}}>{PL("Password attuale")}</label><input type="password" autoComplete="current-password" value={deletePassword} onChange={function(e){setDeletePassword(e.target.value);}} placeholder={PL("Inserisci la password per confermare")} style={sinp}/></div>}
           {deleteError&&<div style={{fontSize:12,color:"#E24B4A",marginBottom:10,background:dark?"#3a1d1d":"#fff",borderRadius:8,padding:"8px 10px"}}>{deleteError}</div>}
           <div style={{display:"flex",gap:8}}>
             <button onClick={requestDeleteAccount} disabled={deleteLoading||deleteConfirm!=="ELIMINA"} style={{flex:1,background:"#E24B4A",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px",fontSize:13,fontWeight:800,cursor:(deleteLoading||deleteConfirm!=="ELIMINA")?"not-allowed":"pointer",opacity:(deleteLoading||deleteConfirm!=="ELIMINA")?0.45:1}}>{deleteLoading?PL("Eliminazione..."):PL("Elimina definitivamente")}</button>
-            <button onClick={function(){setDeleteOpen(false);setDeleteConfirm("");setDeleteError("");}} disabled={deleteLoading} style={{background:dark?"#333":"#f0f0f0",color:dark?"#eee":"#555",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontSize:13,cursor:"pointer"}}>{PL("Annulla")}</button>
+            <button onClick={function(){setDeleteOpen(false);setDeleteConfirm("");setDeletePassword("");setDeleteError("");}} disabled={deleteLoading} style={{background:dark?"#333":"#f0f0f0",color:dark?"#eee":"#555",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontSize:13,cursor:"pointer"}}>{PL("Annulla")}</button>
           </div>
         </div>}
       </div>}
       <button onClick={function(){if(window.confirm(PL("Uscire dall'account?")))onLogout();}} style={{width:"100%",background:dark?"#252535":"#f5f5f5",color:"#E24B4A",border:"1px solid #E24B4A",borderRadius:btnRadius,padding:"11px",fontSize:14,fontWeight:500,cursor:"pointer"}}>{PL("🚪 Esci")}</button>
-    </>:<div style={{display:"flex",flexDirection:"column",gap:10}}>
+    </>:<div style={{display:"flex",flexDirection:"column",gap:12,background:dark?"linear-gradient(160deg,rgba(28,28,47,.96),rgba(38,38,61,.92))":"linear-gradient(160deg,rgba(255,255,255,.98),rgba(239,246,255,.98) 66%,rgba(255,248,224,.96))",border:"1.5px solid "+(dark?"#4B4B69":secondaryC+"66"),borderRadius:20,padding:16,boxShadow:dark?"0 12px 28px rgba(0,0,0,.22)":"0 12px 30px rgba(52,86,145,.13)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"4px 2px 8px"}}><div style={{width:44,height:44,borderRadius:15,background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:20,fontWeight:900,boxShadow:"0 7px 18px rgba(83,74,183,.25)"}}>{pName?pName[0].toUpperCase():"U"}</div><div style={{minWidth:0}}><div style={{fontSize:15,fontWeight:900,color:textC}}>{PL("👤 Profilo")}</div><div style={{fontSize:11,color:subC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{currentUser.email||""}</div></div></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Nome")}</label><input value={pName} onChange={function(e){setPName(e.target.value);}} style={sinp}/></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Telefono")}</label><div style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:8}}><input list="phone-prefixes" value={pPhonePrefix} onChange={function(e){setPPhonePrefix(e.target.value);}} style={sinp} placeholder="+39"/><input type="tel" value={pPhone} onChange={function(e){setPPhone(e.target.value.replace(/[^0-9 ]/g,""));}} style={sinp} placeholder="333 1234567"/></div><datalist id="phone-prefixes">{PHONE_PREFIXES.map(function(p){return <option key={p.code} value={p.code}>{p.country}</option>;})}</datalist><div style={{fontSize:10,color:subC,marginTop:3}}>{PL("Cerca il prefisso nazionale e inserisci solo numeri nel telefono.")}</div></div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-        <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Data nascita")}</label><input type="date" value={pBirth} onChange={function(e){setPBirth(e.target.value);}} style={sinp}/></div>
-        <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Sesso")}</label>
-          <select value={pGender} onChange={function(e){setPGender(e.target.value);}} style={sinp}><option value="">—</option><option value="M">{PL("Maschile")}</option><option value="F">{PL("Femminile")}</option><option value="X">{PL("Non spec.")}</option></select>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:10}}>
+        <div style={{minWidth:0}}><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Data nascita")}</label><input type="date" value={pBirth} onChange={function(e){setPBirth(e.target.value);}} style={{...sinp,minWidth:0,boxSizing:"border-box"}}/></div>
+        <div style={{minWidth:0}}><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Sesso")}</label>
+          <select value={pGender} onChange={function(e){setPGender(e.target.value);}} style={{...sinp,minWidth:0,boxSizing:"border-box"}}><option value="">—</option><option value="M">{PL("Maschile")}</option><option value="F">{PL("Femminile")}</option><option value="X">{PL("Non spec.")}</option></select>
         </div>
       </div>
       <ProfileLocalPromptField label={PL("Nazionalità")} value={pNationality} onChange={setPNationality} placeholder={PL("Cerca nazionalità")} options={countryNames} subC={subC} dark={dark} borderC={borderC} textC={textC} sinp={sinp}/>
       <ProfileLocalPromptField label={PL("Nazione di residenza")} value={pCountry} onChange={setPCountry} placeholder={PL("Cerca nazione di residenza")} options={countryNames} subC={subC} dark={dark} borderC={borderC} textC={textC} sinp={sinp}/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Provincia / Regione")}</label><input value={pProvince} onChange={function(e){setPProvince(e.target.value);}} style={sinp} placeholder={PL("Provincia o regione")}/></div><div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Città")}</label><input value={pCity} onChange={function(e){setPCity(e.target.value);}} style={sinp} placeholder={PL("Città")}/></div></div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:10}}><div style={{minWidth:0}}><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Provincia / Regione")}</label><input value={pProvince} onChange={function(e){setPProvince(e.target.value);}} style={{...sinp,minWidth:0,boxSizing:"border-box"}} placeholder={PL("Provincia o regione")}/></div><div style={{minWidth:0}}><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Città")}</label><input value={pCity} onChange={function(e){setPCity(e.target.value);}} style={{...sinp,minWidth:0,boxSizing:"border-box"}} placeholder={PL("Città")}/></div></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Indirizzo")}</label><input value={pAddress} onChange={function(e){setPAddress(e.target.value);}} style={sinp} placeholder={PL("Indirizzo")}/></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Lavoro")}</label><select value={pJobType} onChange={function(e){setPJobType(e.target.value);}} style={sinp}><option value="">—</option>{JOB_TYPES.map(function(j){return <option key={j} value={j}>{PL(j)}</option>;})}</select></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Per cosa vuoi usare principalmente fAInance?")}</label><select value={pAppUseReason} onChange={function(e){setPAppUseReason(e.target.value);}} style={sinp}><option value="">—</option>{APP_USE_REASONS.map(function(r){return <option key={r} value={r}>{PL(r)}</option>;})}</select></div>
       <div style={{display:"flex",gap:8}}>
-        <button onClick={save} style={{flex:1,background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px",fontSize:14,fontWeight:600,cursor:"pointer"}}>{"💾 "+PL("Salva")}</button>
+        <button onClick={save} style={{flex:1,background:primaryC,color:"#fff",border:"none",borderRadius:btnRadius,padding:"11px",fontSize:14,fontWeight:800,cursor:"pointer",boxShadow:"0 6px 16px "+primaryC+"35"}}>{"💾 "+PL("Salva")}</button>
         <button onClick={function(){setEdit(false);}} style={{padding:"10px 14px",background:dark?"#333":"#f0f0f0",color:dark?"#eee":"#555",border:"none",borderRadius:btnRadius,cursor:"pointer",fontSize:13}}>{PL("Annulla")}</button>
       </div>
     </div>}
@@ -1082,9 +1250,6 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
 }
 
 function AppWithLogin(){
-  async function deriveBankKey(uid){var enc=new TextEncoder();var km=await crypto.subtle.importKey("raw",enc.encode("fainance_bank_"+uid),["deriveBits","deriveKey"],false,["deriveKey"]);return crypto.subtle.deriveKey({name:"PBKDF2",salt:enc.encode("fainance_salt_v1"),iterations:100000,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);}
-  async function encryptBankCoords(data,uid){try{var key=await deriveBankKey(uid);var iv=crypto.getRandomValues(new Uint8Array(12));var enc=new TextEncoder();var ct=await crypto.subtle.encrypt({name:"AES-GCM",iv:iv},key,enc.encode(JSON.stringify(data)));var combined=new Uint8Array(iv.byteLength+ct.byteLength);combined.set(iv,0);combined.set(new Uint8Array(ct),12);return btoa(String.fromCharCode(...combined));}catch(e){return null;}}
-  async function decryptBankCoords(b64,uid){try{var raw=Uint8Array.from(atob(b64),function(c){return c.charCodeAt(0);});var iv=raw.slice(0,12);var ct=raw.slice(12);var key=await deriveBankKey(uid);var pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:iv},key,ct);return JSON.parse(new TextDecoder().decode(pt));}catch(e){return null;}}
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
 
@@ -1188,67 +1353,78 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   // locali non associate all'account. Senza questa copia, dopo l'aggiornamento
   // una nuova build può mostrare Share (sincronizzato separatamente) ma non i
   // movimenti personali ancora presenti nelle vecchie chiavi locali.
+  function localStorageValueHasData(raw){
+    if(raw==null)return false;
+    try{
+      var value=JSON.parse(raw);
+      if(Array.isArray(value))return value.length>0;
+      if(value&&typeof value==="object")return Object.keys(value).length>0;
+      return value!==null&&value!==undefined&&String(value)!=="";
+    }catch(e){return String(raw).trim()!==""&&String(raw)!=="[]"&&String(raw)!=="{}";}
+  }
   function migrateLegacyLocalStorageForUser(uid){
     if(!uid||typeof localStorage==="undefined")return;
     var prefix="user_"+uid+"_";
-    var marker=prefix+"legacy_account_storage_migrated_v1";
+    var marker=prefix+"legacy_account_storage_migrated_v3";
+    var ownerKey="fainance_legacy_storage_owner_uid_v2";
     try{
-      if(localStorage.getItem(marker)==="1")return;
-      function hasContent(key){
-        var raw=localStorage.getItem(key);
-        if(raw==null||raw==="")return false;
-        try{
-          var value=JSON.parse(raw);
-          if(Array.isArray(value))return value.length>0;
-          if(value&&typeof value==="object")return Object.keys(value).length>0;
-          return value!==null&&value!==false&&value!=="";
-        }catch(e){return true;}
-      }
-      var meaningfulKeys=[
-        "exp_v10","inc_v10","rec_v10","debt_credits_v1",
-        "appunti_documents_v1","appunti_notes_v1","bank_coords_v1","credit_cards_v1",
-        "shopping_items_v1","shopping_cards_v1","share_projects_v1"
+      var keys=[
+        "exp_v10","inc_v10","cats_v10","meth_v10","rec_v10","goals_v1","alerts_v1","budget_plan_v1",
+        "expense_groups_v1","income_groups_v1","method_groups_v1","custom_income_types_v1","income_type_overrides_v1",
+        "cat_order_v1","method_order_v1","cat_sort_mode","method_sort_mode","income_type_order_v1",
+        "default_expense_cat_v1","default_expense_method_v1","default_income_type_v1",
+        "default_expense_area_v1","default_income_area_v1","default_method_area_v1",
+        "history_future_mode_v1","history_sort_date_v1","history_sort_direction_v1",
+        "history_sort_secondary_v1","history_sort_secondary_direction_v1",
+        "patrimonio_values_v1","patrimonio_areas_v1","patrimonio_entries_v1","patrimonio_history_v1",
+        "patrimonio_notes_v1","patrimonio_mode_v1","appunti_documents_v1","appunti_notes_v1",
+        "bank_coords_v1","credit_cards_v1","share_projects_v1","share_receipt_uploads_v1","share_show_history_v1",
+        "debt_credits_v1","debt_credits_show_patrimonio_v1","debt_credits_show_expenses_v1",
+        "shopping_cards_v1","shopping_items_v1","shopping_lists_v2","shopping_deleted_records_v2","account_deleted_records_v1",
+        "shopping_areas_v1","shopping_area_icons_v1","shopping_bought_color_v1",
+        "shopping_default_area_v1","shopping_product_sort_v1","shopping_active_list_id_v2",
+        "notif_prefs_v1","custom_notifs_v1","shown_alert_ids_v2","onboarding_guide_seen_v1",
+        "terms_accepted_v1","privacy_accepted_v1","meta_events_consent_v1","legal_acceptance_date_v1",
+        "ai_chat_v1","ai_data_access_v1","ai_dismissed_v1","ai_floating_enabled_v1","ai_tab_v1",
+        "pref_bg","pref_btn_style","pref_cur","pref_datefmt","pref_exp_color","pref_inc_color",
+        "pref_first_day_week","pref_home_balance","pref_statsview","pref_confirm_color",
+        "pref_secondary_button_color_v1","pref_sec_cur","pref_sec_history","pref_sec_stats",
+        "pref_sec_budget","pref_sec_patrimonio","home_worklets_v1","pref_show_app_summary_header_v1",
+        "pref_mobile_nav_order_v1","pref_mobile_nav_icon_count_v1","pref_mobile_menu_order_v1",
+        "pref_mobile_all_nav_order_v1","pref_biometric_lock_enabled_v1","pref_biometric_lock_timeout_v1",
+        "pref_local_lock_method_v1","pref_local_lock_pin_v1"
       ];
-      var legacyHasData=meaningfulKeys.some(function(key){return hasContent(key);});
-      var scopedHasData=meaningfulKeys.some(function(key){return hasContent(prefix+key);});
-      if(!legacyHasData){
-        if(scopedHasData)localStorage.setItem(marker,"1");
-        return;
+      var legacyKeys=keys.filter(function(key){return localStorage.getItem(key)!=null;});
+      var owner=String(localStorage.getItem(ownerKey)||"");
+      if(owner&&owner!==String(uid)){
+        legacyKeys.forEach(function(key){try{localStorage.removeItem(key);localStorage.removeItem(key+"_updated_at");}catch(e){}});
+        localStorage.setItem(marker,"1");return;
       }
-      if(!scopedHasData){
-        var keys=[
-          "exp_v10","inc_v10","cats_v10","meth_v10","rec_v10","goals_v1","alerts_v1","budget_plan_v1",
-          "expense_groups_v1","income_groups_v1","method_groups_v1","custom_income_types_v1","income_type_overrides_v1",
-          "cat_order_v1","method_order_v1","cat_sort_mode","method_sort_mode","income_type_order_v1",
-          "default_expense_cat_v1","default_expense_method_v1","default_income_type_v1",
-          "default_expense_area_v1","default_income_area_v1","default_method_area_v1",
-          "history_future_mode_v1","history_sort_date_v1","history_sort_direction_v1",
-          "history_sort_secondary_v1","history_sort_secondary_direction_v1",
-          "patrimonio_values_v1","patrimonio_areas_v1","patrimonio_entries_v1","patrimonio_history_v1",
-          "patrimonio_notes_v1","patrimonio_mode_v1","appunti_documents_v1","appunti_notes_v1",
-          "bank_coords_v1","credit_cards_v1","share_projects_v1","share_receipt_uploads_v1","share_show_history_v1",
-          "debt_credits_v1","debt_credits_show_patrimonio_v1","debt_credits_show_expenses_v1",
-          "shopping_cards_v1","shopping_items_v1","shopping_lists_v2","shopping_deleted_records_v2",
-          "shopping_areas_v1","shopping_area_icons_v1","shopping_bought_color_v1",
-          "shopping_default_area_v1","shopping_product_sort_v1","shopping_active_list_id_v2",
-          "notif_prefs_v1","custom_notifs_v1","shown_alert_ids_v2","onboarding_guide_seen_v1",
-          "terms_accepted_v1","privacy_accepted_v1","legal_acceptance_date_v1",
-          "ai_chat_v1","ai_data_access_v1","ai_dismissed_v1","ai_floating_enabled_v1","ai_tab_v1",
-          "pref_bg","pref_btn_style","pref_cur","pref_datefmt","pref_exp_color","pref_inc_color",
-          "pref_first_day_week","pref_home_balance","pref_statsview","pref_confirm_color",
-          "pref_secondary_button_color_v1","pref_sec_cur","pref_sec_history","pref_sec_stats",
-          "pref_sec_budget","pref_sec_patrimonio","home_worklets_v1","pref_show_app_summary_header_v1",
-          "pref_mobile_nav_order_v1","pref_mobile_nav_icon_count_v1","pref_mobile_menu_order_v1",
-          "pref_mobile_all_nav_order_v1"
-        ];
-        keys.forEach(function(key){
-          var source=localStorage.getItem(key);
-          if(source!=null&&localStorage.getItem(prefix+key)==null)localStorage.setItem(prefix+key,source);
-        });
-        localStorage.setItem("fainance_legacy_account_storage_migrated_uid_v1",String(uid));
-      }
+      if(!owner&&legacyKeys.length)localStorage.setItem(ownerKey,String(uid));
+      keys.forEach(function(key){
+        var source=localStorage.getItem(key);
+        var targetKey=prefix+key;
+        var target=localStorage.getItem(targetKey);
+        var recoveryKey=prefix+"recovery_legacy_"+key;
+        var recovery=localStorage.getItem(recoveryKey);
+        if(source!=null){
+          if(recovery==null||(!localStorageValueHasData(recovery)&&localStorageValueHasData(source)))localStorage.setItem(recoveryKey,source);
+          if(target==null||(!localStorageValueHasData(target)&&localStorageValueHasData(source)))localStorage.setItem(targetKey,source);
+          localStorage.removeItem(key);
+        }else if(recovery!=null&&(target==null||(!localStorageValueHasData(target)&&localStorageValueHasData(recovery)))){
+          localStorage.setItem(targetKey,recovery);
+        }
+      });
+      var timestampMap={shopping_cards_v1:"shopping_cards_updated_at",shopping_items_v1:"shopping_items_updated_at",shopping_lists_v2:"shopping_lists_updated_at"};
+      Object.keys(timestampMap).forEach(function(sourceKey){
+        var legacyTs=Number(localStorage.getItem(timestampMap[sourceKey])||localStorage.getItem(sourceKey+"_updated_at")||0);
+        var targetTsKey=prefix+timestampMap[sourceKey];
+        var currentTs=Number(localStorage.getItem(targetTsKey)||0);
+        if(legacyTs>currentTs)localStorage.setItem(targetTsKey,String(legacyTs));
+      });
+      localStorage.setItem("fainance_legacy_account_storage_migrated_uid_v3",String(uid));
       localStorage.setItem(marker,"1");
-    }catch(e){}
+    }catch(e){console.error("Legacy storage migration error",(e&&e.message)||e);}
   }
   migrateLegacyLocalStorageForUser(userId);
 
@@ -1517,8 +1693,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return Math.max.apply(Math,candidates.filter(function(x){return isFinite(x)&&x>0;}).concat([0]));
   }
   function syncComparableRecord(item){if(!item||typeof item!=="object")return item;var out={...item};delete out.syncUpdatedAtMs;return out;}
+  function syncTombstoneTime(value){if(value&&typeof value==="object")return Number(value.deletedAt||value.ts||0);return 0;}
+  function isExplicitSyncTombstone(value){return !!(value&&typeof value==="object"&&(value.explicit===true||value.source==="user"));}
   function mergeSyncTombstones(a,b){
-    var out={};[a,b].forEach(function(src){if(!src||typeof src!=="object")return;Object.keys(src).forEach(function(k){var ts=Number(src[k]||0);if(ts>Number(out[k]||0))out[k]=ts;});});
+    var out={};[a,b].forEach(function(src){if(!src||typeof src!=="object")return;Object.keys(src).forEach(function(k){var value=src[k];if(!isExplicitSyncTombstone(value))return;var ts=syncTombstoneTime(value);if(ts>syncTombstoneTime(out[k]))out[k]={deletedAt:ts,source:"user",explicit:true};});});
     return out;
   }
   function mergeSyncRecords(localValue,cloudValue,tombstones,keyFn,preferLocalOrder){
@@ -1526,16 +1704,16 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     function add(item,preferOnTie){if(!item||typeof item!=="object")return;var key=keyFn(item);if(!key)return;var prev=chosen[key];if(!prev||syncRecordTime(item)>syncRecordTime(prev)||(syncRecordTime(item)===syncRecordTime(prev)&&preferOnTie))chosen[key]=item;}
     cloud.forEach(function(x){add(x,!preferLocalOrder);});local.forEach(function(x){add(x,!!preferLocalOrder);});
     var order=[];var seen={};(preferLocalOrder?local.concat(cloud):cloud.concat(local)).forEach(function(x){var key=keyFn(x);if(key&&!seen[key]){seen[key]=true;order.push(key);}});
-    return order.map(function(key){return chosen[key];}).filter(function(item){var key=keyFn(item);var deletedAt=Number((tombstones&&tombstones[key])||0);return !deletedAt||syncRecordTime(item)>deletedAt;});
+    return order.map(function(key){return chosen[key];}).filter(function(item){var key=keyFn(item);var deletedAt=syncTombstoneTime(tombstones&&tombstones[key]);return !deletedAt||syncRecordTime(item)>deletedAt;});
   }
   function stampLocalSyncRecords(currentValue,nextValue,keyFn){
     var current=Array.isArray(currentValue)?currentValue:[];var next=Array.isArray(nextValue)?nextValue:[];var currentByKey={};var now=Date.now();
     current.forEach(function(item){var key=keyFn(item);if(key)currentByKey[key]=item;});
-    return next.map(function(item){var key=keyFn(item);var prev=key?currentByKey[key]:null;if(prev&&syncJsonEqual(syncComparableRecord(prev),syncComparableRecord(item)))return item;return {...item,syncUpdatedAtMs:now};});
+    return next.map(function(item){var key=keyFn(item);var prev=key?currentByKey[key]:null;if(prev&&syncJsonEqual(syncComparableRecord(prev),syncComparableRecord(item))){var previousStamp=Number(prev.syncUpdatedAtMs||0);return previousStamp&&Number(item.syncUpdatedAtMs||0)!==previousStamp?{...item,syncUpdatedAtMs:previousStamp}:item;}return {...item,syncUpdatedAtMs:now};});
   }
   function removedSyncRecordTombstones(currentValue,nextValue,keyFn){
     var current=Array.isArray(currentValue)?currentValue:[];var next=Array.isArray(nextValue)?nextValue:[];var present={};var out={};var now=Date.now();
-    next.forEach(function(item){var key=keyFn(item);if(key)present[key]=true;});current.forEach(function(item){var key=keyFn(item);if(key&&!present[key])out[key]=now;});return out;
+    next.forEach(function(item){var key=keyFn(item);if(key)present[key]=true;});current.forEach(function(item){var key=keyFn(item);if(key&&!present[key])out[key]={deletedAt:now,source:"user",explicit:true};});return out;
   }
   function shoppingSyncRecordKey(item){
     if(!item||typeof item!=="object")return "";
@@ -1544,6 +1722,50 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
   function shoppingListSyncKey(item){return item&&item.id!==undefined?"list:"+String(item.id):"";}
   function shoppingCardSyncKey(item){return item&&item.id!==undefined?"card:"+String(item.id):"";}
+  function readLegacyRecoveryArray(key){
+    if(typeof localStorage==="undefined")return [];
+    var values=[];
+    [userKey(key),userKey("recovery_legacy_"+key),key].forEach(function(storageKey){
+      try{var raw=localStorage.getItem(storageKey);if(!raw)return;var parsed=JSON.parse(raw);if(Array.isArray(parsed))values.push(parsed);}catch(e){}
+    });
+    return values;
+  }
+  function mergeShoppingRecoveryArrays(arrays,keyFn){
+    var out=[];var seen={};
+    (arrays||[]).forEach(function(list){(Array.isArray(list)?list:[]).forEach(function(item){var key=keyFn(item);if(!key||seen[key])return;seen[key]=true;out.push(item);});});
+    return out;
+  }
+  function shoppingRecoveryState(){
+    var currentItems=normalizeShoppingItemsData(readUserLocalJson("shopping_items_v1",[]));
+    var itemSources=readLegacyRecoveryArray("shopping_items_v1");
+    var cardSources=readLegacyRecoveryArray("shopping_cards_v1");
+    var listSources=readLegacyRecoveryArray("shopping_lists_v2");
+    var items=normalizeShoppingItemsData(mergeShoppingRecoveryArrays([currentItems].concat(itemSources),shoppingSyncRecordKey));
+    var cards=mergeShoppingRecoveryArrays(cardSources,shoppingCardSyncKey);
+    var lists=mergeShoppingRecoveryArrays(listSources,shoppingListSyncKey);
+    var recovered=items.length>currentItems.length||cards.length>(Array.isArray(shoppingCardsRef.current)?shoppingCardsRef.current.length:0)||lists.length>(Array.isArray(shoppingListsRef.current)?shoppingListsRef.current.length:0);
+    return {items:items,cards:cards,lists:lists,recovered:recovered};
+  }
+  function preserveShoppingRecoverySnapshot(items,lists,cards){
+    try{
+      var key=userKey("shopping_recovery_snapshot_v1");var current={items:[],lists:[],cards:[]};
+      try{var raw=localStorage.getItem(key);if(raw)current=JSON.parse(raw)||current;}catch(e){}
+      var mergedItems=mergeShoppingRecoveryArrays([current.items,items],shoppingSyncRecordKey);
+      var mergedLists=mergeShoppingRecoveryArrays([current.lists,lists],shoppingListSyncKey);
+      var mergedCards=mergeShoppingRecoveryArrays([current.cards,cards],shoppingCardSyncKey);
+      if(mergedItems.length||mergedLists.length||mergedCards.length)localStorage.setItem(key,JSON.stringify({items:mergedItems,lists:mergedLists,cards:mergedCards,savedAt:new Date().toISOString()}));
+    }catch(e){}
+  }
+  function readShoppingRecoverySnapshot(){
+    try{var raw=localStorage.getItem(userKey("shopping_recovery_snapshot_v1"));var parsed=raw?JSON.parse(raw):null;return parsed&&typeof parsed==="object"?parsed:{items:[],lists:[],cards:[]};}catch(e){return {items:[],lists:[],cards:[]};}
+  }
+  function removeTombstonesForShoppingRecords(tombstones,items,lists,cards){
+    var out={...(tombstones||{})};
+    (items||[]).forEach(function(item){var key=shoppingSyncRecordKey(item);if(key)delete out[key];});
+    (lists||[]).forEach(function(item){var key=shoppingListSyncKey(item);if(key)delete out[key];});
+    (cards||[]).forEach(function(item){var key=shoppingCardSyncKey(item);if(key)delete out[key];});
+    return out;
+  }
   function markHomePreferencesChange(){if(!applyingFirestoreRef.current)markUserLocalChange("home_preferences");}
   function markCategoryPreferencesChange(){if(!applyingFirestoreRef.current)markUserLocalChange("category_preferences_v2");}
   function markDisplayPreferencesChange(){if(!applyingFirestoreRef.current)markUserLocalChange("display_preferences_v2");}
@@ -1559,8 +1781,23 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     source.forEach(function(item){var id=String(item||"");if(id&&!seen[id]){seen[id]=true;out.push(id);}});
     return out.length?out:(Array.isArray(fallback)?fallback.slice():[]);
   }
-  var [expenses,setExpenses]=useStorage(userKey("exp_v10"),[]);
-  var [incomes,setIncomes]=useStorage(userKey("inc_v10"),[]);
+  function accountSyncRecordKey(namespace,item){
+    if(!item||typeof item!=="object")return "";
+    var id=item.id!==undefined&&item.id!==null?String(item.id):String(item.syncRecordId||item.uuid||item.createdAt||item.created_at||"");
+    if(!id&&item.date!==undefined)id=[item.date,item.amount,item.description||item.desc||item.title||item.name||""].join("|");
+    return id?String(namespace)+":"+id:"";
+  }
+  var [accountDeletedRecords,setAccountDeletedRecordsRaw]=useStorage(userKey("account_deleted_records_v1"),{});
+  function mergeAccountDeletedRecords(patch){setAccountDeletedRecordsRaw(function(current){return mergeSyncTombstones(current,patch);});}
+  function prepareAccountCollectionWrite(namespace,current,nextValue){
+    var source=Array.isArray(nextValue)?nextValue:[];var keyFn=function(item){return accountSyncRecordKey(namespace,item);};
+    mergeAccountDeletedRecords(removedSyncRecordTombstones(current,source,keyFn));
+    return stampLocalSyncRecords(current,source,keyFn);
+  }
+  var [expenses,setExpensesRaw]=useStorage(userKey("exp_v10"),[]);var expensesRef=useRef(expenses);expensesRef.current=expenses;
+  function setExpenses(nextValue){var current=Array.isArray(expensesRef.current)?expensesRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("expense",current,requested);expensesRef.current=prepared;return setExpensesRaw(prepared);}
+  var [incomes,setIncomesRaw]=useStorage(userKey("inc_v10"),[]);var incomesRef=useRef(incomes);incomesRef.current=incomes;
+  function setIncomes(nextValue){var current=Array.isArray(incomesRef.current)?incomesRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("income",current,requested);incomesRef.current=prepared;return setIncomesRaw(prepared);}
   var [cats,setCatsRaw]=useStorage(userKey("cats_v10"),DEFAULT_CATS);
   function setCats(nextCats){if(!applyingFirestoreRef.current)markUserLocalChange("cats");return setCatsRaw(resolveDefaultProtectedNext(nextCats,cats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES));}
   cats=defaultProtectedArray(cats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES);
@@ -1589,9 +1826,12 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [customIncomeTypes,setCustomIncomeTypes]=useStorage(userKey("custom_income_types_v1"),[]);
   var [incomeTypeOverrides,setIncomeTypeOverrides]=useStorage(userKey("income_type_overrides_v1"),{});
   var incomeTypes=useMemo(function(){return getAllIncomeTypes(customIncomeTypes,incomeTypeOverrides).filter(function(x){return !x.deleted&&!x.archived;});},[customIncomeTypes,incomeTypeOverrides]);
-  var [recurring,setRecurring]=useStorage(userKey("rec_v10"),[]);
-  var [goals,setGoals]=useStorage(userKey("goals_v1"),DEFAULT_GOALS);
-  var [alerts,setAlerts]=useStorage(userKey("alerts_v1"),[]);
+  var [recurring,setRecurringRaw]=useStorage(userKey("rec_v10"),[]);var recurringRef=useRef(recurring);recurringRef.current=recurring;
+  function setRecurring(nextValue){var current=Array.isArray(recurringRef.current)?recurringRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("recurring",current,requested);recurringRef.current=prepared;return setRecurringRaw(prepared);}
+  var [goals,setGoalsRaw]=useStorage(userKey("goals_v1"),DEFAULT_GOALS);var goalsRef=useRef(goals);goalsRef.current=goals;
+  function setGoals(nextValue){var current=Array.isArray(goalsRef.current)?goalsRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("goal",current,requested);goalsRef.current=prepared;return setGoalsRaw(prepared);}
+  var [alerts,setAlertsRaw]=useStorage(userKey("alerts_v1"),[]);var alertsRef=useRef(alerts);alertsRef.current=alerts;
+  function setAlerts(nextValue){var current=Array.isArray(alertsRef.current)?alertsRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("alert",current,requested);alertsRef.current=prepared;return setAlertsRaw(prepared);}
   var [budgetPlan,setBudgetPlan]=useStorage(userKey("budget_plan_v1"),DEFAULT_BUDGET_PLAN);
   var [patrimonioAreas,setPatrimonioAreas]=useStorage(userKey("patrimonio_areas_v1"),DEFAULT_PATRIMONIO_AREAS);
   var [patrimonioEntries,setPatrimonioEntries]=useStorage(userKey("patrimonio_entries_v1"),DEFAULT_PATRIMONIO_ENTRIES);
@@ -1651,9 +1891,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var DEFAULT_HOME_WORKLETS=[
     {id:"home_quick_actions",type:"quick_actions",size:"1x",color:"#F8FAFF",params:{showTitle:false}},
     {id:"home_summary",type:"summary",size:"1x",color:"#FFFFFF",params:{showTitle:false}},
-    {id:"home_distribution_expenses",type:"distribution_expenses",size:"1x",color:"#FFFFFF",params:{range:12}},
-    {id:"home_income_vs_expense",type:"income_vs_expense",size:"1x",color:"#FFFFFF",params:{range:12}},
-    {id:"home_monthly_balance",type:"monthly_balance",size:"2x",color:"#FFFFFF",params:{range:12}},
+    {id:"home_distribution_expenses",type:"distribution_expenses",size:"1x",color:"#FFFFFF",params:{range:6}},
+    {id:"home_income_vs_expense",type:"income_vs_expense",size:"1x",color:"#FFFFFF",params:{range:6}},
+    {id:"home_monthly_balance",type:"monthly_balance",size:"2x",color:"#FFFFFF",params:{range:6}},
     {id:"home_latest_expenses",type:"latest_expenses",size:"1x",color:"#FFFFFF",params:{count:5}},
     {id:"home_latest_incomes",type:"latest_incomes",size:"1x",color:"#FFFFFF",params:{count:5}}
   ];
@@ -1778,9 +2018,18 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
 
   var [tab,setTab]=useState("home");
   var [settingsPage,setSettingsPage]=useState(null);
+  // Stato del form di supporto mantenuto nel componente principale.
+  // SupportSettingsPage è definita dentro SettingsPanel e viene ricreata quando il pannello
+  // padre si aggiorna: uno stato locale al suo interno veniva quindi azzerato e il form
+  // si richiudeva subito dopo l'apertura.
+  var [supportContactFormOpen,setSupportContactFormOpen]=useState(false);
+  useEffect(function(){
+    if(settingsPage!=="support"&&supportContactFormOpen)setSupportContactFormOpen(false);
+  },[settingsPage,supportContactFormOpen]);
   var androidBackLastPressRef=useRef(0);
   var [notifPrefs,setNotifPrefs]=useStorage(userKey("notif_prefs_v1"),{remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true});
-  var [customNotifs,setCustomNotifs]=useStorage(userKey("custom_notifs_v1"),[]);
+  var [customNotifs,setCustomNotifsRaw]=useStorage(userKey("custom_notifs_v1"),[]);var customNotifsRef=useRef(customNotifs);customNotifsRef.current=customNotifs;
+  function setCustomNotifs(nextValue){var current=Array.isArray(customNotifsRef.current)?customNotifsRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("notification",current,requested);customNotifsRef.current=prepared;return setCustomNotifsRaw(prepared);}
   var [patrimonioHistory,setPatrimonioHistory]=useStorage(userKey("patrimonio_history_v1"),{});
   var [patrimonioNotes,setPatrimonioNotes]=useStorage(userKey("patrimonio_notes_v1"),{});
   var [historyFutureMode,setHistoryFutureMode]=useStorage(userKey("history_future_mode_v1"),"untilToday");
@@ -1788,10 +2037,13 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [historySortDirection,setHistorySortDirection]=useStorage(userKey("history_sort_direction_v1"),"desc");
   var [historySortSecondary,setHistorySortSecondary]=useStorage(userKey("history_sort_secondary_v1"),"amount");
   var [historySortSecondaryDirection,setHistorySortSecondaryDirection]=useStorage(userKey("history_sort_secondary_direction_v1"),"desc");
-  var [appuntiDocuments,setAppuntiDocuments]=useStorage(userKey("appunti_documents_v1"),[]);
-  var [appuntiNotes,setAppuntiNotes]=useStorage(userKey("appunti_notes_v1"),[]);
-  var [bankCoords,setBankCoords]=useStorage(userKey("bank_coords_v1"),[]);
-  var [creditCards,setCreditCards]=useStorage(userKey("credit_cards_v1"),[]);
+  var [appuntiDocuments,setAppuntiDocumentsRaw]=useStorage(userKey("appunti_documents_v1"),[]);var appuntiDocumentsRef=useRef(appuntiDocuments);appuntiDocumentsRef.current=appuntiDocuments;
+  function setAppuntiDocuments(nextValue){var current=Array.isArray(appuntiDocumentsRef.current)?appuntiDocumentsRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("document",current,requested);appuntiDocumentsRef.current=prepared;return setAppuntiDocumentsRaw(prepared);}
+  var [appuntiNotes,setAppuntiNotesRaw]=useStorage(userKey("appunti_notes_v1"),[]);var appuntiNotesRef=useRef(appuntiNotes);appuntiNotesRef.current=appuntiNotes;
+  function setAppuntiNotes(nextValue){var current=Array.isArray(appuntiNotesRef.current)?appuntiNotesRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("note",current,requested);appuntiNotesRef.current=prepared;return setAppuntiNotesRaw(prepared);}
+  var [bankCoords,setBankCoords,bankCoordsStorageReady]=useFainanceSensitiveStorage(userKey("bank_coords_v1"),[],userId);
+  var [creditCards,setCreditCards,creditCardsStorageReady]=useFainanceSensitiveStorage(userKey("credit_cards_v1"),[],userId);
+  var sensitiveStorageReady=!!bankCoordsStorageReady&&!!creditCardsStorageReady;
   function readAIExternalConsentLocal(){try{var raw=localStorage.getItem(userKey("ai_external_consent_v1"));return raw==="accepted"||raw==='"accepted"'||raw==="true";}catch(e){return false;}}
   function readAIExternalConsentAtLocal(){try{return String(localStorage.getItem(userKey("ai_external_consent_at_v1"))||"");}catch(e){return "";}}
   var [aiExternalConsent,setAiExternalConsentState]=useState(readAIExternalConsentLocal);
@@ -1806,14 +2058,95 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   useEffect(function(){setAiExternalConsentState(readAIExternalConsentLocal());setAiExternalConsentAt(readAIExternalConsentAtLocal());},[userId]);
   var [termsAccepted,setTermsAccepted]=useStorage(userKey("terms_accepted_v1"),false);
   var [privacyAccepted,setPrivacyAccepted]=useStorage(userKey("privacy_accepted_v1"),false);
+  var [metaEventsConsent,setMetaEventsConsent]=useStorage(userKey("meta_events_consent_v1"),false);
+  // Keep the legal modal draft in the parent component. TermsAcceptanceModal is declared
+  // inside App and can otherwise be remounted whenever App rerenders, resetting taps.
+  var [legalTermsChecked,setLegalTermsChecked]=useState(!!termsAccepted);
+  var [legalPrivacyChecked,setLegalPrivacyChecked]=useState(!!privacyAccepted);
+  var [legalMetaChecked,setLegalMetaChecked]=useState(!!metaEventsConsent);
+  function readLegalAcceptanceCommittedLocal(){try{return localStorage.getItem(userKey("legal_acceptance_committed_v1"))==="1";}catch(e){return false;}}
+  function writeLegalAcceptanceCommittedLocal(){try{localStorage.setItem(userKey("legal_acceptance_committed_v1"),"1");}catch(e){}}
+  var [legalAcceptanceCommitted,setLegalAcceptanceCommitted]=useState(readLegalAcceptanceCommittedLocal);
+  var legalAcceptingRef=useRef(false);
+  useEffect(function(){
+    var committed=readLegalAcceptanceCommittedLocal();
+    legalAcceptingRef.current=false;
+    setLegalAcceptanceCommitted(committed);
+    setLegalTermsChecked(committed?true:!!termsAccepted);
+    setLegalPrivacyChecked(committed?true:!!privacyAccepted);
+    setLegalMetaChecked(!!metaEventsConsent);
+    if(committed){
+      if(!termsAccepted)setTermsAccepted(true);
+      if(!privacyAccepted)setPrivacyAccepted(true);
+    }
+  },[userId]);
+  useEffect(function(){
+    if(!legalAcceptanceCommitted)return;
+    if(!termsAccepted)setTermsAccepted(true);
+    if(!privacyAccepted)setPrivacyAccepted(true);
+  },[legalAcceptanceCommitted,termsAccepted,privacyAccepted,userId]);
+  useEffect(function(){
+    if(!fainanceIsNativePlatform())return;
+    fainanceSetMetaEventsConsent(!!metaEventsConsent).catch(function(e){console.warn("Meta App Events consent update failed",(e&&e.message)||e);});
+  },[metaEventsConsent,userId]);
   var [legalAcceptanceDate,setLegalAcceptanceDate]=useStorage(userKey("legal_acceptance_date_v1"),"");
   var [onboardingGuideSeen,setOnboardingGuideSeen]=useStorage(userKey("onboarding_guide_seen_v1"),false);
   var [onboardingGuideOpen,setOnboardingGuideOpen]=useState(false);
   var [onboardingGuideStep,setOnboardingGuideStep]=useState(0);
+  var [initialSetupStatus,setInitialSetupStatus]=useStorage(userKey("initial_setup_status_v1"),"");
+  var [initialSetupOpen,setInitialSetupOpen]=useState(false);
+  var [initialSetupMode,setInitialSetupMode]=useState("essential");
+  var [initialSetupStep,setInitialSetupStep]=useState(0);
+  var [setupLang,setSetupLang]=useState(getDefaultLang());
+  var [setupCurrency,setSetupCurrency]=useState("EUR");
+  var [setupDateFmt,setSetupDateFmt]=useState(getDefaultDateFormat());
+  var [setupFirstDay,setSetupFirstDay]=useState("mon");
+  var [setupBalanceView,setSetupBalanceView]=useState("rateizzato");
+  var [setupIncomeType,setSetupIncomeType]=useState("salario");
+  var [setupExpenseCat,setSetupExpenseCat]=useState("4");
+  var [setupExpenseMethod,setSetupExpenseMethod]=useState("8");
+  var [setupBiometric,setSetupBiometric]=useState(false);
+  var [setupShowSummary,setSetupShowSummary]=useState(true);
+  var [setupNavIcons,setSetupNavIcons]=useState(5);
+  var [setupHistoryDate,setSetupHistoryDate]=useState("operation");
+  var [setupHistoryDirection,setSetupHistoryDirection]=useState("desc");
+  var [setupShowShareHistory,setSetupShowShareHistory]=useState(true);
+  var [setupPicker,setSetupPicker]=useState("");
+  var [setupPickerSearch,setSetupPickerSearch]=useState("");
+  var setupPickerActionRef=useRef(false);
+  var onboardingGuideTransitionRef=useRef(false);
+  var onboardingGuideLocalSeenRef=useRef(false);
+  var onboardingFlowCompleteRef=useRef(false);
+  function readLocalOnboardingFlag(name){try{return localStorage.getItem(userKey(name))==="1";}catch(e){return false;}}
+  function writeLocalOnboardingFlag(name){try{localStorage.setItem(userKey(name),"1");}catch(e){}}
+  useEffect(function(){
+    var guideDone=readLocalOnboardingFlag("onboarding_guide_completed_local_v2");
+    var flowDone=readLocalOnboardingFlag("onboarding_flow_complete_v2");
+    onboardingGuideLocalSeenRef.current=guideDone||flowDone;
+    onboardingFlowCompleteRef.current=flowDone;
+    setupPickerActionRef.current=false;
+    onboardingGuideTransitionRef.current=false;
+    if(flowDone){
+      setOnboardingGuideSeen(true);
+      setInitialSetupStatus("complete");
+      setOnboardingGuideOpen(false);
+      setInitialSetupOpen(false);
+    }else if(guideDone){
+      setOnboardingGuideSeen(true);
+    }
+  },[userId]);
+  useEffect(function(){
+    if(String(initialSetupStatus||"")!=="complete")return;
+    onboardingGuideLocalSeenRef.current=true;
+    onboardingFlowCompleteRef.current=true;
+    writeLocalOnboardingFlag("onboarding_guide_completed_local_v2");
+    writeLocalOnboardingFlag("onboarding_flow_complete_v2");
+  },[userId,initialSetupStatus]);
   var [shareProjects,setShareProjects]=useStorage(userKey("share_projects_v1"),[]);
   var [showShareInHistory,setShowShareInHistory]=useStorage(userKey("share_show_history_v1"),true);
   var DEFAULT_SHOPPING_AREAS=["Alimenti","Banco Frigo","Macelleria","Pescheria","Salumi","Ortofrutta","Igiene","Altro"];
-  var [debtCredits,setDebtCredits]=useStorage(userKey("debt_credits_v1"),[]);
+  var [debtCredits,setDebtCreditsRaw]=useStorage(userKey("debt_credits_v1"),[]);var debtCreditsRef=useRef(debtCredits);debtCreditsRef.current=debtCredits;
+  function setDebtCredits(nextValue){var current=Array.isArray(debtCreditsRef.current)?debtCreditsRef.current:[];var requested=typeof nextValue==="function"?nextValue(current):nextValue;var prepared=applyingFirestoreRef.current?(Array.isArray(requested)?requested:[]):prepareAccountCollectionWrite("debt",current,requested);debtCreditsRef.current=prepared;return setDebtCreditsRaw(prepared);}
   var [shoppingDeletedRecords,setShoppingDeletedRecordsRaw]=useStorage(userKey("shopping_deleted_records_v2"),{});
   function mergeShoppingDeletedRecords(patch){setShoppingDeletedRecordsRaw(function(current){return mergeSyncTombstones(current,patch);});}
   var [shoppingCards,setShoppingCardsRaw]=useStorage(userKey("shopping_cards_v1"),[]);
@@ -1974,38 +2307,38 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   function currentAIConsentV2(){return {accepted:!!aiExternalConsent,acceptedAt:aiExternalConsent?String(aiExternalConsentAt||""):"",textVersion:AI_CONSENT_TEXT_VERSION};}
   function syncValueIsDefault(value,defaultValue){return syncJsonEqual(value,defaultValue);}
   function chooseMigratedPreference(localValue,cloudValue,defaultValue,cloudHasValue,preferAllLocal){if(preferAllLocal||!cloudHasValue)return localValue;if(!syncValueIsDefault(localValue,defaultValue)&&syncValueIsDefault(cloudValue,defaultValue))return localValue;return cloudValue;}
-  function inferDeletedKeys(newer,older,keyFn,newerTs){var out={};if(!newerTs)return out;var present={};(Array.isArray(newer)?newer:[]).forEach(function(x){var k=keyFn(x);if(k)present[k]=true;});(Array.isArray(older)?older:[]).forEach(function(x){var k=keyFn(x);if(k&&!present[k])out[k]=newerTs;});return out;}
 
   useEffect(function(){
     if(!userId){setFirestoreReady(true);return;}
+    if(!sensitiveStorageReady){setFirestoreReady(false);return;}
     firestoreHydratedRef.current=false;setFirestoreReady(false);
     var localSnap:any={
       expenses:readUserLocalJson("exp_v10",[]),incomes:readUserLocalJson("inc_v10",[]),recurring:readUserLocalJson("rec_v10",[]),goals:readUserLocalJson("goals_v1",DEFAULT_GOALS),alerts:readUserLocalJson("alerts_v1",[]),budgetPlan:readUserLocalJson("budget_plan_v1",DEFAULT_BUDGET_PLAN),
       cats:readUserLocalJson("cats_v10",DEFAULT_CATS),methods:readUserLocalJson("meth_v10",DEFAULT_METHODS),expenseGroups:readUserLocalJson("expense_groups_v1",DEFAULT_EXPENSE_GROUPS),incomeGroups:readUserLocalJson("income_groups_v1",DEFAULT_INCOME_GROUPS),methodGroups:readUserLocalJson("method_groups_v1",DEFAULT_METHOD_GROUPS),customIncomeTypes:readUserLocalJson("custom_income_types_v1",[]),incomeTypeOverrides:readUserLocalJson("income_type_overrides_v1",{}),
-      categoryPreferencesV2:{catOrder:readUserLocalJson("cat_order_v1",[]),methodOrder:readUserLocalJson("method_order_v1",[]),catSortMode:readUserLocalJson("cat_sort_mode","group"),methodSortMode:readUserLocalJson("method_sort_mode","group"),defaultExpenseCat:readUserLocalJson("default_expense_cat_v1","4"),defaultExpenseMethod:readUserLocalJson("default_expense_method_v1","2"),defaultIncomeType:readUserLocalJson("default_income_type_v1","salario"),defaultExpenseArea:readUserLocalJson("default_expense_area_v1","vita"),defaultIncomeArea:readUserLocalJson("default_income_area_v1","lavoro"),defaultMethodArea:readUserLocalJson("default_method_area_v1","conti_carte"),incomeTypeOrder:readUserLocalJson("income_type_order_v1",[])},categoryPreferencesUpdatedAt:readUserLocalUpdatedAt("category_preferences_v2"),
+      categoryPreferencesV2:{catOrder:readUserLocalJson("cat_order_v1",[]),methodOrder:readUserLocalJson("method_order_v1",[]),catSortMode:readUserLocalJson("cat_sort_mode","group"),methodSortMode:readUserLocalJson("method_sort_mode","group"),defaultExpenseCat:readUserLocalJson("default_expense_cat_v1","4"),defaultExpenseMethod:readUserLocalJson("default_expense_method_v1","8"),defaultIncomeType:readUserLocalJson("default_income_type_v1","salario"),defaultExpenseArea:readUserLocalJson("default_expense_area_v1","vita"),defaultIncomeArea:readUserLocalJson("default_income_area_v1","lavoro"),defaultMethodArea:readUserLocalJson("default_method_area_v1","conti_carte"),incomeTypeOrder:readUserLocalJson("income_type_order_v1",[])},categoryPreferencesUpdatedAt:readUserLocalUpdatedAt("category_preferences_v2"),
       patrimonioValues:readUserLocalJson("patrimonio_values_v1",{}),patrimonioAreas:readUserLocalJson("patrimonio_areas_v1",DEFAULT_PATRIMONIO_AREAS),patrimonioEntries:readUserLocalJson("patrimonio_entries_v1",DEFAULT_PATRIMONIO_ENTRIES),patrimonioHistory:readUserLocalJson("patrimonio_history_v1",{}),patrimonioNotes:readUserLocalJson("patrimonio_notes_v1",{}),patrimonyPreferencesV2:{patrimonioMode:readUserLocalJson("patrimonio_mode_v1","manuale")},patrimonyPreferencesUpdatedAt:readUserLocalUpdatedAt("patrimony_preferences_v2"),
       displayPreferencesV2:{currency:readUserLocalJson("pref_cur",getDefaultCurrency()),secondaryCurrency:readUserLocalJson("pref_sec_cur",""),showSecInHistory:readUserLocalJson("pref_sec_history",true),showSecInStats:readUserLocalJson("pref_sec_stats",true),showSecInBudget:readUserLocalJson("pref_sec_budget",false),showSecInPatrimonio:readUserLocalJson("pref_sec_patrimonio",false),dateFmt:readUserLocalJson("pref_datefmt",getDefaultDateFormat()),firstDayOfWeek:readUserLocalJson("pref_first_day_week","mon"),statsView:readUserLocalJson("pref_statsview","rateizzato"),btnStyle:readUserLocalJson("pref_btn_style","soft"),expenseColor:readUserLocalJson("pref_exp_color","#E24B4A"),incomeColor:readUserLocalJson("pref_inc_color","#1D9E75"),confirmButtonColor:readUserLocalJson("pref_confirm_color","#378ADD"),secondaryButtonColor:readUserLocalJson("pref_secondary_button_color_v1","#7FC8F8")},displayPreferencesUpdatedAt:readUserLocalUpdatedAt("display_preferences_v2"),
       homePreferencesV2:{homeBalanceView:readUserLocalJson("pref_home_balance","rateizzato"),homeWorklets:readUserLocalJson("home_worklets_v1",DEFAULT_HOME_WORKLETS),showAppSummaryHeader:readUserLocalJson("pref_show_app_summary_header_v1",true),mobileNavOrder:readUserLocalJson("pref_mobile_nav_order_v1",DEFAULT_MOBILE_NAV_ORDER),mobileNavIconCount:readUserLocalJson("pref_mobile_nav_icon_count_v1",5),mobileMenuOrder:readUserLocalJson("pref_mobile_menu_order_v1",DEFAULT_MOBILE_MENU_ORDER),mobileAllNavOrder:readUserLocalJson("pref_mobile_all_nav_order_v1",DEFAULT_MOBILE_ALL_NAV_ORDER)},homePreferencesUpdatedAt:readUserLocalUpdatedAt("home_preferences"),
-      appuntiDocuments:readUserLocalJson("appunti_documents_v1",[]),appuntiNotes:readUserLocalJson("appunti_notes_v1",[]),bankCoords:readUserLocalJson("bank_coords_v1",[]),creditCards:readUserLocalJson("credit_cards_v1",[]),shareProjects:readUserLocalJson("share_projects_v1",[]),debtCredits:readUserLocalJson("debt_credits_v1",[]),shareReceiptUploads:readUserLocalJson("share_receipt_uploads_v1",[]),
+      appuntiDocuments:readUserLocalJson("appunti_documents_v1",[]),appuntiNotes:readUserLocalJson("appunti_notes_v1",[]),bankCoords:Array.isArray(bankCoords)?bankCoords:[],creditCards:Array.isArray(creditCards)?creditCards:[],shareProjects:readUserLocalJson("share_projects_v1",[]),debtCredits:readUserLocalJson("debt_credits_v1",[]),shareReceiptUploads:readUserLocalJson("share_receipt_uploads_v1",[]),accountDeletedRecords:readUserLocalJson("account_deleted_records_v1",{}),
       shoppingCards:readUserLocalJson("shopping_cards_v1",[]),shoppingCardsUpdatedAt:readUserLocalUpdatedAt("shopping_cards"),shoppingItems:readUserLocalJson("shopping_items_v1",[]),shoppingItemsUpdatedAt:shoppingItemsLocalUpdatedAt(),shoppingLists:readUserLocalJson("shopping_lists_v2",[{id:"main",title:"Lista principale",icon:"🧺",createdAt:""}]),shoppingListsUpdatedAt:readUserLocalUpdatedAt("shopping_lists"),shoppingDeletedRecords:readUserLocalJson("shopping_deleted_records_v2",{}),shoppingPreferencesV2:{shoppingAreas:readUserLocalJson("shopping_areas_v1",DEFAULT_SHOPPING_AREAS),shoppingAreaIcons:readUserLocalJson("shopping_area_icons_v1",{}),shoppingBoughtColor:readUserLocalJson("shopping_bought_color_v1","#EAF7EE"),shoppingDefaultArea:readUserLocalJson("shopping_default_area_v1","Alimenti"),shoppingProductSort:readUserLocalJson("shopping_product_sort_v1","custom")},shoppingPreferencesUpdatedAt:readUserLocalUpdatedAt("shopping_preferences_v2"),
       aiConsentV2:{accepted:readAIExternalConsentLocal(),acceptedAt:readAIExternalConsentAtLocal(),textVersion:AI_CONSENT_TEXT_VERSION},aiConsentUpdatedAt:readUserLocalUpdatedAt("ai_consent_v2"),
-      customNotifs:readUserLocalJson("custom_notifs_v1",[]),notifPrefs:readUserLocalJson("notif_prefs_v1",{remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true}),planUsage:readUserLocalJson("plan_usage_v1",{}),shownAlertIds:readUserLocalJson("shown_alert_ids_v2",[]),onboardingGuideSeen:readUserLocalJson("onboarding_guide_seen_v1",false),termsAccepted:readUserLocalJson("terms_accepted_v1",false),privacyAccepted:readUserLocalJson("privacy_accepted_v1",false),legalAcceptanceDate:readUserLocalJson("legal_acceptance_date_v1","")
+      customNotifs:readUserLocalJson("custom_notifs_v1",[]),notifPrefs:readUserLocalJson("notif_prefs_v1",{remindActive:false,remindFreq:"daily",remindHour:"20:00",stipendioActive:true,stipendioHour:"18:00",stipendioDay:0,spesaRicorrente:true}),planUsage:readUserLocalJson("plan_usage_v1",{}),shownAlertIds:readUserLocalJson("shown_alert_ids_v2",[]),onboardingGuideSeen:readUserLocalJson("onboarding_guide_seen_v1",false),initialSetupStatus:readUserLocalJson("initial_setup_status_v1",""),termsAccepted:readUserLocalJson("terms_accepted_v1",false),privacyAccepted:readUserLocalJson("privacy_accepted_v1",false),metaEventsConsent:readUserLocalJson("meta_events_consent_v1",false),legalAcceptanceDate:readUserLocalJson("legal_acceptance_date_v1","")
     };
 
     beginRemoteApply();
-    setExpenses(Array.isArray(localSnap.expenses)?localSnap.expenses:[]);setIncomes(Array.isArray(localSnap.incomes)?localSnap.incomes:[]);setRecurring(Array.isArray(localSnap.recurring)?localSnap.recurring:[]);setGoals(Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS);setAlerts(Array.isArray(localSnap.alerts)?localSnap.alerts:[]);setBudgetPlan(localSnap.budgetPlan||DEFAULT_BUDGET_PLAN);
+    setAccountDeletedRecordsRaw(localSnap.accountDeletedRecords||{});setExpenses(stampLocalSyncRecords([],Array.isArray(localSnap.expenses)?localSnap.expenses:[],function(item){return accountSyncRecordKey("expense",item);}));setIncomes(stampLocalSyncRecords([],Array.isArray(localSnap.incomes)?localSnap.incomes:[],function(item){return accountSyncRecordKey("income",item);}));setRecurring(stampLocalSyncRecords([],Array.isArray(localSnap.recurring)?localSnap.recurring:[],function(item){return accountSyncRecordKey("recurring",item);}));setGoals(stampLocalSyncRecords([],Array.isArray(localSnap.goals)?localSnap.goals:DEFAULT_GOALS,function(item){return accountSyncRecordKey("goal",item);}));setAlerts(stampLocalSyncRecords([],Array.isArray(localSnap.alerts)?localSnap.alerts:[],function(item){return accountSyncRecordKey("alert",item);}));setBudgetPlan(localSnap.budgetPlan||DEFAULT_BUDGET_PLAN);
     setCats(Array.isArray(localSnap.cats)&&localSnap.cats.length?localSnap.cats:DEFAULT_CATS);setMethods(ensureReferencedMethods(Array.isArray(localSnap.methods)&&localSnap.methods.length?localSnap.methods:DEFAULT_METHODS,localSnap.expenses,localSnap.recurring));setExpenseGroups(Array.isArray(localSnap.expenseGroups)&&localSnap.expenseGroups.length?localSnap.expenseGroups:DEFAULT_EXPENSE_GROUPS);setIncomeGroups(Array.isArray(localSnap.incomeGroups)&&localSnap.incomeGroups.length?localSnap.incomeGroups:DEFAULT_INCOME_GROUPS);setMethodGroups(Array.isArray(localSnap.methodGroups)&&localSnap.methodGroups.length?localSnap.methodGroups:DEFAULT_METHOD_GROUPS);setCustomIncomeTypes(Array.isArray(localSnap.customIncomeTypes)?localSnap.customIncomeTypes:[]);setIncomeTypeOverrides(localSnap.incomeTypeOverrides||{});
     var lc=localSnap.categoryPreferencesV2;setCatOrder(Array.isArray(lc.catOrder)?lc.catOrder.map(String):[]);setMethodOrder(Array.isArray(lc.methodOrder)?lc.methodOrder.map(String):[]);setCatSortMode(String(lc.catSortMode||"group"));setMethodSortMode(String(lc.methodSortMode||"group"));setDefaultExpenseCat(String(lc.defaultExpenseCat||""));setDefaultExpenseMethod(String(lc.defaultExpenseMethod||""));setDefaultIncomeType(String(lc.defaultIncomeType||""));setDefaultExpenseArea(String(lc.defaultExpenseArea||"vita"));setDefaultIncomeArea(String(lc.defaultIncomeArea||"lavoro"));setDefaultMethodArea(String(lc.defaultMethodArea||"conti_carte"));setIncomeTypeOrder(Array.isArray(lc.incomeTypeOrder)?lc.incomeTypeOrder.map(String):[]);
     setPatrimonioValues(localSnap.patrimonioValues||{});setPatrimonioAreas(Array.isArray(localSnap.patrimonioAreas)?localSnap.patrimonioAreas:DEFAULT_PATRIMONIO_AREAS);setPatrimonioEntries(Array.isArray(localSnap.patrimonioEntries)?localSnap.patrimonioEntries:DEFAULT_PATRIMONIO_ENTRIES);setPatrimonioHistory(localSnap.patrimonioHistory||{});setPatrimonioNotes(localSnap.patrimonioNotes||{});setPatrimonioMode(String(localSnap.patrimonyPreferencesV2.patrimonioMode||"manuale"));
     var ld=localSnap.displayPreferencesV2;setCurrency(String(ld.currency||getDefaultCurrency()));setSecondaryCurrency(String(ld.secondaryCurrency||""));setShowSecInHistory(ld.showSecInHistory!==false);setShowSecInStats(ld.showSecInStats!==false);setShowSecInBudget(!!ld.showSecInBudget);setShowSecInPatrimonio(!!ld.showSecInPatrimonio);setDateFmt(String(ld.dateFmt||getDefaultDateFormat()));setFirstDayOfWeek(String(ld.firstDayOfWeek||"mon"));setStatsView(String(ld.statsView||"rateizzato"));setBtnStyle(String(ld.btnStyle||"soft"));setExpenseColor(String(ld.expenseColor||"#E24B4A"));setIncomeColor(String(ld.incomeColor||"#1D9E75"));setConfirmButtonColor(String(ld.confirmButtonColor||"#378ADD"));setSecondaryButtonColor(String(ld.secondaryButtonColor||"#7FC8F8"));
     var lh=localSnap.homePreferencesV2;setHomeBalanceViewRaw(lh.homeBalanceView==="reale"?"reale":"rateizzato");setHomeWorkletsRaw(normalizeHomeWorkletsValue(lh.homeWorklets,DEFAULT_HOME_WORKLETS));setShowAppSummaryHeaderRaw(lh.showAppSummaryHeader!==false);setMobileNavOrderRaw(normalizeStringOrderValue(lh.mobileNavOrder,DEFAULT_MOBILE_NAV_ORDER));setMobileNavIconCountRaw(Math.max(3,Math.min(7,Number(lh.mobileNavIconCount||5))));setMobileMenuOrderRaw(normalizeStringOrderValue(lh.mobileMenuOrder,DEFAULT_MOBILE_MENU_ORDER));setMobileAllNavOrderRaw(normalizeStringOrderValue(lh.mobileAllNavOrder,DEFAULT_MOBILE_ALL_NAV_ORDER));
-    setAppuntiDocuments(Array.isArray(localSnap.appuntiDocuments)?localSnap.appuntiDocuments:[]);setAppuntiNotes(Array.isArray(localSnap.appuntiNotes)?localSnap.appuntiNotes:[]);setBankCoords(Array.isArray(localSnap.bankCoords)?localSnap.bankCoords:[]);setCreditCards(Array.isArray(localSnap.creditCards)?localSnap.creditCards:[]);setShareProjects(Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[]);setDebtCredits(Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[]);setShareReceiptUploads(Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[]);
+    setAppuntiDocuments(stampLocalSyncRecords([],Array.isArray(localSnap.appuntiDocuments)?localSnap.appuntiDocuments:[],function(item){return accountSyncRecordKey("document",item);}));setAppuntiNotes(stampLocalSyncRecords([],Array.isArray(localSnap.appuntiNotes)?localSnap.appuntiNotes:[],function(item){return accountSyncRecordKey("note",item);}));setBankCoords(Array.isArray(localSnap.bankCoords)?localSnap.bankCoords:[]);setCreditCards(Array.isArray(localSnap.creditCards)?localSnap.creditCards:[]);setShareProjects(Array.isArray(localSnap.shareProjects)?localSnap.shareProjects:[]);setDebtCredits(stampLocalSyncRecords([],Array.isArray(localSnap.debtCredits)?localSnap.debtCredits:[],function(item){return accountSyncRecordKey("debt",item);}));setShareReceiptUploads(Array.isArray(localSnap.shareReceiptUploads)?localSnap.shareReceiptUploads:[]);
     setShoppingDeletedRecordsRaw(localSnap.shoppingDeletedRecords||{});setShoppingCards(Array.isArray(localSnap.shoppingCards)?localSnap.shoppingCards:[]);setShoppingItems(Array.isArray(localSnap.shoppingItems)?localSnap.shoppingItems:[]);setShoppingLists(Array.isArray(localSnap.shoppingLists)&&localSnap.shoppingLists.length?localSnap.shoppingLists:[{id:"main",title:"Lista principale",icon:"🧺",createdAt:""}]);var lsp=localSnap.shoppingPreferencesV2;setShoppingAreas(Array.isArray(lsp.shoppingAreas)&&lsp.shoppingAreas.length?lsp.shoppingAreas:DEFAULT_SHOPPING_AREAS);setShoppingAreaIcons(lsp.shoppingAreaIcons||{});setShoppingBoughtColor(String(lsp.shoppingBoughtColor||"#EAF7EE"));setShoppingDefaultArea(String(lsp.shoppingDefaultArea||"Alimenti"));setShoppingProductSort(String(lsp.shoppingProductSort||"custom"));
-    setAiExternalConsent(!!localSnap.aiConsentV2.accepted,localSnap.aiConsentV2.acceptedAt);setCustomNotifs(Array.isArray(localSnap.customNotifs)?localSnap.customNotifs:[]);setNotifPrefs(localSnap.notifPrefs||{});setPlanUsage(localSnap.planUsage||{});setShownAlertIds(Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[]);setOnboardingGuideSeen(!!localSnap.onboardingGuideSeen);setTermsAccepted(!!localSnap.termsAccepted);setPrivacyAccepted(!!localSnap.privacyAccepted);setLegalAcceptanceDate(String(localSnap.legalAcceptanceDate||""));
+    setAiExternalConsent(!!localSnap.aiConsentV2.accepted,localSnap.aiConsentV2.acceptedAt);setCustomNotifs(stampLocalSyncRecords([],Array.isArray(localSnap.customNotifs)?localSnap.customNotifs:[],function(item){return accountSyncRecordKey("notification",item);}));setNotifPrefs(localSnap.notifPrefs||{});setPlanUsage(localSnap.planUsage||{});setShownAlertIds(Array.isArray(localSnap.shownAlertIds)?localSnap.shownAlertIds:[]);var localFlowDone=onboardingFlowCompleteRef.current||readLocalOnboardingFlag("onboarding_flow_complete_v2");var localGuideDone=onboardingGuideLocalSeenRef.current||readLocalOnboardingFlag("onboarding_guide_completed_local_v2");var restoredSetupStatus=String(localSnap.initialSetupStatus||"");setOnboardingGuideSeen(localFlowDone||localGuideDone||!!localSnap.onboardingGuideSeen);setInitialSetupStatus(localFlowDone?"complete":(localGuideDone&&!restoredSetupStatus?"essential_pending":restoredSetupStatus));setTermsAccepted(!!localSnap.termsAccepted);setPrivacyAccepted(!!localSnap.privacyAccepted);setMetaEventsConsent(!!localSnap.metaEventsConsent);setLegalAcceptanceDate(String(localSnap.legalAcceptanceDate||""));
     endRemoteApply();setFirestoreReady(true);
 
     var docRef=doc(fbDb,"userData",userId);var cancelled=false;var firstSnapshot=true;var readyFallback=setTimeout(function(){if(!cancelled){console.warn("Firestore load timeout",userId);firestoreHydratedRef.current=true;setFirestoreReady(true);}},12000);var unsubData:any=null;
-    try{unsubData=onSnapshot(docRef,function(snap:any){
+    try{unsubData=onSnapshot(docRef,async function(snap:any){
       if(cancelled)return;clearTimeout(readyFallback);beginRemoteApply();
       if(snap.exists()){
         var d:any=snap.data();var isFirstSnapshot=firstSnapshot;firstSnapshot=false;
@@ -2021,17 +2354,19 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
             firestoreHydratedRef.current=true;setFirestoreReady(true);endRemoteApply();return;
           }
         }
-        var backfill:any={accountSyncSchemaVersion:2};var needsBackfill=false;
-        var latestLocalExpenses=readUserLocalJson("exp_v10",localSnap.expenses);var latestLocalIncomes=readUserLocalJson("inc_v10",localSnap.incomes);var latestLocalRecurring=readUserLocalJson("rec_v10",localSnap.recurring);var latestLocalGoals=readUserLocalJson("goals_v1",localSnap.goals);var latestLocalAlerts=readUserLocalJson("alerts_v1",localSnap.alerts);var latestLocalDebtCredits=readUserLocalJson("debt_credits_v1",localSnap.debtCredits);var latestLocalAppuntiDocuments=readUserLocalJson("appunti_documents_v1",localSnap.appuntiDocuments);var latestLocalAppuntiNotes=readUserLocalJson("appunti_notes_v1",localSnap.appuntiNotes);var latestLocalBankCoords=readUserLocalJson("bank_coords_v1",localSnap.bankCoords);var latestLocalCreditCards=readUserLocalJson("credit_cards_v1",localSnap.creditCards);var latestLocalCustomNotifs=readUserLocalJson("custom_notifs_v1",localSnap.customNotifs);var latestLocalShareProjects=readUserLocalJson("share_projects_v1",localSnap.shareProjects);var latestLocalShareReceiptUploads=readUserLocalJson("share_receipt_uploads_v1",localSnap.shareReceiptUploads);var latestLocalExpenseGroups=readUserLocalJson("expense_groups_v1",localSnap.expenseGroups);var latestLocalIncomeGroups=readUserLocalJson("income_groups_v1",localSnap.incomeGroups);var latestLocalMethodGroups=readUserLocalJson("method_groups_v1",localSnap.methodGroups);var latestLocalCustomIncomeTypes=readUserLocalJson("custom_income_types_v1",localSnap.customIncomeTypes);var latestLocalIncomeTypeOverrides=readUserLocalJson("income_type_overrides_v1",localSnap.incomeTypeOverrides);var latestLocalPatrimonioValues=readUserLocalJson("patrimonio_values_v1",localSnap.patrimonioValues);var latestLocalPatrimonioAreas=readUserLocalJson("patrimonio_areas_v1",localSnap.patrimonioAreas);var latestLocalPatrimonioEntries=readUserLocalJson("patrimonio_entries_v1",localSnap.patrimonioEntries);var latestLocalPatrimonioHistory=readUserLocalJson("patrimonio_history_v1",localSnap.patrimonioHistory);var latestLocalPatrimonioNotes=readUserLocalJson("patrimonio_notes_v1",localSnap.patrimonioNotes);var latestLocalCats=readUserLocalJson("cats_v10",localSnap.cats);var latestLocalMethods=readUserLocalJson("meth_v10",localSnap.methods);
+        var backfill:any={accountSyncSchemaVersion:3};var needsBackfill=false;
+        var latestLocalExpenses=readUserLocalJson("exp_v10",localSnap.expenses);var latestLocalIncomes=readUserLocalJson("inc_v10",localSnap.incomes);var latestLocalRecurring=readUserLocalJson("rec_v10",localSnap.recurring);var latestLocalGoals=readUserLocalJson("goals_v1",localSnap.goals);var latestLocalAlerts=readUserLocalJson("alerts_v1",localSnap.alerts);var latestLocalDebtCredits=readUserLocalJson("debt_credits_v1",localSnap.debtCredits);var latestLocalAppuntiDocuments=readUserLocalJson("appunti_documents_v1",localSnap.appuntiDocuments);var latestLocalAppuntiNotes=readUserLocalJson("appunti_notes_v1",localSnap.appuntiNotes);var latestLocalBankCoords=Array.isArray(bankCoords)?bankCoords:localSnap.bankCoords;var latestLocalCreditCards=Array.isArray(creditCards)?creditCards:localSnap.creditCards;var latestLocalCustomNotifs=readUserLocalJson("custom_notifs_v1",localSnap.customNotifs);var latestLocalShareProjects=readUserLocalJson("share_projects_v1",localSnap.shareProjects);var latestLocalShareReceiptUploads=readUserLocalJson("share_receipt_uploads_v1",localSnap.shareReceiptUploads);var latestLocalExpenseGroups=readUserLocalJson("expense_groups_v1",localSnap.expenseGroups);var latestLocalIncomeGroups=readUserLocalJson("income_groups_v1",localSnap.incomeGroups);var latestLocalMethodGroups=readUserLocalJson("method_groups_v1",localSnap.methodGroups);var latestLocalCustomIncomeTypes=readUserLocalJson("custom_income_types_v1",localSnap.customIncomeTypes);var latestLocalIncomeTypeOverrides=readUserLocalJson("income_type_overrides_v1",localSnap.incomeTypeOverrides);var latestLocalPatrimonioValues=readUserLocalJson("patrimonio_values_v1",localSnap.patrimonioValues);var latestLocalPatrimonioAreas=readUserLocalJson("patrimonio_areas_v1",localSnap.patrimonioAreas);var latestLocalPatrimonioEntries=readUserLocalJson("patrimonio_entries_v1",localSnap.patrimonioEntries);var latestLocalPatrimonioHistory=readUserLocalJson("patrimonio_history_v1",localSnap.patrimonioHistory);var latestLocalPatrimonioNotes=readUserLocalJson("patrimonio_notes_v1",localSnap.patrimonioNotes);var latestLocalCats=readUserLocalJson("cats_v10",localSnap.cats);var latestLocalMethods=readUserLocalJson("meth_v10",localSnap.methods);var latestLocalAccountDeleted=readUserLocalJson("account_deleted_records_v1",localSnap.accountDeletedRecords||{});
         var localCatsTs=readUserLocalUpdatedAt("cats"),localMethodsTs=readUserLocalUpdatedAt("methods"),cloudCatsTs=Number(d.catsUpdatedAt||0),cloudMethodsTs=Number(d.methodsUpdatedAt||0);var preferLocalCats=localCatsTs>cloudCatsTs,preferLocalMethods=localMethodsTs>cloudMethodsTs;
-        var cloudExpenses=Array.isArray(d.expenses)?d.expenses:[];var cloudIncomes=Array.isArray(d.incomes)?d.incomes:[];var cloudRecurring=Array.isArray(d.recurring)?d.recurring:[];
-        var mergedExpenses=isFirstSnapshot?mergeArrayByStableId(cloudExpenses,latestLocalExpenses):cloudExpenses;var mergedIncomes=isFirstSnapshot?mergeArrayByStableId(cloudIncomes,latestLocalIncomes):cloudIncomes;var mergedRecurring=isFirstSnapshot?mergeArrayByStableId(cloudRecurring,latestLocalRecurring):cloudRecurring;
-        if(isFirstSnapshot&&!syncJsonEqual(cloudExpenses,mergedExpenses)){backfill.expenses=mergedExpenses;needsBackfill=true;}if(isFirstSnapshot&&!syncJsonEqual(cloudIncomes,mergedIncomes)){backfill.incomes=mergedIncomes;needsBackfill=true;}if(isFirstSnapshot&&!syncJsonEqual(cloudRecurring,mergedRecurring)){backfill.recurring=mergedRecurring;needsBackfill=true;}
+        var cloudAccountDeleted=d.accountDeletedRecords&&typeof d.accountDeletedRecords==="object"?d.accountDeletedRecords:{};var mergedAccountDeleted=mergeSyncTombstones(latestLocalAccountDeleted,cloudAccountDeleted);
+        var expenseKey=function(item){return accountSyncRecordKey("expense",item);};var incomeKey=function(item){return accountSyncRecordKey("income",item);};var recurringKey=function(item){return accountSyncRecordKey("recurring",item);};var goalKey=function(item){return accountSyncRecordKey("goal",item);};var alertKey=function(item){return accountSyncRecordKey("alert",item);};
+        var cloudExpenses=Array.isArray(d.expenses)?d.expenses:[];var cloudIncomes=Array.isArray(d.incomes)?d.incomes:[];var cloudRecurring=Array.isArray(d.recurring)?d.recurring:[];var cloudGoals=Array.isArray(d.goals)?d.goals:[];var cloudAlerts=Array.isArray(d.alerts)?d.alerts:[];
+        var mergedExpenses=mergeSyncRecords(latestLocalExpenses,cloudExpenses,mergedAccountDeleted,expenseKey,true);var mergedIncomes=mergeSyncRecords(latestLocalIncomes,cloudIncomes,mergedAccountDeleted,incomeKey,true);var mergedRecurring=mergeSyncRecords(latestLocalRecurring,cloudRecurring,mergedAccountDeleted,recurringKey,true);var mergedGoals=mergeSyncRecords(latestLocalGoals,cloudGoals,mergedAccountDeleted,goalKey,true);var mergedAlerts=mergeSyncRecords(latestLocalAlerts,cloudAlerts,mergedAccountDeleted,alertKey,true);
+        if(isFirstSnapshot){if(!syncJsonEqual(cloudAccountDeleted,mergedAccountDeleted)){backfill.accountDeletedRecords=mergedAccountDeleted;needsBackfill=true;}[["expenses",cloudExpenses,mergedExpenses],["incomes",cloudIncomes,mergedIncomes],["recurring",cloudRecurring,mergedRecurring],["goals",cloudGoals,mergedGoals],["alerts",cloudAlerts,mergedAlerts]].forEach(function(entry){if(!syncJsonEqual(entry[1],entry[2])){backfill[entry[0]]=entry[2];needsBackfill=true;}});}
         var mergedCats=compactProtectedArray(mergeProtectedArrayByStableId(Array.isArray(d.cats)?d.cats:[],latestLocalCats,DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES,preferLocalCats),DEFAULT_CATS,DEFAULT_EXPENSE_CATEGORY_NAMES);var mergedMethods=ensureReferencedMethods(mergeProtectedArrayByStableId(Array.isArray(d.methods)?d.methods:[],latestLocalMethods,DEFAULT_METHODS,DEFAULT_METHOD_NAMES,preferLocalMethods),mergedExpenses,mergedRecurring);
-        setExpenses(mergedExpenses);setIncomes(mergedIncomes);setRecurring(mergedRecurring);setCats(mergedCats);setMethods(mergedMethods);setGoals(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.goals)?d.goals:[],latestLocalGoals):(Array.isArray(d.goals)?d.goals:localSnap.goals));setAlerts(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.alerts)?d.alerts:[],latestLocalAlerts):(Array.isArray(d.alerts)?d.alerts:localSnap.alerts));setBudgetPlan(preserveLatestLocalOnFirst?readUserLocalJson("budget_plan_v1",localSnap.budgetPlan):(d.budgetPlan!==undefined?d.budgetPlan:localSnap.budgetPlan));setExpenseGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.expenseGroups)?d.expenseGroups:[],latestLocalExpenseGroups):chooseCloudLocalArray(d.expenseGroups,localSnap.expenseGroups,DEFAULT_EXPENSE_GROUPS,false));setIncomeGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.incomeGroups)?d.incomeGroups:[],latestLocalIncomeGroups):chooseCloudLocalArray(d.incomeGroups,localSnap.incomeGroups,DEFAULT_INCOME_GROUPS,false));setMethodGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.methodGroups)?d.methodGroups:[],latestLocalMethodGroups):chooseCloudLocalArray(d.methodGroups,localSnap.methodGroups,DEFAULT_METHOD_GROUPS,false));setCustomIncomeTypes(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.customIncomeTypes)?d.customIncomeTypes:[],latestLocalCustomIncomeTypes):chooseCloudLocalArray(d.customIncomeTypes,localSnap.customIncomeTypes,[],true));setIncomeTypeOverrides(preserveLatestLocalOnFirst?{...ensureObjectValue(d.incomeTypeOverrides,{}),...ensureObjectValue(latestLocalIncomeTypeOverrides,{})}:chooseCloudLocalObject(d.incomeTypeOverrides,localSnap.incomeTypeOverrides,{}));
+        setAccountDeletedRecordsRaw(mergedAccountDeleted);setExpenses(mergedExpenses);setIncomes(mergedIncomes);setRecurring(mergedRecurring);setGoals(mergedGoals);setAlerts(mergedAlerts);setCats(mergedCats);setMethods(mergedMethods);setBudgetPlan(preserveLatestLocalOnFirst?readUserLocalJson("budget_plan_v1",localSnap.budgetPlan):(d.budgetPlan!==undefined?d.budgetPlan:localSnap.budgetPlan));setExpenseGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.expenseGroups)?d.expenseGroups:[],latestLocalExpenseGroups):chooseCloudLocalArray(d.expenseGroups,localSnap.expenseGroups,DEFAULT_EXPENSE_GROUPS,false));setIncomeGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.incomeGroups)?d.incomeGroups:[],latestLocalIncomeGroups):chooseCloudLocalArray(d.incomeGroups,localSnap.incomeGroups,DEFAULT_INCOME_GROUPS,false));setMethodGroups(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.methodGroups)?d.methodGroups:[],latestLocalMethodGroups):chooseCloudLocalArray(d.methodGroups,localSnap.methodGroups,DEFAULT_METHOD_GROUPS,false));setCustomIncomeTypes(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.customIncomeTypes)?d.customIncomeTypes:[],latestLocalCustomIncomeTypes):chooseCloudLocalArray(d.customIncomeTypes,localSnap.customIncomeTypes,[],true));setIncomeTypeOverrides(preserveLatestLocalOnFirst?{...ensureObjectValue(d.incomeTypeOverrides,{}),...ensureObjectValue(latestLocalIncomeTypeOverrides,{})}:chooseCloudLocalObject(d.incomeTypeOverrides,localSnap.incomeTypeOverrides,{}));
 
         var localCategory:any={...localSnap.categoryPreferencesV2,catOrder:readUserLocalJson("cat_order_v1",localSnap.categoryPreferencesV2.catOrder),methodOrder:readUserLocalJson("method_order_v1",localSnap.categoryPreferencesV2.methodOrder),catSortMode:readUserLocalJson("cat_sort_mode",localSnap.categoryPreferencesV2.catSortMode),methodSortMode:readUserLocalJson("method_sort_mode",localSnap.categoryPreferencesV2.methodSortMode),defaultExpenseCat:readUserLocalJson("default_expense_cat_v1",localSnap.categoryPreferencesV2.defaultExpenseCat),defaultExpenseMethod:readUserLocalJson("default_expense_method_v1",localSnap.categoryPreferencesV2.defaultExpenseMethod),defaultIncomeType:readUserLocalJson("default_income_type_v1",localSnap.categoryPreferencesV2.defaultIncomeType),defaultExpenseArea:readUserLocalJson("default_expense_area_v1",localSnap.categoryPreferencesV2.defaultExpenseArea),defaultIncomeArea:readUserLocalJson("default_income_area_v1",localSnap.categoryPreferencesV2.defaultIncomeArea),defaultMethodArea:readUserLocalJson("default_method_area_v1",localSnap.categoryPreferencesV2.defaultMethodArea),incomeTypeOrder:readUserLocalJson("income_type_order_v1",localSnap.categoryPreferencesV2.incomeTypeOrder)};
-        var legacyCategory:any={catOrder:d.catOrder,methodOrder:d.methodOrder,catSortMode:d.catSortMode,methodSortMode:d.methodSortMode,defaultExpenseCat:d.defaultExpenseCat,defaultExpenseMethod:d.defaultExpenseMethod,defaultIncomeType:d.defaultIncomeType,defaultExpenseArea:d.defaultExpenseArea,defaultIncomeArea:d.defaultIncomeArea,defaultMethodArea:d.defaultMethodArea,incomeTypeOrder:d.incomeTypeOrder};Object.keys(legacyCategory).forEach(function(k){if(legacyCategory[k]===undefined)delete legacyCategory[k];});var cloudCategory:any=d.categoryPreferencesV2&&typeof d.categoryPreferencesV2==="object"?d.categoryPreferencesV2:null;var cloudCategoryCombined:any={...legacyCategory,...(cloudCategory||{})};var localCategoryTs=readUserLocalUpdatedAt("category_preferences_v2"),cloudCategoryTs=Number(d.categoryPreferencesUpdatedAt||0);var preferLocalCategory=localCategoryTs>cloudCategoryTs;var categoryDefaults:any={catOrder:[],methodOrder:[],catSortMode:"group",methodSortMode:"group",defaultExpenseCat:"4",defaultExpenseMethod:"2",defaultIncomeType:"salario",defaultExpenseArea:"vita",defaultIncomeArea:"lavoro",defaultMethodArea:"conti_carte",incomeTypeOrder:[]};var mergedCategory:any={};Object.keys(categoryDefaults).forEach(function(k){mergedCategory[k]=chooseMigratedPreference(localCategory[k],cloudCategoryCombined[k],categoryDefaults[k],Object.prototype.hasOwnProperty.call(cloudCategoryCombined,k),preferLocalCategory);});
+        var legacyCategory:any={catOrder:d.catOrder,methodOrder:d.methodOrder,catSortMode:d.catSortMode,methodSortMode:d.methodSortMode,defaultExpenseCat:d.defaultExpenseCat,defaultExpenseMethod:d.defaultExpenseMethod,defaultIncomeType:d.defaultIncomeType,defaultExpenseArea:d.defaultExpenseArea,defaultIncomeArea:d.defaultIncomeArea,defaultMethodArea:d.defaultMethodArea,incomeTypeOrder:d.incomeTypeOrder};Object.keys(legacyCategory).forEach(function(k){if(legacyCategory[k]===undefined)delete legacyCategory[k];});var cloudCategory:any=d.categoryPreferencesV2&&typeof d.categoryPreferencesV2==="object"?d.categoryPreferencesV2:null;var cloudCategoryCombined:any={...legacyCategory,...(cloudCategory||{})};var localCategoryTs=readUserLocalUpdatedAt("category_preferences_v2"),cloudCategoryTs=Number(d.categoryPreferencesUpdatedAt||0);var preferLocalCategory=localCategoryTs>cloudCategoryTs;var categoryDefaults:any={catOrder:[],methodOrder:[],catSortMode:"group",methodSortMode:"group",defaultExpenseCat:"4",defaultExpenseMethod:"8",defaultIncomeType:"salario",defaultExpenseArea:"vita",defaultIncomeArea:"lavoro",defaultMethodArea:"conti_carte",incomeTypeOrder:[]};var mergedCategory:any={};Object.keys(categoryDefaults).forEach(function(k){mergedCategory[k]=chooseMigratedPreference(localCategory[k],cloudCategoryCombined[k],categoryDefaults[k],Object.prototype.hasOwnProperty.call(cloudCategoryCombined,k),preferLocalCategory);});
         mergedCategory.catOrder=Array.isArray(mergedCategory.catOrder)?mergedCategory.catOrder.map(String):[];mergedCategory.methodOrder=Array.isArray(mergedCategory.methodOrder)?mergedCategory.methodOrder.map(String):[];mergedCategory.incomeTypeOrder=Array.isArray(mergedCategory.incomeTypeOrder)?mergedCategory.incomeTypeOrder.map(String):[];
         setCatOrder(mergedCategory.catOrder);setMethodOrder(mergedCategory.methodOrder);setCatSortMode(String(mergedCategory.catSortMode||"group"));setMethodSortMode(String(mergedCategory.methodSortMode||"group"));setDefaultExpenseCat(String(mergedCategory.defaultExpenseCat||""));setDefaultExpenseMethod(String(mergedCategory.defaultExpenseMethod||""));setDefaultIncomeType(String(mergedCategory.defaultIncomeType||""));setDefaultExpenseArea(String(mergedCategory.defaultExpenseArea||"vita"));setDefaultIncomeArea(String(mergedCategory.defaultIncomeArea||"lavoro"));setDefaultMethodArea(String(mergedCategory.defaultMethodArea||"conti_carte"));setIncomeTypeOrder(mergedCategory.incomeTypeOrder);
         if(!cloudCategory||preferLocalCategory||!syncJsonEqual(mergedCategory,cloudCategoryCombined)){var ct=localCategoryTs||cloudCategoryTs||Date.now();writeUserLocalUpdatedAt("category_preferences_v2",ct);backfill.categoryPreferencesV2=mergedCategory;backfill.categoryPreferencesUpdatedAt=ct;Object.assign(backfill,mergedCategory);needsBackfill=true;}
@@ -2049,13 +2384,25 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         setHomeBalanceViewRaw(mergedHome.homeBalanceView);setHomeWorkletsRaw(mergedHome.homeWorklets);setShowAppSummaryHeaderRaw(mergedHome.showAppSummaryHeader);setMobileNavOrderRaw(mergedHome.mobileNavOrder);setMobileNavIconCountRaw(mergedHome.mobileNavIconCount);setMobileMenuOrderRaw(mergedHome.mobileMenuOrder);setMobileAllNavOrderRaw(mergedHome.mobileAllNavOrder);if(preferLocalHome||!cloudHomeComplete){var ht=localHomeTs||cloudHomeTs||Date.now();writeUserLocalUpdatedAt("home_preferences",ht);Object.assign(backfill,mergedHome,{homePreferencesUpdatedAt:ht});needsBackfill=true;}
 
         if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.historySortDate)setHistorySortDate(d.historySortDate);if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);
-        setAppuntiDocuments(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[],latestLocalAppuntiDocuments):(Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:localSnap.appuntiDocuments));setAppuntiNotes(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.appuntiNotes)?d.appuntiNotes:[],latestLocalAppuntiNotes):(Array.isArray(d.appuntiNotes)?d.appuntiNotes:localSnap.appuntiNotes));beginRemoteApply();(async function(){try{var raw=d.bankCoords;var cloudBank:any;if(typeof raw==="string"&&raw){var dec=await decryptBankCoords(raw,userId);cloudBank=Array.isArray(dec)?dec:[];}else cloudBank=Array.isArray(raw)?raw:localSnap.bankCoords;setBankCoords(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(cloudBank,latestLocalBankCoords):cloudBank);}catch(e){console.error("Bank coordinates decrypt/sync error");}finally{endRemoteApply();}})();beginRemoteApply();(async function(){try{var raw=d.creditCards;var cloudCards:any;if(typeof raw==="string"&&raw){var dec=await decryptBankCoords(raw,userId);cloudCards=Array.isArray(dec)?dec:[];}else cloudCards=Array.isArray(raw)?raw:localSnap.creditCards;setCreditCards(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(cloudCards,latestLocalCreditCards):cloudCards);}catch(e){console.error("Credit cards decrypt/sync error");}finally{endRemoteApply();}})();
-        setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);if(d.aiFloatingEnabled!==undefined)setAiFloatingEnabled(!!d.aiFloatingEnabled);if(d.notifPrefs)setNotifPrefs(d.notifPrefs);setCustomNotifs(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.customNotifs)?d.customNotifs:[],latestLocalCustomNotifs):(Array.isArray(d.customNotifs)?d.customNotifs:localSnap.customNotifs));if(d.termsAccepted!==undefined)setTermsAccepted(!!d.termsAccepted);if(d.privacyAccepted!==undefined)setPrivacyAccepted(!!d.privacyAccepted);if(d.legalAcceptanceDate)setLegalAcceptanceDate(d.legalAcceptanceDate);if(d.onboardingGuideSeen!==undefined)setOnboardingGuideSeen(!!d.onboardingGuideSeen);
-        setShareProjects(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.shareProjects)?d.shareProjects:[],latestLocalShareProjects):chooseCloudLocalArray(d.shareProjects,localSnap.shareProjects,[],true));setDebtCredits(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.debtCredits)?d.debtCredits:[],latestLocalDebtCredits):chooseCloudLocalArray(d.debtCredits,localSnap.debtCredits,[],true));setShareReceiptUploads(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.shareReceiptUploads)?d.shareReceiptUploads:[],latestLocalShareReceiptUploads):chooseCloudLocalArray(d.shareReceiptUploads,localSnap.shareReceiptUploads,[],true));if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);
+        var documentKey=function(item){return accountSyncRecordKey("document",item);};var noteKey=function(item){return accountSyncRecordKey("note",item);};var cloudDocuments=Array.isArray(d.appuntiDocuments)?d.appuntiDocuments:[];var cloudNotes=Array.isArray(d.appuntiNotes)?d.appuntiNotes:[];var mergedDocuments=mergeSyncRecords(latestLocalAppuntiDocuments,cloudDocuments,mergedAccountDeleted,documentKey,true);var mergedNotes=mergeSyncRecords(latestLocalAppuntiNotes,cloudNotes,mergedAccountDeleted,noteKey,true);setAppuntiDocuments(mergedDocuments);setAppuntiNotes(mergedNotes);if(isFirstSnapshot){if(!syncJsonEqual(cloudDocuments,mergedDocuments)){backfill.appuntiDocuments=mergedDocuments;needsBackfill=true;}if(!syncJsonEqual(cloudNotes,mergedNotes)){backfill.appuntiNotes=mergedNotes;needsBackfill=true;}}try{
+          var rawBank=d.bankCoords;var cloudBank:any;
+          if(typeof rawBank==="string"&&rawBank)cloudBank=await fainanceDecryptSensitiveData(rawBank,userId);else cloudBank=Array.isArray(rawBank)?rawBank:localSnap.bankCoords;
+          var mergedBank=preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(cloudBank,latestLocalBankCoords):cloudBank;
+          setBankCoords(Array.isArray(mergedBank)?mergedBank:latestLocalBankCoords);
+          if(Array.isArray(rawBank)){backfill.bankCoords=await fainanceEncryptSensitiveData(mergedBank,userId);needsBackfill=true;}
+        }catch(e){console.error("Bank coordinates decrypt/sync error",(e&&e.message)||e);setBankCoords(latestLocalBankCoords);}
+        try{
+          var rawCredit=d.creditCards;var cloudCredit:any;
+          if(typeof rawCredit==="string"&&rawCredit)cloudCredit=await fainanceDecryptSensitiveData(rawCredit,userId);else cloudCredit=Array.isArray(rawCredit)?rawCredit:localSnap.creditCards;
+          var mergedCredit=preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(cloudCredit,latestLocalCreditCards):cloudCredit;
+          setCreditCards(Array.isArray(mergedCredit)?mergedCredit:latestLocalCreditCards);
+          if(Array.isArray(rawCredit)){backfill.creditCards=await fainanceEncryptSensitiveData(mergedCredit,userId);needsBackfill=true;}
+        }catch(e){console.error("Credit cards decrypt/sync error",(e&&e.message)||e);setCreditCards(latestLocalCreditCards);}
+        setAiDismissed(Array.isArray(d.aiDismissed)?d.aiDismissed:[]);setAiChat(Array.isArray(d.aiChat)?d.aiChat:[]);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);if(d.aiFloatingEnabled!==undefined)setAiFloatingEnabled(!!d.aiFloatingEnabled);if(d.notifPrefs)setNotifPrefs(d.notifPrefs);var notificationKey=function(item){return accountSyncRecordKey("notification",item);};var cloudCustomNotifs=Array.isArray(d.customNotifs)?d.customNotifs:[];var mergedCustomNotifs=mergeSyncRecords(latestLocalCustomNotifs,cloudCustomNotifs,mergedAccountDeleted,notificationKey,true);setCustomNotifs(mergedCustomNotifs);if(isFirstSnapshot&&!syncJsonEqual(cloudCustomNotifs,mergedCustomNotifs)){backfill.customNotifs=mergedCustomNotifs;needsBackfill=true;}if(d.termsAccepted!==undefined)setTermsAccepted(!!d.termsAccepted);if(d.privacyAccepted!==undefined)setPrivacyAccepted(!!d.privacyAccepted);if(d.metaEventsConsent!==undefined)setMetaEventsConsent(!!d.metaEventsConsent);if(d.legalAcceptanceDate)setLegalAcceptanceDate(d.legalAcceptanceDate);if(d.onboardingGuideSeen!==undefined&&!onboardingGuideLocalSeenRef.current&&!onboardingFlowCompleteRef.current)setOnboardingGuideSeen(!!d.onboardingGuideSeen);if(d.initialSetupStatus!==undefined&&!onboardingGuideLocalSeenRef.current&&!onboardingFlowCompleteRef.current)setInitialSetupStatus(String(d.initialSetupStatus||""));
+        setShareProjects(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.shareProjects)?d.shareProjects:[],latestLocalShareProjects):chooseCloudLocalArray(d.shareProjects,localSnap.shareProjects,[],true));var debtKey=function(item){return accountSyncRecordKey("debt",item);};var cloudDebtCredits=Array.isArray(d.debtCredits)?d.debtCredits:[];var mergedDebtCredits=mergeSyncRecords(latestLocalDebtCredits,cloudDebtCredits,mergedAccountDeleted,debtKey,true);setDebtCredits(mergedDebtCredits);if(isFirstSnapshot&&!syncJsonEqual(cloudDebtCredits,mergedDebtCredits)){backfill.debtCredits=mergedDebtCredits;needsBackfill=true;}setShareReceiptUploads(preserveLatestLocalOnFirst?mergeArrayPreferLocalByStableId(Array.isArray(d.shareReceiptUploads)?d.shareReceiptUploads:[],latestLocalShareReceiptUploads):chooseCloudLocalArray(d.shareReceiptUploads,localSnap.shareReceiptUploads,[],true));if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);
 
-        var localItems=normalizeShoppingItemsData(readUserLocalJson("shopping_items_v1",localSnap.shoppingItems));var cloudItems=normalizeShoppingItemsData(Array.isArray(d.shoppingItems)?d.shoppingItems:[]);var localLists=readUserLocalJson("shopping_lists_v2",localSnap.shoppingLists);var cloudLists=Array.isArray(d.shoppingLists)?d.shoppingLists:[];var localCards=readUserLocalJson("shopping_cards_v1",localSnap.shoppingCards);var cloudCards=Array.isArray(d.shoppingCards)?d.shoppingCards:[];var localDeleted=readUserLocalJson("shopping_deleted_records_v2",localSnap.shoppingDeletedRecords);var cloudDeleted=d.shoppingDeletedRecords&&typeof d.shoppingDeletedRecords==="object"?d.shoppingDeletedRecords:{};var localItemsTs=shoppingItemsLocalUpdatedAt(),cloudItemsTs=Number(d.shoppingItemsUpdatedAt||0);shoppingItemsCloudUpdatedAtRef.current=cloudItemsTs;var localListsTs=readUserLocalUpdatedAt("shopping_lists"),cloudListsTs=Number(d.shoppingListsUpdatedAt||0),localCardsTs=readUserLocalUpdatedAt("shopping_cards"),cloudCardsTs=Number(d.shoppingCardsUpdatedAt||0);var mergedDeleted=mergeSyncTombstones(localDeleted,cloudDeleted);
-        if(isFirstSnapshot&&localItemsTs>cloudItemsTs)mergedDeleted=mergeSyncTombstones(mergedDeleted,inferDeletedKeys(localItems,cloudItems,shoppingSyncRecordKey,localItemsTs));else if(isFirstSnapshot&&cloudItemsTs>localItemsTs)mergedDeleted=mergeSyncTombstones(mergedDeleted,inferDeletedKeys(cloudItems,localItems,shoppingSyncRecordKey,cloudItemsTs));if(isFirstSnapshot&&localListsTs>cloudListsTs)mergedDeleted=mergeSyncTombstones(mergedDeleted,inferDeletedKeys(localLists,cloudLists,shoppingListSyncKey,localListsTs));else if(isFirstSnapshot&&cloudListsTs>localListsTs)mergedDeleted=mergeSyncTombstones(mergedDeleted,inferDeletedKeys(cloudLists,localLists,shoppingListSyncKey,cloudListsTs));if(isFirstSnapshot&&localCardsTs>cloudCardsTs)mergedDeleted=mergeSyncTombstones(mergedDeleted,inferDeletedKeys(localCards,cloudCards,shoppingCardSyncKey,localCardsTs));else if(isFirstSnapshot&&cloudCardsTs>localCardsTs)mergedDeleted=mergeSyncTombstones(mergedDeleted,inferDeletedKeys(cloudCards,localCards,shoppingCardSyncKey,cloudCardsTs));
-        var mergedItems=normalizeShoppingItemsData(mergeSyncRecords(localItems,cloudItems,mergedDeleted,shoppingSyncRecordKey,localItemsTs>=cloudItemsTs));var mergedLists=mergeSyncRecords(localLists,cloudLists,mergedDeleted,shoppingListSyncKey,localListsTs>=cloudListsTs);if(!mergedLists.length)mergedLists=[{id:"main",title:"Lista principale",icon:"🧺",createdAt:new Date().toISOString(),syncUpdatedAtMs:Date.now()}];var mergedCards=mergeSyncRecords(localCards,cloudCards,mergedDeleted,shoppingCardSyncKey,localCardsTs>=cloudCardsTs);
+        var recoveryState=shoppingRecoveryState();var recoverySnapshot=readShoppingRecoverySnapshot();var localItems=normalizeShoppingItemsData(mergeShoppingRecoveryArrays([readUserLocalJson("shopping_items_v1",localSnap.shoppingItems),recoveryState.items,recoverySnapshot.items],shoppingSyncRecordKey));var cloudItems=normalizeShoppingItemsData(Array.isArray(d.shoppingItems)?d.shoppingItems:[]);var localLists=mergeShoppingRecoveryArrays([readUserLocalJson("shopping_lists_v2",localSnap.shoppingLists),recoveryState.lists,recoverySnapshot.lists],shoppingListSyncKey);var cloudLists=Array.isArray(d.shoppingLists)?d.shoppingLists:[];var localCards=mergeShoppingRecoveryArrays([readUserLocalJson("shopping_cards_v1",localSnap.shoppingCards),recoveryState.cards,recoverySnapshot.cards],shoppingCardSyncKey);var cloudCards=Array.isArray(d.shoppingCards)?d.shoppingCards:[];preserveShoppingRecoverySnapshot(localItems,localLists,localCards);preserveShoppingRecoverySnapshot(cloudItems,cloudLists,cloudCards);var localDeleted=readUserLocalJson("shopping_deleted_records_v2",localSnap.shoppingDeletedRecords);var cloudDeleted=d.shoppingDeletedRecords&&typeof d.shoppingDeletedRecords==="object"?d.shoppingDeletedRecords:{};var localItemsTs=shoppingItemsLocalUpdatedAt(),cloudItemsTs=Number(d.shoppingItemsUpdatedAt||0);shoppingItemsCloudUpdatedAtRef.current=cloudItemsTs;var localListsTs=readUserLocalUpdatedAt("shopping_lists"),cloudListsTs=Number(d.shoppingListsUpdatedAt||0),localCardsTs=readUserLocalUpdatedAt("shopping_cards"),cloudCardsTs=Number(d.shoppingCardsUpdatedAt||0);var mergedDeleted=mergeSyncTombstones(localDeleted,cloudDeleted);var emergencyRecovery=(cloudItems.length===0&&cloudCards.length===0&&cloudLists.filter(function(x){return String(x&&x.id)!=="main";}).length===0&&(localItems.length>0||localCards.length>0||localLists.filter(function(x){return String(x&&x.id)!=="main";}).length>0));if(emergencyRecovery)mergedDeleted=removeTombstonesForShoppingRecords(mergedDeleted,localItems,localLists,localCards);
+        var mergedItems=normalizeShoppingItemsData(mergeSyncRecords(localItems,cloudItems,mergedDeleted,shoppingSyncRecordKey,emergencyRecovery||localItemsTs>=cloudItemsTs));var mergedLists=mergeSyncRecords(localLists,cloudLists,mergedDeleted,shoppingListSyncKey,emergencyRecovery||localListsTs>=cloudListsTs);if(!mergedLists.length)mergedLists=[{id:"main",title:"Lista principale",icon:"🧺",createdAt:new Date().toISOString(),syncUpdatedAtMs:Date.now()}];var mergedCards=mergeSyncRecords(localCards,cloudCards,mergedDeleted,shoppingCardSyncKey,emergencyRecovery||localCardsTs>=cloudCardsTs);preserveShoppingRecoverySnapshot(mergedItems,mergedLists,mergedCards);
         setShoppingDeletedRecordsRaw(mergedDeleted);setShoppingItems(mergedItems);setShoppingLists(mergedLists);setShoppingCards(mergedCards);if(!(mergedLists||[]).some(function(x){return String(x.id)===String(activeShoppingListId);}))setActiveShoppingListId(String((mergedLists[0]&&mergedLists[0].id)||"main"));
         var localShopPrefs:any={shoppingAreas:readUserLocalJson("shopping_areas_v1",localSnap.shoppingPreferencesV2.shoppingAreas),shoppingAreaIcons:readUserLocalJson("shopping_area_icons_v1",localSnap.shoppingPreferencesV2.shoppingAreaIcons),shoppingBoughtColor:readUserLocalJson("shopping_bought_color_v1",localSnap.shoppingPreferencesV2.shoppingBoughtColor),shoppingDefaultArea:readUserLocalJson("shopping_default_area_v1",localSnap.shoppingPreferencesV2.shoppingDefaultArea),shoppingProductSort:readUserLocalJson("shopping_product_sort_v1",localSnap.shoppingPreferencesV2.shoppingProductSort)};var cloudShopPrefs:any=d.shoppingPreferencesV2&&typeof d.shoppingPreferencesV2==="object"?d.shoppingPreferencesV2:{shoppingAreas:d.shoppingAreas,shoppingAreaIcons:d.shoppingAreaIcons,shoppingBoughtColor:d.shoppingBoughtColor,shoppingDefaultArea:d.shoppingDefaultArea,shoppingProductSort:d.shoppingProductSort};Object.keys(cloudShopPrefs).forEach(function(k){if(cloudShopPrefs[k]===undefined)delete cloudShopPrefs[k];});var localShopPrefsTs=readUserLocalUpdatedAt("shopping_preferences_v2"),cloudShopPrefsTs=Number(d.shoppingPreferencesUpdatedAt||0);var preferLocalShopPrefs=localShopPrefsTs>cloudShopPrefsTs;var shoppingDefaults:any={shoppingAreas:DEFAULT_SHOPPING_AREAS,shoppingAreaIcons:{},shoppingBoughtColor:"#EAF7EE",shoppingDefaultArea:"Alimenti",shoppingProductSort:"custom"};var mergedShopPrefs:any={};Object.keys(shoppingDefaults).forEach(function(k){mergedShopPrefs[k]=chooseMigratedPreference(localShopPrefs[k],cloudShopPrefs[k],shoppingDefaults[k],Object.prototype.hasOwnProperty.call(cloudShopPrefs,k),preferLocalShopPrefs);});setShoppingAreas(Array.isArray(mergedShopPrefs.shoppingAreas)&&mergedShopPrefs.shoppingAreas.length?mergedShopPrefs.shoppingAreas:DEFAULT_SHOPPING_AREAS);setShoppingAreaIcons(mergedShopPrefs.shoppingAreaIcons||{});setShoppingBoughtColor(String(mergedShopPrefs.shoppingBoughtColor||"#EAF7EE"));setShoppingDefaultArea(String(mergedShopPrefs.shoppingDefaultArea||"Alimenti"));setShoppingProductSort(String(mergedShopPrefs.shoppingProductSort||"custom"));
         var shoppingNeedsBackfill=isFirstSnapshot&&(!syncJsonEqual(cloudItems,mergedItems)||!syncJsonEqual(cloudLists,mergedLists)||!syncJsonEqual(cloudCards,mergedCards)||!syncJsonEqual(cloudDeleted,mergedDeleted)||!d.shoppingPreferencesV2||preferLocalShopPrefs||!syncJsonEqual(mergedShopPrefs,cloudShopPrefs));if(shoppingNeedsBackfill){backfill.shoppingItems=mergedItems;backfill.shoppingItemsUpdatedAt=Math.max(localItemsTs,cloudItemsTs,Date.now());backfill.shoppingLists=mergedLists;backfill.shoppingListsUpdatedAt=Math.max(localListsTs,cloudListsTs,Date.now());backfill.shoppingCards=mergedCards;backfill.shoppingCardsUpdatedAt=Math.max(localCardsTs,cloudCardsTs,Date.now());backfill.shoppingDeletedRecords=mergedDeleted;backfill.shoppingPreferencesV2=mergedShopPrefs;backfill.shoppingPreferencesUpdatedAt=Math.max(localShopPrefsTs,cloudShopPrefsTs,Date.now());Object.assign(backfill,mergedShopPrefs);needsBackfill=true;}
@@ -2066,13 +2413,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(needsBackfill){backfill.updatedAt=new Date().toISOString();backfill.updatedAtMs=Date.now();try{setDoc(docRef,backfill,{merge:true}).catch(function(e){console.error("Firestore V2 backfill error",(e&&e.code)||"unknown");});}catch(e){}}
       }else{
         var initialHome:any=localSnap.homePreferencesV2;var initialCategory:any=localSnap.categoryPreferencesV2;var initialDisplay:any=localSnap.displayPreferencesV2;var initialShopPrefs:any=localSnap.shoppingPreferencesV2;var initialMethods=ensureReferencedMethods(Array.isArray(localSnap.methods)&&localSnap.methods.length?localSnap.methods:DEFAULT_METHODS,localSnap.expenses,localSnap.recurring);var now=Date.now();
-        var initialPayload:any={accountSyncSchemaVersion:2,expenses:localSnap.expenses,incomes:localSnap.incomes,cats:localSnap.cats,methods:initialMethods,recurring:localSnap.recurring,goals:localSnap.goals,alerts:localSnap.alerts,budgetPlan:localSnap.budgetPlan,expenseGroups:localSnap.expenseGroups,incomeGroups:localSnap.incomeGroups,methodGroups:localSnap.methodGroups,customIncomeTypes:localSnap.customIncomeTypes,incomeTypeOverrides:localSnap.incomeTypeOverrides,categoryPreferencesV2:initialCategory,categoryPreferencesUpdatedAt:localSnap.categoryPreferencesUpdatedAt||now,...initialCategory,patrimonioValues:localSnap.patrimonioValues,patrimonioAreas:localSnap.patrimonioAreas,patrimonioEntries:localSnap.patrimonioEntries,patrimonioHistory:localSnap.patrimonioHistory,patrimonioNotes:localSnap.patrimonioNotes,patrimonyPreferencesV2:localSnap.patrimonyPreferencesV2,patrimonyPreferencesUpdatedAt:localSnap.patrimonyPreferencesUpdatedAt||now,patrimonioMode:localSnap.patrimonyPreferencesV2.patrimonioMode,displayPreferencesV2:initialDisplay,displayPreferencesUpdatedAt:localSnap.displayPreferencesUpdatedAt||now,...initialDisplay,homeBalanceView:initialHome.homeBalanceView,homeWorklets:normalizeHomeWorkletsValue(initialHome.homeWorklets,DEFAULT_HOME_WORKLETS),showAppSummaryHeader:initialHome.showAppSummaryHeader!==false,mobileNavOrder:normalizeStringOrderValue(initialHome.mobileNavOrder,DEFAULT_MOBILE_NAV_ORDER),mobileNavIconCount:Math.max(3,Math.min(7,Number(initialHome.mobileNavIconCount||5))),mobileMenuOrder:normalizeStringOrderValue(initialHome.mobileMenuOrder,DEFAULT_MOBILE_MENU_ORDER),mobileAllNavOrder:normalizeStringOrderValue(initialHome.mobileAllNavOrder,DEFAULT_MOBILE_ALL_NAV_ORDER),homePreferencesUpdatedAt:localSnap.homePreferencesUpdatedAt||(isCustomHomeSyncValue(initialHome)?now:0),appuntiDocuments:localSnap.appuntiDocuments,appuntiNotes:localSnap.appuntiNotes,bankCoords:localSnap.bankCoords,creditCards:localSnap.creditCards,shareProjects:localSnap.shareProjects,debtCredits:localSnap.debtCredits,shareReceiptUploads:localSnap.shareReceiptUploads,shoppingCards:stampLocalSyncRecords([],localSnap.shoppingCards,shoppingCardSyncKey),shoppingCardsUpdatedAt:localSnap.shoppingCardsUpdatedAt||now,shoppingItems:stampLocalSyncRecords([],normalizeShoppingItemsData(localSnap.shoppingItems),shoppingSyncRecordKey),shoppingItemsUpdatedAt:localSnap.shoppingItemsUpdatedAt||now,shoppingLists:stampLocalSyncRecords([],localSnap.shoppingLists,shoppingListSyncKey),shoppingListsUpdatedAt:localSnap.shoppingListsUpdatedAt||now,shoppingDeletedRecords:localSnap.shoppingDeletedRecords||{},shoppingPreferencesV2:initialShopPrefs,shoppingPreferencesUpdatedAt:localSnap.shoppingPreferencesUpdatedAt||now,...initialShopPrefs,aiConsentV2:localSnap.aiConsentV2,aiConsentUpdatedAt:localSnap.aiConsentUpdatedAt||(localSnap.aiConsentV2.accepted?now:0),customNotifs:localSnap.customNotifs,notifPrefs:localSnap.notifPrefs,planUsage:localSnap.planUsage,shownAlertIds:localSnap.shownAlertIds,onboardingGuideSeen:localSnap.onboardingGuideSeen,termsAccepted:localSnap.termsAccepted,privacyAccepted:localSnap.privacyAccepted,legalAcceptanceDate:localSnap.legalAcceptanceDate,updatedAt:new Date().toISOString(),updatedAtMs:now};
+        var initialBankEncrypted=await fainanceEncryptSensitiveData(localSnap.bankCoords,userId);var initialCreditEncrypted=await fainanceEncryptSensitiveData(localSnap.creditCards,userId);
+        var initialPayload:any={accountSyncSchemaVersion:3,accountDeletedRecords:localSnap.accountDeletedRecords||{},expenses:stampLocalSyncRecords([],localSnap.expenses,function(item){return accountSyncRecordKey("expense",item);}),incomes:stampLocalSyncRecords([],localSnap.incomes,function(item){return accountSyncRecordKey("income",item);}),cats:localSnap.cats,methods:initialMethods,recurring:stampLocalSyncRecords([],localSnap.recurring,function(item){return accountSyncRecordKey("recurring",item);}),goals:stampLocalSyncRecords([],localSnap.goals,function(item){return accountSyncRecordKey("goal",item);}),alerts:stampLocalSyncRecords([],localSnap.alerts,function(item){return accountSyncRecordKey("alert",item);}),budgetPlan:localSnap.budgetPlan,expenseGroups:localSnap.expenseGroups,incomeGroups:localSnap.incomeGroups,methodGroups:localSnap.methodGroups,customIncomeTypes:localSnap.customIncomeTypes,incomeTypeOverrides:localSnap.incomeTypeOverrides,categoryPreferencesV2:initialCategory,categoryPreferencesUpdatedAt:localSnap.categoryPreferencesUpdatedAt||now,...initialCategory,patrimonioValues:localSnap.patrimonioValues,patrimonioAreas:localSnap.patrimonioAreas,patrimonioEntries:localSnap.patrimonioEntries,patrimonioHistory:localSnap.patrimonioHistory,patrimonioNotes:localSnap.patrimonioNotes,patrimonyPreferencesV2:localSnap.patrimonyPreferencesV2,patrimonyPreferencesUpdatedAt:localSnap.patrimonyPreferencesUpdatedAt||now,patrimonioMode:localSnap.patrimonyPreferencesV2.patrimonioMode,displayPreferencesV2:initialDisplay,displayPreferencesUpdatedAt:localSnap.displayPreferencesUpdatedAt||now,...initialDisplay,homeBalanceView:initialHome.homeBalanceView,homeWorklets:normalizeHomeWorkletsValue(initialHome.homeWorklets,DEFAULT_HOME_WORKLETS),showAppSummaryHeader:initialHome.showAppSummaryHeader!==false,mobileNavOrder:normalizeStringOrderValue(initialHome.mobileNavOrder,DEFAULT_MOBILE_NAV_ORDER),mobileNavIconCount:Math.max(3,Math.min(7,Number(initialHome.mobileNavIconCount||5))),mobileMenuOrder:normalizeStringOrderValue(initialHome.mobileMenuOrder,DEFAULT_MOBILE_MENU_ORDER),mobileAllNavOrder:normalizeStringOrderValue(initialHome.mobileAllNavOrder,DEFAULT_MOBILE_ALL_NAV_ORDER),homePreferencesUpdatedAt:localSnap.homePreferencesUpdatedAt||(isCustomHomeSyncValue(initialHome)?now:0),appuntiDocuments:stampLocalSyncRecords([],localSnap.appuntiDocuments,function(item){return accountSyncRecordKey("document",item);}),appuntiNotes:stampLocalSyncRecords([],localSnap.appuntiNotes,function(item){return accountSyncRecordKey("note",item);}),bankCoords:initialBankEncrypted,creditCards:initialCreditEncrypted,shareProjects:localSnap.shareProjects,debtCredits:stampLocalSyncRecords([],localSnap.debtCredits,function(item){return accountSyncRecordKey("debt",item);}),shareReceiptUploads:localSnap.shareReceiptUploads,shoppingCards:stampLocalSyncRecords([],localSnap.shoppingCards,shoppingCardSyncKey),shoppingCardsUpdatedAt:localSnap.shoppingCardsUpdatedAt||now,shoppingItems:stampLocalSyncRecords([],normalizeShoppingItemsData(localSnap.shoppingItems),shoppingSyncRecordKey),shoppingItemsUpdatedAt:localSnap.shoppingItemsUpdatedAt||now,shoppingLists:stampLocalSyncRecords([],localSnap.shoppingLists,shoppingListSyncKey),shoppingListsUpdatedAt:localSnap.shoppingListsUpdatedAt||now,shoppingDeletedRecords:localSnap.shoppingDeletedRecords||{},shoppingPreferencesV2:initialShopPrefs,shoppingPreferencesUpdatedAt:localSnap.shoppingPreferencesUpdatedAt||now,...initialShopPrefs,aiConsentV2:localSnap.aiConsentV2,aiConsentUpdatedAt:localSnap.aiConsentUpdatedAt||(localSnap.aiConsentV2.accepted?now:0),customNotifs:stampLocalSyncRecords([],localSnap.customNotifs,function(item){return accountSyncRecordKey("notification",item);}),notifPrefs:localSnap.notifPrefs,planUsage:localSnap.planUsage,shownAlertIds:localSnap.shownAlertIds,onboardingGuideSeen:localSnap.onboardingGuideSeen,initialSetupStatus:localSnap.initialSetupStatus,termsAccepted:localSnap.termsAccepted,privacyAccepted:localSnap.privacyAccepted,metaEventsConsent:localSnap.metaEventsConsent,legalAcceptanceDate:localSnap.legalAcceptanceDate,updatedAt:new Date().toISOString(),updatedAtMs:now};
         try{setDoc(docRef,initialPayload,{merge:true}).catch(function(e){console.error("Firestore first local V2 backfill error",(e&&e.code)||"unknown");});}catch(e){}
       }
       firestoreHydratedRef.current=true;setFirestoreReady(true);endRemoteApply();
     },function(err){if(cancelled)return;clearTimeout(readyFallback);console.error("Firestore realtime sync error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);endRemoteApply();});}catch(err){clearTimeout(readyFallback);console.error("Firestore listener setup error",(err&&err.code)||"unknown");firestoreHydratedRef.current=true;setFirestoreReady(true);endRemoteApply();}
     return function(){cancelled=true;clearTimeout(readyFallback);try{if(unsubData)unsubData();}catch(e){}};
-  },[userId]);
+  },[userId,sensitiveStorageReady]);
 
   async function saveToFirestore(){
     if(!userId||!firestoreHydratedRef.current||applyingFirestoreRef.current||!navigator.onLine)return;
@@ -2085,9 +2433,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var capturedRevision=Number(pendingAtStart.revision||0);
     var writeToken=String(userId)+"_"+String(Date.now())+"_"+Math.random().toString(36).slice(2);
     pendingAccountSyncRef.current={revision:capturedRevision,token:writeToken};
-    var docRef=doc(fbDb,"userData",userId);var bankCoordsToSave:any=bankCoords;var creditCardsToSave:any=creditCards;try{var encBank=await encryptBankCoords(bankCoords,userId);if(encBank)bankCoordsToSave=encBank;}catch(e){}try{var encCredit=await encryptBankCoords(creditCards,userId);if(encCredit)creditCardsToSave=encCredit;}catch(e){}
+    var docRef=doc(fbDb,"userData",userId);var bankCoordsToSave:any;var creditCardsToSave:any;
+    try{bankCoordsToSave=await fainanceEncryptSensitiveData(bankCoords,userId);creditCardsToSave=await fainanceEncryptSensitiveData(creditCards,userId);}catch(e){console.error("Sensitive cloud encryption blocked",(e&&e.message)||e);accountSyncSavingRef.current=false;pendingAccountSyncRef.current={revision:capturedRevision,token:""};accountSyncRetryRequestedRef.current=true;setTimeout(function(){setAccountSyncRetryPulse(function(v){return v+1;});},1600);return;}
     var catsTs=readUserLocalUpdatedAt("cats"),methodsTs=readUserLocalUpdatedAt("methods"),now=Date.now();var homeValue=currentHomeSyncValue(),categoryValue=currentCategoryPreferencesV2(),displayValue=currentDisplayPreferencesV2(),shopPrefs=currentShoppingPreferencesV2(),patValue=currentPatrimonyPreferencesV2(),consentValue=currentAIConsentV2();var homeTs=readUserLocalUpdatedAt("home_preferences")||(isCustomHomeSyncValue(homeValue)?now:0);var categoryTs=readUserLocalUpdatedAt("category_preferences_v2");var displayTs=readUserLocalUpdatedAt("display_preferences_v2");var shopPrefsTs=readUserLocalUpdatedAt("shopping_preferences_v2");var patTs=readUserLocalUpdatedAt("patrimony_preferences_v2");var consentTs=readUserLocalUpdatedAt("ai_consent_v2");var itemsTs=shoppingItemsLocalUpdatedAt();var listsTs=readUserLocalUpdatedAt("shopping_lists");var cardsTs=readUserLocalUpdatedAt("shopping_cards");
-    var safeMethodsToSave=ensureReferencedMethods(methods,expenses,recurring);var savePayload:any={accountSyncSchemaVersion:2,syncClientWriteToken:writeToken,expenses,incomes,cats,methods:safeMethodsToSave,catsUpdatedAt:catsTs,methodsUpdatedAt:methodsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode:patValue.patrimonioMode,patrimonyPreferencesV2:patValue,patrimonyPreferencesUpdatedAt:patTs,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,...categoryValue,categoryPreferencesV2:categoryValue,categoryPreferencesUpdatedAt:categoryTs,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,...displayValue,displayPreferencesV2:displayValue,displayPreferencesUpdatedAt:displayTs,...homeValue,homePreferencesUpdatedAt:homeTs,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,creditCards:creditCardsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,aiConsentV2:consentValue,aiConsentUpdatedAt:consentTs,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingCardsUpdatedAt:cardsTs,shoppingItems,shoppingItemsUpdatedAt:itemsTs,shoppingLists,shoppingListsUpdatedAt:listsTs,shoppingDeletedRecords,...shopPrefs,shoppingPreferencesV2:shopPrefs,shoppingPreferencesUpdatedAt:shopPrefsTs,shoppingAreas:shopPrefs.shoppingAreas,shoppingAreaIcons:shopPrefs.shoppingAreaIcons,shoppingBoughtColor:shopPrefs.shoppingBoughtColor,shoppingDefaultArea:shopPrefs.shoppingDefaultArea,shoppingProductSort:shopPrefs.shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,planUsage,shownAlertIds,onboardingGuideSeen,updatedAt:new Date().toISOString(),updatedAtMs:now};
+    var safeMethodsToSave=ensureReferencedMethods(methods,expenses,recurring);var savePayload:any={accountSyncSchemaVersion:3,syncClientWriteToken:writeToken,accountDeletedRecords,expenses,incomes,cats,methods:safeMethodsToSave,catsUpdatedAt:catsTs,methodsUpdatedAt:methodsTs,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode:patValue.patrimonioMode,patrimonyPreferencesV2:patValue,patrimonyPreferencesUpdatedAt:patTs,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,...categoryValue,categoryPreferencesV2:categoryValue,categoryPreferencesUpdatedAt:categoryTs,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,...displayValue,displayPreferencesV2:displayValue,displayPreferencesUpdatedAt:displayTs,...homeValue,homePreferencesUpdatedAt:homeTs,appuntiDocuments,appuntiNotes,bankCoords:bankCoordsToSave,creditCards:creditCardsToSave,notifPrefs,customNotifs,termsAccepted,privacyAccepted,metaEventsConsent,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,aiConsentV2:consentValue,aiConsentUpdatedAt:consentTs,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingCardsUpdatedAt:cardsTs,shoppingItems,shoppingItemsUpdatedAt:itemsTs,shoppingLists,shoppingListsUpdatedAt:listsTs,shoppingDeletedRecords,...shopPrefs,shoppingPreferencesV2:shopPrefs,shoppingPreferencesUpdatedAt:shopPrefsTs,shoppingAreas:shopPrefs.shoppingAreas,shoppingAreaIcons:shopPrefs.shoppingAreaIcons,shoppingBoughtColor:shopPrefs.shoppingBoughtColor,shoppingDefaultArea:shopPrefs.shoppingDefaultArea,shoppingProductSort:shopPrefs.shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,planUsage,shownAlertIds,onboardingGuideSeen,initialSetupStatus,updatedAt:new Date().toISOString(),updatedAtMs:now};
     [["catsUpdatedAt",catsTs],["methodsUpdatedAt",methodsTs],["homePreferencesUpdatedAt",homeTs],["categoryPreferencesUpdatedAt",categoryTs],["displayPreferencesUpdatedAt",displayTs],["shoppingPreferencesUpdatedAt",shopPrefsTs],["patrimonyPreferencesUpdatedAt",patTs],["aiConsentUpdatedAt",consentTs],["shoppingItemsUpdatedAt",itemsTs],["shoppingListsUpdatedAt",listsTs],["shoppingCardsUpdatedAt",cardsTs]].forEach(function(entry){if(!Number(entry[1]||0))delete savePayload[entry[0]];});
     try{
       await setDoc(docRef,savePayload,{merge:true});
@@ -2107,29 +2456,70 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     }
   }
 
-  async function deleteCurrentAccount(){
-    if(!userId)throw new Error("Account non valido.");
+  async function reauthenticateForAccountDeletion(authUser:any,password:string){
+    var providers=((authUser&&authUser.providerData)||[]).map(function(p){return String((p&&p.providerId)||"");});
+    var authMod:any=await import("firebase/auth");
+    if(providers.indexOf("password")>=0){
+      if(!password)throw new Error(L("Inserisci la password attuale prima di eliminare l’account."));
+      if(!authUser.email)throw new Error(L("Email dell’account non disponibile."));
+      var credential=authMod.EmailAuthProvider.credential(authUser.email,password);
+      await authMod.reauthenticateWithCredential(authUser,credential);return;
+    }
+    if(providers.indexOf("google.com")>=0){
+      if(fainanceIsNativePlatform()){
+        var gmod:any=await import("@capacitor-firebase/authentication");var gauth=gmod&&gmod.FirebaseAuthentication;
+        if(!gauth||!gauth.signInWithGoogle)throw new Error(L("Riautenticazione Google non disponibile in questa build."));
+        var result:any=await gauth.signInWithGoogle({scopes:["email","profile"],skipNativeAuth:true,customParameters:[{key:"prompt",value:"select_account"}]});
+        var data:any=(result&&result.credential)||result||{};var idToken=data.idToken||data.id_token||"";var accessToken=data.accessToken||data.access_token||"";
+        if(!idToken&&!accessToken)throw new Error(L("Google non ha restituito credenziali valide."));
+        await authMod.reauthenticateWithCredential(authUser,GoogleAuthProvider.credential(idToken||null,accessToken||null));return;
+      }
+      var gp=new GoogleAuthProvider();gp.setCustomParameters({prompt:"select_account"});await authMod.reauthenticateWithPopup(authUser,gp);return;
+    }
+    if(providers.indexOf("apple.com")>=0){
+      if(fainanceIsNativePlatform()){
+        var amod:any=await import("@capacitor-firebase/authentication");var aauth=amod&&amod.FirebaseAuthentication;
+        if(!aauth||!aauth.signInWithApple)throw new Error(L("Riautenticazione Apple non disponibile in questa build."));
+        var ares:any=await aauth.signInWithApple({scopes:["email","name"],skipNativeAuth:true});var adata:any=(ares&&ares.credential)||ares||{};
+        var aid=adata.idToken||adata.id_token||adata.identityToken||adata.identity_token||"";var aa=adata.accessToken||adata.access_token||"";var nonce=adata.rawNonce||adata.raw_nonce||adata.nonce||"";
+        if(!aid)throw new Error(L("Apple non ha restituito credenziali valide."));
+        var ap=new OAuthProvider("apple.com");var ac=ap.credential(nonce?{idToken:aid,rawNonce:nonce,accessToken:aa||undefined}:{idToken:aid,accessToken:aa||undefined});
+        await authMod.reauthenticateWithCredential(authUser,ac);return;
+      }
+      var provider=new OAuthProvider("apple.com");provider.addScope("email");provider.addScope("name");await authMod.reauthenticateWithPopup(authUser,provider);return;
+    }
+    throw new Error(L("Per eliminare l’account devi accedere nuovamente con il metodo usato alla registrazione."));
+  }
+
+  async function deleteCurrentAccount(password?:string){
+    if(!userId)throw new Error(L("Account non valido."));
     var authUser=fbAuth.currentUser;
-    if(!authUser)throw new Error("Utente non trovato. Esci e rientra, poi riprova.");
+    if(!authUser)throw new Error(L("Utente non trovato. Esci e rientra, poi riprova."));
+    // La riautenticazione avviene prima di cancellare qualsiasi dato: se fallisce,
+    // profilo, cloud e copia locale rimangono intatti.
+    try{await reauthenticateForAccountDeletion(authUser,String(password||""));}catch(err:any){
+      if(err&&(err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"))throw new Error(L("Password non corretta."));
+      if(err&&err.code==="auth/popup-closed-by-user")throw new Error(L("Riautenticazione annullata."));
+      throw err;
+    }
     var deletingKey="fainance_deleting_account_"+userId;
     try{
       try{localStorage.setItem(deletingKey,"1");}catch(e){}
       setFirestoreReady(false);
-      await deleteDoc(doc(fbDb,"userData",userId)).catch(function(){});
-      await deleteDoc(doc(fbDb,"users",userId)).catch(function(){});
-      try{var ownedSnap=await getDocs(query(collection(fbDb,"shareProjects"),where("ownerUid","==",userId)));await Promise.all(ownedSnap.docs.map(function(d){return deleteDoc(d.ref);}));}catch(e){}
-      try{var invSnap=await getDocs(query(collection(fbDb,"shareInvites"),where("invitedUid","==",userId)));await Promise.all(invSnap.docs.map(function(d){return deleteDoc(d.ref);}));}catch(e){}
-      try{var notifSnap=await getDocs(query(collection(fbDb,"shareNotifications"),where("userUid","==",userId)));await Promise.all(notifSnap.docs.map(function(d){return deleteDoc(d.ref);}));}catch(e){}
-      clearFainanceLocalAccountData();
+      await deleteDoc(doc(fbDb,"userData",userId));
+      await deleteDoc(doc(fbDb,"users",userId));
+      var collectionsToDelete=[
+        getDocs(query(collection(fbDb,"shareProjects"),where("ownerUid","==",userId))),
+        getDocs(query(collection(fbDb,"shareInvites"),where("invitedUid","==",userId))),
+        getDocs(query(collection(fbDb,"shareNotifications"),where("userUid","==",userId)))
+      ];
+      var snapshots:any=await Promise.all(collectionsToDelete);
+      await Promise.all([].concat.apply([],snapshots.map(function(snap){return (snap&&snap.docs||[]).map(function(d){return deleteDoc(d.ref);});})));
       await deleteUser(authUser);
+      clearFainanceLocalAccountData(userId);
       await Promise.resolve(onLogout&&onLogout());
-    }catch(err){
-      if(err&&err.code==="auth/requires-recent-login"){
-        clearFainanceLocalAccountData();
-        await Promise.resolve(onLogout&&onLogout());
-        throw new Error("Per sicurezza Firebase richiede un accesso recente. Rientra con lo stesso account e ripeti l’eliminazione: i dati locali sono già stati rimossi da questo dispositivo.");
-      }
-      await Promise.resolve(onLogout&&onLogout()).catch(function(){});
+    }catch(err:any){
+      setFirestoreReady(true);
       throw err;
     }finally{
       try{localStorage.removeItem(deletingKey);}catch(e){}
@@ -2180,7 +2570,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return null;
   }
   function currentUserShareName(){return currentUser&&currentUser.name?currentUser.name:"Utente";}
-  var SHARE_WEB_APP_URL="https://test-fainanceapp-it.web.app";
+  var SHARE_WEB_APP_URL="https://fainanceapp.it";
   useEffect(function(){try{if(currentUser&&currentUser.email)publishCurrentUserLookup(currentUser.email,currentUser.phone,currentUser.name);}catch(e){}},[currentUser&&currentUser.id,currentUser&&currentUser.email,currentUser&&currentUser.phone,currentUser&&currentUser.name]);
   function escapeShareHtml(v){return String(v==null?"":v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
   function buildShareInviteUrl(inviteId,projectId){
@@ -2380,14 +2770,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(!firestoreReady||applyingFirestoreRef.current)return;
     var timer=setTimeout(saveToFirestore,140); // salva prima che uno snapshot remoto obsoleto possa prevalere
     return function(){clearTimeout(timer);};
-  },[expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder,methodOrder,catSortMode,methodSortMode,defaultExpenseCat,defaultExpenseMethod,defaultIncomeType,defaultExpenseArea,defaultIncomeArea,defaultMethodArea,incomeTypeOrder,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,dateFmt,firstDayOfWeek,statsView,btnStyle,expenseColor,incomeColor,homeBalanceView,homeWorklets,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrderRaw,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,aiExternalConsent,aiExternalConsentAt,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingLists,shoppingDeletedRecords,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,currentPlan,planUsage,shownAlertIds,onboardingGuideSeen,accountSyncRetryPulse,isOffline]);
+  },[accountDeletedRecords,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder,methodOrder,catSortMode,methodSortMode,defaultExpenseCat,defaultExpenseMethod,defaultIncomeType,defaultExpenseArea,defaultIncomeArea,defaultMethodArea,incomeTypeOrder,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,dateFmt,firstDayOfWeek,statsView,btnStyle,expenseColor,incomeColor,homeBalanceView,homeWorklets,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrderRaw,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,metaEventsConsent,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,aiExternalConsent,aiExternalConsentAt,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingLists,shoppingDeletedRecords,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,currentPlan,planUsage,shownAlertIds,onboardingGuideSeen,initialSetupStatus,accountSyncRetryPulse,isOffline]);
   useEffect(function(){
     function flush(){if(firestoreReady&&firestoreHydratedRef.current&&!applyingFirestoreRef.current)saveToFirestore();}
     function onVisibility(){if(document.visibilityState==="hidden")flush();}
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("pagehide",flush);
     return function(){document.removeEventListener("visibilitychange",onVisibility);window.removeEventListener("pagehide",flush);};
-  },[firestoreReady,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder,methodOrder,catSortMode,methodSortMode,defaultExpenseCat,defaultExpenseMethod,defaultIncomeType,defaultExpenseArea,defaultIncomeArea,defaultMethodArea,incomeTypeOrder,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,dateFmt,firstDayOfWeek,statsView,btnStyle,expenseColor,incomeColor,homeBalanceView,homeWorklets,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrderRaw,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,aiExternalConsent,aiExternalConsentAt,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingLists,shoppingDeletedRecords,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,onboardingGuideSeen,accountSyncRetryPulse,isOffline]);
+  },[firestoreReady,accountDeletedRecords,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder,methodOrder,catSortMode,methodSortMode,defaultExpenseCat,defaultExpenseMethod,defaultIncomeType,defaultExpenseArea,defaultIncomeArea,defaultMethodArea,incomeTypeOrder,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,dateFmt,firstDayOfWeek,statsView,btnStyle,expenseColor,incomeColor,homeBalanceView,homeWorklets,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrderRaw,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,metaEventsConsent,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,aiExternalConsent,aiExternalConsentAt,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingLists,shoppingDeletedRecords,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,planUsage,shownAlertIds,onboardingGuideSeen,initialSetupStatus,accountSyncRetryPulse,isOffline]);
 
   var [speseSubTab,setSpeseSubTab]=useState("add");
   var [addType,setAddType]=useState("expense");
@@ -2724,7 +3114,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   function setDefaultExpenseArea(value){markCategoryPreferencesChange();return setDefaultExpenseAreaRaw(value);}
   var [defaultExpenseCat,setDefaultExpenseCatRaw]=useStorage(userKey("default_expense_cat_v1"),"4");
   function setDefaultExpenseCat(value){markCategoryPreferencesChange();return setDefaultExpenseCatRaw(value);}
-  var [defaultExpenseMethod,setDefaultExpenseMethodRaw]=useStorage(userKey("default_expense_method_v1"),"2");
+  var [defaultExpenseMethod,setDefaultExpenseMethodRaw]=useStorage(userKey("default_expense_method_v1"),"8");
   function setDefaultExpenseMethod(value){markCategoryPreferencesChange();return setDefaultExpenseMethodRaw(value);}
   var [defaultIncomeArea,setDefaultIncomeAreaRaw]=useStorage(userKey("default_income_area_v1"),"lavoro");
   function setDefaultIncomeArea(value){markCategoryPreferencesChange();return setDefaultIncomeAreaRaw(value);}
@@ -2754,10 +3144,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [deleteConfirmId,setDeleteConfirmId]=useState(null);
   var [alertPopup,setAlertPopup]=useState(null); // holds array of NEW alerts to show
   var [shownAlertIds,setShownAlertIds]=useStorage(userKey("shown_alert_ids_v2"),[]); // alert keys already acknowledged
-  var [toast,setToastState]=useState<any>(null);
+  // Toast state is isolated in GlobalToastHost to preserve every open form.
   var [appUpdatePopup,setAppUpdatePopup]=useState<any>(null);
   var [appUpdateManualStatus,setAppUpdateManualStatus]=useState<any>(null);
-  var [installedAppInfo,setInstalledAppInfo]=useState<any>({version:"1.3.12",code:168,platform:"web"});
+  var [installedAppInfo,setInstalledAppInfo]=useState<any>({version:"1.4.1",code:175,platform:"web"});
   var appUpdateStoreCacheRef=useRef<any>({});
   var appUpdateCheckPromiseRef=useRef<any>(null);
   function buildRuntimeTranslationMap(){
@@ -2772,7 +3162,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           var sourceVal=src[k];
           if(typeof target==="string"&&typeof sourceVal==="string"&&sourceVal){
             if(runtimeAliasBlock[sourceVal]||runtimeAliasBlock[k])return;
-            map[sourceVal]=target;
+            if(map[sourceVal]===undefined)map[sourceVal]=target;
           }
         });
       });
@@ -2979,20 +3369,20 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return b;
   }
   function setToast(msg){
-    if(typeof msg==="function"){setToastState(msg);return;}
-    if(!msg){setToastState(null);return;}
+    if(typeof msg==="function"){publishFainanceToast(msg(FAINANCE_TOAST_CURRENT));return;}
+    if(!msg){publishFainanceToast(null);return;}
     var base=typeof msg==="object"&&!Array.isArray(msg)?msg:{text:String(msg)};
     var rawText=String((base&&base.text)||(base&&base.message)||"");
     var cleanBase={...base};
     var finalText=cleanBase.translated?String(rawText):translatePopupText(rawText);
     delete cleanBase.translated;
     cleanBase=inferToastPresentation(finalText,cleanBase);
-    setToastState({...cleanBase,text:finalText,id:Date.now()+Math.random()});
+    publishFainanceToast({...cleanBase,text:finalText,id:Date.now()+Math.random()});
   } 
 
 
-  var FAINANCE_CURRENT_VERSION="1.3.12";
-  var FAINANCE_CURRENT_VERSION_CODE=168;
+  var FAINANCE_CURRENT_VERSION="1.4.1";
+  var FAINANCE_CURRENT_VERSION_CODE=175;
   var FAINANCE_ANDROID_PACKAGE_ID="it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL="market://details?id="+FAINANCE_ANDROID_PACKAGE_ID;
   var FAINANCE_PLAY_STORE_WEB_URL="https://play.google.com/store/apps/details?id="+FAINANCE_ANDROID_PACKAGE_ID;
@@ -3308,10 +3698,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
   function AppUpdateModal(){
     if(!appUpdatePopup)return null;
-    return <div style={{position:"fixed",inset:0,zIndex:10050,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:18}}>
+    return <div style={{position:"fixed",inset:0,zIndex:10050,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:"10vh 18px 2vh",boxSizing:"border-box",overflowY:"auto"}}>
       <div style={{width:"100%",maxWidth:390,background:cardBg,color:textC,border:"1px solid "+borderC,borderRadius:22,boxShadow:"0 18px 50px rgba(0,0,0,.28)",overflow:"hidden",position:"relative"}}>
         {!appUpdatePopup.force&&<button onClick={dismissAppUpdatePopup} aria-label={translatePopupText("Chiudi")} style={{position:"absolute",top:10,right:10,zIndex:2,width:34,height:34,border:"none",borderRadius:12,background:"#FFE7E7",color:"#E24B4A",fontSize:22,fontWeight:900,lineHeight:"34px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 12px rgba(0,0,0,.12)"}}>×</button>}
-        <div style={{padding:"18px 56px 14px 18px",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff"}}>
+        <div style={{padding:"18px 56px 14px 18px",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff"}}>
           <div style={{fontSize:13,fontWeight:800,opacity:.9,marginBottom:4}}>fAInance</div>
           <div style={{fontSize:20,fontWeight:900,lineHeight:1.15}}>🚀 {translatePopupText(appUpdatePopup.title||"Aggiornamento disponibile")}</div>
         </div>
@@ -3321,13 +3711,27 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
             {translatePopupText("Versione installata")}: <b>{appUpdatePopup.currentVersion||"—"}</b>
             {appUpdatePopup.latestVersion&&<span> · {translatePopupText("Nuova versione")}: <b>{appUpdatePopup.latestVersion}</b></span>}
           </div>
-          <button onClick={openAppUpdateStore} style={{width:"100%",border:"none",borderRadius:btnRadius,padding:"12px 14px",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",fontSize:15,fontWeight:900,cursor:"pointer"}}>{translatePopupText("Aggiorna ora")}</button>
+          <button onClick={openAppUpdateStore} style={{width:"100%",border:"none",borderRadius:btnRadius,padding:"12px 14px",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",fontSize:15,fontWeight:900,cursor:"pointer"}}>{translatePopupText("Aggiorna ora")}</button>
           {!appUpdatePopup.force&&<button onClick={dismissAppUpdatePopup} style={{width:"100%",border:"1px solid "+borderC,borderRadius:btnRadius,padding:"11px 14px",background:dark?"#242435":"#fff",color:subC,fontSize:14,fontWeight:800,cursor:"pointer"}}>{translatePopupText("Non mostrare più")}</button>}
         </div>
       </div>
     </div>;
   }
+  function markOnboardingGuideLocallySeen(){
+    onboardingGuideLocalSeenRef.current=true;
+    writeLocalOnboardingFlag("onboarding_guide_completed_local_v2");
+  }
+  function persistOnboardingFlowComplete(){
+    onboardingGuideLocalSeenRef.current=true;
+    onboardingFlowCompleteRef.current=true;
+    writeLocalOnboardingFlag("onboarding_guide_completed_local_v2");
+    writeLocalOnboardingFlag("onboarding_flow_complete_v2");
+    setOnboardingGuideSeen(true);
+    setInitialSetupStatus("complete");
+  }
   function onboardingGuideEligibleNow(){
+    if(onboardingFlowCompleteRef.current||onboardingGuideLocalSeenRef.current)return false;
+    if(readLocalOnboardingFlag("onboarding_flow_complete_v2")||readLocalOnboardingFlag("onboarding_guide_completed_local_v2"))return false;
     if(onboardingGuideSeen)return false;
     var acceptedAt=Date.parse(String(legalAcceptanceDate||""));
     if(!acceptedAt||isNaN(acceptedAt))return false;
@@ -3335,14 +3739,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
 
   useEffect(function(){
-    if(appLocked||!termsAccepted||!privacyAccepted||onboardingGuideOpen)return;
+    if(appLocked||!termsAccepted||!privacyAccepted||onboardingGuideOpen||initialSetupOpen)return;
     var delay=onboardingGuideEligibleNow()?4200:1600;
     var t=setTimeout(checkAppUpdatePopup,delay);
     return function(){clearTimeout(t);};
-  },[appLocked,termsAccepted,privacyAccepted,lang,onboardingGuideSeen,onboardingGuideOpen,legalAcceptanceDate]);
+  },[appLocked,termsAccepted,privacyAccepted,lang,onboardingGuideSeen,onboardingGuideOpen,initialSetupOpen,legalAcceptanceDate]);
 
   useEffect(function(){
-    if(appLocked||!termsAccepted||!privacyAccepted||onboardingGuideOpen)return;
+    if(appLocked||!termsAccepted||!privacyAccepted||onboardingGuideOpen||initialSetupOpen)return;
     var cancelled=false;
     var nativeHandle:any=null;
     var lastCheck=0;
@@ -3362,64 +3766,241 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       }).then(function(handle:any){if(cancelled){try{handle&&handle.remove&&handle.remove();}catch(e){}}else nativeHandle=handle;}).catch(function(){});
     }
     return function(){cancelled=true;try{window.removeEventListener("focus",runForegroundCheck);document.removeEventListener("visibilitychange",runForegroundCheck);}catch(e){}try{nativeHandle&&nativeHandle.remove&&nativeHandle.remove();}catch(e){}};
-  },[appLocked,termsAccepted,privacyAccepted,onboardingGuideOpen,lang]);
+  },[appLocked,termsAccepted,privacyAccepted,onboardingGuideOpen,initialSetupOpen,lang]);
 
   useEffect(function(){
     if(appLocked||!termsAccepted||!privacyAccepted)return;
-    if(onboardingGuideOpen||!onboardingGuideEligibleNow())return;
+    if(onboardingGuideOpen||initialSetupOpen||!onboardingGuideEligibleNow())return;
     var t=setTimeout(function(){
       setOnboardingGuideStep(0);
       setOnboardingGuideOpen(true);
     },850);
     return function(){clearTimeout(t);};
-  },[appLocked,termsAccepted,privacyAccepted,onboardingGuideSeen,onboardingGuideOpen,userId,legalAcceptanceDate]);
+  },[appLocked,termsAccepted,privacyAccepted,onboardingGuideSeen,onboardingGuideOpen,initialSetupOpen,userId,legalAcceptanceDate]);
 
   function markOnboardingGuideDone(){
+    markOnboardingGuideLocallySeen();
     setOnboardingGuideSeen(true);
     setOnboardingGuideOpen(false);
     setOnboardingGuideStep(0);
+    setInitialSetupStatus("essential_pending");
+    openEssentialSetup();
+  }
+
+  function resetEssentialSetupDrafts(){
+    setSetupLang(String(getDefaultLang()));
+    setSetupCurrency("EUR");
+    setSetupDateFmt(getDefaultDateFormat());
+    setSetupFirstDay("mon");
+    setSetupBalanceView("rateizzato");
+    setSetupIncomeType("salario");
+    setSetupExpenseCat("4");
+    setSetupExpenseMethod("8");
+  }
+  function resetAdvancedSetupDrafts(){
+    setSetupBiometric(!!biometricLockEnabled);
+    setSetupShowSummary(showAppSummaryHeader!==false);
+    setSetupNavIcons(Math.max(3,Math.min(7,Number(mobileNavIconCount||5))));
+    setSetupHistoryDate(historySortDate==="created"?"created":"operation");
+    setSetupHistoryDirection(historySortDirection==="asc"?"asc":"desc");
+    setSetupShowShareHistory(showShareInHistory!==false);
+  }
+  function openEssentialSetup(){
+    resetEssentialSetupDrafts();setSetupPicker("");setSetupPickerSearch("");setInitialSetupMode("essential");setInitialSetupStep(0);setInitialSetupOpen(true);
+  }
+  function openAdvancedSetup(){
+    resetAdvancedSetupDrafts();setSetupPicker("");setSetupPickerSearch("");setInitialSetupMode("advanced");setInitialSetupStep(0);setInitialSetupOpen(true);
+  }
+  useEffect(function(){
+    if(appLocked||!termsAccepted||!privacyAccepted)return;
+    if(onboardingFlowCompleteRef.current||readLocalOnboardingFlag("onboarding_flow_complete_v2")){
+      onboardingFlowCompleteRef.current=true;
+      if(initialSetupStatus!=="complete")setInitialSetupStatus("complete");
+      if(onboardingGuideOpen)setOnboardingGuideOpen(false);
+      if(initialSetupOpen)setInitialSetupOpen(false);
+      return;
+    }
+    if(onboardingGuideOpen||initialSetupOpen)return;
+    if(initialSetupStatus==="essential_pending"){openEssentialSetup();return;}
+    if(initialSetupStatus==="advanced_pending"){openAdvancedSetup();return;}
+    if(!initialSetupStatus&&onboardingGuideSeen){setInitialSetupStatus("complete");return;}
+    if(!initialSetupStatus&&!onboardingGuideSeen&&!onboardingGuideEligibleNow()&&legalAcceptanceDate){setInitialSetupStatus("complete");}
+  },[appLocked,termsAccepted,privacyAccepted,onboardingGuideOpen,initialSetupOpen,initialSetupStatus,onboardingGuideSeen,legalAcceptanceDate,userId]);
+  function applyEssentialSetup(){
+    setLang(String(setupLang||getDefaultLang()));setCurrency(String(setupCurrency||"EUR"));setDateFmt(String(setupDateFmt||getDefaultDateFormat()));setFirstDayOfWeek(String(setupFirstDay||"mon"));setHomeBalanceView(setupBalanceView==="reale"?"reale":"rateizzato");setStatsView(setupBalanceView==="reale"?"reale":"rateizzato");
+    setDefaultIncomeType(String(setupIncomeType||"salario"));setDefaultExpenseCat(String(setupExpenseCat||"4"));setDefaultExpenseMethod(String(setupExpenseMethod||"8"));
+    var income=incomeTypes.find(function(x){return String(x.id)===String(setupIncomeType);});var expense=cats.find(function(x){return String(x.id)===String(setupExpenseCat);});var method=methods.find(function(x){return String(x.id)===String(setupExpenseMethod);});
+    if(income&&income.group)setDefaultIncomeArea(String(income.group));if(expense&&expense.group)setDefaultExpenseArea(String(expense.group));if(method&&method.group)setDefaultMethodArea(String(method.group));
+  }
+  function logMetaRegistrationOnce(){
+    if(!metaEventsConsent)return;
+    var key=userKey("meta_complete_registration_logged_v1");
+    try{if(localStorage.getItem(key)==="1")return;}catch(e){}
+    fainanceLogMetaEvent("fb_mobile_complete_registration",undefined,{registration_method:"fainance_account"}).then(function(result:any){
+      if(result&&result.success){try{localStorage.setItem(key,"1");}catch(e){}}
+    }).catch(function(e){console.warn("Meta registration event failed",(e&&e.message)||e);});
+  }
+  function completeEssentialSetup(openAdvanced){
+    applyEssentialSetup();logMetaRegistrationOnce();
+    if(openAdvanced){setInitialSetupStatus("advanced_pending");openAdvancedSetup();}
+    else{persistOnboardingFlowComplete();setInitialSetupOpen(false);setInitialSetupStep(0);}
+  }
+  async function chooseSetupBiometric(value){
+    if(!value){setSetupBiometric(false);return;}
+    var available=await checkBiometricAvailability();
+    if(!available.available){setSetupBiometric(false);setToast({text:L(available.reason||"Il controllo biometrico non è disponibile o non è configurato su questo dispositivo."),type:"warning",icon:"⚠️",color:"#EF9F27"});return;}
+    var confirmed=await requestBiometricUnlock(L("Conferma l’attivazione del blocco biometrico"));
+    if(confirmed!==true){setSetupBiometric(false);setToast({text:L(biometricLockMessage||"Controllo biometrico non completato."),type:"warning",icon:"⚠️",color:"#EF9F27"});return;}
+    setSetupBiometric(true);
+    setToast({text:L("Biometria verificata. La protezione verrà attivata al termine della configurazione."),type:"success",icon:"🔐"});
+  }
+  function completeAdvancedSetup(){
+    if(setupBiometric){biometricInitialCheckRef.current=true;biometricBackgroundAtRef.current=null;biometricSkipAutoLockUntilRef.current=Date.now()+5000;setLocalLockMethod("biometric");setBiometricLockEnabled(true);setAppLocked(false);}else setBiometricLockEnabled(false);
+    setShowAppSummaryHeader(!!setupShowSummary);setMobileNavIconCount(Math.max(3,Math.min(7,Number(setupNavIcons||5))));setHistorySortDate(setupHistoryDate==="created"?"created":"operation");setHistorySortDirection(setupHistoryDirection==="asc"?"asc":"desc");setShowShareInHistory(!!setupShowShareHistory);persistOnboardingFlowComplete();setInitialSetupStep(2);
+  }
+  function finishAdvancedSetup(){persistOnboardingFlowComplete();setSetupPicker("");setSetupPickerSearch("");setInitialSetupOpen(false);setInitialSetupStep(0);setInitialSetupMode("essential");}
+  function skipInitialSetup(){
+    persistOnboardingFlowComplete();setSetupPicker("");setSetupPickerSearch("");setInitialSetupOpen(false);setInitialSetupStep(0);setInitialSetupMode("essential");
+  }
+  function InitialSetupModal(){
+    var essential=initialSetupMode==="essential";
+    var maxStep=essential?4:2;
+    function SL(value:any){
+      var raw=String(value==null?"":value);
+      var code=String(setupLang||lang||getDefaultLang()||"it");
+      try{
+        var table:any=(TRANSLATIONS as any)[code]||(TRANSLATIONS as any).it||{};
+        var translated=table[raw];
+        if(typeof translated==="string"&&translated)return translated;
+      }catch(e){}
+      return raw;
+    }
+    var step=Math.max(0,Math.min(initialSetupStep,maxStep));
+    var primary=confirmButtonColor||"#378ADD";
+    var panelStyle:any={background:dark?"#252535":"#F7F9FC",border:"1px solid "+borderC,borderRadius:16,padding:14,display:"flex",flexDirection:"column",gap:9};
+    var labelStyle:any={fontSize:12,fontWeight:900,color:textC};
+    function choice(id:any,label:any,selected:any,onClick:any,desc?:any){
+      var active=String(selected)===String(id);
+      return <button type="button" onClick={onClick} style={{width:"100%",textAlign:"left",border:"1px solid "+(active?primary:borderC),background:active?(dark?primary+"2B":primary+"12"):(dark?"#252535":"#fff"),borderRadius:14,padding:"12px 13px",color:textC,cursor:"pointer",display:"flex",alignItems:"center",gap:11,touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span style={{width:20,height:20,borderRadius:"50%",border:"2px solid "+(active?primary:borderC),display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{active&&<span style={{width:10,height:10,borderRadius:"50%",background:primary}}/>}</span><span><span style={{fontSize:14,fontWeight:900}}>{SL(label)}</span>{desc&&<span style={{display:"block",fontSize:12,color:subC,marginTop:3,lineHeight:1.35}}>{SL(desc)}</span>}</span></button>;
+    }
+    function switchControl(checked){return <span aria-hidden="true" style={{width:46,height:27,borderRadius:999,background:checked?primary:(dark?"#55556a":"#CDD2DC"),padding:3,boxSizing:"border-box",flexShrink:0,transition:"all .15s"}}><span style={{display:"block",width:21,height:21,borderRadius:"50%",background:"#fff",transform:checked?"translateX(19px)":"translateX(0)",transition:"all .15s",boxShadow:"0 2px 6px rgba(0,0,0,.25)"}}/></span>}
+    function toggleRow(label,desc,checked,onChange){return <button type="button" onClick={onChange} style={{...panelStyle,width:"100%",textAlign:"left",cursor:"pointer",flexDirection:"row",alignItems:"center",justifyContent:"space-between",touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span style={{paddingRight:12}}><span style={{display:"block",fontSize:14,fontWeight:900,color:textC}}>{SL(label)}</span>{desc&&<span style={{display:"block",fontSize:12,color:subC,marginTop:4,lineHeight:1.35}}>{SL(desc)}</span>}</span>{switchControl(checked)}</button>}
+    function openSetupPicker(id){
+      if(setupPickerActionRef.current)return;
+      setSetupPickerSearch("");
+      setSetupPicker(id);
+    }
+    function closeSetupPicker(){
+      setupPickerActionRef.current=false;
+      setSetupPicker("");
+      setSetupPickerSearch("");
+    }
+    function setupDateLabel(id,example){
+      var labels:any={it:{dmy:"GG/MM/AAAA",mdy:"MM/GG/AAAA",ymd:"AAAA-MM-GG"},en:{dmy:"DD/MM/YYYY",mdy:"MM/DD/YYYY",ymd:"YYYY-MM-DD"},es:{dmy:"DD/MM/AAAA",mdy:"MM/DD/AAAA",ymd:"AAAA-MM-DD"},fr:{dmy:"JJ/MM/AAAA",mdy:"MM/JJ/AAAA",ymd:"AAAA-MM-JJ"},de:{dmy:"TT/MM/JJJJ",mdy:"MM/TT/JJJJ",ymd:"JJJJ-MM-TT"},pt:{dmy:"DD/MM/AAAA",mdy:"MM/DD/AAAA",ymd:"AAAA-MM-DD"},pl:{dmy:"DD/MM/RRRR",mdy:"MM/DD/RRRR",ymd:"RRRR-MM-DD"},nl:{dmy:"DD/MM/JJJJ",mdy:"MM/DD/JJJJ",ymd:"JJJJ-MM-DD"},ro:{dmy:"ZZ/LL/AAAA",mdy:"LL/ZZ/AAAA",ymd:"AAAA-LL-ZZ"},el:{dmy:"ΗΗ/ΜΜ/ΕΕΕΕ",mdy:"ΜΜ/ΗΗ/ΕΕΕΕ",ymd:"ΕΕΕΕ-ΜΜ-ΗΗ"}};
+      var code=String(setupLang||lang||"it");var map=labels[code]||labels.it;return String(map[id]||id)+" · "+String(example||"");
+    }
+    function cleanSetupOptionName(value:any){return String(value||"").replace(/^\s*[+＋]\s*/,"").trim();}
+    function setupOptionIcon(item:any,kind:any){
+      var icon=String((item&&item.icon)||"").trim();
+      if(icon!=="+"&&icon!=="＋")return icon;
+      var defaults=kind==="expense"?DEFAULT_CATS:(kind==="method"?DEFAULT_METHODS:[]);
+      var canonical=(defaults||[]).find(function(x){return String(x.id)===String(item&&item.id);});
+      return String((canonical&&canonical.icon)||"").trim();
+    }
+    function setupOptionLabel(item:any,kind:any){
+      var icon=setupOptionIcon(item,kind);
+      var name=cleanSetupOptionName(SL(item&&item.name));
+      return (icon?icon+" ":"")+name;
+    }
+    function dateFormatChoice(id:any,example:any){
+      var active=String(setupDateFmt)===String(id);
+      var full=setupDateLabel(String(id),example).split(" · ");
+      return <button key={String(id)} type="button" onClick={function(){setSetupDateFmt(String(id));}} style={{minWidth:0,border:"1px solid "+(active?primary:borderC),background:active?(dark?primary+"2B":primary+"12"):(dark?"#252535":"#fff"),borderRadius:13,padding:"10px 6px",color:textC,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span style={{fontSize:11,fontWeight:950,whiteSpace:"nowrap"}}>{full[0]}</span><span style={{fontSize:10,color:active?primary:subC,fontWeight:active?900:700,whiteSpace:"nowrap"}}>{full.slice(1).join(" · ")}</span></button>;
+    }
+    function pickerOptions(){
+      if(setupPicker==="language")return LANGUAGES.map(function(x){return {value:String(x.code),label:String(x.label)};});
+      if(setupPicker==="currency")return CURRENCIES.map(function(x){return {value:String(x.code),label:String(x.symbol)+" · "+String(x.code)};});
+      if(setupPicker==="date")return DATE_FORMATS.map(function(x){return {value:String(x.id),label:setupDateLabel(String(x.id),x.example)};});
+      if(setupPicker==="income")return incomeTypes.map(function(x){return {value:String(x.id),label:setupOptionLabel(x,"income")};});
+      if(setupPicker==="expense")return cats.filter(function(x){return !x.archived&&!x.deleted;}).map(function(x){return {value:String(x.id),label:setupOptionLabel(x,"expense")};});
+      if(setupPicker==="method")return methods.filter(function(x){return !x.archived&&!x.deleted;}).map(function(x){return {value:String(x.id),label:setupOptionLabel(x,"method")};});
+      return [];
+    }
+    function currentPickerValue(){if(setupPicker==="language")return setupLang;if(setupPicker==="currency")return setupCurrency;if(setupPicker==="date")return setupDateFmt;if(setupPicker==="income")return setupIncomeType;if(setupPicker==="expense")return setupExpenseCat;if(setupPicker==="method")return setupExpenseMethod;return "";}
+    function selectedLabel(id,value){
+      if(id==="language"){var l=LANGUAGES.find(function(x){return String(x.code)===String(value);});return l?l.label:String(value);}
+      if(id==="currency"){var c=CURRENCIES.find(function(x){return String(x.code)===String(value);});return c?String(c.symbol)+" · "+String(c.code):String(value);}
+      if(id==="date"){var d=DATE_FORMATS.find(function(x){return String(x.id)===String(value);});return d?setupDateLabel(String(d.id),d.example):String(value);}
+      var list=id==="income"?incomeTypes:(id==="expense"?cats:methods);var item=list.find(function(x){return String(x.id)===String(value);});return item?setupOptionLabel(item,id):String(value);
+    }
+    function pickValue(value){
+      if(setupPickerActionRef.current)return;
+      setupPickerActionRef.current=true;
+      var pickerId=String(setupPicker||"");
+      var selected=String(value);
+      // Prima chiudiamo il pannello. Il valore viene applicato nel fotogramma
+      // successivo, così Android non deve smontare il selettore e ritradurre
+      // contemporaneamente tutta la configurazione.
+      setSetupPicker("");
+      setSetupPickerSearch("");
+      var applySelection=function(){
+        if(pickerId==="language")setSetupLang(selected);
+        else if(pickerId==="currency")setSetupCurrency(selected);
+        else if(pickerId==="date")setSetupDateFmt(selected);
+        else if(pickerId==="income")setSetupIncomeType(selected);
+        else if(pickerId==="expense")setSetupExpenseCat(selected);
+        else if(pickerId==="method")setSetupExpenseMethod(selected);
+        setTimeout(function(){setupPickerActionRef.current=false;},80);
+      };
+      try{
+        if(typeof window!=="undefined"&&typeof window.requestAnimationFrame==="function")window.requestAnimationFrame(function(){applySelection();});
+        else setTimeout(applySelection,0);
+      }catch(e){setTimeout(applySelection,0);}
+    }
+    function pickerField(label,id,value){return <div style={panelStyle}><label style={labelStyle}>{SL(label)}</label><button type="button" onClick={function(){openSetupPicker(id);}} style={{width:"100%",boxSizing:"border-box",border:"1px solid "+borderC,borderRadius:12,padding:"12px",fontSize:14,background:dark?"#1E1E30":"#fff",color:textC,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,textAlign:"left",touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span style={{fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selectedLabel(id,value)}</span><span aria-hidden="true" style={{color:primary,fontSize:18}}>⌄</span></button></div>}
+    function summaryPreviewContent(){return <><style>{"@keyframes fainanceSummaryGlow{0%,100%{transform:translateY(0);box-shadow:0 5px 16px rgba(55,138,221,.10)}50%{transform:translateY(-3px);box-shadow:0 10px 24px rgba(55,138,221,.24)}}@keyframes fainanceNavPop{0%,100%{transform:translateY(0);opacity:.72}50%{transform:translateY(-5px);opacity:1}}"}</style><div style={{fontSize:11,fontWeight:900,color:subC,marginBottom:8}}>{SL("Anteprima riepilogo superiore")}</div><div className="fainance-setup-summary-preview" style={{animation:"fainanceSummaryGlow 2.4s ease-in-out infinite",background:dark?"#1E1E30":"#fff",border:"1px solid "+borderC,borderRadius:13,padding:"10px 12px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>{[["Uscite","€ 820","#E24B4A"],["Saldo","€ 430","#378ADD"],["Entrate","€ 1.250","#1D9E75"]].map(function(x){return <div key={x[0]} style={{textAlign:"center"}}><div style={{fontSize:9,color:subC}}>{SL(x[0])}</div><div style={{fontSize:13,fontWeight:950,color:x[2]}}>{x[1]}</div></div>})}</div><div style={{fontSize:11,color:subC,lineHeight:1.35,marginTop:8}}>{SL("Mostra sempre entrate, uscite e saldo nella parte alta dell’app.")}</div></>}
+    function summarySettingCard(){return <div style={panelStyle}><button type="button" onClick={function(){setSetupShowSummary(!setupShowSummary)}} style={{border:"none",padding:0,background:"transparent",width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,textAlign:"left",cursor:"pointer",touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span><span style={{display:"block",fontSize:14,fontWeight:900,color:textC}}>{SL("Mostra riepilogo in alto?")}</span><span style={{display:"block",fontSize:12,color:subC,marginTop:4,lineHeight:1.35}}>{SL("Mostra entrate, uscite e saldo nella parte superiore dell’app.")}</span></span>{switchControl(setupShowSummary)}</button><div style={{height:1,background:borderC,margin:"4px 0 2px"}}/>{summaryPreviewContent()}</div>}
+    function navPreviewContent(){var count=Math.max(3,Math.min(7,Number(setupNavIcons||5)));var icons=["🏠","💸","📋","🎙️","📊","🎯","☰"].slice(0,count);return <><div style={{fontSize:11,fontWeight:900,color:subC,marginBottom:8}}>{SL("Anteprima barra inferiore")}</div><div style={{background:dark?"#1E1E30":"#fff",border:"1px solid "+borderC,borderRadius:13,padding:"10px 8px",display:"flex",alignItems:"center",justifyContent:"space-around",gap:4}}>{icons.map(function(icon,i){return <span key={i} style={{fontSize:18,animation:"fainanceNavPop 1.8s ease-in-out "+(i*.12)+"s infinite",display:"inline-flex",width:28,height:28,alignItems:"center",justifyContent:"center"}}>{icon}</span>})}</div><div style={{fontSize:11,color:subC,lineHeight:1.35,marginTop:8}}>{SL("Scegli quante sezioni mostrare direttamente nella barra. Le altre restano disponibili in Altro.")}</div></>}
+    function navSettingCard(){return <div style={panelStyle}><label style={labelStyle}>{SL("Numero icone barra inferiore")}: <b>{setupNavIcons}</b></label><input type="range" min="3" max="7" step="1" value={setupNavIcons} onChange={function(e){setSetupNavIcons(Number(e.target.value))}} style={{width:"100%",touchAction:"pan-x"}}/><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:subC}}><span>3</span><span>7</span></div><div style={{height:1,background:borderC,margin:"4px 0 2px"}}/>{navPreviewContent()}</div>}
+    var body:any=null;
+    var title=essential?"Configurazione essenziale":"Configurazione avanzata";
+    var subtitle=essential?"Personalizza le impostazioni di base prima di iniziare.":"Completa le preferenze facoltative dell’app.";
+    if(essential&&step===0)body=<>{pickerField("Scegli lingua","language",setupLang)}{pickerField("Scegli valuta","currency",setupCurrency)}</>;
+    if(essential&&step===1)body=<><div style={panelStyle}><label style={labelStyle}>{SL("Formato data")}</label><div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:7}}>{DATE_FORMATS.map(function(x){return dateFormatChoice(x.id,x.example);})}</div></div><div style={panelStyle}><label style={labelStyle}>{SL("Primo giorno della settimana")}</label><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{choice("mon","Lunedì",setupFirstDay,function(){setSetupFirstDay("mon")})}{choice("sun","Domenica",setupFirstDay,function(){setSetupFirstDay("sun")})}</div></div></>;
+    if(essential&&step===2)body=<div style={{display:"flex",flexDirection:"column",gap:10}}><div style={{fontSize:13,color:subC,lineHeight:1.45}}>{SL("Scegli come mostrare le spese rateizzate nel saldo e nelle statistiche.")}</div>{choice("rateizzato","Rateizzato",setupBalanceView,function(){setSetupBalanceView("rateizzato")},"Ogni rata viene conteggiata nel mese in cui è prevista.")}{choice("reale","Reale",setupBalanceView,function(){setSetupBalanceView("reale")},"L’intero importo viene conteggiato nella data dell’acquisto.")}</div>;
+    if(essential&&step===3)body=<div style={{display:"flex",flexDirection:"column",gap:11}}>{pickerField("Categoria entrate predefinita","income",setupIncomeType)}{pickerField("Categoria uscite predefinita","expense",setupExpenseCat)}{pickerField("Metodo di pagamento predefinito","method",setupExpenseMethod)}</div>;
+    if(essential&&step===4)body=<div style={{textAlign:"center",padding:"12px 4px 2px"}}><div style={{width:72,height:72,borderRadius:"50%",background:primary+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:38,margin:"0 auto 18px"}}>✓</div><div style={{fontSize:21,fontWeight:950,color:textC,lineHeight:1.2,marginBottom:10}}>{SL("La configurazione essenziale è terminata.")}</div><div style={{fontSize:14,color:subC,lineHeight:1.5,maxWidth:390,margin:"0 auto"}}>{SL("Sei pronto a usare fAInance. Puoi aprire l’app o continuare con la configurazione avanzata.")}</div></div>;
+    if(!essential&&step===0)body=<div style={{display:"flex",flexDirection:"column",gap:12}}>{toggleRow("Imposta il controllo biometrico","Proteggi l’accesso all’app con biometria o credenziali del dispositivo.",setupBiometric,function(){chooseSetupBiometric(!setupBiometric)})}{summarySettingCard()}{navSettingCard()}</div>;
+    if(!essential&&step===1)body=<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={panelStyle}><label style={labelStyle}>{SL("Storico - Data di ordinamento")}</label>{choice("operation","Data operazione",setupHistoryDate,function(){setSetupHistoryDate("operation")})}{choice("created","Data inserimento",setupHistoryDate,function(){setSetupHistoryDate("created")})}</div><div style={panelStyle}><label style={labelStyle}>{SL("Storico - Direzione ordinamento")}</label>{choice("desc","Più recenti",setupHistoryDirection,function(){setSetupHistoryDirection("desc")})}{choice("asc","Più vecchi",setupHistoryDirection,function(){setSetupHistoryDirection("asc")})}</div>{toggleRow("Share - Mostra transazioni Share nello storico","Include nello storico la tua quota delle spese registrate nei progetti Share.",setupShowShareHistory,function(){setSetupShowShareHistory(!setupShowShareHistory)})}</div>;
+    if(!essential&&step===2)body=<div style={{textAlign:"center",padding:"12px 4px 2px"}}><div style={{width:72,height:72,borderRadius:"50%",background:primary+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:38,margin:"0 auto 18px"}}>✓</div><div style={{fontSize:21,fontWeight:950,color:textC,lineHeight:1.2,marginBottom:10}}>{SL("Configurazione avanzata completata.")}</div><div style={{fontSize:14,color:subC,lineHeight:1.5}}>{SL("Le impostazioni avanzate sono state salvate.")}</div></div>;
+    function next(){if(essential){if(step<3){setInitialSetupStep(step+1);return}if(step===3){applyEssentialSetup();setInitialSetupStep(4);return}}else{if(step===0){setInitialSetupStep(1);return}if(step===1){completeAdvancedSetup();return}}}
+    var options=pickerOptions();
+    var query=String(setupPickerSearch||"").trim().toLowerCase();
+    var filtered=query?options.filter(function(x){return String(x.label).toLowerCase().indexOf(query)>=0||String(x.value).toLowerCase().indexOf(query)>=0}):options;
+    var pickerLayer=setupPicker?<div role="presentation" onClick={function(e){if(e.target===e.currentTarget)closeSetupPicker()}} style={{position:"fixed",inset:0,zIndex:10090,background:"rgba(0,0,0,.52)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:isMobile?0:18,boxSizing:"border-box",overscrollBehavior:"contain"}}><div role="dialog" aria-modal="true" onClick={function(e){e.stopPropagation()}} style={{width:"100%",maxWidth:540,maxHeight:isMobile?"78vh":"74vh",background:cardBg,border:"1px solid "+borderC,borderRadius:isMobile?"24px 24px 0 0":24,padding:16,boxShadow:"0 -16px 50px rgba(0,0,0,.28)",display:"flex",flexDirection:"column",gap:12,overscrollBehavior:"contain"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><div style={{fontSize:17,fontWeight:950,color:textC}}>{SL("Seleziona un valore")}</div><button type="button" onClick={closeSetupPicker} style={{width:34,height:34,borderRadius:11,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#D92D20",fontSize:21,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>×</button></div>{options.length>12&&<input value={setupPickerSearch} onChange={function(e){setSetupPickerSearch(e.target.value)}} placeholder={SL("Cerca...")} style={{width:"100%",boxSizing:"border-box",border:"1px solid "+borderC,borderRadius:12,padding:"11px 12px",fontSize:14,background:dark?"#1E1E30":"#fff",color:textC,outline:"none"}}/>}<div style={{overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",touchAction:"pan-y",display:"flex",flexDirection:"column",gap:7,paddingBottom:4}}>{filtered.map(function(x){var active=String(currentPickerValue())===String(x.value);return <button key={x.value} type="button" onClick={function(e){e.preventDefault();e.stopPropagation();pickValue(x.value)}} style={{width:"100%",border:"1px solid "+(active?primary:borderC),background:active?(dark?primary+"28":primary+"12"):(dark?"#252535":"#fff"),color:textC,borderRadius:12,padding:"13px",fontSize:14,fontWeight:active?950:750,textAlign:"left",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span>{x.label}</span>{active&&<span style={{color:primary,fontWeight:950}}>✓</span>}</button>})}{filtered.length===0&&<div style={{textAlign:"center",padding:20,color:subC,fontSize:13}}>{SL("Nessun risultato")}</div>}</div></div></div>:null;
+    return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10060,background:dark?"rgba(8,10,18,.94)":"rgba(245,248,252,.97)",display:"flex",alignItems:"center",justifyContent:"center",padding:16,boxSizing:"border-box",overscrollBehavior:"contain"}}><div style={{width:"100%",maxWidth:isMobile?440:540,maxHeight:"95vh",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:cardBg,border:"1px solid "+borderC,borderRadius:26,padding:isMobile?20:26,boxShadow:"0 24px 70px rgba(0,0,0,.22)",position:"relative"}}><button type="button" onClick={skipInitialSetup} aria-label={SL("Chiudi configurazione")} style={{position:"absolute",right:13,top:13,zIndex:2,width:36,height:36,border:"1px solid #F7B4B4",borderRadius:12,background:"#FFE7E7",color:"#D92D20",fontSize:23,fontWeight:950,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"}}>×</button><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:18,paddingRight:44}}><div><div style={{fontSize:11,fontWeight:950,color:primary,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{SL("Passaggio")} {step+1} {SL("di")} {maxStep+1}</div><div style={{fontSize:23,fontWeight:950,color:textC,lineHeight:1.15}}>{SL(title)}</div><div style={{fontSize:13,color:subC,marginTop:6,lineHeight:1.4}}>{SL(subtitle)}</div></div><div style={{fontSize:26}}>⚙️</div></div><div style={{height:6,borderRadius:999,background:dark?"#35354A":"#E8ECF2",overflow:"hidden",marginBottom:20}}><div style={{height:"100%",width:((step+1)/(maxStep+1)*100)+"%",background:"linear-gradient(90deg,"+primary+",#7F77DD)",transition:"width .2s"}}/></div><div style={{display:"flex",flexDirection:"column",gap:12}}>{body}</div>{essential&&step===4?<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginTop:22}}><button type="button" onClick={function(){completeEssentialSetup(false)}} style={{border:"1px solid "+primary,background:dark?"#252535":"#fff",color:primary,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button><button type="button" onClick={function(){completeEssentialSetup(true)}} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Configurazione avanzata")}</button></div>:(!essential&&step===2)?<button type="button" onClick={finishAdvancedSetup} style={{width:"100%",marginTop:22,border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:15,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button>:<><div style={{display:"grid",gridTemplateColumns:step>0?"1fr 1.5fr":"1fr",gap:10,marginTop:22}}>{step>0&&<button type="button" onClick={function(){setInitialSetupStep(step-1)}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer",touchAction:"manipulation"}}>{SL("Indietro")}</button>}<button type="button" onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL((!essential&&step===1)||(essential&&step===3)?"Termina":"Avanti")}</button></div><button type="button" onClick={skipInitialSetup} style={{width:"100%",marginTop:10,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:850,cursor:"pointer",padding:8,touchAction:"manipulation"}}>{SL("Salta configurazione")}</button></>}</div>{pickerLayer}</div>;
   }
 
   function OnboardingGuideModal(){
     var slides=[
-      {icon:"💳",title:"Le tue finanze",text:"Tutto quello che ti serve per gestire le tue finanze in un’unica app.\nMovimenti, budget, patrimonio, obiettivi e strumenti intelligenti a portata di mano.",items:["Movimenti","Budget","Obiettivi"]},
-      {icon:"✍️",title:"Tieni traccia dei movimenti",text:"Aggiungi spese ed entrate manualmente, con la voce o fotografando uno scontrino.\nAutomatizza entrate e uscite periodiche, così non devi inserirle ogni volta.",items:["Entrate","Uscite","Storico"]},
-      {icon:"🤝",title:"Condividi le spese con Share",text:"Gestisci spese condivise con il partner, amici o famiglia.\nfAInance calcola la tua parte e la salva nello Storico, così il tuo saldo resta sempre aggiornato.",items:["Share","Quote","Storico"]},
-      {icon:"📊",title:"Controlla Budget e Statistiche",text:"Guarda grafici chiari e scopri dove vanno i tuoi soldi.\nImposta limiti di spesa e crea Alert per tenere sotto controllo le varie categorie.",items:["Budget","Grafici","Alert"]},
-      {icon:"🎯",title:"Organizza Patrimonio e Obiettivi",text:"Tieni sotto controllo conti correnti, risparmi, investimenti e altri valori del tuo portafoglio.\nCrea obiettivi di risparmio e segui i tuoi progressi nel tempo.",items:["Patrimonio","Risparmi","Obiettivi"]},
-      {icon:"🧰",title:"Scopri le altre funzionalità",text:"Gestisci Debiti e Crediti, Liste della spesa, Fidelity card e Widget.\nPersonalizza sezioni, categorie, colori e impostazioni in base al tuo modo di usare l’app.",items:["Debiti","Liste","Widget"]},
-      {icon:"🤖",title:"Usa l’AI come consulente",text:"Ricevi consigli pratici per capire meglio le tue abitudini finanziarie.\nfAInance ti aiuta a individuare le priorità, controllare le spese più importanti e trovare nuove opportunità di risparmio.",items:["AI","Consigli","Risparmio"]}
+      {icon:"💳",title:"Le tue finanze in un unico posto",text:"Registra entrate, uscite, patrimonio, budget e obiettivi.\nTutto resta ordinato e sincronizzato sul tuo account.",items:["Conti","Carte","Budget"]},
+      {icon:"✍️",title:"Tieni traccia dei movimenti",text:"Aggiungi Spese ed Entrate manualmente, vocalmente e con lo scontrino.\nAutomatizza le entrate e le uscite periodiche.",items:["Entrate","Uscite","Storico"]},
+      {icon:"📊",title:"Controlla budget e statistiche",text:"Imposta limiti, guarda grafici chiari e capisci dove vanno i tuoi soldi mese per mese.",items:["Budget","Grafici","Alert"]},
+      {icon:"🎯",title:"Organizza obiettivi, patrimonio e Share",text:"Tieni sotto controllo risparmi, debiti, crediti, liste della spesa, appunti e spese condivise.",items:["Obiettivi","Patrimonio","Share"]},
+      {icon:"🤖",title:"Usa l’AI per migliorare",text:"Chiedi consigli, controlli e priorità per capire come ottimizzare le spese e risparmiare meglio.",items:["Consigli","Controlli","Priorità"]}
     ];
     var idx=Math.max(0,Math.min(onboardingGuideStep,slides.length-1));
     var slide=slides[idx];
     var primary=confirmButtonColor||"#378ADD";
     var accent=secondaryButtonColor||"#7FC8F8";
-    var onboardingSwipeRef=useRef({x:0,y:0,t:0,active:false});
-    function next(){if(idx>=slides.length-1)markOnboardingGuideDone();else setOnboardingGuideStep(idx+1);}
-    function prev(){if(idx>0)setOnboardingGuideStep(idx-1);}
-    function swipeNext(){if(idx<slides.length-1)setOnboardingGuideStep(idx+1);}
-    function swipePrev(){if(idx>0)setOnboardingGuideStep(idx-1);}
-    function getSwipePoint(e:any){
-      var ev=(e&&e.nativeEvent)?e.nativeEvent:e;
-      if(ev&&ev.touches&&ev.touches.length)return ev.touches[0];
-      if(ev&&ev.changedTouches&&ev.changedTouches.length)return ev.changedTouches[0];
-      return ev||{};
+    function setGuideStepStable(nextStep){
+      if(onboardingGuideTransitionRef.current)return;
+      onboardingGuideTransitionRef.current=true;
+      setOnboardingGuideStep(Math.max(0,Math.min(nextStep,slides.length-1)));
+      setTimeout(function(){onboardingGuideTransitionRef.current=false;},140);
     }
-    function handleOnboardingSwipeStart(e:any){
-      var p=getSwipePoint(e);
-      onboardingSwipeRef.current={x:Number(p.clientX)||0,y:Number(p.clientY)||0,t:Date.now(),active:true};
-    }
-    function handleOnboardingSwipeEnd(e:any){
-      var s=onboardingSwipeRef.current;
-      if(!s||!s.active)return;
-      var p=getSwipePoint(e);
-      var dx=(Number(p.clientX)||0)-s.x;
-      var dy=(Number(p.clientY)||0)-s.y;
-      var ax=Math.abs(dx),ay=Math.abs(dy);
-      onboardingSwipeRef.current={x:0,y:0,t:0,active:false};
-      if(ax<52||ax<ay*1.25||Date.now()-s.t>950)return;
-      if(dx<0)swipeNext();else swipePrev();
-    }
+    function next(){if(idx>=slides.length-1)markOnboardingGuideDone();else setGuideStepStable(idx+1);}
+    function prev(){if(idx>0)setGuideStepStable(idx-1);}
     function renderGuideBrandText(value:any){
       var raw=String(value||"");
       var parts=raw.split(/(fAInance)/g);
@@ -3445,18 +4026,18 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       </div>;
     }
     return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10050,background:dark?"rgba(10,10,18,.92)":"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",padding:18,boxSizing:"border-box"}}>
-      <div onTouchStart={handleOnboardingSwipeStart} onTouchEnd={handleOnboardingSwipeEnd} onMouseDown={handleOnboardingSwipeStart} onMouseUp={handleOnboardingSwipeEnd} style={{width:"100%",maxWidth:isMobile?430:520,maxHeight:"94vh",overflowY:"auto",WebkitOverflowScrolling:"touch",touchAction:"pan-y",background:dark?"#1E1E30":"#fff",border:"1px solid "+(dark?"#34344a":"#E7EAF5"),borderRadius:28,padding:isMobile?"22px 20px 18px":"28px 28px 22px",boxShadow:dark?"0 24px 70px rgba(0,0,0,.55)":"0 24px 70px rgba(31,60,120,.18)",position:"relative",textAlign:"center"}}>
-        <button onClick={markOnboardingGuideDone} aria-label={translateUiRuntimeText("Salta guida")} style={{position:"absolute",right:14,top:14,border:"1px solid "+borderC,background:dark?"#252535":"#F8FAFF",color:subC,borderRadius:12,width:36,height:36,fontSize:20,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button>
+      <div style={{width:"100%",maxWidth:isMobile?430:520,maxHeight:"94vh",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:dark?"#1E1E30":"#fff",border:"1px solid "+(dark?"#34344a":"#E7EAF5"),borderRadius:28,padding:isMobile?"22px 20px 18px":"28px 28px 22px",boxShadow:dark?"0 24px 70px rgba(0,0,0,.55)":"0 24px 70px rgba(31,60,120,.18)",position:"relative",textAlign:"center"}}>
+        <button type="button" onClick={markOnboardingGuideDone} aria-label={translateUiRuntimeText("Salta guida")} style={{position:"absolute",right:14,top:14,border:"1px solid "+borderC,background:dark?"#252535":"#F8FAFF",color:subC,borderRadius:12,width:36,height:36,fontSize:20,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button>
         <div style={{fontSize:11,fontWeight:900,color:primary,letterSpacing:.5,textTransform:"uppercase",marginBottom:12}}>{translateUiRuntimeText("Guida rapida")}</div>
         {illustration()}
         <div style={{fontSize:isMobile?22:24,fontWeight:950,color:textC,lineHeight:1.12,margin:"0 auto 10px",maxWidth:360}}>{translateUiRuntimeText(slide.title)}</div>
         {renderGuideText(slide.text)}
-        <div style={{display:"flex",justifyContent:"center",gap:7,marginBottom:18}}>{slides.map(function(_,i){var active=i===idx;return <button key={i} onClick={function(){setOnboardingGuideStep(i);}} aria-label={translateUiRuntimeText("Vai alla schermata")+" "+(i+1)} style={{width:active?22:8,height:8,borderRadius:999,border:"none",background:active?primary:(dark?"#55556a":"#D9DDE8"),padding:0,cursor:"pointer",transition:"all .18s ease"}}/>;})}</div>
+        <div style={{display:"flex",justifyContent:"center",gap:7,marginBottom:18}}>{slides.map(function(_,i){var active=i===idx;return <button key={i} type="button" onClick={function(){setGuideStepStable(i);}} aria-label={translateUiRuntimeText("Vai alla schermata")+" "+(i+1)} style={{width:active?22:8,height:8,borderRadius:999,border:"none",background:active?primary:(dark?"#55556a":"#D9DDE8"),padding:0,cursor:"pointer",transition:"all .18s ease"}}/>;})}</div>
         <div style={{display:"grid",gridTemplateColumns:idx>0?"1fr 1.5fr":"1fr",gap:10}}>
-          {idx>0&&<button onClick={prev} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:16,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer"}}>{translateUiRuntimeText("Indietro")}</button>}
-          <button onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:16,padding:"13px 16px",fontSize:15,fontWeight:950,cursor:"pointer",boxShadow:"0 10px 24px rgba(55,138,221,.26)"}}>{translateUiRuntimeText(idx>=slides.length-1?"Inizia ora":"Avanti")}</button>
+          {idx>0&&<button type="button" onClick={prev} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:16,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer"}}>{translateUiRuntimeText("Indietro")}</button>}
+          <button type="button" onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:16,padding:"13px 16px",fontSize:15,fontWeight:950,cursor:"pointer",boxShadow:"0 10px 24px rgba(55,138,221,.26)"}}>{translateUiRuntimeText(idx>=slides.length-1?"Inizia ora":"Avanti")}</button>
         </div>
-        <button onClick={markOnboardingGuideDone} style={{marginTop:12,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:800,cursor:"pointer"}}>{translateUiRuntimeText("Salta")}</button>
+        <button type="button" onClick={markOnboardingGuideDone} style={{marginTop:12,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:800,cursor:"pointer"}}>{translateUiRuntimeText("Salta")}</button>
       </div>
     </div>;
   }
@@ -3812,6 +4393,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var remText=rem===Infinity?translateUiRuntimeText("illimitati"):String(rem);
     var f=translateUiRuntimeText(featureLabel(feature));
     function tr(s){return translateUiRuntimeText(s).replace("{plan}",label).replace("{feature}",f).replace("{remaining}",remText);}
+    if(getPlanLimit(feature)===0){if(currentPlan==="free")return translateUiRuntimeText("Questa funzionalità non è disponibile nel piano Gratuito. Vai in Info per passare a un piano superiore.");return tr("Questa funzionalità non è disponibile nel piano {plan}. Vai in Info per passare a un piano superiore.");}
     if(feature==="manualMovement")return tr("Limite giornaliero raggiunto. Hai già usato tutti i movimenti inclusi e quelli extra con annuncio.");
     if(feature==="instalmentMovement")return tr("Hai raggiunto il limite giornaliero di rateizzazioni del piano {plan}.");
     if(feature==="shareProjects")return tr("Hai raggiunto il limite per progetti Share nel piano {plan}.");
@@ -4073,7 +4655,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
   useEffect(function(){
     if(appLocked||!termsAccepted||!privacyAccepted)return;
-    if(onboardingGuideOpen||onboardingGuideEligibleNow())return;
+    if(onboardingGuideOpen||initialSetupOpen||onboardingGuideEligibleNow())return;
     if(currentPlan!=="free")return;
     if(premiumTrialPromptStatus)return;
     var acceptedAt=Date.parse(String(legalAcceptanceDate||""));
@@ -4082,7 +4664,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     if(premiumTrialPromptShownRef.current)return;
     var t=setTimeout(function(){premiumTrialPromptShownRef.current=true;setShowPremiumTrialPrompt(true);},450);
     return function(){clearTimeout(t);};
-  },[appLocked,termsAccepted,privacyAccepted,currentPlan,premiumTrialPromptStatus,legalAcceptanceDate,onboardingGuideSeen,onboardingGuideOpen]);
+  },[appLocked,termsAccepted,privacyAccepted,currentPlan,premiumTrialPromptStatus,legalAcceptanceDate,onboardingGuideSeen,onboardingGuideOpen,initialSetupOpen]);
 
   function dismissPremiumTrialPrompt(status){
     setPremiumTrialPromptStatus(status||"dismissed");
@@ -4138,11 +4720,11 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       };
       return map[l]||map.it;
     }
-    return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:930,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:930,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}>
       <div style={{width:"100%",maxWidth:560,background:cardBg,borderRadius:24,border:"1px solid "+borderC,boxShadow:"0 18px 70px rgba(0,0,0,0.34)",padding:20,position:"relative",overflow:"hidden"}}>
         <button onClick={function(){dismissPremiumTrialPrompt("closed");}} aria-label={translateUiRuntimeText("Chiudi")} style={{position:"absolute",top:12,right:12,width:36,height:36,borderRadius:12,border:"1px solid rgba(243,111,111,.35)",background:"#F36F6F",color:"#fff",fontSize:24,fontWeight:950,cursor:"pointer",lineHeight:1,boxShadow:"0 6px 16px rgba(243,111,111,.22)"}}>×</button>
         <div style={{display:"flex",alignItems:"center",gap:12,paddingRight:42,marginBottom:14}}>
-          <div style={{width:52,height:52,borderRadius:18,background:"linear-gradient(135deg,#7F77DD,#378ADD)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:27,boxShadow:"0 8px 24px rgba(127,119,221,.32)"}}>💎</div>
+          <div style={{width:52,height:52,borderRadius:18,background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:27,boxShadow:"0 8px 24px rgba(127,119,221,.32)"}}>💎</div>
           <div>
             <div style={{fontSize:20,fontWeight:950,color:textC,lineHeight:1.12}}>{renderColoredParts(premiumTrialTitleParts())}</div>
             <div style={{fontSize:12,color:subC,marginTop:5,fontWeight:750}}>{translateUiRuntimeText("Offerta valida per i nuovi utenti")}</div>
@@ -4156,7 +4738,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           </div>
         </div>
         <div style={{fontSize:12,color:subC,lineHeight:1.45,marginBottom:14}}>{translateUiRuntimeText("Se accetti, si aprirà lo store per attivare la prova gratuita. Dopo i 2 mesi l’abbonamento si rinnoverà automaticamente al prezzo indicato dallo store, salvo cancellazione prima della fine della prova.")}</div>
-        <button onClick={acceptPremiumTrialPrompt} disabled={!!planPurchaseLoading} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:950,cursor:planPurchaseLoading?"not-allowed":"pointer",opacity:planPurchaseLoading?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)",marginBottom:9}}>{translateUiRuntimeText(planPurchaseLoading?"Acquisto in corso...":"Accetta")}</button>
+        <button onClick={acceptPremiumTrialPrompt} disabled={!!planPurchaseLoading} style={{width:"100%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:950,cursor:planPurchaseLoading?"not-allowed":"pointer",opacity:planPurchaseLoading?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)",marginBottom:9}}>{translateUiRuntimeText(planPurchaseLoading?"Acquisto in corso...":"Accetta")}</button>
         <button onClick={function(){dismissPremiumTrialPrompt("free");}} disabled={!!planPurchaseLoading} style={{width:"100%",background:dark?"#252535":"#fff",color:subC,border:"1px solid "+borderC,borderRadius:btnRadius,padding:"12px 16px",fontSize:14,fontWeight:900,cursor:planPurchaseLoading?"not-allowed":"pointer",opacity:planPurchaseLoading?0.7:1}}>{translateUiRuntimeText("Voglio continuare con la versione gratuita")}</button>
       </div>
     </div>;
@@ -4663,7 +5245,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     historyTab,setHistoryTab,
     editingItem,setEditingItem,
     mobileMenu,setMobileMenu,
-    toast,setToast,alertPopup,setAlertPopup,markAlertsSeen,
+    toast:FAINANCE_TOAST_CURRENT,setToast,alertPopup,setAlertPopup,markAlertsSeen,
     // ── Statistiche ────────────────────────────────────────────────────────
     statsView,setStatsView,curYear,yearExp,yearInc,monthlyTotals,
     // ── Filtri storico ─────────────────────────────────────────────────────
@@ -5330,12 +5912,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           files.length
         )
       ) {
-        setToast({
-          text: upgradeMessage("documents", (appuntiDocuments || []).length),
-          type: "error",
-          color: "#E24B4A",
-          icon: "🚫",
-        });
+        showPlanLimitWarning("documents", (appuntiDocuments || []).length);
         ev.target.value = "";
         return;
       }
@@ -5623,6 +6200,15 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     function sensitiveCount() {
       return (bankCoords || []).length + (creditCards || []).length;
     }
+    function showPlanLimitWarning(feature, currentCount, customText) {
+      setToast({
+        text: customText || upgradeMessage(feature, currentCount),
+        type: "warning",
+        color: "#FFF3CD",
+        textColor: "#856404",
+        icon: "⚠️",
+      });
+    }
     function maskCardNumber(n) {
       var clean = String(n || "").replace(/\D/g, "");
       if (!clean) return "—";
@@ -5630,17 +6216,32 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       return "•••• •••• •••• " + clean.slice(-4);
     }
     function openNewNote() {
+      if (!canAddPlanItem("notes", (appuntiNotes || []).length, 1)) {
+        showPlanLimitWarning("notes", (appuntiNotes || []).length);
+        return;
+      }
       setEditingNoteId(null);
       setNoteTitle("");
       setNoteText("");
       setShowNoteForm(true);
     }
+    function sensitiveLimitMessage() {
+      return L("Hai raggiunto il limite complessivo di coordinate bancarie e carte di credito del tuo piano. Puoi modificare o eliminare gli elementi già salvati.");
+    }
     function openNewBank() {
+      if (!canAddPlanItem("bankNotes", sensitiveCount(), 1)) {
+        showPlanLimitWarning("bankNotes", sensitiveCount(), sensitiveLimitMessage());
+        return;
+      }
       setEditingBankId(null);
       setBankForm({ ...emptyBankForm });
       setShowBankForm(true);
     }
     function openNewCreditCard() {
+      if (!canAddPlanItem("bankNotes", sensitiveCount(), 1)) {
+        showPlanLimitWarning("bankNotes", sensitiveCount(), sensitiveLimitMessage());
+        return;
+      }
       setEditingCreditCardId(null);
       setCreditCardForm({ ...emptyCreditCardForm });
       setShowCreditCardForm(true);
@@ -5868,15 +6469,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
       return (n / 1024 / 1024).toFixed(1).replace(".", ",") + " MB";
     }
-    var documentsLocked = !settingAllowed("base");
+    var documentsUnavailable = getPlanLimit("documents") === 0;
     var notesLimitReached =
-      !editingNoteId && !canAddPlanItem("notes", (appuntiNotes || []).length, 1);
-    var bankLimitReached =
-      !editingBankId && !canAddPlanItem("bankNotes", sensitiveCount(), 1);
-    var creditCardLimitReached =
-      !editingCreditCardId && !canAddPlanItem("bankNotes", sensitiveCount(), 1);
+      !canAddPlanItem("notes", (appuntiNotes || []).length, 1);
+    var sensitiveLimitReached =
+      !canAddPlanItem("bankNotes", sensitiveCount(), 1);
+    var bankLimitReached = sensitiveLimitReached;
+    var creditCardLimitReached = sensitiveLimitReached;
     var documentsLimitReached =
-      !editingDocumentId &&
       !canAddPlanItem("documents", (appuntiDocuments || []).length, 1);
     function LimitReachedBox() {
       return (
@@ -5909,9 +6509,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
             background: "rgba(0,0,0,.55)",
             zIndex: 850,
             display: "flex",
-            alignItems: "center",
+            alignItems: "flex-start",
             justifyContent: "center",
-            padding: 16,
+            padding: "17vh 16px 3vh",
           }}
           onClick={onClose}
         >
@@ -5969,15 +6569,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div
           style={{
-            background: documentsLimitReached
-              ? dark
-                ? "#342b16"
-                : "#FFF8E1"
-              : cardBg,
+            background: documentsUnavailable ? (dark ? "#2D2514" : "#FFF8E1") : cardBg,
             borderRadius: 14,
-            border:
-              "1px solid " +
-              (documentsLimitReached ? (dark ? "#6a5520" : "#FFD54F") : borderC),
+            border: "1px solid " + (documentsUnavailable ? (dark ? "#6A5520" : "#FFD54F") : borderC),
             padding: 20,
           }}
         >
@@ -5994,23 +6588,19 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           <div
             style={{
               fontSize: 12,
-              color: documentsLimitReached
-                ? dark
-                  ? "#FFE5A6"
-                  : "#856404"
-                : subC,
+              color: subC,
               marginBottom: 12,
             }}
           >
-            {documentsLimitReached
-              ? L(
-                  "Hai raggiunto il limite massimo del tuo piano. Non puoi aggiungere altri elementi in questa sezione."
-                )
-              : L(
-                  "Carica PDF, immagini, Word, Excel, CSV o file di testo. I documenti si aprono con le app del telefono."
-                )}
+            {L(
+              "Carica PDF, immagini, Word, Excel, CSV o file di testo. I documenti si aprono con le app del telefono."
+            )}
           </div>
-          {documentsLimitReached && <LimitReachedBox />}
+          {documentsUnavailable && (
+            <div style={{fontSize:12,color:dark?"#FFE09A":"#856404",background:dark?"#3A3018":"#FFF3CD",border:"1px solid "+(dark?"#6A5520":"#FFD54F"),borderRadius:10,padding:"9px 10px",marginBottom:10,fontWeight:800,lineHeight:1.35}}>
+              🔒 {L("Questa funzionalità non è disponibile nel piano Gratuito. Vai in Info per passare a un piano superiore.")}
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -6021,11 +6611,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           />
           <Btn
             onClick={function () {
-              if (documentsLimitReached) return;
+              if (documentsLimitReached) {
+                showPlanLimitWarning("documents", (appuntiDocuments || []).length);
+                return;
+              }
               fileInputRef.current && fileInputRef.current.click();
             }}
             bg={documentsLimitReached ? "#999" : "#7F77DD"}
-            disabled={documentsLimitReached}
+            aria-disabled={documentsLimitReached}
             style={{ marginBottom: 12 }}
           >
             {L("+ Carica documento")}
@@ -6183,15 +6776,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         </div>
         <div
           style={{
-            background: notesLimitReached
-              ? dark
-                ? "#342b16"
-                : "#FFF8E1"
-              : cardBg,
+            background: cardBg,
             borderRadius: 14,
-            border:
-              "1px solid " +
-              (notesLimitReached ? (dark ? "#6a5520" : "#FFD54F") : borderC),
+            border: "1px solid " + borderC,
             padding: 20,
           }}
         >
@@ -6213,18 +6800,18 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
                 <span>{plainAppuntiTextLabel()}</span>
               </div>
               <div style={{ fontSize: 12, color: subC, marginTop: 3 }}>
-                {(appuntiNotes || []).length} {L("salvati")}
+                {(appuntiNotes || []).length} {L((appuntiNotes || []).length===1?"salvato":"salvati")}
               </div>
             </div>
             <Btn
               onClick={openNewNote}
               bg={notesLimitReached ? "#999" : confirmButtonColor}
-              disabled={notesLimitReached}
+              aria-disabled={notesLimitReached}
             >
               {L("Nuovo Appunto")}
             </Btn>
           </div>
-          {notesLimitReached && <LimitReachedBox />}
+          
           {(!appuntiNotes || appuntiNotes.length === 0) && (
             <div
               style={{
@@ -6321,17 +6908,27 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
             );
           })}
         </div>
+        {sensitiveLimitReached && (
+          <div
+            style={{
+              background: dark ? "#4b3d1b" : "#FFF3CD",
+              border: "1px solid " + (dark ? "#80672a" : "#FFD54F"),
+              borderRadius: 12,
+              padding: "10px 12px",
+              fontSize: 12,
+              color: dark ? "#FFE5A6" : "#856404",
+              fontWeight: 800,
+              lineHeight: 1.4,
+            }}
+          >
+            ⚠️ {sensitiveLimitMessage()}
+          </div>
+        )}
         <div
           style={{
-            background: bankLimitReached
-              ? dark
-                ? "#342b16"
-                : "#FFF8E1"
-              : cardBg,
+            background: cardBg,
             borderRadius: 14,
-            border:
-              "1px solid " +
-              (bankLimitReached ? (dark ? "#6a5520" : "#FFD54F") : borderC),
+            border: "1px solid " + borderC,
             padding: 20,
           }}
         >
@@ -6349,18 +6946,18 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
                 🏦 {L("Coordinate bancarie")}
               </div>
               <div style={{ fontSize: 12, color: subC, marginTop: 3 }}>
-                {(bankCoords || []).length} {L("salvate")}
+                {(bankCoords || []).length} {L((bankCoords || []).length===1?"salvata":"salvate")}
               </div>
             </div>
             <Btn
               onClick={openNewBank}
               bg={bankLimitReached ? "#999" : confirmButtonColor}
-              disabled={bankLimitReached}
+              aria-disabled={bankLimitReached}
             >
               {L("Nuova Coordinata")}
             </Btn>
           </div>
-          {bankLimitReached && <LimitReachedBox />}
+          
           {(!bankCoords || bankCoords.length === 0) && (
             <div
               style={{
@@ -6475,15 +7072,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         </div>
         <div
           style={{
-            background: creditCardLimitReached
-              ? dark
-                ? "#342b16"
-                : "#FFF8E1"
-              : cardBg,
+            background: cardBg,
             borderRadius: 14,
-            border:
-              "1px solid " +
-              (creditCardLimitReached ? (dark ? "#6a5520" : "#FFD54F") : borderC),
+            border: "1px solid " + borderC,
             padding: 20,
           }}
         >
@@ -6501,18 +7092,18 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
                 💳 {L("Carte di credito")}
               </div>
               <div style={{ fontSize: 12, color: subC, marginTop: 3 }}>
-                {(creditCards || []).length} {L("salvate")}
+                {(creditCards || []).length} {L((creditCards || []).length===1?"salvata":"salvate")}
               </div>
             </div>
             <Btn
               onClick={openNewCreditCard}
               bg={creditCardLimitReached ? "#999" : confirmButtonColor}
-              disabled={creditCardLimitReached}
+              aria-disabled={creditCardLimitReached}
             >
               {L("Nuova Carta")}
             </Btn>
           </div>
-          {creditCardLimitReached && <LimitReachedBox />}
+          
           {(!creditCards || creditCards.length === 0) && (
             <div
               style={{
@@ -6912,7 +7503,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     </div>;
   }
 
-  function PrivacyPolicyContent(){
+  function PrivacyPolicyContent({showConsentControl=true}:any={}){
     function L(s){return translateUiRuntimeText(s);}
     var rows=[
       {title:"Dati trattati",text:"fAInance può salvare i dati che inserisci nell’app, come entrate, uscite, categorie, metodi di pagamento, ricorrenze, budget, patrimonio, obiettivi, alert, appunti, documenti caricati e coordinate bancarie salvate volontariamente."},
@@ -6922,8 +7513,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       {title:"Finalità",text:"I dati vengono usati per fornire le funzionalità dell’app: registrazione movimenti, statistiche, budget, alert, patrimonio, backup, sincronizzazione e analisi tramite AI."},
       {title:"Responsabilità dell’utente",text:"L’utente decide quali dati inserire, caricare o cancellare. Prima di salvare documenti, note o coordinate bancarie, valuta se siano davvero necessari per l’uso personale dell’app."},
       {title:"Cancellazione dati",text:"L’app include funzioni per eliminare dati per sezione o cancellare informazioni salvate. Alcuni dati potrebbero restare in backup o cache tecniche fino ai normali tempi di aggiornamento dei servizi utilizzati."},
-      {title:"Servizi terzi",text:"L’app può usare servizi esterni come Firebase, Firestore, autenticazione Google/Apple, API di cambio valuta e servizi AI. Ogni servizio può applicare proprie regole tecniche e privacy."},
-      {title:"Aggiornamenti",text:"Questa informativa può essere aggiornata quando cambiano funzionalità, servizi tecnici, modalità di sincronizzazione o uso dell’Agente AI."}
+      {title:"Analisi e attribuzione pubblicitaria",text:"Solo se fornisci un consenso facoltativo, l’app può inviare a Meta App Events eventi tecnici come apertura dell’app, completamento della registrazione e acquisti in-app. Non vengono inviati movimenti finanziari, importi, coordinate bancarie, numeri di carta, documenti o contenuti delle note. La raccolta dell’identificatore pubblicitario è disattivata."},
+      {title:"Servizi terzi",text:"L’app può usare servizi esterni come Firebase, Firestore, autenticazione Google/Apple, API di cambio valuta, Meta App Events e servizi AI. Ogni servizio può applicare proprie regole tecniche e privacy."},
+      {title:"Aggiornamenti",text:"Questa informativa può essere aggiornata quando cambiano funzionalità, servizi tecnici, modalità di sincronizzazione, analisi pubblicitaria o uso dell’Agente AI."}
     ];
     return <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
@@ -6934,56 +7526,89 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         <div style={{fontSize:14,fontWeight:800,color:textC,marginBottom:6}}>{L(r.title)}</div>
         <div style={{fontSize:13,color:subC,lineHeight:1.55}}>{L(r.text)}</div>
       </div>;})}
+      {showConsentControl&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
+        <Toggle label={L("Consenti analisi e misurazione pubblicitaria")} checked={!!metaEventsConsent} onChange={function(){setMetaEventsConsent(!metaEventsConsent);}} color={confirmButtonColor}/>
+        <div style={{fontSize:12,color:subC,lineHeight:1.5,marginTop:8}}>{L("Puoi modificare questa scelta in qualsiasi momento. Se disattivata, fAInance non invia eventi a Meta App Events.")}</div>
+      </div>}
       <div style={{background:dark?"#24213a":"#F0EDFF",borderRadius:14,border:"1px solid "+(dark?"#3d376a":"#D8D2FF"),padding:16}}>
-        <div style={{fontSize:13,color:dark?"#BEB8FF":"#534AB7",lineHeight:1.55,fontWeight:600}}>{L("Versione privacy: 1.0 · Ultimo aggiornamento: 25/05/2026")}</div>
+        <div style={{fontSize:13,color:dark?"#BEB8FF":"#534AB7",lineHeight:1.55,fontWeight:600}}>{L("Versione privacy: 1.1 · Ultimo aggiornamento: 26/07/2026")}</div>
       </div>
     </div>;
   }
 
   function TermsAcceptanceModal(){
     var [legalView,setLegalView]=useState("main");
-    var [termsChecked,setTermsChecked]=useState(!!termsAccepted);
-    var [privacyChecked,setPrivacyChecked]=useState(!!privacyAccepted);
+    var termsChecked=!!legalTermsChecked;
+    var privacyChecked=!!legalPrivacyChecked;
+    var metaChecked=!!legalMetaChecked;
+    var legalCopy:any={
+      "Autorizzazioni":{it:"Autorizzazioni",en:"Permissions",es:"Autorizaciones",fr:"Autorisations",de:"Berechtigungen",pt:"Autorizações",pl:"Uprawnienia",nl:"Toestemmingen",ro:"Autorizări",el:"Άδειες"},
+      "Prima di continuare devi leggere e accettare i documenti obbligatori.":{it:"Prima di continuare devi leggere e accettare i documenti obbligatori.",en:"Before continuing, you must read and accept the required documents.",es:"Antes de continuar, debes leer y aceptar los documentos obligatorios.",fr:"Avant de continuer, tu dois lire et accepter les documents obligatoires.",de:"Bevor du fortfährst, musst du die erforderlichen Dokumente lesen und akzeptieren.",pt:"Antes de continuar, tens de ler e aceitar os documentos obrigatórios.",pl:"Przed kontynuowaniem musisz przeczytać i zaakceptować wymagane dokumenty.",nl:"Voordat je doorgaat, moet je de verplichte documenten lezen en accepteren.",ro:"Înainte de a continua, trebuie să citești și să accepți documentele obligatorii.",el:"Πριν συνεχίσεις, πρέπει να διαβάσεις και να αποδεχτείς τα υποχρεωτικά έγγραφα."},
+      "Dichiaro di aver letto e accettato i Termini di utilizzo":{it:"Dichiaro di aver letto e accettato i Termini di utilizzo",en:"I confirm that I have read and accepted the Terms of Use",es:"Declaro que he leído y acepto los Términos de uso",fr:"Je déclare avoir lu et accepté les Conditions d’utilisation",de:"Ich bestätige, dass ich die Nutzungsbedingungen gelesen und akzeptiert habe",pt:"Declaro que li e aceito os Termos de utilização",pl:"Oświadczam, że przeczytałem(-am) i akceptuję Warunki korzystania",nl:"Ik verklaar dat ik de Gebruiksvoorwaarden heb gelezen en geaccepteerd",ro:"Declar că am citit și accept Termenii de utilizare",el:"Δηλώνω ότι διάβασα και αποδέχομαι τους Όρους χρήσης"},
+      "Leggi i Termini di utilizzo":{it:"Leggi i Termini di utilizzo",en:"Read the Terms of Use",es:"Leer los Términos de uso",fr:"Lire les Conditions d’utilisation",de:"Nutzungsbedingungen lesen",pt:"Ler os Termos de utilização",pl:"Przeczytaj Warunki korzystania",nl:"Lees de Gebruiksvoorwaarden",ro:"Citește Termenii de utilizare",el:"Διάβασε τους Όρους χρήσης"},
+      "Dichiaro di aver letto e accettato l’Informativa Privacy":{it:"Dichiaro di aver letto e accettato l’Informativa Privacy",en:"I confirm that I have read and accepted the Privacy Policy",es:"Declaro que he leído y acepto la Política de privacidad",fr:"Je déclare avoir lu et accepté la Politique de confidentialité",de:"Ich bestätige, dass ich die Datenschutzerklärung gelesen und akzeptiert habe",pt:"Declaro que li e aceito a Política de privacidade",pl:"Oświadczam, że przeczytałem(-am) i akceptuję Politykę prywatności",nl:"Ik verklaar dat ik het Privacybeleid heb gelezen en geaccepteerd",ro:"Declar că am citit și accept Politica de confidențialitate",el:"Δηλώνω ότι διάβασα και αποδέχομαι την Πολιτική απορρήτου"},
+      "Leggi l’Informativa Privacy":{it:"Leggi l’Informativa Privacy",en:"Read the Privacy Policy",es:"Leer la Política de privacidad",fr:"Lire la Politique de confidentialité",de:"Datenschutzerklärung lesen",pt:"Ler a Política de privacidade",pl:"Przeczytaj Politykę prywatności",nl:"Lees het Privacybeleid",ro:"Citește Politica de confidențialitate",el:"Διάβασε την Πολιτική απορρήτου"},
+      "Consenso facoltativo":{it:"Consenso facoltativo",en:"Optional consent",es:"Consentimiento opcional",fr:"Consentement facultatif",de:"Optionale Einwilligung",pt:"Consentimento facultativo",pl:"Zgoda opcjonalna",nl:"Optionele toestemming",ro:"Consimțământ opțional",el:"Προαιρετική συγκατάθεση"},
+      "Consento l’invio a Meta di eventi tecnici per misurare installazioni e risultati pubblicitari. Non vengono inviati dati finanziari.":{it:"Consento l’invio a Meta di eventi tecnici per misurare installazioni e risultati pubblicitari. Non vengono inviati dati finanziari.",en:"I consent to sending technical events to Meta to measure installations and advertising results. No financial data is sent.",es:"Consiento el envío a Meta de eventos técnicos para medir instalaciones y resultados publicitarios. No se envían datos financieros.",fr:"J’accepte l’envoi à Meta d’événements techniques afin de mesurer les installations et les résultats publicitaires. Aucune donnée financière n’est envoyée.",de:"Ich stimme der Übermittlung technischer Ereignisse an Meta zu, um Installationen und Werbeergebnisse zu messen. Es werden keine Finanzdaten gesendet.",pt:"Consinto o envio à Meta de eventos técnicos para medir instalações e resultados publicitários. Não são enviados dados financeiros.",pl:"Wyrażam zgodę na wysyłanie do Meta zdarzeń technicznych w celu pomiaru instalacji i wyników reklam. Żadne dane finansowe nie są przesyłane.",nl:"Ik stem in met het verzenden van technische gebeurtenissen naar Meta om installaties en advertentieresultaten te meten. Er worden geen financiële gegevens verzonden.",ro:"Sunt de acord cu trimiterea către Meta a evenimentelor tehnice pentru măsurarea instalărilor și a rezultatelor publicitare. Nu sunt trimise date financiare.",el:"Συναινώ στην αποστολή τεχνικών συμβάντων στη Meta για τη μέτρηση εγκαταστάσεων και διαφημιστικών αποτελεσμάτων. Δεν αποστέλλονται οικονομικά δεδομένα."},
+      "Continua":{it:"Continua",en:"Continue",es:"Continuar",fr:"Continuer",de:"Weiter",pt:"Continuar",pl:"Kontynuuj",nl:"Doorgaan",ro:"Continuă",el:"Συνέχεια"},
+      "‹ Indietro":{it:"‹ Indietro",en:"‹ Back",es:"‹ Atrás",fr:"‹ Retour",de:"‹ Zurück",pt:"‹ Voltar",pl:"‹ Wstecz",nl:"‹ Terug",ro:"‹ Înapoi",el:"‹ Πίσω"},
+      "Termini di utilizzo":{it:"Termini di utilizzo",en:"Terms of Use",es:"Términos de uso",fr:"Conditions d’utilisation",de:"Nutzungsbedingungen",pt:"Termos de utilização",pl:"Warunki korzystania",nl:"Gebruiksvoorwaarden",ro:"Termeni de utilizare",el:"Όροι χρήσης"},
+      "Informativa Privacy":{it:"Informativa Privacy",en:"Privacy Policy",es:"Política de privacidad",fr:"Politique de confidentialité",de:"Datenschutzerklärung",pt:"Política de privacidade",pl:"Polityka prywatności",nl:"Privacybeleid",ro:"Politica de confidențialitate",el:"Πολιτική απορρήτου"},
+      "Ho letto":{it:"Ho letto",en:"I have read it",es:"He leído",fr:"J’ai lu",de:"Ich habe es gelesen",pt:"Li",pl:"Przeczytałem(-am)",nl:"Ik heb het gelezen",ro:"Am citit",el:"Το διάβασα"},
+      "Autorizzazioni salvate":{it:"Autorizzazioni salvate",en:"Permissions saved",es:"Autorizaciones guardadas",fr:"Autorisations enregistrées",de:"Berechtigungen gespeichert",pt:"Autorizações guardadas",pl:"Uprawnienia zapisane",nl:"Toestemmingen opgeslagen",ro:"Autorizări salvate",el:"Οι άδειες αποθηκεύτηκαν"}
+    };
+    function LT(key:string){var row=legalCopy[key]||{};return row[String(lang||"it")]||row.it||String(key);}
     function acceptAll(){
-      if(!termsChecked||!privacyChecked)return;
+      if(!termsChecked||!privacyChecked||legalAcceptingRef.current)return;
+      legalAcceptingRef.current=true;
+      var acceptedAt=new Date().toISOString();
+      writeLegalAcceptanceCommittedLocal();
+      try{
+        localStorage.setItem(userKey("terms_accepted_v1"),JSON.stringify(true));
+        localStorage.setItem(userKey("privacy_accepted_v1"),JSON.stringify(true));
+        localStorage.setItem(userKey("meta_events_consent_v1"),JSON.stringify(!!metaChecked));
+        localStorage.setItem(userKey("legal_acceptance_date_v1"),JSON.stringify(acceptedAt));
+      }catch(e){}
+      setLegalAcceptanceCommitted(true);
+      setLegalTermsChecked(true);
+      setLegalPrivacyChecked(true);
       setTermsAccepted(true);
       setPrivacyAccepted(true);
-      setLegalAcceptanceDate(new Date().toISOString());
-      setToast(translateUiRuntimeText("Autorizzazioni salvate"));
+      setMetaEventsConsent(!!metaChecked);
+      setLegalAcceptanceDate(acceptedAt);
+      setToast({text:LT("Autorizzazioni salvate"),type:"success",translated:true});
     }
     function LegalDetail({type}){
       var isTerms=type==="terms";
       return <div>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-          <button onClick={function(){setLegalView("main");}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#f5f5f5",color:textC,borderRadius:10,padding:"8px 12px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{translateUiRuntimeText("‹ Indietro")}</button>
-          <div style={{fontSize:16,fontWeight:900,color:textC}}>{translateUiRuntimeText(isTerms?"Termini di utilizzo":"Informativa Privacy")}</div>
+          <button type="button" onClick={function(){setLegalView("main");}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#f5f5f5",color:textC,borderRadius:10,padding:"8px 12px",fontSize:13,fontWeight:700,cursor:"pointer"}}>{LT("‹ Indietro")}</button>
+          <div style={{fontSize:16,fontWeight:900,color:textC}}>{LT(isTerms?"Termini di utilizzo":"Informativa Privacy")}</div>
         </div>
-        <div style={{maxHeight:"58vh",overflowY:"auto",paddingRight:4}}>{isTerms?<TermsAndConditionsContent/>:<PrivacyPolicyContent/>}</div>
-        <button onClick={function(){if(isTerms){setTermsChecked(true);}else{setPrivacyChecked(true);}setLegalView("main");}} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 4px 16px rgba(127,119,221,0.35)",marginTop:14}}>{translateUiRuntimeText("Ho letto")}</button>
+        <div style={{maxHeight:"58vh",overflowY:"auto",paddingRight:4}}>{isTerms?<TermsAndConditionsContent/>:<PrivacyPolicyContent showConsentControl={false}/>}</div>
+        <button type="button" onClick={function(){if(isTerms)setLegalTermsChecked(true);else setLegalPrivacyChecked(true);setLegalView("main");}} style={{width:"100%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 4px 16px rgba(127,119,221,0.35)",marginTop:14}}>{LT("Ho letto")}</button>
       </div>;
     }
-    if(legalView==="terms")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="terms"/></div></div>;
-    if(legalView==="privacy")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="privacy"/></div></div>;
-    return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    if(legalView==="terms")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="terms"/></div></div>;
+    if(legalView==="privacy")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="privacy"/></div></div>;
+    function checkMark(checked){return <span aria-hidden="true" style={{width:20,height:20,marginTop:1,borderRadius:4,border:"2px solid "+(checked?"#7F77DD":borderC),background:checked?"#7F77DD":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0,boxSizing:"border-box"}}>{checked?"✓":""}</span>;}
+    return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}>
       <div style={{width:"100%",maxWidth:520,maxHeight:"88vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}><FAInanceLogo size={44}/><div><div style={{fontSize:18,fontWeight:900,color:textC}}>{translateUiRuntimeText("Autorizzazioni")}</div><div style={{fontSize:12,color:subC}}>{translateUiRuntimeText("Prima di continuare devi leggere e accettare i documenti obbligatori.")}</div></div></div>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}><FAInanceLogo size={44}/><div><div style={{fontSize:18,fontWeight:900,color:textC}}>{LT("Autorizzazioni")}</div><div style={{fontSize:12,color:subC}}>{LT("Prima di continuare devi leggere e accettare i documenti obbligatori.")}</div></div></div>
         <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:14}}>
-            <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
-              <input type="checkbox" checked={termsChecked} onChange={function(e){setTermsChecked(e.target.checked);}} style={{width:18,height:18,marginTop:1,accentColor:"#7F77DD",flexShrink:0}}/>
-              <span style={{fontSize:13,color:textC,lineHeight:1.45}}>{translateUiRuntimeText("Dichiaro di aver letto e accettato i Termini di utilizzo")} <span style={{color:"#E24B4A"}}>*</span></span>
-            </label>
-            <button onClick={function(){setLegalView("terms");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 28px",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left"}}>{translateUiRuntimeText("Leggi i Termini di utilizzo")}</button>
+            <button type="button" aria-pressed={termsChecked} onClick={function(){setLegalTermsChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:0,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(termsChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}>{LT("Dichiaro di aver letto e accettato i Termini di utilizzo")} <span style={{color:"#E24B4A"}}>*</span></span></button>
+            <button type="button" onClick={function(){setLegalView("terms");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 30px",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{LT("Leggi i Termini di utilizzo")}</button>
           </div>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:14}}>
-            <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
-              <input type="checkbox" checked={privacyChecked} onChange={function(e){setPrivacyChecked(e.target.checked);}} style={{width:18,height:18,marginTop:1,accentColor:"#7F77DD",flexShrink:0}}/>
-              <span style={{fontSize:13,color:textC,lineHeight:1.45}}>{translateUiRuntimeText("Dichiaro di aver letto e accettato l’Informativa Privacy")} <span style={{color:"#E24B4A"}}>*</span></span>
-            </label>
-            <button onClick={function(){setLegalView("privacy");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 28px",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left"}}>{translateUiRuntimeText("Leggi l’Informativa Privacy")}</button>
+            <button type="button" aria-pressed={privacyChecked} onClick={function(){setLegalPrivacyChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:0,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(privacyChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}>{LT("Dichiaro di aver letto e accettato l’Informativa Privacy")} <span style={{color:"#E24B4A"}}>*</span></span></button>
+            <button type="button" onClick={function(){setLegalView("privacy");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 30px",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{LT("Leggi l’Informativa Privacy")}</button>
+          </div>
+          <div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:14}}>
+            <button type="button" aria-pressed={metaChecked} onClick={function(){setLegalMetaChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:0,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(metaChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}><strong>{LT("Consenso facoltativo")}</strong><br/>{LT("Consento l’invio a Meta di eventi tecnici per misurare installazioni e risultati pubblicitari. Non vengono inviati dati finanziari.")}</span></button>
           </div>
         </div>
-        <button onClick={acceptAll} disabled={!termsChecked||!privacyChecked} style={{width:"100%",background:(!termsChecked||!privacyChecked)?(dark?"#333":"#ddd"):"linear-gradient(135deg,#7F77DD,#378ADD)",color:(!termsChecked||!privacyChecked)?(dark?"#777":"#999"):"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:800,cursor:(!termsChecked||!privacyChecked)?"not-allowed":"pointer",boxShadow:(!termsChecked||!privacyChecked)?"none":"0 4px 16px rgba(127,119,221,0.35)"}}>{translateUiRuntimeText("Continua")}</button>
+        <button type="button" onClick={acceptAll} disabled={!termsChecked||!privacyChecked||legalAcceptingRef.current} style={{width:"100%",background:(!termsChecked||!privacyChecked)?(dark?"#333":"#ddd"):"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:(!termsChecked||!privacyChecked)?(dark?"#777":"#999"):"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:800,cursor:(!termsChecked||!privacyChecked)?"not-allowed":"pointer",boxShadow:(!termsChecked||!privacyChecked)?"none":"0 4px 16px rgba(127,119,221,0.35)"}}>{LT("Continua")}</button>
       </div>
     </div>;
   }
@@ -7126,8 +7751,8 @@ var row=D[raw]||D[raw.trim()];
       {id:"data",icon:"💾",label:"Dati",desc:"Importa, esporta, backup, elimina"},
       {id:"info",icon:"ℹ️",label:"Info",desc:"Versione, termini, privacy e aggiornamenti"}
     ]}/></div>;
-    function Segmented({items,value,onChange}){return <div style={{display:"flex",gap:0,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3,marginBottom:12}}>{items.map(function(it){var active=value===it.id;var disabled=!!it.disabled;return <button type="button" key={it.id} disabled={disabled} onClick={function(e){if(e&&e.stopPropagation)e.stopPropagation();if(disabled){if(it.lockedMessage)setToast(it.lockedMessage);return;}onChange(it.id);}} style={{flex:1,padding:"9px 10px",border:"none",borderRadius:10,background:active?"linear-gradient(135deg,#7F77DD,#378ADD)":"transparent",color:active?"#fff":(disabled?(dark?"#555":"#aaa"):subC),fontSize:13,cursor:disabled?"not-allowed":"pointer",fontWeight:active?800:400,boxShadow:active?"0 3px 10px rgba(127,119,221,0.25)":"none",opacity:disabled?0.55:1}}>{L(it.label)}{disabled?" 🔒":""}</button>;})}</div>;}
-    function CurrencyPicker({value,onChange,exclude,allowNone}){var [q,setQ]=useState("");var normalized=String(q||"").toLowerCase().trim();var list=CURRENCIES.filter(function(c){return (!exclude||c.code!==exclude)&&(!normalized||c.code.toLowerCase().indexOf(normalized)>=0||String(c.name||"").toLowerCase().indexOf(normalized)>=0||String(c.symbol||"").toLowerCase().indexOf(normalized)>=0);}).slice(0,180);return <div style={{display:"flex",flexDirection:"column",gap:8}}><input placeholder={L("Cerca valuta, es. euro, dollaro, yen...")} value={q} onChange={function(e){setQ(e.target.value);}} style={{...sinp,width:"100%"}}/><select value={value||""} onChange={function(e){onChange(e.target.value);}} style={{...sinp,width:"100%"}}>{allowNone&&<option value="">{L("Nessuna")}</option>}{list.map(function(c){return <option key={c.code} value={c.code}>{c.symbol} {c.code} — {c.name}</option>;})}</select><div style={{fontSize:11,color:subC}}>{list.length} {L("valute mostrate")}{normalized?L(" per la ricerca"):""}.</div></div>;}
+    function Segmented({items,value,onChange,columns}){var cols=Number(columns)||((isMobile&&items.length>2)?2:Math.max(1,items.length));var activeC=secondaryButtonColor||"#7FC8F8";return <div style={{display:"grid",gridTemplateColumns:"repeat("+cols+",minmax(0,1fr))",gap:4,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3,marginBottom:12}}>{items.map(function(it){var active=value===it.id;var disabled=!!it.disabled;return <button type="button" key={it.id} disabled={disabled} onClick={function(e){if(e&&e.stopPropagation)e.stopPropagation();if(disabled){if(it.lockedMessage)setToast(it.lockedMessage);return;}onChange(it.id);}} style={{minWidth:0,minHeight:40,padding:isMobile?"8px 5px":"9px 10px",border:"none",borderRadius:10,background:active?activeC:"transparent",color:active?"#fff":(disabled?(dark?"#555":"#aaa"):subC),fontSize:isMobile?11:13,lineHeight:1.18,whiteSpace:"normal",overflowWrap:"anywhere",cursor:disabled?"not-allowed":"pointer",fontWeight:active?800:400,boxShadow:active?"0 3px 10px "+activeC+"40":"none",opacity:disabled?0.55:1}}>{L(it.label)}{disabled?" 🔒":""}</button>;})}</div>;}
+    
 
     function WidgetAppearancePanel(){
       var noteLocked=!isWidgetAllowed("note");
@@ -7328,7 +7953,7 @@ var row=D[raw]||D[raw.trim()];
       {view==="list"&&<div style={{display:"flex",flexDirection:"column",gap:8}}>{items.map(function(a){return edit&&edit.id===a.id?<div key={a.id} style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:12,border:"1px solid "+borderC,padding:12,display:"flex",flexDirection:"column",gap:10,...baseDisabledStyle()}}>{withIcon&&<EmojiPicker value={edit.icon||"📂"} onChange={function(v){if(blockSetting("base"))return;setEdit(function(p){return{...p,icon:v};});}}/>}<input disabled={!baseSettingsAllowed} type="color" value={edit.color||COLORS[0]} onChange={function(e){if(blockSetting("base"))return;setEdit(function(p){return{...p,color:e.target.value};});}} style={{width:34,height:34,border:"none",borderRadius:8,padding:0}}/><input disabled={!baseSettingsAllowed} value={edit.name} onChange={function(e){if(blockSetting("base"))return;setEdit(function(p){return{...p,name:e.target.value};});}} style={{...sinp,width:"100%",boxSizing:"border-box"}}/><div style={{display:"flex",gap:8}}><Btn onClick={save} disabled={!groupEditValid} bg={groupEditValid?"#7F77DD":"#A8A8A8"} style={{flex:1}}>{V.save}</Btn><Btn onClick={function(){setEdit(null);}} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn></div></div>:<div key={a.id} style={{background:cardBg,borderRadius:12,border:"1px solid "+borderC,padding:"12px 14px",display:"flex",alignItems:"center",gap:10,opacity:a.archived?0.55:1}}>{withIcon&&<span style={{fontSize:20}}>{a.icon||"📂"}</span>}<span style={{width:12,height:12,borderRadius:"50%",background:a.color||COLORS[0],flexShrink:0}}/><div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:600,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(a.name)}</div>{a.archived&&<div style={{fontSize:11,color:subC}}>{L("Archiviata")}</div>}</div><button disabled={!baseSettingsAllowed} onClick={function(){if(blockSetting("base"))return;setEdit({...a});}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:subC,opacity:baseSettingsAllowed?1:.45}}>✏️</button><button disabled={!baseSettingsAllowed} onClick={function(){archive(a.id);}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:subC,opacity:baseSettingsAllowed?1:.45}}>{a.archived?"📂":"🗂"}</button><button disabled={!baseSettingsAllowed} onClick={function(){del(a.id);}} style={{background:"none",border:"none",cursor:baseSettingsAllowed?"pointer":"not-allowed",fontSize:16,color:"#E24B4A",opacity:baseSettingsAllowed?1:.45}}>🗑</button></div>;})}{baseLockHint("Modifica, archiviazione, eliminazione e aggiunta disponibili dal piano Base")}<button type="button" onClick={function(){if(blockSetting("base"))return;setShowCreate(true);}} style={{width:"100%",marginTop:8,background:confirmButtonColor||"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:dark?"none":"0 6px 18px rgba(55,138,221,0.25)"}}>＋ {createTitle}</button></div>}
       {view==="order"&&<SortableRows items={items} onMove={function(i,dir){if(blockSetting("base"))return;var j=i+dir;if(j<0||j>=items.length)return;var arr=items.slice();var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;setItems(arr);}} renderItem={function(a){return <div style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>{withIcon&&<span style={{fontSize:20}}>{a.icon||"📂"}</span>}<span style={{width:12,height:12,borderRadius:"50%",background:a.color||COLORS[0],flexShrink:0}}/><div style={{fontSize:14,fontWeight:600,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(a.name)}</div></div>;}}/>}
       {view==="default"&&<div><SettingHint>Valore preselezionato quando apri il form relativo a questa sezione.</SettingHint><select value={defaultValue||""} onChange={function(e){setDefaultValue(e.target.value);}} style={{...sinp,width:"100%"}}><option value="">{L("Nessun default")}</option>{items.map(function(a){return <option key={a.id} value={a.id}>{withIcon?(a.icon||"📂")+" ":""}{L(a.name)}</option>;})}</select></div>}
-      </div>{showCreate&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:950,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div style={{width:"100%",maxWidth:480,background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 16px 60px rgba(0,0,0,0.35)",padding:18}}><div style={{fontSize:17,fontWeight:900,color:textC,marginBottom:12}}>{createTitle}</div><div style={{display:"flex",flexDirection:"column",gap:12,...baseDisabledStyle()}}>{withIcon&&<div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Icona")}</div><EmojiPicker value={form.icon} onChange={function(v){if(blockSetting("base"))return;setForm(function(p){return{...p,icon:v};});}}/></div>}<div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Colore")}</div><input disabled={!baseSettingsAllowed} type="color" value={form.color} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,color:e.target.value};});}} style={{width:54,height:42,border:"none",borderRadius:10,padding:0,background:"transparent"}}/></div><div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Nome area")}</div><input autoFocus disabled={!baseSettingsAllowed} placeholder={L("Nuova area")} value={form.name} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,name:e.target.value};});}} onKeyDown={function(e){if(e.key==="Enter"&&groupCreateValid)add();}} style={{...sinp,width:"100%"}}/></div></div><div style={{display:"flex",gap:8,marginTop:16}}><Btn onClick={add} disabled={!groupCreateValid} bg={groupCreateValid?(confirmButtonColor||"#7F77DD"):"#A8A8A8"} style={{flex:1,padding:12,fontWeight:900}}>{L("Salva")}</Btn><Btn onClick={resetCreate} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn></div></div></div>}</div>;
+      </div>{showCreate&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:950,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}><div style={{width:"100%",maxWidth:480,background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 16px 60px rgba(0,0,0,0.35)",padding:18}}><div style={{fontSize:17,fontWeight:900,color:textC,marginBottom:12}}>{createTitle}</div><div style={{display:"flex",flexDirection:"column",gap:12,...baseDisabledStyle()}}>{withIcon&&<div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Icona")}</div><EmojiPicker value={form.icon} onChange={function(v){if(blockSetting("base"))return;setForm(function(p){return{...p,icon:v};});}}/></div>}<div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Colore")}</div><input disabled={!baseSettingsAllowed} type="color" value={form.color} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,color:e.target.value};});}} style={{width:54,height:42,border:"none",borderRadius:10,padding:0,background:"transparent"}}/></div><div><div style={{fontSize:12,fontWeight:800,color:subC,marginBottom:6}}>{L("Nome area")}</div><input autoFocus disabled={!baseSettingsAllowed} placeholder={L("Nuova area")} value={form.name} onChange={function(e){if(blockSetting("base"))return;setForm(function(p){return{...p,name:e.target.value};});}} onKeyDown={function(e){if(e.key==="Enter"&&groupCreateValid)add();}} style={{...sinp,width:"100%"}}/></div></div><div style={{display:"flex",gap:8,marginTop:16}}><Btn onClick={add} disabled={!groupCreateValid} bg={groupCreateValid?(confirmButtonColor||"#7F77DD"):"#A8A8A8"} style={{flex:1,padding:12,fontWeight:900}}>{L("Salva")}</Btn><Btn onClick={resetCreate} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn></div></div></div>}</div>;
     }
     function ExpenseCategoriesSettings(){var [view,setView]=useStorage(userKey("expense_cats_settings_view_v1"),"list");var activeCats=(cats||[]).filter(function(c){return !c.deleted&&!c.archived;});var validCatIds=activeCats.map(function(c){return String(c.id);});
 var rawCatOrder=(catOrder||[]).map(function(id){return String(id);});
@@ -7382,19 +8007,19 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     useEffect(function(){setPendingLang(lang);},[lang]);
     if(!settingsPage)return <SettingsMenu/>;
     if(settingsPage==="profile")return <div><PageHeader title="Profilo"/>
-      <ProfileCard currentUser={currentUser} onLogout={onLogout} dark={dark} textC={textC} subC={subC} borderC={borderC} cardBg={cardBg} btnRadius={btnRadius} dateFmt={dateFmt} setToast={setToast} fbDb={fbDb} onProfileUpdate={onProfileUpdate} onDeleteAccount={deleteCurrentAccount}/>
+      <ProfileCard currentUser={currentUser} onLogout={onLogout} dark={dark} textC={textC} subC={subC} borderC={borderC} cardBg={cardBg} btnRadius={btnRadius} dateFmt={dateFmt} setToast={setToast} fbDb={fbDb} onProfileUpdate={onProfileUpdate} onDeleteAccount={deleteCurrentAccount} lang={lang} confirmButtonColor={confirmButtonColor} secondaryButtonColor={secondaryButtonColor}/>
     </div>;
 
     function SecuritySettingsPage(){
       var timeoutItems=[{id:"0",label:"Subito"},{id:"1",label:"1 minuto"},{id:"5",label:"5 minuti"},{id:"15",label:"15 minuti"}];
       var methods=[{id:"biometric",icon:"👆",label:"Biometria",desc:"Impronta, Face ID o codice dispositivo"},{id:"password",icon:"🔑",label:"Password account",desc:"Usa la stessa password dell’account email"},{id:"pin",icon:"🔢",label:"PIN 4 numeri",desc:"Codice locale di 4 cifre"}];
       function methodBtn(m){var active=localLockMethod===m.id;return <button key={m.id} type="button" onClick={function(){setLocalLockMethod(m.id);setBiometricLockMessage("");}} style={{textAlign:"left",border:"1px solid "+(active?confirmButtonColor:borderC),background:active?(confirmButtonColor+"18"):(dark?"#252535":"#fff"),color:textC,borderRadius:14,padding:"12px 13px",cursor:"pointer"}}><div style={{fontSize:14,fontWeight:900,marginBottom:3}}>{m.icon} {L(m.label)}</div><div style={{fontSize:11,color:subC,lineHeight:1.35}}>{L(m.desc)}</div></button>;}
-      function savePin(){var clean=String((securityPinDraftRef&&securityPinDraftRef.current)||securityPinDraft||"").replace(/\D/g,"").slice(0,4);if(!/^\d{4}$/.test(clean)){setToast({text:L("Il PIN deve contenere 4 numeri."),type:"error",icon:"🚫",color:"#E24B4A"});return;}setLocalLockPin(clean);securityPinDraftRef.current="";setSecurityPinDraft("");setToast({text:L("PIN salvato"),type:"success",icon:"🔢"});}
+      function savePin(){var clean=String((securityPinDraftRef&&securityPinDraftRef.current)||securityPinDraft||"").replace(/\D/g,"").slice(0,4);if(!/^\d{4}$/.test(clean)){setToast({text:L("Il PIN deve contenere 4 numeri."),type:"error",icon:"🚫",color:"#E24B4A"});return;}if(localLockPin&&clean===String(localLockPin)){setToast({text:L("Il nuovo PIN deve essere diverso da quello attuale."),type:"error",icon:"🚫",color:"#E24B4A",duration:4200});return;}setLocalLockPin(clean);securityPinDraftRef.current="";setSecurityPinDraft("");var pinSavedMessages:any={it:"PIN salvato",en:"PIN saved",es:"PIN guardado",fr:"PIN enregistré",de:"PIN gespeichert",pt:"PIN guardado",pl:"PIN zapisany",nl:"PIN opgeslagen",ro:"PIN salvat",el:"Το PIN αποθηκεύτηκε"};var pinSavedLang=String(lang||"it").toLowerCase().slice(0,2);setToast({text:pinSavedMessages[pinSavedLang]||pinSavedMessages.it,type:"success",icon:"🔢",translated:true});}
       return <div><PageHeader title="Sicurezza"/><div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:14}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:900,color:textC,marginBottom:4}}>🔐 {L("Proteggi l’app")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45}}>{L("Scegli se sbloccare fAInance con biometria, password dell’account o PIN di 4 numeri.")}</div></div><button type="button" onClick={function(){handleBiometricToggle(!biometricLockEnabled);}} disabled={biometricChecking} aria-label={L("Proteggi l’app")} style={{width:44,height:26,borderRadius:999,border:"none",padding:3,background:biometricLockEnabled?"linear-gradient(135deg,#7F77DD,#378ADD)":(dark?"#4b4b5f":"#d4d4d8"),cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.65:1,display:"flex",alignItems:"center",justifyContent:biometricLockEnabled?"flex-end":"flex-start",transition:"all .2s ease",flexShrink:0}}><span style={{width:20,height:20,borderRadius:"50%",background:"#fff",display:"block",boxShadow:"0 2px 6px rgba(0,0,0,.18)"}}/></button></div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,marginBottom:14}}><div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:900,color:textC,marginBottom:4}}>🔐 {L("Proteggi l’app")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45}}>{L("Scegli se sbloccare fAInance con biometria, password dell’account o PIN di 4 numeri.")}</div></div><button type="button" onClick={function(){handleBiometricToggle(!biometricLockEnabled);}} disabled={biometricChecking} aria-label={L("Proteggi l’app")} style={{width:44,height:26,borderRadius:999,border:"none",padding:3,background:biometricLockEnabled?"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))":(dark?"#4b4b5f":"#d4d4d8"),cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.65:1,display:"flex",alignItems:"center",justifyContent:biometricLockEnabled?"flex-end":"flex-start",transition:"all .2s ease",flexShrink:0}}><span style={{width:20,height:20,borderRadius:"50%",background:"#fff",display:"block",boxShadow:"0 2px 6px rgba(0,0,0,.18)"}}/></button></div>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)",gap:10}}>{methods.map(methodBtn)}</div>
-          {localLockMethod==="pin"&&<div style={{marginTop:12,background:dark?"#1e1e30":"#F8FAFF",border:"1px solid "+borderC,borderRadius:14,padding:12}}><label style={{fontSize:12,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("PIN di 4 numeri")}</label><div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8}}><input defaultValue="" onChange={function(e){securityPinDraftRef.current=String(e.currentTarget.value||"").replace(/\D/g,"").slice(0,4);}} inputMode="numeric" type="text" maxLength={4} autoComplete="off" placeholder={localLockPin?"••••":"1234"} style={{...sinp,width:"100%"}}/><Btn onClick={savePin} bg={confirmButtonColor}>{L("Salva PIN")}</Btn></div>{localLockPin&&<div style={{fontSize:11,color:"#1D9E75",fontWeight:800,marginTop:7}}>✅ {L("PIN configurato")}</div>}</div>}
+          <div style={{display:localLockMethod==="pin"?"block":"none",marginTop:12,background:dark?"#1e1e30":"#F8FAFF",border:"1px solid "+borderC,borderRadius:14,padding:12}}><label style={{fontSize:12,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("PIN di 4 numeri")}</label><div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:8}}><input value={securityPinDraft} onChange={function(e){var next=String(e.currentTarget.value||"").replace(/\D/g,"").slice(0,4);securityPinDraftRef.current=next;setSecurityPinDraft(next);}} onFocus={function(e){e.stopPropagation();}} inputMode="numeric" type="text" maxLength={4} autoComplete="off" placeholder={localLockPin?"••••":"1234"} style={{...sinp,width:"100%",fontSize:18,textAlign:"center",letterSpacing:6}}/><Btn onClick={savePin} bg={confirmButtonColor}>{L("Salva PIN")}</Btn></div>{localLockPin&&<div style={{fontSize:11,color:"#1D9E75",fontWeight:800,marginTop:7}}>✅ {L("PIN configurato")}</div>}</div>
           {localLockMethod==="password"&&<div style={{fontSize:12,color:subC,lineHeight:1.4,marginTop:12}}>{L("La password dell’account funziona per gli account creati con email e password. Gli account Google o Apple possono non avere una password fAInance verificabile localmente.")}</div>}
           {biometricChecking&&<div style={{fontSize:12,color:subC,marginTop:10}}>⏳ {L("Controllo in corso...")}</div>}
           {biometricLockMessage&&<div style={{fontSize:12,color:"#E24B4A",marginTop:10,lineHeight:1.35}}>{L(biometricLockMessage)}</div>}
@@ -7404,20 +8029,20 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       </div></div>;
     }
 
-    if(settingsPage==="security")return <SecuritySettingsPage/>;
+    if(settingsPage==="security")return <StableNestedPanelHost key="settings-security" render={function(){return SecuritySettingsPage();}}/>;
 
     if(settingsPage==="general")return <div><PageHeader title="Generale"/>
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         <div style={{display:"flex",flexDirection:"column",gap:0,borderRadius:14,overflow:"hidden",border:"1px solid "+borderC}}>
-          {[{label:"🌐 Lingua",el:<div><select value={pendingLang} onChange={function(e){setPendingLang(e.target.value);}} style={{...sinp,width:"100%",marginBottom:8}}>{LANGUAGES.map(function(l){return <option key={l.code} value={l.code}>{l.label}</option>;})}</select><Btn onClick={function(){var nextLang=pendingLang;setLang(nextLang);try{localStorage.setItem("pref_lang_v2",JSON.stringify(nextLang));}catch(e){};setToast({text:translateFainanceText("Lingua aggiornata",nextLang),type:"success",translated:true});}} bg="#7F77DD" style={{width:"100%",padding:10}}>{L("Salva lingua")}</Btn><div style={{fontSize:11,color:subC,marginTop:6}}>{L("La lingua viene applicata salvando e ricaricando l’app.")}</div></div>},{label:"📅 Formato data",el:<Segmented items={DATE_FORMATS.map(function(f){return{id:f.id,label:f.label};})} value={dateFmt} onChange={setDateFmt}/>},{label:"📅 Primo giorno settimana",el:<Segmented items={[{id:"mon",label:"Lunedì"},{id:"sun",label:"Domenica"}]} value={firstDayOfWeek} onChange={setFirstDayOfWeek}/>}].map(function(item,i,arr){return <div key={item.label} style={{background:cardBg,padding:"16px 20px",borderBottom:i<arr.length-1?"1px solid "+borderC:"none"}}><div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:8}}>{L(item.label)}</div>{item.el}</div>;})}
+          {[{label:"🌐 Lingua",el:<div><select value={pendingLang} onChange={function(e){setPendingLang(e.target.value);}} style={{...sinp,width:"100%",marginBottom:8}}>{LANGUAGES.map(function(l){return <option key={l.code} value={l.code}>{l.label}</option>;})}</select><Btn onClick={function(){var nextLang=pendingLang;setLang(nextLang);try{localStorage.setItem("pref_lang_v2",JSON.stringify(nextLang));}catch(e){};setToast({text:translateFainanceText("Lingua aggiornata",nextLang),type:"success",translated:true});}} bg="#7F77DD" style={{width:"100%",padding:10}}>{L("Salva lingua")}</Btn><div style={{fontSize:11,color:subC,marginTop:6}}>{L("La lingua viene applicata salvando e ricaricando l’app.")}</div></div>},{label:"📅 Formato data",el:<Segmented columns={3} items={DATE_FORMATS.map(function(f){return{id:f.id,label:f.id==="dmy"?"GG/MM/AAAA":(f.id==="mdy"?"MM/GG/AAAA":"AAAA-MM-GG")};})} value={dateFmt} onChange={setDateFmt}/>},{label:"📅 Primo giorno settimana",el:<Segmented items={[{id:"mon",label:"Lunedì"},{id:"sun",label:"Domenica"}]} value={firstDayOfWeek} onChange={setFirstDayOfWeek}/>}].map(function(item,i,arr){return <div key={item.label} style={{background:cardBg,padding:"16px 20px",borderBottom:i<arr.length-1?"1px solid "+borderC:"none"}}><div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:8}}>{L(item.label)}</div>{item.el}</div>;})}
         </div>
 
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
           <div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:4}}>💱 {L("Valute")}</div>
           <SettingHint>Gestisci valuta principale e valuta secondaria con ricerca tra tutte le valute disponibili.</SettingHint>
           <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,alignItems:"start"}}>
-            <div><div style={{fontSize:13,fontWeight:700,color:textC,marginBottom:6}}>{L("Valuta principale")}</div><CurrencyPicker value={currency} onChange={setCurrency}/></div>
-            <div style={{opacity:settingAllowed("base")?1:.62}}><div style={{fontSize:13,fontWeight:700,color:textC,marginBottom:6}}>{L("Valuta secondaria")} <span style={{fontSize:11,background:dark?"#333":"#FFF3CD",color:dark?"#ffd58a":"#856404",borderRadius:20,padding:"2px 7px",fontWeight:900}}>Base</span></div>{settingAllowed("base")?<CurrencyPicker value={secondaryCurrency} onChange={setSecondaryCurrency} exclude={currency} allowNone/>:<div onClick={function(){blockSetting("base");}} style={{border:"1px dashed "+(dark?"#5a4a20":"#FFD54F"),background:dark?"#2b2518":"#FFF8E1",borderRadius:12,padding:"12px",fontSize:12,color:dark?"#ffd58a":"#856404",cursor:"pointer",lineHeight:1.35}}>🔒 {L("Valuta secondaria disponibile dal piano Base.")}</div>}</div>
+            <div><div style={{fontSize:13,fontWeight:700,color:textC,marginBottom:6}}>{L("Valuta principale")}</div><StableCurrencyPicker value={currency} onChange={setCurrency} dark={dark} textC={textC} subC={subC} borderC={borderC} translate={L}/></div>
+            <div style={{opacity:settingAllowed("base")?1:.62}}><div style={{fontSize:13,fontWeight:700,color:textC,marginBottom:6}}>{L("Valuta secondaria")} <span style={{fontSize:11,background:dark?"#333":"#FFF3CD",color:dark?"#ffd58a":"#856404",borderRadius:20,padding:"2px 7px",fontWeight:900}}>Base</span></div>{settingAllowed("base")?<StableCurrencyPicker value={secondaryCurrency} onChange={setSecondaryCurrency} exclude={currency} allowNone dark={dark} textC={textC} subC={subC} borderC={borderC} translate={L}/>:<div onClick={function(){blockSetting("base");}} style={{border:"1px dashed "+(dark?"#5a4a20":"#FFD54F"),background:dark?"#2b2518":"#FFF8E1",borderRadius:12,padding:"12px",fontSize:12,color:dark?"#ffd58a":"#856404",cursor:"pointer",lineHeight:1.35}}>🔒 {L("Valuta secondaria disponibile dal piano Base.")}</div>}</div>
           </div>
           {secondaryCurrency&&<div style={{display:"flex",flexDirection:"column",gap:10,background:dark?"#252535":"#f9f9f9",borderRadius:12,padding:"14px 16px",border:"1px solid "+borderC,marginTop:12,opacity:settingAllowed("base")?1:.62}}>
             <div style={{fontSize:12,fontWeight:700,color:subC}}>{L("Mostra")} {secondaryCurrency} {L("in")}:</div>
@@ -7532,10 +8157,10 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     ]}/></div>;
 
     if(settingsPage==="sections_income_areas")return <GroupSettingsPanel title="Entrate / Aree" desc="Gestisci le aree delle entrate: lista, riordino e area default." items={incomeGroups||DEFAULT_INCOME_GROUPS} setItems={setIncomeGroups} defaultValue={defaultIncomeArea} setDefaultValue={setDefaultIncomeArea}/>;
-    if(settingsPage==="sections_income_categories")return <IncomeCategoriesSettings/>;
+    if(settingsPage==="sections_income_categories")return <StableNestedPanelHost key="settings-income-categories" render={function(){return IncomeCategoriesSettings();}}/>;
     if(settingsPage==="sections_expense_areas")return <GroupSettingsPanel title="Uscite / Aree" desc="Gestisci le aree delle uscite: lista, riordino e area default." items={expenseGroups||DEFAULT_EXPENSE_GROUPS} setItems={setExpenseGroups} defaultValue={defaultExpenseArea} setDefaultValue={setDefaultExpenseArea}/>;
-    if(settingsPage==="sections_expense_categories")return <ExpenseCategoriesSettings/>;
-    if(settingsPage==="sections_expense_methods")return <ExpenseMethodsSettings/>;
+    if(settingsPage==="sections_expense_categories")return <StableNestedPanelHost key="settings-expense-categories" render={function(){return ExpenseCategoriesSettings();}}/>;
+    if(settingsPage==="sections_expense_methods")return <StableNestedPanelHost key="settings-expense-methods" render={function(){return ExpenseMethodsSettings();}}/>;
     if(settingsPage==="values")return <div><PageHeader title="Categorie & Metodi"/>
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         {[{id:"cats",icon:"💸",label:"Uscite"},{id:"income_types",icon:"💰",label:"Entrate"},{id:"methods",icon:"💳",label:"Metodi di pagamento"},{id:"areas",icon:"📂",label:"Aree"},{id:"patrimonio",icon:"💎",label:"Patrimonio"},{id:"merge",icon:"↔",label:"Accorpa"},{id:"order",icon:"↕",label:"Ordine"},{id:"defaultcat",icon:"⭐",label:"Default"}].map(function(st){return <Btn key={st.id} onClick={function(){setSettingsValuesTab(st.id);}} bg={settingsValuesTab===st.id?(dark?"#444":"#333"):(dark?"#333":"#f0f0f0")} color={settingsValuesTab===st.id?"#fff":(dark?"#eee":"#555")} style={{fontSize:12,padding:"8px 11px",whiteSpace:"nowrap",minWidth:settingsValuesTab===st.id?92:78,flex:"0 0 auto",textAlign:"center"}}>{st.icon} {L(st.label)}</Btn>;})}
@@ -7734,7 +8359,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     
     }
 
-    if(settingsPage==="notifications")return <NotificationsSettingsPage/>;
+    if(settingsPage==="notifications")return <StableNestedPanelHost key="settings-notifications" render={function(){return NotificationsSettingsPage();}}/>;
 
     if(settingsPage==="patrimonio_settings")return <div><PageHeader title="Patrimonio"/><SettingsCards items={[{id:"patrimonio_areas_settings",icon:"📂",label:"Aree",desc:settingAllowed("base")?"Lista, crea, modifica e riordina aree patrimonio":"Lista disponibile. Crea, modifica e riordina dal piano Base"},{id:"patrimonio_entries_settings",icon:"💎",label:"Voci",desc:settingAllowed("base")?"Lista, crea, modifica e riordina voci patrimonio":"Lista disponibile. Crea, modifica e riordina dal piano Base"},{id:"patrimonio_mode_settings",icon:"⚙️",label:"Modalità",desc:"Come vengono aggiornati i valori del patrimonio"}]}/></div>;
     if(settingsPage==="patrimonio_areas_settings")return <div><PageHeader title="Patrimonio / Aree"/><PatrimonioSettingsPanel forcedSection="areas" allowEditing={settingAllowed("base")} onLocked={function(){blockSetting("base");}}/></div>;
@@ -7854,11 +8479,39 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
 
     function backupLocalJson(key,fallback){try{var raw=localStorage.getItem(userKey(key));return raw?JSON.parse(raw):fallback;}catch(e){return fallback;}}
     function restoreLocalJson(key,value){try{if(value!==undefined)localStorage.setItem(userKey(key),JSON.stringify(value));}catch(e){}}
-    function buildBackupPayload(){return {backupSchemaVersion:2,accountSyncSchemaVersion:2,expenses,incomes,cats,methods,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder:(catOrder||[]).map(String),methodOrder:(methodOrder||[]).map(String),catSortMode,methodSortMode,defaultExpenseCat,defaultExpenseMethod,defaultIncomeType,defaultExpenseArea,defaultIncomeArea,defaultMethodArea,incomeTypeOrder:(incomeTypeOrder||[]).map(String),recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,dateFmt,firstDayOfWeek,statsView,btnStyle,expenseColor,incomeColor,homeBalanceView,homeWorklets,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrder,appuntiDocuments,appuntiNotes,bankCoords,creditCards,aiDataAccess,aiExternalConsent,aiExternalConsentAt,aiConsentTextVersion:AI_CONSENT_TEXT_VERSION,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingDeletedRecords,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists,activeShoppingListId,shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor,secondaryButtonColor};}
+    async function buildBackupPayload(){
+      var sensitiveDataEncryptedV1={bankCoords:await fainanceEncryptSensitiveData(bankCoords,userId),creditCards:await fainanceEncryptSensitiveData(creditCards,userId),accountUid:String(userId||"")};
+      return {backupSchemaVersion:3,accountSyncSchemaVersion:3,accountDeletedRecords,expenses,incomes,cats,methods,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder:(catOrder||[]).map(String),methodOrder:(methodOrder||[]).map(String),catSortMode,methodSortMode,defaultExpenseCat,defaultExpenseMethod,defaultIncomeType,defaultExpenseArea,defaultIncomeArea,defaultMethodArea,incomeTypeOrder:(incomeTypeOrder||[]).map(String),recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,dateFmt,firstDayOfWeek,statsView,btnStyle,expenseColor,incomeColor,homeBalanceView,homeWorklets,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrder,appuntiDocuments,appuntiNotes,sensitiveDataEncryptedV1,aiDataAccess,aiExternalConsent,aiExternalConsentAt,aiConsentTextVersion:AI_CONSENT_TEXT_VERSION,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingDeletedRecords,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingDefaultArea,shoppingLists,activeShoppingListId,shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,initialSetupStatus,metaEventsConsent};
+    }
+    async function prepareBackupImport(raw){
+      var d=raw&&typeof raw==="object"?{...raw}:{};var encrypted=d.sensitiveDataEncryptedV1;
+      if(encrypted&&typeof encrypted==="object"){
+        var owner=String(encrypted.accountUid||"");
+        if(owner&&owner!==String(userId||""))throw new Error("BACKUP_DIFFERENT_ACCOUNT");
+        d.bankCoords=await fainanceDecryptSensitiveData(encrypted.bankCoords,userId);
+        d.creditCards=await fainanceDecryptSensitiveData(encrypted.creditCards,userId);
+      }else{
+        d.bankCoords=Array.isArray(d.bankCoords)?d.bankCoords:[];
+        d.creditCards=Array.isArray(d.creditCards)?d.creditCards:[];
+      }
+      return d;
+    }
     function countBackupItems(d){d=d||{};var parts=[];function add(label,n){n=Number(n||0);if(n>0)parts.push(n+" "+label);}add("uscite",(d.expenses||[]).length);add("entrate",(d.incomes||[]).length);add("ricorrenti",(d.recurring||[]).length);add("obiettivi",(d.goals||[]).length);add("alert",(d.alerts||[]).length);add("voci patrimonio",(d.patrimonioEntries||[]).length);add("mesi patrimonio",Object.keys(d.patrimonioHistory||{}).length);add("documenti",(d.appuntiDocuments||[]).length);add("appunti",(d.appuntiNotes||[]).length);add("coordinate",(d.bankCoords||[]).length);add("carte di credito",(d.creditCards||[]).length);add("progetti Share",(d.shareProjects||[]).length);add(L("debiti/crediti"),(d.debtCredits||[]).length);add(L("carte fidelity"),(d.shoppingCards||[]).length);add(L("prodotti spesa"),(d.shoppingItems||[]).length);add(L("aree spesa"),(d.shoppingAreas||[]).length);add(L("liste spesa"),(d.shoppingLists||[]).length);return parts.length?parts.join(" · "):"0 voci";}
-    function applyBackupData(d){if(!d||typeof d!=="object")return;if(Array.isArray(d.expenses))setExpenses(d.expenses);if(Array.isArray(d.incomes))setIncomes(d.incomes);if(Array.isArray(d.cats))setCats(d.cats);if(Array.isArray(d.methods))setMethods(d.methods);if(Array.isArray(d.expenseGroups))setExpenseGroups(d.expenseGroups);if(Array.isArray(d.incomeGroups))setIncomeGroups(d.incomeGroups);if(Array.isArray(d.methodGroups))setMethodGroups(d.methodGroups);if(Array.isArray(d.customIncomeTypes))setCustomIncomeTypes(d.customIncomeTypes);if(d.incomeTypeOverrides&&typeof d.incomeTypeOverrides==="object")setIncomeTypeOverrides(d.incomeTypeOverrides);if(Array.isArray(d.catOrder))setCatOrder(d.catOrder.map(String));if(Array.isArray(d.methodOrder))setMethodOrder(d.methodOrder.map(String));if(d.catSortMode!==undefined)setCatSortMode(String(d.catSortMode||"group"));if(d.methodSortMode!==undefined)setMethodSortMode(String(d.methodSortMode||"group"));if(d.defaultExpenseCat!==undefined)setDefaultExpenseCat(String(d.defaultExpenseCat||""));if(d.defaultExpenseMethod!==undefined)setDefaultExpenseMethod(String(d.defaultExpenseMethod||""));if(d.defaultIncomeType!==undefined)setDefaultIncomeType(String(d.defaultIncomeType||""));if(d.defaultExpenseArea!==undefined)setDefaultExpenseArea(String(d.defaultExpenseArea||"vita"));if(d.defaultIncomeArea!==undefined)setDefaultIncomeArea(String(d.defaultIncomeArea||"lavoro"));if(d.defaultMethodArea!==undefined)setDefaultMethodArea(String(d.defaultMethodArea||"conti_carte"));if(Array.isArray(d.incomeTypeOrder))setIncomeTypeOrder(d.incomeTypeOrder.map(String));if(Array.isArray(d.recurring))setRecurring(d.recurring);if(Array.isArray(d.goals))setGoals(d.goals);if(Array.isArray(d.alerts))setAlerts(d.alerts);if(d.budgetPlan!==undefined)setBudgetPlan(d.budgetPlan);if(d.patrimonioValues&&typeof d.patrimonioValues==="object")setPatrimonioValues(d.patrimonioValues);if(Array.isArray(d.patrimonioAreas))setPatrimonioAreas(d.patrimonioAreas);if(Array.isArray(d.patrimonioEntries))setPatrimonioEntries(d.patrimonioEntries);if(d.patrimonioHistory&&typeof d.patrimonioHistory==="object")setPatrimonioHistory(d.patrimonioHistory);if(d.patrimonioNotes&&typeof d.patrimonioNotes==="object")setPatrimonioNotes(d.patrimonioNotes);if(d.patrimonioMode!==undefined)setPatrimonioMode(String(d.patrimonioMode||"manuale"));if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.historySortDate)setHistorySortDate(d.historySortDate);if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);if(d.currency)setCurrency(d.currency);if(d.secondaryCurrency!==undefined)setSecondaryCurrency(String(d.secondaryCurrency||""));if(d.showSecInHistory!==undefined)setShowSecInHistory(!!d.showSecInHistory);if(d.showSecInStats!==undefined)setShowSecInStats(!!d.showSecInStats);if(d.showSecInBudget!==undefined)setShowSecInBudget(!!d.showSecInBudget);if(d.showSecInPatrimonio!==undefined)setShowSecInPatrimonio(!!d.showSecInPatrimonio);if(d.dateFmt)setDateFmt(d.dateFmt);if(d.firstDayOfWeek)setFirstDayOfWeek(d.firstDayOfWeek);if(d.statsView)setStatsView(d.statsView);if(d.btnStyle)setBtnStyle(d.btnStyle);if(d.expenseColor)setExpenseColor(d.expenseColor);if(d.incomeColor)setIncomeColor(d.incomeColor);if(d.homeBalanceView)setHomeBalanceView(d.homeBalanceView);if(Array.isArray(d.homeWorklets))setHomeWorklets(d.homeWorklets);if(d.showAppSummaryHeader!==undefined)setShowAppSummaryHeader(!!d.showAppSummaryHeader);if(Array.isArray(d.mobileNavOrder))setMobileNavOrder(d.mobileNavOrder);if(d.mobileNavIconCount!==undefined)setMobileNavIconCount(Number(d.mobileNavIconCount||5));if(Array.isArray(d.mobileMenuOrder))setMobileMenuOrder(d.mobileMenuOrder);if(Array.isArray(d.mobileAllNavOrder))setMobileAllNavOrder(d.mobileAllNavOrder);if(Array.isArray(d.shareProjects))setShareProjects(d.shareProjects);if(Array.isArray(d.debtCredits))setDebtCredits(d.debtCredits);if(Array.isArray(d.shoppingCards))setShoppingCards(d.shoppingCards);if(Array.isArray(d.shoppingItems))setShoppingItems(d.shoppingItems);if(d.shoppingDeletedRecords&&typeof d.shoppingDeletedRecords==="object")setShoppingDeletedRecordsRaw(d.shoppingDeletedRecords);if(Array.isArray(d.shoppingLists))setShoppingLists(d.shoppingLists);if(d.activeShoppingListId!==undefined)setActiveShoppingListId(String(d.activeShoppingListId||"main"));if(Array.isArray(d.shoppingAreas))setShoppingAreas(d.shoppingAreas);if(d.shoppingAreaIcons&&typeof d.shoppingAreaIcons==="object")setShoppingAreaIcons(d.shoppingAreaIcons);if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);if(d.shoppingProductSort)setShoppingProductSort(d.shoppingProductSort);if(Array.isArray(d.shareReceiptUploads))setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);if(Array.isArray(d.appuntiDocuments))setAppuntiDocuments(d.appuntiDocuments);if(Array.isArray(d.appuntiNotes))setAppuntiNotes(d.appuntiNotes);if(Array.isArray(d.bankCoords))setBankCoords(d.bankCoords);if(Array.isArray(d.creditCards))setCreditCards(d.creditCards);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);if(d.aiExternalConsent!==undefined)setAiExternalConsent(!!d.aiExternalConsent,d.aiExternalConsentAt);setToast("Backup ripristinato");}
-    function handleBackupJsonFile(e){var f=e.target.files&&e.target.files[0];if(!f)return;e.target.value="";var r=new FileReader();r.onload=function(ev){try{var d=JSON.parse(String(ev.target.result||"{}"));var summary=countBackupItems(d);var ok=window.confirm(L("Stai per ripristinare questo backup.\nVoci che verranno importate: ")+summary+L(".\n\nContinuare?"));if(!ok)return;applyBackupData(d);}catch(err){setToast({text:"File JSON non valido",type:"error",icon:"🚫",color:"#E24B4A"});}};r.readAsText(f);} 
-
+    function applyBackupData(d){if(!d||typeof d!=="object")return;if(d.accountDeletedRecords&&typeof d.accountDeletedRecords==="object")setAccountDeletedRecordsRaw(d.accountDeletedRecords);if(Array.isArray(d.expenses))setExpenses(d.expenses);if(Array.isArray(d.incomes))setIncomes(d.incomes);if(Array.isArray(d.cats))setCats(d.cats);if(Array.isArray(d.methods))setMethods(d.methods);if(Array.isArray(d.expenseGroups))setExpenseGroups(d.expenseGroups);if(Array.isArray(d.incomeGroups))setIncomeGroups(d.incomeGroups);if(Array.isArray(d.methodGroups))setMethodGroups(d.methodGroups);if(Array.isArray(d.customIncomeTypes))setCustomIncomeTypes(d.customIncomeTypes);if(d.incomeTypeOverrides&&typeof d.incomeTypeOverrides==="object")setIncomeTypeOverrides(d.incomeTypeOverrides);if(Array.isArray(d.catOrder))setCatOrder(d.catOrder.map(String));if(Array.isArray(d.methodOrder))setMethodOrder(d.methodOrder.map(String));if(d.catSortMode!==undefined)setCatSortMode(String(d.catSortMode||"group"));if(d.methodSortMode!==undefined)setMethodSortMode(String(d.methodSortMode||"group"));if(d.defaultExpenseCat!==undefined)setDefaultExpenseCat(String(d.defaultExpenseCat||""));if(d.defaultExpenseMethod!==undefined)setDefaultExpenseMethod(String(d.defaultExpenseMethod||""));if(d.defaultIncomeType!==undefined)setDefaultIncomeType(String(d.defaultIncomeType||""));if(d.defaultExpenseArea!==undefined)setDefaultExpenseArea(String(d.defaultExpenseArea||"vita"));if(d.defaultIncomeArea!==undefined)setDefaultIncomeArea(String(d.defaultIncomeArea||"lavoro"));if(d.defaultMethodArea!==undefined)setDefaultMethodArea(String(d.defaultMethodArea||"conti_carte"));if(Array.isArray(d.incomeTypeOrder))setIncomeTypeOrder(d.incomeTypeOrder.map(String));if(Array.isArray(d.recurring))setRecurring(d.recurring);if(Array.isArray(d.goals))setGoals(d.goals);if(Array.isArray(d.alerts))setAlerts(d.alerts);if(d.budgetPlan!==undefined)setBudgetPlan(d.budgetPlan);if(d.patrimonioValues&&typeof d.patrimonioValues==="object")setPatrimonioValues(d.patrimonioValues);if(Array.isArray(d.patrimonioAreas))setPatrimonioAreas(d.patrimonioAreas);if(Array.isArray(d.patrimonioEntries))setPatrimonioEntries(d.patrimonioEntries);if(d.patrimonioHistory&&typeof d.patrimonioHistory==="object")setPatrimonioHistory(d.patrimonioHistory);if(d.patrimonioNotes&&typeof d.patrimonioNotes==="object")setPatrimonioNotes(d.patrimonioNotes);if(d.patrimonioMode!==undefined)setPatrimonioMode(String(d.patrimonioMode||"manuale"));if(d.historyFutureMode)setHistoryFutureMode(d.historyFutureMode);if(d.historySortDate)setHistorySortDate(d.historySortDate);if(d.historySortDirection)setHistorySortDirection(d.historySortDirection);if(d.historySortSecondary)setHistorySortSecondary(d.historySortSecondary);if(d.historySortSecondaryDirection)setHistorySortSecondaryDirection(d.historySortSecondaryDirection);if(d.currency)setCurrency(d.currency);if(d.secondaryCurrency!==undefined)setSecondaryCurrency(String(d.secondaryCurrency||""));if(d.showSecInHistory!==undefined)setShowSecInHistory(!!d.showSecInHistory);if(d.showSecInStats!==undefined)setShowSecInStats(!!d.showSecInStats);if(d.showSecInBudget!==undefined)setShowSecInBudget(!!d.showSecInBudget);if(d.showSecInPatrimonio!==undefined)setShowSecInPatrimonio(!!d.showSecInPatrimonio);if(d.dateFmt)setDateFmt(d.dateFmt);if(d.firstDayOfWeek)setFirstDayOfWeek(d.firstDayOfWeek);if(d.statsView)setStatsView(d.statsView);if(d.btnStyle)setBtnStyle(d.btnStyle);if(d.expenseColor)setExpenseColor(d.expenseColor);if(d.incomeColor)setIncomeColor(d.incomeColor);if(d.homeBalanceView)setHomeBalanceView(d.homeBalanceView);if(Array.isArray(d.homeWorklets))setHomeWorklets(d.homeWorklets);if(d.showAppSummaryHeader!==undefined)setShowAppSummaryHeader(!!d.showAppSummaryHeader);if(Array.isArray(d.mobileNavOrder))setMobileNavOrder(d.mobileNavOrder);if(d.mobileNavIconCount!==undefined)setMobileNavIconCount(Number(d.mobileNavIconCount||5));if(Array.isArray(d.mobileMenuOrder))setMobileMenuOrder(d.mobileMenuOrder);if(Array.isArray(d.mobileAllNavOrder))setMobileAllNavOrder(d.mobileAllNavOrder);if(Array.isArray(d.shareProjects))setShareProjects(d.shareProjects);if(Array.isArray(d.debtCredits))setDebtCredits(d.debtCredits);if(Array.isArray(d.shoppingCards))setShoppingCards(d.shoppingCards);if(Array.isArray(d.shoppingItems))setShoppingItems(d.shoppingItems);if(d.shoppingDeletedRecords&&typeof d.shoppingDeletedRecords==="object")setShoppingDeletedRecordsRaw(d.shoppingDeletedRecords);if(Array.isArray(d.shoppingLists))setShoppingLists(d.shoppingLists);if(d.activeShoppingListId!==undefined)setActiveShoppingListId(String(d.activeShoppingListId||"main"));if(Array.isArray(d.shoppingAreas))setShoppingAreas(d.shoppingAreas);if(d.shoppingAreaIcons&&typeof d.shoppingAreaIcons==="object")setShoppingAreaIcons(d.shoppingAreaIcons);if(d.shoppingBoughtColor)setShoppingBoughtColor(d.shoppingBoughtColor);if(d.shoppingProductSort)setShoppingProductSort(d.shoppingProductSort);if(Array.isArray(d.shareReceiptUploads))setShareReceiptUploads(d.shareReceiptUploads);if(d.showDebtCreditsInPatrimonio!==undefined)setShowDebtCreditsInPatrimonio(!!d.showDebtCreditsInPatrimonio);if(d.showDebtCreditsInExpenses!==undefined)setShowDebtCreditsInExpenses(!!d.showDebtCreditsInExpenses);if(d.shoppingDefaultArea)setShoppingDefaultArea(d.shoppingDefaultArea);if(d.showShareInHistory!==undefined)setShowShareInHistory(!!d.showShareInHistory);if(d.confirmButtonColor)setConfirmButtonColor(d.confirmButtonColor);if(d.secondaryButtonColor)setSecondaryButtonColor(d.secondaryButtonColor);if(Array.isArray(d.appuntiDocuments))setAppuntiDocuments(d.appuntiDocuments);if(Array.isArray(d.appuntiNotes))setAppuntiNotes(d.appuntiNotes);if(Array.isArray(d.bankCoords))setBankCoords(d.bankCoords);if(Array.isArray(d.creditCards))setCreditCards(d.creditCards);if(d.aiDataAccess)setAiDataAccess(d.aiDataAccess);if(d.metaEventsConsent!==undefined)setMetaEventsConsent(!!d.metaEventsConsent);if(d.aiExternalConsent!==undefined)setAiExternalConsent(!!d.aiExternalConsent,d.aiExternalConsentAt);if(d.initialSetupStatus!==undefined)setInitialSetupStatus(String(d.initialSetupStatus||"complete"));setToast("Backup ripristinato");}
+    function handleBackupJsonFile(e){
+      var f=e.target.files&&e.target.files[0];if(!f)return;e.target.value="";var r=new FileReader();
+      r.onload=async function(ev){
+        try{
+          var raw=JSON.parse(String(ev.target.result||"{}"));var d=await prepareBackupImport(raw);var summary=countBackupItems(d);
+          var ok=window.confirm(L("Stai per ripristinare questo backup.\nVoci che verranno importate: ")+summary+L(".\n\nContinuare?"));
+          if(!ok)return;applyBackupData(d);
+        }catch(err){
+          var different=String((err&&err.message)||err)==="BACKUP_DIFFERENT_ACCOUNT";
+          setToast({text:L(different?"Questo backup contiene dati sensibili cifrati per un altro account.":"File JSON non valido o dati sensibili non decifrabili."),type:"error",icon:"🚫",color:"#E24B4A"});
+        }
+      };
+      r.readAsText(f);
+    }
     function dataTitle(label){
       function stripDataCardIcons(value){
         var text=String(value==null?"":value).trim();
@@ -7920,9 +8573,9 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       return base;
     }
     function selectedDeleteOptions(){var opts=deleteDataOptions();var selected=Array.isArray(dataDeleteSelection)?dataDeleteSelection:[];if(selected.indexOf("all")>=0)return opts.filter(function(o){return o.id==="all";});return opts.filter(function(o){return selected.indexOf(o.id)>=0;});}
-    function runDataExport(){
+    async function runDataExport(){
       var opt=String(dataExportOption||"backup");
-      if(opt==="backup"){var data=buildBackupPayload();androidDownload("fainance_backup_"+todayStr()+".json",new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),function(){setToast("Backup pronto");});return;}
+      if(opt==="backup"){try{var data=await buildBackupPayload();androidDownload("fainance_backup_"+todayStr()+".json",new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),function(){setToast("Backup pronto");});}catch(err){console.error("Backup encryption error",err);setToast({text:L("Impossibile creare il backup: i dati sensibili non possono essere cifrati."),type:"error",icon:"🚫",color:"#E24B4A"});}return;}
       if(opt==="expenses_xlsx"){exportToXLSX(expenses,[],cats,methods,dateFmt,function(){setToast("File Excel uscite pronto");},"fainance_uscite.xlsx");return;}
       if(opt==="expenses_csv"){exportToCSV(expenses,[],cats,methods,dateFmt,function(){setToast("File CSV uscite pronto");},"fainance_uscite.csv");return;}
       if(opt==="incomes_xlsx"){exportToXLSX([],incomes,cats,methods,dateFmt,function(){setToast("File Excel entrate pronto");},"fainance_entrate.xlsx");return;}
@@ -7985,7 +8638,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
             <div style={{position:"absolute",right:-44,top:-44,width:150,height:150,borderRadius:"50%",background:"rgba(127,119,221,.22)"}}/>
             <div style={{position:"absolute",left:-50,bottom:-60,width:170,height:170,borderRadius:"50%",background:"rgba(29,158,117,.18)"}}/>
             <div style={{position:"relative",display:"flex",alignItems:"flex-start",gap:14,marginBottom:16}}>
-              <div style={{width:54,height:54,borderRadius:18,background:"linear-gradient(135deg,#7F77DD,#378ADD)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,boxShadow:"0 12px 24px rgba(83,74,183,.24)"}}>💎</div>
+              <div style={{width:54,height:54,borderRadius:18,background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,boxShadow:"0 12px 24px rgba(83,74,183,.24)"}}>💎</div>
               <div style={{minWidth:0}}><div style={{fontSize:18,fontWeight:950,color:textC,marginBottom:5}}>{L("Piano attuale")}</div><div style={{fontSize:12,color:subC,lineHeight:1.45}}>{L("Gestisci il tuo piano e il tipo di rinnovo in modo semplice e immediato.")}</div></div>
             </div>
             <div style={{position:"relative",display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr",gap:10,marginBottom:14}}>
@@ -8061,36 +8714,47 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       </div>;
     }
 
-    if(settingsPage==="plans_settings")return <PlansSettingsPage/>;
+    if(settingsPage==="plans_settings")return <StableNestedPanelHost key="settings-plans" render={function(){return PlansSettingsPage();}}/>;
 
     function SupportSettingsPage(){
-      var [showContactForm,setShowContactForm]=useState(false);
       function openExternal(url){try{if(window&&window.open){window.open(url,"_blank");return;}}catch(e){}try{window.location.href=url;}catch(e2){setToast(L("Link supporto non disponibile"));}}
+      function openContactForm(e){
+        if(e){e.preventDefault();e.stopPropagation();}
+        // Non usare un toggle: più tocchi ravvicinati non devono richiudere il form.
+        setSupportContactFormOpen(true);
+      }
       return <div><PageHeader title="Supporto"/>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,overflow:"hidden"}}>
             {(isNativeIOSApp()?[
-              {icon:"✉️",label:"Contattaci",desc:"Apri il form di contatto interno",action:function(){setShowContactForm(function(v){return !v;});},badge:"Form"}
+              {icon:"✉️",label:"Contattaci",desc:"Apri il form di contatto interno",action:openContactForm,badge:"Form"}
             ]:[
               {icon:"🌐",label:"FAQ sul sito web",desc:"Apri le FAQ ufficiali su fainanceapp.it",action:function(){openExternal("https://fainanceapp.it/it/faq-ita/");},badge:"Apri"},
               {icon:"🌐",label:"Sito web ufficiale",desc:"fainanceapp.it",action:function(){openExternal("https://fainanceapp.it/");},badge:"Apri"},
-              {icon:"✉️",label:"Contattaci",desc:"Apri il form di contatto interno",action:function(){setShowContactForm(function(v){return !v;});},badge:"Form"}
-            ]).map(function(item,i,arr){return <button key={i} onClick={item.action} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"16px 20px",border:"none",borderBottom:i<arr.length-1?"1px solid "+borderC:"none",background:cardBg,cursor:"pointer",textAlign:"left"}}>
+              {icon:"✉️",label:"Contattaci",desc:"Apri il form di contatto interno",action:openContactForm,badge:"Form"}
+            ]).map(function(item,i,arr){return <button type="button" key={i} onClick={function(e){e.preventDefault();e.stopPropagation();item.action(e);}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"16px 20px",border:"none",borderBottom:i<arr.length-1?"1px solid "+borderC:"none",background:cardBg,cursor:"pointer",textAlign:"left"}}>
               <span style={{fontSize:24,width:36,textAlign:"center"}}>{item.icon}</span><div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:textC}}>{L(item.label)}</div><div style={{fontSize:12,color:subC,marginTop:1}}>{L(item.desc)}</div></div><span style={{fontSize:12,background:"#e8f4ff",color:"#1a5fa8",borderRadius:20,padding:"3px 10px",fontWeight:500,flexShrink:0}}>{L(item.badge)}</span>
             </button>;})}
           </div>
-          {showContactForm&&<ContactForm currentUser={currentUser}/>}
+          {supportContactFormOpen&&<div style={{display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",justifyContent:"flex-end"}}><button type="button" title={L("Annulla")} aria-label={L("Annulla")} onClick={function(e){e.preventDefault();e.stopPropagation();setSupportContactFormOpen(false);}} style={{border:"1px solid "+borderC,background:cardBg,color:subC,borderRadius:10,width:36,height:34,fontSize:18,fontWeight:900,cursor:"pointer"}}>✕</button></div>
+            <ContactForm currentUser={currentUser}/>
+          </div>}
           <div style={{background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,color:subC}}>fAInance v{String(installedAppInfo.version||FAINANCE_CURRENT_VERSION)}</span><span style={{fontSize:11,background:"#f0f0f0",color:"#888",borderRadius:20,padding:"2px 10px"}}>{planLabel(currentPlan,lang)}</span></div>
         </div>
       </div>;
     }
 
-    if(settingsPage==="support")return <SupportSettingsPage/>;
+    if(settingsPage==="support")return <StableNestedPanelHost key="settings-support" render={function(){return SupportSettingsPage();}}/>;
 
     if(settingsPage==="terms_conditions")return <div><PageHeader title="Info app / Termini di utilizzo"/><TermsAndConditionsContent/></div>;
     if(settingsPage==="privacy_policy")return <div><PageHeader title="Info app / Informativa Privacy"/><PrivacyPolicyContent/></div>;
 
     function InfoSettingsPage(){
+      function openInfoExternal(url){
+        try{if(window&&window.open){window.open(url,"_blank");return;}}catch(e){}
+        try{window.location.href=url;}catch(e2){setToast({text:L("Impossibile aprire il collegamento."),type:"error",icon:"🚫",color:"#E24B4A"});}
+      }
       var APP_VERSION=String(installedAppInfo.version||FAINANCE_CURRENT_VERSION);
       var APP_VERSION_CODE=Number(installedAppInfo.code||FAINANCE_CURRENT_VERSION_CODE)||FAINANCE_CURRENT_VERSION_CODE;
       var APP_PLATFORM=String(installedAppInfo.platform||appUpdatePlatform()||"web");
@@ -8173,6 +8837,21 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
 
           {/* Piano spostato in Info, Piani & Supporto / Piani */}
 
+          {/* Social */}
+          <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
+            <div style={{fontSize:12,color:subC,marginBottom:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.8}}>{L("Seguici sui social")}</div>
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr",gap:10}}>
+              <button type="button" onClick={function(){openInfoExternal("https://www.facebook.com/profile.php?id=61592298219650");}} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px",border:"1px solid "+borderC,borderRadius:12,background:dark?"#252535":"#F6F8FF",color:textC,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                <span aria-hidden="true" style={{width:34,height:34,borderRadius:10,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"#1877F2",color:"#fff",fontSize:20,fontWeight:950,flexShrink:0}}>f</span>
+                <span style={{minWidth:0}}><span style={{display:"block",fontSize:13,fontWeight:900}}>Facebook</span><span style={{display:"block",fontSize:11,color:subC,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L("Pagina ufficiale")}</span></span>
+              </button>
+              <button type="button" onClick={function(){openInfoExternal("https://www.instagram.com/fainanceapp");}} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 13px",border:"1px solid "+borderC,borderRadius:12,background:dark?"#252535":"#FFF6FB",color:textC,cursor:"pointer",textAlign:"left",minWidth:0}}>
+                <span aria-hidden="true" style={{width:34,height:34,borderRadius:10,display:"inline-flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#833AB4,#FD1D1D,#FCAF45)",color:"#fff",fontSize:17,fontWeight:950,flexShrink:0}}>◎</span>
+                <span style={{minWidth:0}}><span style={{display:"block",fontSize:13,fontWeight:900}}>Instagram</span><span data-no-translate="true" style={{display:"block",fontSize:11,color:subC,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>@fainanceapp</span></span>
+              </button>
+            </div>
+          </div>
+
           {/* Rating */}
           <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
             <button onClick={openStoreRating} style={{width:"100%",display:"flex",alignItems:"center",gap:12,background:"none",border:"none",cursor:"pointer",padding:0}}>
@@ -8192,7 +8871,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       </div>;
     }
 
-    if(settingsPage==="info")return <InfoSettingsPage/>;
+    if(settingsPage==="info")return <StableNestedPanelHost key="settings-info" render={function(){return InfoSettingsPage();}}/>;
   }
 
 
@@ -8450,6 +9129,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     var [showCardManualForm,setShowCardManualForm]=useState(false);
     var [pendingScannedCard,setPendingScannedCard]=useState(null);
     var [highlightedCardId,setHighlightedCardId]=useState("");
+    var [pendingDeleteCardId,setPendingDeleteCardId]=useState("");
     function scrollToFidelityCard(cardId){
       if(!cardId)return;
       setTimeout(function(){try{var safe=String(cardId).replace(/\"/g,'\\"');var el=document.querySelector('[data-fainance-card-id="'+safe+'"]');if(el&&el.scrollIntoView)el.scrollIntoView({behavior:"smooth",block:"center"});}catch(e){}},180);
@@ -8518,7 +9198,8 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     function deleteShoppingList(id){if(String(id)==="main"||lists.length<=1)return;if(!window.confirm(L("Eliminare questa lista della spesa?")))return;setShoppingLists(function(list){return (list||[]).filter(function(x){return String(x.id)!==String(id);});});setShoppingItems(function(list){return (list||[]).filter(function(x){return String(x.listId||"main")!==String(id)||x.archived;});});setActiveShoppingListId("main");}
     function saveCard(){var clean=String(cardCode||"").replace(/\D/g,"");if(!cardName.trim()||!clean){setToast({text:L("Inserisci nome carta e codice numerico."),type:"warning",color:"#FFF8E1",icon:"⚠️",textColor:"#856404"});return;}if(editingCardId){setShoppingCards(function(list){return (list||[]).map(function(c){return String(c.id)===String(editingCardId)?{...c,name:cardName.trim(),code:clean,codeType:cardCodeType,color:cardColor,updatedAt:new Date().toISOString()}:c;});});setEditingCardId("");setPendingScannedCard(null);setCardName("");setCardCode("");setCardCodeType("barcode");setCardColor("#0F9F76");setShowCardManualForm(false);setShowCardCreateChoice(false);setToast({text:L("Carta aggiornata"),type:"success",icon:"✅"});return;}var lim=(PLAN_LIMITS[currentPlan]&&PLAN_LIMITS[currentPlan].shoppingCards)||2;if(lim!==Infinity&&(shoppingCards||[]).length>=lim){setToast({text:L("Hai raggiunto il limite di carte del tuo piano."),type:"error",color:"#E24B4A",icon:"🚫"});return;}var c={id:"card_"+Date.now(),name:cardName.trim(),code:clean,codeType:cardCodeType,color:cardColor,createdAt:new Date().toISOString(),fromScan:!!pendingScannedCard};setShoppingCards(function(list){return [c].concat(list||[]);});setPendingScannedCard(null);setCardName("");setCardCode("");setCardCodeType("barcode");setCardColor("#0F9F76");setShowCardManualForm(false);setShowCardCreateChoice(false);setToast({text:L("Carta salvata"),type:"success",icon:"✅"});}
     function editCard(c){setPendingScannedCard(null);setEditingCardId(c.id);setCardName(c.name||"");setCardCode(String(c.code||""));setCardCodeType(c.codeType||"barcode");setCardColor(c.color||"#0F9F76");setShowCardCreateChoice(false);setShowCardManualForm(false);setTabShop("cards");}
-    function deleteCard(id){if(!window.confirm(L("Eliminare questa carta?")))return;setShoppingCards(function(list){return (list||[]).filter(function(c){return String(c.id)!==String(id);});});if(String(editingCardId)===String(id)){setEditingCardId("");setCardName("");setCardCode("");setShowCardManualForm(false);setShowCardCreateChoice(false);}setToast({text:L("Carta eliminata"),type:"success",icon:"🗑️"});}
+    function deleteCard(id){setPendingDeleteCardId(String(id||""));}
+    function confirmDeleteCard(){var id=String(pendingDeleteCardId||"");if(!id)return;setShoppingCards(function(list){return (list||[]).filter(function(c){return String(c.id)!==id;});});if(String(editingCardId)===id){setEditingCardId("");setCardName("");setCardCode("");setShowCardManualForm(false);setShowCardCreateChoice(false);}setPendingDeleteCardId("");setToast({text:L("Carta eliminata"),type:"success",icon:"🗑️"});}
     function readRawFromBarcodeResult(res){var candidates=[];try{candidates.push(res&&res.rawValue,res&&res.displayValue,res&&res.content,res&&res.text,res&&res.value,res&&res.result);}catch(e){}try{if(res&&Array.isArray(res.barcodes))res.barcodes.forEach(function(b){candidates.push(b&&b.rawValue,b&&b.displayValue,b&&b.value,b&&b.text);});}catch(e){}for(var i=0;i<candidates.length;i++){var raw=String(candidates[i]||"").replace(/\D/g,"");if(raw.length>=4)return raw;}return "";}
     async function scanCardWithNativePlugins(){try{var cap=(window as any).Capacitor;var plugins=(cap&&cap.Plugins)||{};var p=plugins.BarcodeScanner||plugins.BarcodeScanning||plugins.MLKitBarcodeScanner;if(!p)return "";try{if(p.requestPermissions)await p.requestPermissions();}catch(e){}var formats=["QR_CODE","EAN_13","EAN_8","CODE_128","CODE_39","UPC_A","UPC_E","ITF"];var res=null;if(p.scan){res=await p.scan({formats:formats});}else if(p.scanBarcode){res=await p.scanBarcode({formats:formats});}else if(p.startScan){res=await p.startScan();}else if(p.scanCode){res=await p.scanCode();}var raw=readRawFromBarcodeResult(res);try{if(p.stopScan)await p.stopScan();}catch(e){}return raw;}catch(e){return "";}}
     function manualCardPrompt(message){setShowCardCreateChoice(true);setShowCardManualForm(true);setToast({text:L(message||"Non sono riuscito a leggere automaticamente il codice. Si apre l’inserimento manuale."),type:"warning",color:"#FFF8E1",icon:"⌨️",textColor:"#856404"});}
@@ -8609,6 +9290,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
         </div>
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>{(shoppingCards||[]).map(function(c){var mainColor=c.color||((c.type||"")==="prepaid"?"#7F77DD":"#0F9F76");return <div key={c.id} data-fainance-card-id={String(c.id)} style={{background:"linear-gradient(135deg,"+mainColor+",#101828 82%)",border:String(highlightedCardId)===String(c.id)?"3px solid "+confirmButtonColor:"1px solid rgba(255,255,255,.18)",borderRadius:26,padding:18,boxShadow:"0 18px 38px rgba(0,0,0,.24)",color:"#fff",position:"relative",overflow:"hidden",minHeight:250}}><div style={{position:"absolute",right:-45,top:-45,width:160,height:160,borderRadius:999,background:"rgba(255,255,255,.13)"}}/><div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:16,position:"relative"}}><div><div style={{fontSize:20,fontWeight:950,letterSpacing:.2}}>{c.name}</div><div style={{fontSize:12,opacity:.82,marginTop:6,letterSpacing:1.2}}>{c.code}</div></div><div style={{display:"flex",gap:6}}><button type="button" onClick={function(){editCard(c);}} style={{border:"none",background:"rgba(255,255,255,.22)",color:"#fff",borderRadius:10,padding:"7px 9px",height:36,cursor:"pointer"}}>✏️</button><button type="button" onClick={function(){deleteCard(c.id);}} style={{border:"none",background:"rgba(255,255,255,.22)",color:"#fff",borderRadius:10,padding:"7px 9px",height:36,cursor:"pointer"}}>🗑️</button></div></div>{cardCodePreview(c)}{String(editingCardId)===String(c.id)&&<div style={{marginTop:12,background:"rgba(255,255,255,.96)",color:"#111827",borderRadius:18,padding:12,position:"relative",zIndex:2}}><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr 110px 54px",gap:8,alignItems:"end"}}><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Nome carta")}<input value={cardName} onChange={function(e){setCardName(e.target.value);}} placeholder={L("Nome carta")} style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}/></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Codice numerico")}<input value={cardCode} onChange={function(e){setCardCode(e.target.value.replace(/\D/g,""));}} placeholder={L("Codice numerico")} inputMode="numeric" style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}/></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Tipo codice")}<select value={cardCodeType} onChange={function(e){setCardCodeType(e.target.value);}} style={{...sinp,marginTop:5,background:"#fff",color:"#111827"}}><option value="barcode">{L("Codice a barre")}</option><option value="qr">{L("QR")}</option></select></label><label style={{fontSize:11,fontWeight:900,color:"#6B7280"}}>{L("Colore")}<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:6}}>{["#0F9F76","#378ADD","#7F77DD","#EF9F27","#E24B4A","#111827"].map(function(c){return <button key={c} type="button" onClick={function(){setCardColor(c);}} style={{width:26,height:26,borderRadius:999,border:cardColor===c?"3px solid #111827":"1px solid #E5E7EB",background:c,cursor:"pointer"}}/>;})}<input type="color" value={cardColor} onChange={function(e){setCardColor(e.target.value);}} style={{width:34,height:30,border:"none",background:"transparent"}}/></div></label></div><div style={{display:"flex",gap:8,marginTop:10}}><button type="button" onClick={saveCard} disabled={!shoppingCardFormValid} style={{flex:1,background:shoppingCardFormValid?confirmButtonColor:"#A8A8A8",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 12px",fontWeight:950,cursor:shoppingCardFormValid?"pointer":"not-allowed"}}>💾 {L("Salva modifica")}</button><button type="button" onClick={function(){setEditingCardId("");setCardName("");setCardCode("");setCardCodeType("barcode");setCardColor("#0F9F76");}} style={{background:"#fff",color:"#111827",border:"1px solid #E5E7EB",borderRadius:btnRadius,padding:"10px 12px",fontWeight:950,cursor:"pointer"}}>× {L("Annulla")}</button></div></div>}</div>;})}{!(shoppingCards||[]).length&&<div style={{fontSize:13,color:subC,background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:16}}>{L("Nessuna carta inserita")}</div>}</div>
       </div>}
+      {pendingDeleteCardId&&<div style={{position:"fixed",inset:0,zIndex:10050,background:"rgba(0,0,0,.48)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"19vh 16px 3vh",boxSizing:"border-box"}} onClick={function(e){if(e.target===e.currentTarget)setPendingDeleteCardId("");}}><div style={{width:"100%",maxWidth:360,background:dark?"#1b1b2b":"#fff",border:"1px solid "+borderC,borderRadius:20,padding:18,boxShadow:"0 18px 50px rgba(0,0,0,.28)"}} onClick={function(e){e.stopPropagation();}}><div style={{fontSize:17,fontWeight:950,color:textC,marginBottom:8}}>{L("Eliminare questa carta?")}</div><div style={{fontSize:12,color:subC,lineHeight:1.45,marginBottom:16}}>{L("La carta verrà rimossa definitivamente.")}</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}><button type="button" onClick={function(){setPendingDeleteCardId("");}} style={{border:"1px solid "+borderC,borderRadius:12,padding:"11px 12px",background:dark?"#252535":"#f5f5f5",color:textC,fontWeight:850,cursor:"pointer"}}>{L("Annulla")}</button><button type="button" onClick={confirmDeleteCard} style={{border:"none",borderRadius:12,padding:"11px 12px",background:"#E24B4A",color:"#fff",fontWeight:900,cursor:"pointer"}}>{L("Elimina")}</button></div></div></div>}
     </div>;
   }
 
@@ -8820,7 +9502,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
       {/* Note modal */}
       {noteEntryId&&(function(){
         var entry=pEntries.find(function(e){return e.id===noteEntryId;});
-        return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget){saveNote();}}}>
+        return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget){saveNote();}}}>
           <div style={{background:dark?"#1e1e30":"#fff",borderRadius:16,padding:20,width:"100%",maxWidth:440,boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
               <div style={{fontSize:15,fontWeight:600,color:textC}}>{entry?entry.icon+" "+entry.name:"Nota"}</div>
@@ -8842,16 +9524,16 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
         <div style={{fontSize:32,fontWeight:700,color:liveTotal>=0?"#1D9E75":"#E24B4A"}}>{fmt(liveTotal)}</div>
         {secRate&&showSecInPatrimonio&&fmtSec(liveTotal)&&<div style={{fontSize:14,color:subC,marginTop:2}}>{fmtSec(liveTotal)}</div>}
         {livePrevTotal!==null&&<div style={{fontSize:13,fontWeight:500,color:(liveTotal-livePrevTotal)>=0?"#1D9E75":"#E24B4A",marginTop:4}}>
-          {(liveTotal-livePrevTotal)>=0?"▲":"▼"} {fmt(Math.abs(liveTotal-livePrevTotal))} vs mese scorso
+          {(liveTotal-livePrevTotal)>=0?"▲":"▼"} {fmt(Math.abs(liveTotal-livePrevTotal))} {L("vs mese scorso")}
         </div>}
-        <div style={{fontSize:11,color:subC,marginTop:6}}>Modalità: {patrimonioMode==="manuale"?"Manuale":"Semi-automatica ⚠️"}</div>
+        <div style={{fontSize:11,color:subC,marginTop:6}}>{L("Modalità")}: {L(patrimonioMode==="manuale"?"Manuale":"Semi-automatica")} {patrimonioMode==="semi"?"⚠️":""}</div>
       </div>
 
       {/* ── Tab ── */}
       <div style={{display:"flex",gap:0,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3}}>
-        <button onClick={function(){setPatTab("inserimento");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:patTab==="inserimento"?(dark?"#444":"#fff"):"transparent",color:patTab==="inserimento"?textC:subC,fontSize:14,cursor:"pointer",fontWeight:patTab==="inserimento"?500:400}}>✏️ Inserimento</button>
+        <button onClick={function(){setPatTab("inserimento");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:patTab==="inserimento"?(dark?"#444":"#fff"):"transparent",color:patTab==="inserimento"?textC:subC,fontSize:14,cursor:"pointer",fontWeight:patTab==="inserimento"?500:400}}>✏️ {L("Inserimento")}</button>
         <button onClick={function(){setPatTab("storico");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:patTab==="storico"?(dark?"#444":"#fff"):"transparent",color:patTab==="storico"?textC:subC,fontSize:14,cursor:"pointer",fontWeight:patTab==="storico"?500:400}}>
-          📅 Storico {histMonths.length>0&&<span style={{fontSize:11,background:"#7F77DD",color:"#fff",borderRadius:10,padding:"1px 6px",marginLeft:4}}>{histMonths.length}</span>}
+          📅 {L("Storico")} {histMonths.length>0&&<span style={{fontSize:11,background:"#7F77DD",color:"#fff",borderRadius:10,padding:"1px 6px",marginLeft:4}}>{histMonths.length}</span>}
         </button>
       </div>
 
@@ -8864,7 +9546,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:16,fontWeight:700,color:textC}}>{monthFullName(selMonth-1)} {selYear}</div>
             <div style={{fontSize:11,color:subC,marginTop:2}}>
-              {existingSnap?"✅ Dati già salvati":(isCurrentMonth?"Mese corrente — non ancora salvato":"⚠️ Nessun dato per questo mese")}
+              {existingSnap?("✅ "+L("Dati già salvati")):(isCurrentMonth?L("Mese corrente — non ancora salvato"):("⚠️ "+L("Nessun dato per questo mese")))}
             </div>
           </div>
           <button onClick={function(){goMonth(1);}} disabled={selMonthKey>=curMonthKey} style={{background:"none",border:"none",cursor:selMonthKey>=curMonthKey?"not-allowed":"pointer",fontSize:20,color:selMonthKey>=curMonthKey?"#ccc":subC,padding:"4px 8px",borderRadius:8}}>›</button>
@@ -8873,10 +9555,10 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
         {/* Totale mese selezionato + delta */}
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:12,alignItems:"center",padding:"14px 16px",background:dark?"#252535":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC}}>
           <div style={{minWidth:0}}>
-            <div style={{fontSize:11,color:subC}}>Totale {monthShortName(selMonth-1)} {selYear}</div>
+            <div style={{fontSize:11,color:subC}}>{L("Totale")} {monthShortName(selMonth-1)} {selYear}</div>
             <div style={{fontSize:isMobile?24:26,fontWeight:900,color:draftTotal>=0?"#1D9E75":"#E24B4A",lineHeight:1.1,wordBreak:"break-word"}}>{fmt(draftTotal)}</div>
             {secRate&&showSecInPatrimonio&&fmtSec(draftTotal)&&<div style={{fontSize:12,color:subC,fontWeight:500,marginTop:2}}>{fmtSec(draftTotal)}</div>}
-            {totalDelta!==null&&<div style={{fontSize:13,fontWeight:800,color:totalDelta>=0?"#1D9E75":"#E24B4A",marginTop:5}}>vs {monthShortName(parseInt(prevKey.split("-")[1])-1)}: {totalDelta>=0?"+":""}{fmt(totalDelta)}</div>}
+            {totalDelta!==null&&<div style={{fontSize:13,fontWeight:800,color:totalDelta>=0?"#1D9E75":"#E24B4A",marginTop:5}}>{L("vs")} {monthShortName(parseInt(prevKey.split("-")[1])-1)}: {totalDelta>=0?"+":""}{fmt(totalDelta)}</div>}
           </div>
           <button onClick={saveMonthSnap} style={{background:"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"12px 18px",fontSize:14,cursor:"pointer",fontWeight:900,width:isMobile?"100%":"auto",minWidth:isMobile?0:118,boxShadow:dark?"none":"0 6px 18px rgba(127,119,221,0.28)"}}>
             {existingSnap?("🔄 "+L("Aggiorna")):("💾 "+L("Salva"))}
@@ -8938,7 +9620,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
                       {entryDelta!==null&&entryDelta!==0&&<span style={{fontSize:11,fontWeight:500,color:entryDelta>0?"#1D9E75":"#E24B4A",minWidth:isMobile?42:56,textAlign:"right",whiteSpace:"nowrap"}}>{entryDelta>0?"+":""}{fmt(entryDelta)}</span>}
                       <span onClick={function(){setEditingId(entry.id);}} style={{fontSize:isMobile?12:14,fontWeight:500,color:numVal>0?"#1D9E75":numVal<0?"#E24B4A":subC,minWidth:isMobile?62:80,maxWidth:isMobile?72:110,textAlign:"right",cursor:"pointer",borderBottom:"1px dashed "+(dark?"#555":"#ddd"),padding:"1px 0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{rawVal===""?"—":fmt(numVal)}</span>
                       <button title={L("Modifica")} onClick={function(){setEditingId(entry.id);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",cursor:"pointer",color:"#378ADD",fontSize:isMobile?12:14,padding:isMobile?"4px 6px":"5px 8px",borderRadius:8,fontWeight:700,flexShrink:0}}>✏️</button>
-                      <button onClick={function(){openNote(entry.id);}} title="Nota" style={{background:pNotes[entry.id]?"#EEEDFE":"none",border:pNotes[entry.id]?"1px solid #AFA9EC":"none",borderRadius:6,cursor:"pointer",color:pNotes[entry.id]?"#534AB7":"#ccc",fontSize:isMobile?12:13,padding:isMobile?"1px 3px":"1px 5px",flexShrink:0}}>📝</button>
+                      <button onClick={function(){openNote(entry.id);}} title={L("Nota")} style={{background:pNotes[entry.id]?"#EEEDFE":"none",border:pNotes[entry.id]?"1px solid #AFA9EC":"none",borderRadius:6,cursor:"pointer",color:pNotes[entry.id]?"#534AB7":"#ccc",fontSize:isMobile?12:13,padding:isMobile?"1px 3px":"1px 5px",flexShrink:0}}>📝</button>
                       <button title={L("Elimina")} onClick={function(){if(!window.confirm(L("Eliminare questa voce dal Patrimonio?")))return;delEntry(entry.id);}} style={{background:"#FFF0F0",border:"1px solid #FFD0D0",cursor:"pointer",color:"#E24B4A",fontSize:isMobile?12:14,padding:isMobile?"4px 6px":"5px 8px",borderRadius:8,fontWeight:700,flexShrink:0}}>🗑️</button>
                     </div>
                   }
@@ -8950,7 +9632,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
             {addingEntry===area.id
               ?<div onClick={function(){if(!patrimonioEntryAllowed)lockedPatrimonioEntry();}} style={{marginTop:10,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",background:patrimonioEntryAllowed?"transparent":(dark?"#342b16":"#FFF8E1"),border:patrimonioEntryAllowed?"none":"1.5px solid "+(dark?"#6a5520":"#FFD54F"),borderRadius:12,padding:patrimonioEntryAllowed?0:10}}>
                 <EmojiPicker value={newEntryIcon} onChange={function(v){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}setNewEntryIcon(v);}}/>
-                <input disabled={!patrimonioEntryAllowed} type="text" placeholder="Nome voce" value={newEntryName} onChange={function(e){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}setNewEntryName(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter"&&patrimonioEntryFormValid)addEntry(area.id);}} style={{...sinp,flex:1,minWidth:120}}/>
+                <input disabled={!patrimonioEntryAllowed} type="text" placeholder={L("Nome voce")} value={newEntryName} onChange={function(e){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}setNewEntryName(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter"&&patrimonioEntryFormValid)addEntry(area.id);}} style={{...sinp,flex:1,minWidth:120}}/>
                 <button onClick={function(){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}addEntry(area.id);}} disabled={!patrimonioEntryFormValid} style={{background:patrimonioEntryFormValid?"#1D9E75":(patrimonioEntryAllowed?"#A8A8A8":"#EF9F27"),color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:patrimonioEntryFormValid?"pointer":"not-allowed",fontSize:13,fontWeight:500}}>{L("Aggiungi")}</button>
                 <button onClick={function(){setAddingEntry(null);setNewEntryName("");}} style={{background:"#f0f0f0",color:"#666",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:13}}>{L("Annulla")}</button>
               </div>
@@ -8958,13 +9640,13 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
             }
           </div>;
         })}
-        {patrimonioMode==="semi"&&<div style={{background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:12,padding:"12px 16px"}}><span style={{fontSize:13,color:"#856404"}}>⚠️ Modalità semi-automatica in beta.</span></div>}
+        {patrimonioMode==="semi"&&<div style={{background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:12,padding:"12px 16px"}}><span style={{fontSize:13,color:"#856404"}}>⚠️ {L("Modalità semi-automatica in beta.")}</span></div>}
       </>}
 
       {/* ══════════════════════ TAB STORICO ══════════════════════ */}
       {patTab==="storico"&&<>
         {histMonths.length===0&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:40,textAlign:"center",color:subC,fontSize:14}}>
-          Nessuno storico disponibile. Nella scheda Inserimento seleziona un mese, inserisci i valori e clicca "💾 Salva".
+          {L("Nessuno storico disponibile. Nella scheda Inserimento seleziona un mese, inserisci i valori e clicca Salva.")}
         </div>}
 
         {histMonths.length>0&&<>
@@ -8973,7 +9655,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
           </div>}
 
           {filteredHist.length>1&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:10}}>Andamento patrimonio — {histViewYear}</div>
+            <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:10}}>{L("Andamento patrimonio")} — {histViewYear}</div>
             {(function(){
               var pts=[...filteredHist].reverse();
               var vals=pts.map(function(m){return m.total;});
@@ -8995,12 +9677,12 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
           </div>}
 
           <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:12}}>Dettaglio mensile</div>
+            <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:12}}>{L("Dettaglio mensile")}</div>
             <div style={{overflowX:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead><tr style={{background:dark?"#252535":"#f5f5f5"}}>
                   <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:subC}}>{translateUiRuntimeText("Mese")}</th>
-                  <th style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>Totale</th>
+                  <th style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>{L("Totale")}</th>
                   <th style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>Δ</th>
                   {pAreas.slice(0,isMobile?2:4).map(function(a){return <th key={a.id} style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>{a.icon}</th>;})}
                   <th style={{padding:"7px 10px",textAlign:"center",fontWeight:600,color:subC}}></th>
@@ -9030,7 +9712,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
           </div>
 
           {filteredHist.length>0&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
-            <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:12}}>Variazioni per voce — {monthShortName(parseInt(filteredHist[0].mk.split("-")[1])-1)} vs mese precedente</div>
+            <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:12}}>{L("Variazioni per voce")} — {monthShortName(parseInt(filteredHist[0].mk.split("-")[1])-1)} {L("vs mese precedente")}</div>
             {filteredHist[0].delta===null?<div style={{fontSize:12,color:subC}}>{translateUiRuntimeText("Nessun mese precedente nel registro.")}</div>:
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
               {pEntries.map(function(entry){
@@ -9040,7 +9722,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
                 if(cur===0&&(d2===null||d2===0))return null;
                 return <div key={entry.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:dark?"#252535":"#f9f9f9",borderRadius:8}}>
                   <span style={{fontSize:14,flexShrink:0}}>{entry.icon}</span>
-                  <span style={{flex:1,fontSize:12,color:textC}}>{entry.name}</span>
+                  <span style={{flex:1,fontSize:12,color:textC}}>{L(entry.name)}</span>
                   <span style={{fontSize:13,fontWeight:500,color:cur>=0?"#1D9E75":"#E24B4A",minWidth:70,textAlign:"right"}}>{fmt(cur)}</span>
                   {d2!==null&&<span style={{fontSize:11,fontWeight:500,color:d2===0?subC:d2>0?"#1D9E75":"#E24B4A",minWidth:60,textAlign:"right"}}>{d2===0?"—":(d2>0?"+":"")+fmt(d2)}</span>}
                 </div>;
@@ -9099,6 +9781,8 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
     var [settlementAmount,setSettlementAmount]=useState("");
     var [settlementDate,setSettlementDate]=useState(todayStr());
     var [settlementPopupOpen,setSettlementPopupOpen]=useState(false);
+    var shareDateInputLang=({it:"it-IT",en:"en-US",es:"es-ES",fr:"fr-FR",de:"de-DE",pt:"pt-PT",pl:"pl-PL",nl:"nl-NL",ro:"ro-RO",el:"el-GR"} as any)[lang]||"it-IT";
+    var shareDateLabel=({it:"Data",en:"Date",es:"Fecha",fr:"Date",de:"Datum",pt:"Data",pl:"Data",nl:"Datum",ro:"Dată",el:"Ημερομηνία"} as any)[lang]||"Data";
     var [participantBusy,setParticipantBusy]=useState(false);
     var [shareReceiptOpen,setShareReceiptOpen]=useState(false);
     var [shareReceiptReady,setShareReceiptReady]=useState(false);
@@ -9625,8 +10309,8 @@ function parseShareVoiceCommand(text){
     return <div style={{display:"flex",flexDirection:"column",gap:14}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}><div><div style={{fontSize:20,fontWeight:900,color:textC}}>Share</div><div style={{fontSize:12,color:subC}}>{L("Progetti, spese condivise e saldi")}</div></div><Btn onClick={function(){if(!projects.length){setShowNewProjectForm(true);return;}setChooseProjectOpen(true);}} bg={confirmButtonColor} style={{padding:"11px 16px",fontWeight:950}}>{L("Progetti")}</Btn></div>
       {shareProjectLimitReached&&<div style={{background:dark?"#342b16":"#FFF8E1",border:"1px solid "+(dark?"#6a5520":"#FFD54F"),borderRadius:16,padding:14,color:dark?"#FFE5A6":"#856404",fontSize:13,fontWeight:800,lineHeight:1.4}}>⚠️ {L("Hai raggiunto il limite massimo del tuo piano. Non puoi aggiungere altri elementi in questa sezione.")}</div>}
-      {showNewProjectForm&&!shareProjectLimitReached&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setShowNewProjectForm(false);}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{L("Nuovo progetto")}</div><button onClick={function(){setShowNewProjectForm(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><input placeholder={L("Nome progetto")} value={newProjectName} onChange={function(e){setNewProjectName(e.target.value);}} style={sinp}/><textarea placeholder={L("Descrizione progetto (opzionale)")} value={newProjectDesc} onChange={function(e){setNewProjectDesc(e.target.value);}} style={{...sinp,minHeight:76,resize:"vertical",marginTop:10}}/><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Icona progetto")}</div><div style={{display:"flex",alignItems:"center",gap:10}}><EmojiPicker value={newProjectIcon} onChange={setNewProjectIcon}/><div style={{fontSize:12,color:subC,lineHeight:1.35}}>{L("Scegli l'icona con lo stesso selettore usato nelle altre sezioni.")}</div></div><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Colore progetto")}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{shareProjectColors.map(function(clr){return <button key={clr} onClick={function(){setNewProjectColor(clr);}} style={{width:32,height:32,borderRadius:999,border:"2px solid "+(newProjectColor===clr?textC:"transparent"),background:clr,cursor:"pointer"}}/>;})}</div><div style={{display:"flex",gap:8,marginTop:14}}><Btn onClick={saveNewShareProject} disabled={!newShareProjectFormValid} bg={newShareProjectFormValid?confirmButtonColor:"#A8A8A8"} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Salva progetto")}</Btn><Btn onClick={function(){setShowNewProjectForm(false);}} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Chiudi")}</Btn></div></div></div>}
-      {chooseProjectOpen&&projects.length>0&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setChooseProjectOpen(false);}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{L("Scegli progetto")}</div><button onClick={function(){setChooseProjectOpen(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><Btn onClick={function(){setChooseProjectOpen(false);setShowNewProjectForm(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950,marginBottom:12}}>＋ {L("Nuovo progetto")}</Btn><div style={{display:"flex",flexDirection:"column",gap:10}}>{projects.map(function(pj){var theme=projectTheme(pj);var active=selected&&selected.id===pj.id;return <button key={pj.id} onClick={function(){setShareSelectedProjectId(pj.id);setShareProjectTab("attivita");setChooseProjectOpen(false);}} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:16,border:"1px solid "+(active?theme.color:borderC),background:active?(theme.color+"22"):(dark?"#252535":"#fff"),cursor:"pointer",textAlign:"left"}}><div style={{width:40,height:40,borderRadius:12,background:theme.color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{theme.icon}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:900,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj.name||"Progetto"}</div>{pj.description&&<div style={{fontSize:11,color:subC,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj.description}</div>}</div></button>;})}</div></div></div>}
+      {showNewProjectForm&&!shareProjectLimitReached&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setShowNewProjectForm(false);}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{L("Nuovo progetto")}</div><button onClick={function(){setShowNewProjectForm(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><input placeholder={L("Nome progetto")} value={newProjectName} onChange={function(e){setNewProjectName(e.target.value);}} style={sinp}/><textarea placeholder={L("Descrizione progetto (opzionale)")} value={newProjectDesc} onChange={function(e){setNewProjectDesc(e.target.value);}} style={{...sinp,minHeight:76,resize:"vertical",marginTop:10}}/><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Icona progetto")}</div><div style={{display:"flex",alignItems:"center",gap:10}}><EmojiPicker value={newProjectIcon} onChange={setNewProjectIcon}/><div style={{fontSize:12,color:subC,lineHeight:1.35}}>{L("Scegli l'icona con lo stesso selettore usato nelle altre sezioni.")}</div></div><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Colore progetto")}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{shareProjectColors.map(function(clr){return <button key={clr} onClick={function(){setNewProjectColor(clr);}} style={{width:32,height:32,borderRadius:999,border:"2px solid "+(newProjectColor===clr?textC:"transparent"),background:clr,cursor:"pointer"}}/>;})}</div><div style={{display:"flex",gap:8,marginTop:14}}><Btn onClick={saveNewShareProject} disabled={!newShareProjectFormValid} bg={newShareProjectFormValid?confirmButtonColor:"#A8A8A8"} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Salva progetto")}</Btn><Btn onClick={function(){setShowNewProjectForm(false);}} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Chiudi")}</Btn></div></div></div>}
+      {chooseProjectOpen&&projects.length>0&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setChooseProjectOpen(false);}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{L("Scegli progetto")}</div><button onClick={function(){setChooseProjectOpen(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><Btn onClick={function(){setChooseProjectOpen(false);setShowNewProjectForm(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950,marginBottom:12}}>＋ {L("Nuovo progetto")}</Btn><div style={{display:"flex",flexDirection:"column",gap:10}}>{projects.map(function(pj){var theme=projectTheme(pj);var active=selected&&selected.id===pj.id;return <button key={pj.id} onClick={function(){setShareSelectedProjectId(pj.id);setShareProjectTab("attivita");setChooseProjectOpen(false);}} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:16,border:"1px solid "+(active?theme.color:borderC),background:active?(theme.color+"22"):(dark?"#252535":"#fff"),cursor:"pointer",textAlign:"left"}}><div style={{width:40,height:40,borderRadius:12,background:theme.color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>{theme.icon}</div><div style={{flex:1,minWidth:0}}><div style={{fontSize:14,fontWeight:900,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj.name||"Progetto"}</div>{pj.description&&<div style={{fontSize:11,color:subC,marginTop:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pj.description}</div>}</div></button>;})}</div></div></div>}
       {(shareReceivedInvites||[]).length>0&&<div style={{background:confirmButtonColor+"18",border:"1px solid "+confirmButtonColor+"55",borderRadius:16,padding:14,display:"flex",flexDirection:"column",gap:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div><div style={{fontSize:14,fontWeight:900,color:textC}}>{L("Inviti ricevuti")}</div><div style={{fontSize:12,color:subC}}>{L("Accetta o rifiuta gli inviti ai progetti Share.")}</div></div><button onClick={loadShareCollaboration} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:10,padding:"6px 9px",color:subC,cursor:"pointer"}}>{shareInviteLoading?"...":"↻"}</button></div>{shareReceivedInvites.map(function(inv){return <div key={inv.id} style={{background:cardBg,border:"1px solid "+borderC,borderRadius:12,padding:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{flex:1,minWidth:160}}><div style={{fontSize:13,fontWeight:900,color:textC}}>{inv.projectName||"Progetto Share"}</div><div style={{fontSize:11,color:subC}}>Invito da {inv.invitedByName||"utente fAInance"}</div></div><Btn onClick={function(){acceptShareInvite(inv);}} bg={confirmButtonColor} style={{padding:"7px 10px",fontSize:12}}>{L("Accetta")}</Btn><Btn onClick={function(){declineShareInvite(inv);}} bg={dark?"#333":"#f0f0f0"} color={textC} style={{padding:"7px 10px",fontSize:12}}>{L("Rifiuta")}</Btn></div>;})}</div>}
       {projects.length===0&&<div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:22,textAlign:"center",color:subC}}><div style={{fontSize:34,marginBottom:8}}>🤝</div><div style={{fontSize:14,fontWeight:700,color:textC,marginBottom:5}}>{L("Nessun progetto Share")}</div><div style={{fontSize:12}}>{L("Crea un progetto per inserire partecipanti, movimenti e saldi.")}</div></div>}
       {selected&&<>
@@ -9637,13 +10321,13 @@ function parseShareVoiceCommand(text){
             <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6,flexShrink:0}}><div style={{display:"flex",gap:8}}><button onClick={function(){setProjectNameDraft(selected?selected.name||"":"");setProjectDescDraft(selected?selected.description||"":"");setProjectIconDraft(selected?(selected.icon||"🤝"):"🤝");setProjectColorDraft(selected?(selected.color||"#4F8FF7"):"#4F8FF7");setProjectEditingDetails(true);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",color:confirmButtonColor,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>✏</button><button onClick={function(){requestDeleteProject(selected.id);}} style={{background:"#fff0f0",border:"1px solid #ffd0d0",color:expenseColor,borderRadius:10,padding:"8px 10px",cursor:"pointer"}}>🗑</button></div><span style={{display:"inline-flex",alignItems:"center",padding:"4px 10px",borderRadius:999,background:theme.color+"18",color:theme.color,fontSize:11,fontWeight:900}}>{L("Progetto attivo")}</span></div>
           </div>; }()}
         </div>
-        {projectEditingDetails&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setProjectEditingDetails(false);}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{L("Modifica progetto")}</div><button onClick={function(){setProjectEditingDetails(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><input value={projectNameDraft} onChange={function(e){setProjectNameDraft(e.target.value);}} style={{...sinp,fontSize:17,fontWeight:900}}/><textarea placeholder={L("Descrizione progetto (opzionale)")} value={projectDescDraft} onChange={function(e){setProjectDescDraft(e.target.value);}} style={{...sinp,minHeight:76,resize:"vertical",marginTop:10}}/><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Icona progetto")}</div><div style={{display:"flex",alignItems:"center",gap:10}}><EmojiPicker value={projectIconDraft} onChange={setProjectIconDraft}/><div style={{fontSize:12,color:subC,lineHeight:1.35}}>{L("Scegli l\'icona con lo stesso selettore usato nelle altre sezioni.")}</div></div><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Colore progetto")}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{shareProjectColors.map(function(clr){return <button key={clr} onClick={function(){setProjectColorDraft(clr);}} style={{width:32,height:32,borderRadius:999,border:"2px solid "+(projectColorDraft===clr?textC:"transparent"),background:clr,cursor:"pointer"}}/>;})}</div><div style={{display:"flex",gap:8,marginTop:14}}><Btn onClick={saveProjectDetails} disabled={!shareProjectDetailsValid} bg={shareProjectDetailsValid?confirmButtonColor:"#A8A8A8"} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Salva modifiche")}</Btn><Btn onClick={function(){setProjectEditingDetails(false);}} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Chiudi")}</Btn></div></div></div>}
+        {projectEditingDetails&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setProjectEditingDetails(false);}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:20,padding:16,width:"100%",maxWidth:430,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{L("Modifica progetto")}</div><button onClick={function(){setProjectEditingDetails(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><input value={projectNameDraft} onChange={function(e){setProjectNameDraft(e.target.value);}} style={{...sinp,fontSize:17,fontWeight:900}}/><textarea placeholder={L("Descrizione progetto (opzionale)")} value={projectDescDraft} onChange={function(e){setProjectDescDraft(e.target.value);}} style={{...sinp,minHeight:76,resize:"vertical",marginTop:10}}/><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Icona progetto")}</div><div style={{display:"flex",alignItems:"center",gap:10}}><EmojiPicker value={projectIconDraft} onChange={setProjectIconDraft}/><div style={{fontSize:12,color:subC,lineHeight:1.35}}>{L("Scegli l\'icona con lo stesso selettore usato nelle altre sezioni.")}</div></div><div style={{fontSize:12,fontWeight:900,color:textC,marginTop:12,marginBottom:6}}>{L("Colore progetto")}</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{shareProjectColors.map(function(clr){return <button key={clr} onClick={function(){setProjectColorDraft(clr);}} style={{width:32,height:32,borderRadius:999,border:"2px solid "+(projectColorDraft===clr?textC:"transparent"),background:clr,cursor:"pointer"}}/>;})}</div><div style={{display:"flex",gap:8,marginTop:14}}><Btn onClick={saveProjectDetails} disabled={!shareProjectDetailsValid} bg={shareProjectDetailsValid?confirmButtonColor:"#A8A8A8"} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Salva modifiche")}</Btn><Btn onClick={function(){setProjectEditingDetails(false);}} bg={dark?"#333":"#f0f0f0"} color={textC} style={{flex:1,padding:"11px 14px",fontWeight:900}}>{L("Chiudi")}</Btn></div></div></div>}
         <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
           {[{id:"attivita",label:L("Progetto")},{id:"partecipanti",label:L("Partecipanti")},{id:"riassunto",label:L("Riassunto e Saldi")}].map(function(tb){var active=shareProjectTab===tb.id;return <button key={tb.id} onClick={function(){setShareProjectTab(tb.id);}} style={{border:"1px solid "+(active?secondaryButtonColor:borderC),background:active?secondaryButtonColor:(dark?"#333":"#f0f0f0"),color:active?"#fff":textC,borderRadius:btnRadius,padding:"11px 8px",fontSize:12,fontWeight:900,cursor:"pointer"}}>{tb.label}</button>;})}
         </div>
 {shareProjectTab==="attivita"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
           <Btn onClick={function(){setShareEditingActivityId(null);openShareExpensePopup("simple");}} bg={confirmButtonColor} style={{width:"100%",padding:"14px 16px",fontSize:15,fontWeight:950}}>＋ {L("Aggiungi spesa")}</Btn>
-          {(shareExpenseFormOpen||shareEditingActivityId)&&<div style={{position:"fixed",inset:0,width:"100%",height:"100dvh",minHeight:"100%",background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16,boxSizing:"border-box",overscrollBehavior:"contain",WebkitTransform:"translateZ(0)",transform:"translateZ(0)",WebkitBackfaceVisibility:"hidden",backfaceVisibility:"hidden"}} onClick={function(e){if(e.target===e.currentTarget)closeShareExpensePopup();}}><div id="share_expense_form" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,width:"100%",maxWidth:430,maxHeight:"calc(100dvh - 32px)",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",boxSizing:"border-box",WebkitTransform:"translateZ(0)",transform:"translateZ(0)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L(shareEditingActivityId?"Modifica spesa condivisa":"+ Spesa condivisa")}</div><div style={{display:"flex",gap:8,alignItems:"center"}}>{shareEditingActivityId&&<button onClick={resetShareExpenseForm} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:9,padding:"6px 8px",fontSize:12,color:subC,cursor:"pointer"}}>{L("Annulla modifica")}</button>}<button onClick={closeShareExpensePopup} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>{[{id:"simple",label:L("Spesa semplice")},{id:"receipt",label:L("Scontrino")},{id:"voice",label:L("Vocale")}].map(function(tb){var active=shareExpenseMode===tb.id;return <button key={tb.id} type="button" onClick={function(){setShareReceiptReady(false);if(tb.id==="receipt"){startShareReceiptFlow();return;}setShareExpenseMode(tb.id);setShareReceiptOpen(false);setShareExpenseFormOpen(true);if(tb.id==="voice")setTimeout(function(){startShareVoiceCommand();},150);}} style={{border:"1px solid "+(active?secondaryButtonColor:borderC),background:active?secondaryButtonColor:(dark?"#333":"#f0f0f0"),color:active?"#fff":textC,borderRadius:btnRadius,padding:"10px 6px",fontSize:11,fontWeight:900,cursor:"pointer"}}>{tb.label}</button>;})}</div>{shareReceiptBusy&&<div style={{border:"1px solid "+borderC,borderRadius:16,padding:12,background:dark?"#252535":"#f9f9f9",fontSize:13,fontWeight:800,color:textC,marginBottom:10}}>🧾 {L("Sto leggendo lo scontrino...")}</div>}{(shareExpenseMode!=="receipt"||shareReceiptReady||String(shareAmount||"").trim()||String(shareDesc||"").trim())&&<>{shareExpenseMode==="voice"&&<div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,marginBottom:10}}><Btn onClick={startShareVoiceCommand} bg={secondaryButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950}}>🎙️ {L(shareVoiceListening?"Ascolto in corso...":"Avvia comando vocale")}</Btn>{shareVoiceText&&<div style={{fontSize:12,color:subC,marginTop:8,lineHeight:1.35}}>{shareVoiceText}</div>}</div>}<div style={{background:"linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)",borderRadius:18,padding:"14px 14px",display:"grid",gridTemplateColumns:"44px minmax(0,1fr)",gap:8,alignItems:"center",color:"#fff",boxShadow:dark?"none":"0 10px 24px rgba(83,74,183,.12)",marginBottom:10}}><div style={{width:34,height:34,borderRadius:"50%",background:"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",color:"#E24B4A",fontSize:18,boxShadow:"0 6px 16px rgba(0,0,0,.12)"}}>💳</div><div style={{minWidth:0,textAlign:"center"}}><div style={{fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:.8,color:"rgba(255,255,255,.70)",marginBottom:2}}>{L("Importo")}</div><div style={{position:"relative"}}>{!String(shareAmount||"").trim()&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,fontWeight:950,color:"#fff",lineHeight:1,pointerEvents:"none"}}>_,__</div>}<input ref={shareAmountInputRef} type="text" inputMode="decimal" placeholder="" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={{width:"100%",border:"none",background:"transparent",padding:0,textAlign:"center",fontSize:34,fontWeight:950,color:"#fff",WebkitTextFillColor:"#fff",outline:"none",lineHeight:1}}/></div>{!String(shareAmount||"").trim()&&<div style={{fontSize:13,color:"rgba(255,255,255,.70)",fontWeight:600,marginTop:4}}>{L("Inserisci l\'importo")}</div>}</div></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("Descrizione")}</label><textarea placeholder={L("Descrizione")} value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={{...sinp,minHeight:72,height:72,resize:"none",padding:"11px 12px",lineHeight:1.25,fontFamily:"inherit"}}/></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:8}}>{L("Data")}</label><div style={{display:"grid",gridTemplateColumns:".58fr .58fr .92fr 2.28fr",gap:5,alignItems:"center"}}><button type="button" onClick={function(){setShareDate(todayStr());}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===todayStr()?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===todayStr()?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===todayStr()?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.today}</button><button type="button" onClick={function(){setShareDate(dateOffset(1));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(1)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(1)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(1)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.yesterday}</button><button type="button" onClick={function(){setShareDate(dateOffset(2));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(2)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(2)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(2)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.twoDaysAgo}</button><label style={{height:38,borderRadius:12,border:"1px solid "+(dark?"#3f3f52":"#E4E2F2"),background:dark?"#252535":"#fff",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",padding:"0 5px",gap:4,cursor:"pointer"}}><span style={{pointerEvents:"none",fontWeight:850,color:textC}}>{fmtDate(shareDate,dateFmt)}</span><span style={{pointerEvents:"none",fontSize:17}}>📅</span><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}}/></label></div></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.4fr",gap:8,marginTop:8}}><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagato da")} {personLabel(p)}</option>;})}</select><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{[{id:"equal",label:L("Equa")},{id:"percent",label:L("Percentuali")},{id:"amount",label:L("Importi")}].map(function(m){return <button key={m.id} onClick={function(){setSplitMode(m.id);setSplitDraft({});setShareSplitTouched(false);}} style={{border:"1px solid "+(splitMode===m.id?confirmButtonColor:borderC),background:splitMode===m.id?confirmButtonColor:"transparent",color:splitMode===m.id?"#fff":textC,borderRadius:10,padding:"8px 6px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{m.label}</button>;})}</div></div><div style={{marginTop:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:12,fontWeight:900,color:textC}}>{L("Condivisa con")}</div><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:subC,cursor:"pointer"}}><input type="checkbox" checked={activeParticipants.length>0&&shareParticipantIds.length===activeParticipants.length} onChange={function(){var all=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(shareParticipantIds.length===all.length?[]:all);}}/>{L("Tutti")}</label></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{activeParticipants.map(function(p){var checked=shareParticipantIds.includes(p.id);return <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,border:"1px solid "+(checked?confirmButtonColor:borderC),background:checked?confirmButtonColor+"22":"transparent",borderRadius:20,padding:"5px 9px",fontSize:12,color:checked?confirmButtonColor:textC,cursor:"pointer"}}><input type="checkbox" checked={checked} onChange={function(){setShareParticipantIds(function(list){return list.includes(p.id)?list.filter(function(x){return x!==p.id;}):list.concat([p.id]);});}}/>{personLabel(p)}</label>;})}</div></div>{splitMode!=="equal"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginTop:8}}>{activeParticipants.filter(function(p){return shareParticipantIds.includes(p.id);}).map(function(p){return <div key={p.id}><label style={{fontSize:11,color:subC}}>{personLabel(p)} {splitMode==="percent"?"%":"€"}</label><input type="text" inputMode={splitMode==="percent"?"numeric":"decimal"} placeholder={splitMode==="percent"?"%":"_,__"} value={splitDraft[p.id]||""} onChange={function(e){var v=e.target.value;setShareSplitTouched(true);setSplitDraft(function(d){return{...d,[p.id]:v};});}} style={sinp}/></div>;})}</div>}{showShareCheck&&<div style={{marginTop:10,background:dark?"#2f2a1e":"#fff8e6",border:"1px solid #F2C94C77",borderRadius:12,padding:"9px 10px",fontSize:12,color:dark?"#F2C94C":"#8A6500",fontWeight:600}}>💡 {shareCheck.message}</div>}<div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontSize:12,color:subC}}>{L("Quote")}: {Object.keys(computeShares()).map(function(id){var p=participants.find(function(x){return x.id===id;});return (p?personLabel(p):id)+" "+fmt(computeShares()[id]);}).join(" · ")}</div><Btn onClick={addSharedActivity} bg={shareExpenseFormValid?confirmButtonColor:"#A8A8A8"} disabled={!shareExpenseFormValid}>{L(shareEditingActivityId?"Aggiorna spesa":"Salva spesa")}</Btn></div></>}</div></div>}
+          {(shareExpenseFormOpen||shareEditingActivityId)&&<div style={{position:"fixed",inset:0,width:"100%",height:"100dvh",minHeight:"100%",background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overscrollBehavior:"contain",WebkitTransform:"translateZ(0)",transform:"translateZ(0)",WebkitBackfaceVisibility:"hidden",backfaceVisibility:"hidden"}} onClick={function(e){if(e.target===e.currentTarget)closeShareExpensePopup();}}><div id="share_expense_form" style={{background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,width:"100%",maxWidth:430,maxHeight:"88dvh",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",boxSizing:"border-box",WebkitTransform:"translateZ(0)",transform:"translateZ(0)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}><div style={{fontSize:14,fontWeight:900,color:textC}}>{L(shareEditingActivityId?"Modifica spesa condivisa":"+ Spesa condivisa")}</div><div style={{display:"flex",gap:8,alignItems:"center"}}>{shareEditingActivityId&&<button onClick={resetShareExpenseForm} style={{background:"transparent",border:"1px solid "+borderC,borderRadius:9,padding:"6px 8px",fontSize:12,color:subC,cursor:"pointer"}}>{L("Annulla modifica")}</button>}<button onClick={closeShareExpensePopup} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div></div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>{[{id:"simple",label:L("Spesa semplice")},{id:"receipt",label:L("Scontrino")},{id:"voice",label:L("Vocale")}].map(function(tb){var active=shareExpenseMode===tb.id;return <button key={tb.id} type="button" onClick={function(){setShareReceiptReady(false);if(tb.id==="receipt"){startShareReceiptFlow();return;}setShareExpenseMode(tb.id);setShareReceiptOpen(false);setShareExpenseFormOpen(true);if(tb.id==="voice")setTimeout(function(){startShareVoiceCommand();},150);}} style={{border:"1px solid "+(active?secondaryButtonColor:borderC),background:active?secondaryButtonColor:(dark?"#333":"#f0f0f0"),color:active?"#fff":textC,borderRadius:btnRadius,padding:"10px 6px",fontSize:11,fontWeight:900,cursor:"pointer"}}>{tb.label}</button>;})}</div>{shareReceiptBusy&&<div style={{border:"1px solid "+borderC,borderRadius:16,padding:12,background:dark?"#252535":"#f9f9f9",fontSize:13,fontWeight:800,color:textC,marginBottom:10}}>🧾 {L("Sto leggendo lo scontrino...")}</div>}{(shareExpenseMode!=="receipt"||shareReceiptReady||String(shareAmount||"").trim()||String(shareDesc||"").trim())&&<>{shareExpenseMode==="voice"&&<div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,marginBottom:10}}><Btn onClick={startShareVoiceCommand} bg={secondaryButtonColor} style={{width:"100%",padding:"12px 14px",fontWeight:950}}>🎙️ {L(shareVoiceListening?"Ascolto in corso...":"Avvia comando vocale")}</Btn>{shareVoiceText&&<div style={{fontSize:12,color:subC,marginTop:8,lineHeight:1.35}}>{shareVoiceText}</div>}</div>}<div style={{background:"linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)",borderRadius:18,padding:"14px 14px",display:"grid",gridTemplateColumns:"44px minmax(0,1fr)",gap:8,alignItems:"center",color:"#fff",boxShadow:dark?"none":"0 10px 24px rgba(83,74,183,.12)",marginBottom:10}}><div style={{width:34,height:34,borderRadius:"50%",background:"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",color:"#E24B4A",fontSize:18,boxShadow:"0 6px 16px rgba(0,0,0,.12)"}}>💳</div><div style={{minWidth:0,textAlign:"center"}}><div style={{fontSize:11,fontWeight:850,textTransform:"uppercase",letterSpacing:.8,color:"rgba(255,255,255,.70)",marginBottom:2}}>{L("Importo")}</div><div style={{position:"relative"}}>{!String(shareAmount||"").trim()&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,fontWeight:950,color:"#fff",lineHeight:1,pointerEvents:"none"}}>_,__</div>}<input ref={shareAmountInputRef} type="text" inputMode="decimal" placeholder="" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={{width:"100%",border:"none",background:"transparent",padding:0,textAlign:"center",fontSize:34,fontWeight:950,color:"#fff",WebkitTextFillColor:"#fff",outline:"none",lineHeight:1}}/></div>{!String(shareAmount||"").trim()&&<div style={{fontSize:13,color:"rgba(255,255,255,.70)",fontWeight:600,marginTop:4}}>{L("Inserisci l\'importo")}</div>}</div></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:6}}>{L("Descrizione")}</label><textarea placeholder={L("Descrizione")} value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={{...sinp,minHeight:72,height:72,resize:"none",padding:"11px 12px",lineHeight:1.25,fontFamily:"inherit"}}/></div><div style={{background:dark?"#1f1f31":"#fff",border:"1px solid "+(dark?"#3d3d50":"#ECE9F6"),borderRadius:16,padding:10,boxShadow:dark?"none":"0 4px 12px rgba(83,74,183,0.05)",marginBottom:10}}><label style={{fontSize:11,fontWeight:800,color:subC,display:"block",marginBottom:8}}>{L("Data")}</label><div style={{display:"grid",gridTemplateColumns:".58fr .58fr .92fr 2.28fr",gap:5,alignItems:"center"}}><button type="button" onClick={function(){setShareDate(todayStr());}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===todayStr()?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===todayStr()?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===todayStr()?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.today}</button><button type="button" onClick={function(){setShareDate(dateOffset(1));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(1)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(1)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(1)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.yesterday}</button><button type="button" onClick={function(){setShareDate(dateOffset(2));}} style={{height:38,borderRadius:12,border:"1px solid "+(shareDate===dateOffset(2)?"#7F77DD":(dark?"#3f3f52":"#E4E2F2")),background:shareDate===dateOffset(2)?(dark?"#7F77DD44":"#7F77DD14"):(dark?"#252535":"#fff"),color:shareDate===dateOffset(2)?"#7F77DD":textC,fontSize:11,fontWeight:850,cursor:"pointer",whiteSpace:"nowrap"}}>{t.twoDaysAgo}</button><label style={{height:38,borderRadius:12,border:"1px solid "+(dark?"#3f3f52":"#E4E2F2"),background:dark?"#252535":"#fff",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden",padding:"0 5px",gap:4,cursor:"pointer"}}><span style={{pointerEvents:"none",fontWeight:850,color:textC}}>{fmtDate(shareDate,dateFmt)}</span><span style={{pointerEvents:"none",fontSize:17}}>📅</span><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer"}}/></label></div></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1.4fr",gap:8,marginTop:8}}><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagato da")} {personLabel(p)}</option>;})}</select><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{[{id:"equal",label:L("Equa")},{id:"percent",label:L("Percentuali")},{id:"amount",label:L("Importi")}].map(function(m){return <button key={m.id} onClick={function(){setSplitMode(m.id);setSplitDraft({});setShareSplitTouched(false);}} style={{border:"1px solid "+(splitMode===m.id?confirmButtonColor:borderC),background:splitMode===m.id?confirmButtonColor:"transparent",color:splitMode===m.id?"#fff":textC,borderRadius:10,padding:"8px 6px",fontSize:12,fontWeight:800,cursor:"pointer"}}>{m.label}</button>;})}</div></div><div style={{marginTop:10,background:dark?"#252535":"#f9f9f9",border:"1px solid "+borderC,borderRadius:12,padding:10}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:8}}><div style={{fontSize:12,fontWeight:900,color:textC}}>{L("Condivisa con")}</div><label style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:subC,cursor:"pointer"}}><input type="checkbox" checked={activeParticipants.length>0&&shareParticipantIds.length===activeParticipants.length} onChange={function(){var all=activeParticipants.map(function(p){return p.id;});setShareParticipantIds(shareParticipantIds.length===all.length?[]:all);}}/>{L("Tutti")}</label></div><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{activeParticipants.map(function(p){var checked=shareParticipantIds.includes(p.id);return <label key={p.id} style={{display:"flex",alignItems:"center",gap:6,border:"1px solid "+(checked?confirmButtonColor:borderC),background:checked?confirmButtonColor+"22":"transparent",borderRadius:20,padding:"5px 9px",fontSize:12,color:checked?confirmButtonColor:textC,cursor:"pointer"}}><input type="checkbox" checked={checked} onChange={function(){setShareParticipantIds(function(list){return list.includes(p.id)?list.filter(function(x){return x!==p.id;}):list.concat([p.id]);});}}/>{personLabel(p)}</label>;})}</div></div>{splitMode!=="equal"&&<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:8,marginTop:8}}>{activeParticipants.filter(function(p){return shareParticipantIds.includes(p.id);}).map(function(p){return <div key={p.id}><label style={{fontSize:11,color:subC}}>{personLabel(p)} {splitMode==="percent"?"%":"€"}</label><input type="text" inputMode={splitMode==="percent"?"numeric":"decimal"} placeholder={splitMode==="percent"?"%":"_,__"} value={splitDraft[p.id]||""} onChange={function(e){var v=e.target.value;setShareSplitTouched(true);setSplitDraft(function(d){return{...d,[p.id]:v};});}} style={sinp}/></div>;})}</div>}{showShareCheck&&<div style={{marginTop:10,background:dark?"#2f2a1e":"#fff8e6",border:"1px solid #F2C94C77",borderRadius:12,padding:"9px 10px",fontSize:12,color:dark?"#F2C94C":"#8A6500",fontWeight:600}}>💡 {shareCheck.message}</div>}<div style={{marginTop:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,flexWrap:"wrap"}}><div style={{fontSize:12,color:subC}}>{L("Quote")}: {Object.keys(computeShares()).map(function(id){var p=participants.find(function(x){return x.id===id;});return (p?personLabel(p):id)+" "+fmt(computeShares()[id]);}).join(" · ")}</div><Btn onClick={addSharedActivity} bg={shareExpenseFormValid?confirmButtonColor:"#A8A8A8"} disabled={!shareExpenseFormValid}>{L(shareEditingActivityId?"Aggiorna spesa":"Salva spesa")}</Btn></div></>}</div></div>}
           <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Attività del progetto")}</div>{(selected.activities||[]).length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"18px 0"}}>{L("Nessuna attività")}</div>}{(selected.activities||[]).map(function(a){var paid=participants.find(function(p){return p.id===a.paidBy;});var from=participants.find(function(p){return p.id===a.from;});var to=participants.find(function(p){return p.id===a.to;});var editing=shareEditingActivityId===a.id&&a.kind!=="settlement";return <div key={a.id} style={{borderBottom:"1px solid "+borderC,padding:"10px 0"}}>{editing?<div style={{background:dark?"#1e1e30":"#F7F8FF",border:"1px solid "+confirmButtonColor+"55",borderRadius:14,padding:12,display:"flex",flexDirection:"column",gap:8}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Modifica spesa Share")}</div><button onClick={resetShareExpenseForm} style={{background:"transparent",border:"none",color:subC,cursor:"pointer",fontSize:18}}>×</button></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 2fr 1fr",gap:8}}><input type="text" inputMode="decimal" value={shareAmount} onChange={function(e){setShareAmount(e.target.value);}} style={sinp} placeholder="_,__"/><input value={shareDesc} onChange={function(e){setShareDesc(e.target.value);}} style={sinp} placeholder={L("Descrizione")}/><input type="date" value={shareDate} onChange={function(e){setShareDate(e.target.value);}} style={sinp}/></div><select value={sharePaidBy} onChange={function(e){setSharePaidBy(e.target.value);}} style={sinp}>{activeParticipants.map(function(p){return <option key={p.id} value={p.id}>{L("Pagata da")} {personLabel(p)}</option>;})}</select><div style={{fontSize:11,color:subC}}>{L("La modifica viene salvata direttamente su questa transazione.")}</div><div style={{display:"flex",gap:8,justifyContent:"flex-end"}}><Btn onClick={resetShareExpenseForm} bg={dark?"#333":"#f0f0f0"} color={textC}>{L("Annulla")}</Btn><Btn onClick={addSharedActivity} disabled={!shareExpenseFormValid} bg={shareExpenseFormValid?confirmButtonColor:"#A8A8A8"}>{L("Salva modifica")}</Btn></div></div>:<div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{fontSize:18}}>{a.kind==="settlement"?"↔️":"🧾"}</span><div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:800,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.kind==="settlement"?((from?personLabel(from):a.from)+" "+L("ha pagato")+" "+(to?personLabel(to):a.to)):a.desc}</div><div style={{fontSize:11,color:subC}}>{fmtDate(a.date,dateFmt)} · {a.time||"--:--"}</div>{a.kind!=="settlement"&&<div style={{marginTop:6,display:"flex",flexDirection:"column",gap:4}}><div style={{fontSize:11,color:textC,fontWeight:700}}>{L("Pagata da")}: {paid?personLabel(paid):(a.paidBy||"—")}</div><div style={{fontSize:11,color:subC}}>{L("Condivisa con")}: {Object.keys(a.shares||{}).map(function(pid){var pp=participants.find(function(x){return x.id===pid;});return (pp?personLabel(pp):pid)+" "+fmt(a.shares[pid]);}).join(" · ")||"—"}</div></div>}</div><div style={{fontSize:13,fontWeight:900,color:a.kind==="settlement"?confirmButtonColor:expenseColor}}>{fmt(a.amount)}</div>{a.kind!=="settlement"&&<button onClick={function(){startEditSharedActivity(a);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",borderRadius:9,padding:"5px 8px",cursor:"pointer",color:confirmButtonColor,fontSize:12,fontWeight:800}}>{L("Modifica")}</button>}<button onClick={function(){deleteActivity(a.id);}} style={{background:"none",border:"none",cursor:"pointer",color:subC}}>×</button></div>}</div>;})}</div>
         </div>}
         {shareProjectTab==="partecipanti"&&<div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -9651,7 +10335,7 @@ function parseShareVoiceCommand(text){
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div style={{fontSize:14,fontWeight:950,color:textC}}>{L("Partecipanti")}</div><Btn onClick={function(){setShareParticipantPopupOpen(true);}} bg={confirmButtonColor} style={{padding:"8px 11px",fontWeight:900}}>{L("Aggiungi Partecipante")}</Btn></div>
             <div style={{display:"flex",flexDirection:"column",gap:9}}>{participants.map(function(p){var archived=p.status==="archived";return <div key={p.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 11px",border:"1px solid "+borderC,borderRadius:14,background:dark?"#252535":"#fff",opacity:archived?0.55:1}}><div style={{width:38,height:38,borderRadius:14,background:(p.kind==="fake"?secondaryButtonColor:confirmButtonColor)+"22",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:950,color:p.kind==="fake"?secondaryButtonColor:confirmButtonColor,flexShrink:0}}>{personLabel(p).slice(0,1).toUpperCase()}</div><div style={{flex:1,minWidth:0}}><div className="fai-ellipsis" style={{fontSize:13,fontWeight:950,color:textC}}>{personLabel(p)}</div><div className="fai-ellipsis" style={{fontSize:11,color:subC,marginTop:2}}>{L(p.kind==="fake"?"Persona Esterna":p.kind==="registered"?"Utente fAInance":"Invito in attesa")}{p.email?" · "+p.email:""}{p.status==="pending"?" · "+L("pendente"):""}{archived?" · "+L("archiviato"):""}</div></div>{p.id!=="me"&&<div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>{archived?<button onClick={function(){restoreParticipant(p.id);}} style={{background:"#eef8f4",border:"1px solid #bdebdc",borderRadius:9,color:incomeColor,padding:"6px 8px",fontSize:11,fontWeight:850}}>{L("Ripristina")}</button>:<button onClick={function(){archiveParticipant(p.id);}} style={{background:"#fff8e1",border:"1px solid #ffe29a",borderRadius:9,color:"#9a6a00",padding:"6px 8px",fontSize:11,fontWeight:850}}>{L("Archivia")}</button>}<button onClick={function(){removeParticipant(p.id);}} style={{background:"#fff0f0",border:"1px solid #ffd0d0",borderRadius:9,color:expenseColor,padding:"6px 8px",fontSize:11,fontWeight:850}}>{L("Elimina")}</button></div>}</div>;})}</div>
           </div>
-          {shareParticipantPopupOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setShareParticipantPopupOpen(false);}}><div style={{position:"relative",width:"100%",maxWidth:460,background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,boxShadow:dark?"none":"0 14px 40px rgba(0,0,0,.18)"}}><button onClick={function(){setShareParticipantPopupOpen(false);}} aria-label="Chiudi" style={{position:"absolute",right:10,top:10,width:32,height:32,borderRadius:"50%",border:"1px solid #ffd0d0",background:"#fff0f0",color:"#E24B4A",fontSize:20,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button><div style={{display:"flex",flexDirection:"column",gap:10,paddingTop:30}}>
+          {shareParticipantPopupOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:500,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setShareParticipantPopupOpen(false);}}><div style={{position:"relative",width:"100%",maxWidth:460,background:cardBg,border:"1px solid "+borderC,borderRadius:18,padding:14,boxShadow:dark?"none":"0 14px 40px rgba(0,0,0,.18)"}}><button onClick={function(){setShareParticipantPopupOpen(false);}} aria-label="Chiudi" style={{position:"absolute",right:10,top:10,width:32,height:32,borderRadius:"50%",border:"1px solid #ffd0d0",background:"#fff0f0",color:"#E24B4A",fontSize:20,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button><div style={{display:"flex",flexDirection:"column",gap:10,paddingTop:30}}>
             <div style={{fontSize:14,fontWeight:950,color:textC,marginBottom:10}}>{L("Aggiungi partecipante")}</div>
             <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:10}}>
               <button type="button" onClick={function(){setPersonMode("user");}} style={{border:"1px solid "+(personMode==="user"?secondaryButtonColor:borderC),background:personMode==="user"?secondaryButtonColor:(dark?"#252535":"#fff"),color:personMode==="user"?"#fff":textC,borderRadius:btnRadius,padding:"9px 8px",fontSize:12,fontWeight:900,cursor:"pointer"}}>{L("Utente")}</button>
@@ -9663,7 +10347,7 @@ function parseShareVoiceCommand(text){
           </div></div></div>}
         </div>}
         {shareProjectTab==="riassunto"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Riassunto")}</div><div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(3,minmax(0,1fr))",gap:10}}><div style={{gridColumn:isMobile?"1/-1":"auto",minWidth:0}}><StatCard title={L("Spese progetto")} value={fmt(totalSpent)} color={expenseColor} bg={expenseColor+"22"}/></div><div style={{minWidth:0}}><StatCard title={L("Mi devono")} value={fmt(Math.max(0,myBalance))} color={incomeColor} bg={incomeColor+"22"}/></div><div style={{minWidth:0}}><StatCard title={L("Devo")} value={fmt(Math.max(0,-myBalance))} color={expenseColor} bg={expenseColor+"22"}/></div></div></div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
-        {settlementPopupOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={function(e){if(e.target===e.currentTarget)setSettlementPopupOpen(false);}}><div style={{background:dark?"#181827":"#fff",border:"1px solid "+borderC,borderRadius:22,padding:16,width:"100%",maxWidth:430,boxShadow:dark?"none":"0 18px 42px rgba(15,23,42,.18)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div><div style={{fontSize:17,fontWeight:950,color:textC}}>↔️ {L("Registra saldo/rimborso")}</div><div style={{fontSize:12,color:subC,marginTop:3}}>{L("Registra un pagamento tra partecipanti del progetto.")}</div></div><button onClick={function(){setSettlementPopupOpen(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Da")}</label><select value={settlementFrom} onChange={function(e){setSettlementFrom(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("A")}</label><select value={settlementTo} onChange={function(e){setSettlementTo(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}><div style={{background:dark?"#1f1f31":"#FFF7F2",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Importo")}</label><input ref={settlementAmountInputRef} autoFocus type="text" inputMode="decimal" placeholder="_,__" value={settlementAmount} onChange={function(e){setSettlementAmount(e.target.value);}} style={{...sinp,fontSize:18,fontWeight:900}}/></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Data")}</label><input type="date" value={settlementDate} onChange={function(e){setSettlementDate(e.target.value);}} style={sinp}/></div></div><Btn onClick={addSettlement} disabled={!settlementFormValid} bg={settlementFormValid?confirmButtonColor:"#A8A8A8"} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra")}</Btn></div></div>}{shareProjectTab==="saldi"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
+        {settlementPopupOpen&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9999,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}} onClick={function(e){if(e.target===e.currentTarget)setSettlementPopupOpen(false);}}><div style={{background:dark?"#181827":"#fff",border:"1px solid "+borderC,borderRadius:22,padding:16,width:"100%",maxWidth:430,boxShadow:dark?"none":"0 18px 42px rgba(15,23,42,.18)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:12}}><div><div style={{fontSize:17,fontWeight:950,color:textC}}>↔️ {L("Registra saldo/rimborso")}</div><div style={{fontSize:12,color:subC,marginTop:3}}>{L("Registra un pagamento tra partecipanti del progetto.")}</div></div><button onClick={function(){setSettlementPopupOpen(false);}} style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("Da")}</label><select value={settlementFrom} onChange={function(e){setSettlementFrom(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:10}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:6}}>{L("A")}</label><select value={settlementTo} onChange={function(e){setSettlementTo(e.target.value);}} style={sinp}>{participants.map(function(p){return <option key={p.id} value={p.id}>{personLabel(p)}</option>;})}</select></div></div><div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginBottom:14}}><div style={{background:dark?"#1f1f31":"#FFF7F2",border:"1px solid "+borderC,borderRadius:15,padding:12,minWidth:0}}><label style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:7}}>{L("Importo")}</label><input ref={settlementAmountInputRef} autoFocus type="text" inputMode="decimal" placeholder="_,__" value={settlementAmount} onChange={function(e){setSettlementAmount(e.target.value);}} style={{...sinp,fontSize:18,fontWeight:900,minWidth:0}}/></div><div style={{background:dark?"#1f1f31":"#F7F8FF",border:"1px solid "+borderC,borderRadius:15,padding:12,minWidth:0}}><div style={{fontSize:11,fontWeight:900,color:subC,display:"block",marginBottom:7}}>{shareDateLabel}</div><label style={{...sinp,height:48,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,position:"relative",overflow:"hidden",cursor:"pointer",minWidth:0,boxSizing:"border-box"}}><span style={{fontSize:14,fontWeight:800,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fmtDate(settlementDate,dateFmt)}</span><span style={{fontSize:18,flexShrink:0}}>📅</span><input aria-label={shareDateLabel} lang={shareDateInputLang} type="date" value={settlementDate} onChange={function(e){setSettlementDate(e.target.value);}} style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%",height:"100%"}}/></label></div></div><Btn onClick={addSettlement} disabled={!settlementFormValid} bg={settlementFormValid?confirmButtonColor:"#A8A8A8"} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra")}</Btn></div></div>}{shareProjectTab==="saldi"&&<div style={{display:"flex",flexDirection:"column",gap:12}}><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><div style={{fontSize:14,fontWeight:900,color:textC,marginBottom:10}}>{L("Chi deve soldi a chi")}</div>{debts.length===0&&<div style={{fontSize:13,color:subC,textAlign:"center",padding:"16px 0"}}>{L("Nessun saldo aperto")}</div>}{debts.map(function(d,i){var from=participants.find(function(p){return p.id===d.from;});var to=participants.find(function(p){return p.id===d.to;});return <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid "+borderC}}><span style={{fontSize:13,color:textC,flex:1}}>{from?personLabel(from):d.from} {L("deve pagare")} {to?personLabel(to):d.to}</span><span style={{fontSize:14,fontWeight:900,color:confirmButtonColor}}>{fmt(d.amount)}</span></div>;})}</div><div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:16,padding:14}}><Btn onClick={function(){setSettlementPopupOpen(true);}} bg={confirmButtonColor} style={{width:"100%",padding:"13px 14px",fontWeight:950}}>{L("Registra saldo/rimborso")}</Btn></div></div>}
       </>}
     </div>;
   }
@@ -9706,9 +10390,9 @@ function parseShareVoiceCommand(text){
     var optionBtn=function(id,label){var active=method===id;return <button type="button" onClick={function(){chooseUnlockMethod(id);}} style={{flex:1,border:"1px solid "+(active?confirmButtonColor:borderC),background:active?(confirmButtonColor+"22"):(dark?"#252535":"#fff"),color:active?confirmButtonColor:textC,borderRadius:btnRadius,padding:"9px 8px",fontSize:12,fontWeight:900,cursor:"pointer"}}>{L(label)}</button>;};
     return <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",background:dark?"linear-gradient(160deg,#111827,#1E1E30)":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><div style={{width:"100%",maxWidth:420,background:cardBg,border:"1px solid "+borderC,borderRadius:24,boxShadow:dark?"0 18px 70px rgba(0,0,0,.45)":"0 18px 70px rgba(74,66,160,.22)",padding:24,textAlign:"center"}}><div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:72,height:72,borderRadius:24,background:dark?"#24213a":"#F0EDFF",marginBottom:14,fontSize:34}}>🔐</div><div style={{fontSize:22,fontWeight:950,color:textC,marginBottom:6}}>{L("fAInance è bloccata")}</div><div style={{fontSize:13,color:subC,lineHeight:1.45,marginBottom:18}}>{L("Sblocca l’app per visualizzare i tuoi dati finanziari.")}</div>{biometricLockMessage&&<div style={{background:dark?"#342424":"#fff0f0",border:"1px solid "+(dark?"#5a3333":"#f3b6b6"),color:dark?"#ffd0d0":"#8a2d2d",borderRadius:12,padding:"10px 12px",fontSize:12,lineHeight:1.35,marginBottom:14}}>{L(biometricLockMessage)}</div>}
       <div style={{display:"flex",gap:8,marginBottom:12}}>{optionBtn("biometric","Biometria")}{optionBtn("password","Password")}{configuredPin&&optionBtn("pin","PIN")}</div>
-      {method==="pin"&&<div style={{display:"flex",flexDirection:"column",gap:10}}><input defaultValue="" onChange={function(e){unlockPinRef.current=String(e.currentTarget.value||"").replace(/\D/g,"").slice(0,4);}} onKeyDown={function(e){if(e.key==="Enter")submitPin();}} inputMode="numeric" type="text" maxLength={4} autoComplete="off" placeholder={L("Inserisci PIN")} style={{width:"100%",borderRadius:btnRadius,border:"1px solid "+borderC,padding:"13px 14px",fontSize:20,textAlign:"center",letterSpacing:8,background:dark?"#252535":"#fff",color:textC,boxSizing:"border-box"}}/><button onClick={submitPin} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{L("Sblocca con PIN")}</button><button type="button" onClick={function(){chooseUnlockMethod("biometric");}} style={{background:"transparent",border:"none",color:confirmButtonColor,fontSize:12,fontWeight:900,cursor:"pointer"}}>{L("PIN dimenticato? Usa un altro metodo")}</button></div>}
-      {method==="password"&&<div style={{display:"flex",flexDirection:"column",gap:10}}><input value={unlockPassword} onChange={function(e){setUnlockPassword(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")submitPassword();}} type="password" autoComplete="current-password" placeholder={L("Password account")} style={{width:"100%",borderRadius:btnRadius,border:"1px solid "+borderC,padding:"13px 14px",fontSize:15,background:dark?"#252535":"#fff",color:textC,boxSizing:"border-box"}}/><button onClick={submitPassword} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con password")}</button></div>}
-      {method!=="pin"&&method!=="password"&&<button onClick={function(){unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");}} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,#7F77DD,#378ADD)",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con biometria")}</button>}
+      {method==="pin"&&<div style={{display:"flex",flexDirection:"column",gap:10}}><input defaultValue="" onChange={function(e){unlockPinRef.current=String(e.currentTarget.value||"").replace(/\D/g,"").slice(0,4);}} onKeyDown={function(e){if(e.key==="Enter")submitPin();}} inputMode="numeric" type="text" maxLength={4} autoComplete="off" placeholder={L("Inserisci PIN")} style={{width:"100%",borderRadius:btnRadius,border:"1px solid "+borderC,padding:"13px 14px",fontSize:20,textAlign:"center",letterSpacing:8,background:dark?"#252535":"#fff",color:textC,boxSizing:"border-box"}}/><button onClick={submitPin} style={{width:"100%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:"pointer",boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{L("Sblocca con PIN")}</button><button type="button" onClick={function(){chooseUnlockMethod("biometric");}} style={{background:"transparent",border:"none",color:confirmButtonColor,fontSize:12,fontWeight:900,cursor:"pointer"}}>{L("PIN dimenticato? Usa un altro metodo")}</button></div>}
+      {method==="password"&&<div style={{display:"flex",flexDirection:"column",gap:10}}><input value={unlockPassword} onChange={function(e){setUnlockPassword(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")submitPassword();}} type="password" autoComplete="current-password" placeholder={L("Password account")} style={{width:"100%",borderRadius:btnRadius,border:"1px solid "+borderC,padding:"13px 14px",fontSize:15,background:dark?"#252535":"#fff",color:textC,boxSizing:"border-box"}}/><button onClick={submitPassword} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con password")}</button></div>}
+      {method!=="pin"&&method!=="password"&&<button onClick={function(){unlockBiometricApp("Sblocca fAInance per visualizzare i tuoi dati finanziari");}} disabled={biometricChecking} style={{width:"100%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:900,cursor:biometricChecking?"not-allowed":"pointer",opacity:biometricChecking?0.7:1,boxShadow:"0 8px 22px rgba(127,119,221,.28)"}}>{biometricChecking?L("Controllo in corso..."):L("Sblocca con biometria")}</button>}
       <div style={{fontSize:11,color:subC,marginTop:12,lineHeight:1.35}}>{L("Se non ricordi il PIN, sblocca con biometria o password account e poi imposta un nuovo PIN in Sicurezza.")}</div>
     </div></div>;
   }
@@ -9716,7 +10400,7 @@ function parseShareVoiceCommand(text){
     {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
     isMobile?
-    <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden"}}>
+    <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100dvh",minHeight:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden",paddingTop:"env(safe-area-inset-top, 0px)",paddingBottom:"env(safe-area-inset-bottom, 0px)",boxSizing:"border-box",...({"--fainance-primary":confirmButtonColor,"--fainance-secondary":secondaryButtonColor} as any)}}>
       {(showAppSummaryHeader&&!(tab==="consulenteAI"&&aiTab==="chat"))&&<div style={{background:headerBg,borderBottom:"1px solid "+borderC,padding:"10px 16px 8px",flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:subC,marginBottom:4}}>fAInance</div><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Uscite")}</div><div style={{fontSize:19,fontWeight:600,color:expenseColor}}>{fmt(curMonthExp)}</div></div><div style={{textAlign:"center"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Saldo")}</div><div style={{fontSize:17,fontWeight:600,color:BALANCE_COLOR}}>{fmt(curMonthInc-curMonthExp)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Entrate")}</div><div style={{fontSize:19,fontWeight:600,color:incomeColor}}>{fmt(curMonthInc)}</div></div></div></div>}
       <TopAdBox/>
       <div style={{flex:1,overflowY:"auto",padding:14}}><SectionErrorBoundary resetKey={tab+"|"+(settingsPage||"")} dark={dark} tr={translateUiRuntimeText} onHome={function(){setTab("home");setSettingsPage(null);setMobileMenu(false);}}>{panelContent()}</SectionErrorBoundary></div>
@@ -9724,13 +10408,12 @@ function parseShareVoiceCommand(text){
       {voiceModal&&<VoiceEntryModal/>}
       <div style={{background:headerBg,borderTop:"1px solid "+borderC,display:"flex",flexShrink:0}}>{mobileMain.map(function(item){return <button key={item.id} onClick={function(){if(item.id==="voice"){openVoiceModal();setMobileMenu(false);}else if(item.id==="more"){setTab("more");setMobileMenu(function(s){return !s;});setSettingsPage(null);}else{setTab(item.id);setMobileMenu(false);setSettingsPage(null);}}} style={{flex:1,padding:"9px 2px",border:"none",background:"transparent",display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer",color:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?textC:subC,borderTop:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?"2px solid "+(dark?"#eee":"#333"):"2px solid transparent"}}><span style={{fontSize:17}}>{item.icon}</span><span style={{fontSize:9,fontWeight:(tab===item.id||(item.id==="more"&&tab==="more")||(item.id==="voice"&&voiceModal))?500:400}}>{item.label}</span></button>;})}</div>
       {mobileMenu&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:9998,display:"flex",alignItems:"flex-end",paddingBottom:8,boxSizing:"border-box"}} onClick={function(){setMobileMenu(false);}}><div style={{background:cardBg,borderRadius:"20px 20px 0 0",width:"100%",padding:"10px 16px 14px",maxHeight:"72vh",overflowY:"auto",WebkitOverflowScrolling:"touch",boxShadow:dark?"none":"0 -8px 30px rgba(0,0,0,0.18)"}} onClick={function(e){e.stopPropagation();}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,padding:"0 2px 8px",position:"sticky",top:0,background:cardBg,zIndex:1}}><div style={{fontSize:16,fontWeight:900,color:textC}}>{translateUiRuntimeText("Altro")}</div><button onClick={function(){setMobileMenu(false);}} aria-label="Chiudi menu" style={{width:34,height:34,borderRadius:12,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#F87171",fontSize:22,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button></div>{buildMobileMenuItems().map(function(item){return <button key={item.id} onClick={function(){setTab(item.id);setSettingsPage(null);setMobileMenu(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:14,padding:"12px 8px",border:"none",background:"transparent",borderBottom:"1px solid "+borderC,fontSize:15,cursor:"pointer",color:textC}}><span style={{fontSize:22}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{marginLeft:"auto",background:expenseColor,color:"#fff",borderRadius:"50%",width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>{item.badge}</span>}</button>;})}</div></div>}
-      {isOffline&&<div style={{position:"fixed",top:0,left:0,right:0,zIndex:9998,background:"#E24B4A",color:"#fff",textAlign:"center",fontSize:13,fontWeight:700,padding:"6px 12px"}}>{L("Nessuna connessione. I dati verranno sincronizzati al ripristino della rete.")}</div>}
-  {toast&&<Toast key={(toast&&toast.id)||String(toast)} msg={toast} onDone={function(){setToast(null);}}/>}
+      {isOffline&&<div style={{position:"fixed",top:0,left:0,right:0,zIndex:9998,background:"#E24B4A",color:"#fff",textAlign:"center",fontSize:13,fontWeight:700,padding:"calc(env(safe-area-inset-top, 0px) + 6px) 12px 6px"}}>{L("Nessuna connessione. I dati verranno sincronizzati al ripristino della rete.")}</div>}
       {alertPopup&&alertPopup.length>0&&<AlertPopup newAlerts={alertPopup} onClose={function(list){markAlertsSeen(list||alertPopup);}}/>}
       {editingItem&&<EditModal item={editingItem.item} isExp={editingItem.isExp} onSave={function(updated){if(editingItem.isExp){setExpenses(expenses.map(function(e){return e.id===updated.id?updated:e;}));setToast("Spesa aggiornata");}else{setIncomes(incomes.map(function(i){return i.id===updated.id?updated:i;}));setToast("Entrata aggiornata");}setEditingItem(null);}} onClose={function(){setEditingItem(null);}}/>}
     </div>
     :
-    <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden"}}>
+    <div style={{fontFamily:"system-ui,sans-serif",height:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden",...({"--fainance-primary":confirmButtonColor,"--fainance-secondary":secondaryButtonColor} as any)}}>
       {(showAppSummaryHeader&&!(tab==="consulenteAI"&&aiTab==="chat"))&&<div style={{background:headerBg,borderBottom:"1px solid "+borderC,padding:"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}><div style={{fontWeight:600,fontSize:15,color:textC}}>fAInance</div><div style={{display:"flex",gap:24}}>{[[translateUiRuntimeText("Uscite"),expenseColor,fmt(curMonthExp)],[translateUiRuntimeText("Saldo"),BALANCE_COLOR,fmt(curMonthInc-curMonthExp)],[translateUiRuntimeText("Entrate"),incomeColor,fmt(curMonthInc)]].map(function(item){return <div key={item[0]} style={{textAlign:"center"}}><div style={{fontSize:10,color:subC}}>{item[0]}</div><div style={{fontSize:16,fontWeight:600,color:item[1]}}>{item[2]}</div></div>;})}</div><div style={{display:"flex",gap:8,alignItems:"center"}}><span style={{fontSize:11,color:subC}}>{curYear}: {fmt(yearExp)} / {fmt(yearInc)}</span><Btn onClick={function(){exportToCSV(expenses,incomes,cats,methods,dateFmt);}} bg={incomeColor} style={{padding:"5px 10px",fontSize:11}}>CSV</Btn><Btn onClick={function(){exportToXLSX(expenses,incomes,cats,methods,dateFmt);}} bg="#217346" style={{padding:"5px 10px",fontSize:11}}>Excel</Btn></div></div>}
       <div style={{flex:1,display:"flex",overflow:"hidden"}}>
         <div style={{width:220,background:sideBg,borderRight:"1px solid "+borderC,display:"flex",flexDirection:"column",padding:"16px 0",flexShrink:0,overflowY:"auto"}}>{navItems.map(function(item){return <button key={item.id} onClick={function(){if(item.id==="voice"){openVoiceModal();}else{setTab(item.id);if(item.id!=="settings")setSettingsPage(null);}}} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 20px",border:"none",background:(tab===item.id||(item.id==="voice"&&voiceModal))?(dark?"#2a2a3e":"#f0f0f0"):"transparent",color:(tab===item.id||(item.id==="voice"&&voiceModal))?textC:subC,fontSize:14,cursor:"pointer",fontWeight:(tab===item.id||(item.id==="voice"&&voiceModal))?500:400,textAlign:"left",position:"relative"}}><span style={{fontSize:18}}>{item.icon}</span>{item.label}{item.badge>0&&<span style={{position:"absolute",right:14,background:expenseColor,color:"#fff",borderRadius:"50%",width:18,height:18,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:500}}>{item.badge}</span>}</button>;})}</div>
@@ -9738,14 +10421,16 @@ function parseShareVoiceCommand(text){
       </div>
       {aiFloatingEnabled&&tab!=="settings"&&<FloatingAIButton desktop/>}
       {voiceModal&&<VoiceEntryModal/>}
-      {toast&&<Toast key={(toast&&toast.id)||String(toast)} msg={toast} onDone={function(){setToast(null);}}/>}
-      {alertPopup&&alertPopup.length>0&&<AlertPopup newAlerts={alertPopup} onClose={function(list){markAlertsSeen(list||alertPopup);}}/>}
+          {alertPopup&&alertPopup.length>0&&<AlertPopup newAlerts={alertPopup} onClose={function(list){markAlertsSeen(list||alertPopup);}}/>}
       {editingItem&&<EditModal item={editingItem.item} isExp={editingItem.isExp} onSave={function(updated){if(editingItem.isExp){setExpenses(expenses.map(function(e){return e.id===updated.id?updated:e;}));setToast("Spesa aggiornata");}else{setIncomes(incomes.map(function(i){return i.id===updated.id?updated:i;}));setToast("Entrata aggiornata");}setEditingItem(null);}} onClose={function(){setEditingItem(null);}}/>}
     </div>}
-    {onboardingGuideOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&<OnboardingGuideModal/>}
+    <GlobalToastHost/>
+    <GlobalNumericInputAssist/>
+    {onboardingGuideOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&OnboardingGuideModal()}
+    {initialSetupOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&InitialSetupModal()}
     {appUpdatePopup&&<AppUpdateModal/>}
     {showPremiumTrialPrompt&&(!appLocked&&termsAccepted&&privacyAccepted&&currentPlan==="free")&&<PremiumTrialPromptModal/>}
-    {(!appLocked&&(!termsAccepted||!privacyAccepted))&&<TermsAcceptanceModal/>}
+    {(!appLocked&&!legalAcceptanceCommitted&&(!termsAccepted||!privacyAccepted))&&<TermsAcceptanceModal/>}
   </AppCtx.Provider>;
 }
 
@@ -9843,6 +10528,7 @@ export default AppWithLogin;
     'PIN di 4 numeri':{en:'4-digit PIN',es:'PIN de 4 números',fr:'PIN à 4 chiffres',de:'4-stellige PIN',pt:'PIN de 4 dígitos',pl:'4-cyfrowy PIN',nl:'4-cijferige PIN',ro:'PIN de 4 cifre',el:'4ψήφιο PIN'},
     'Il PIN deve contenere 4 numeri.':{en:'The PIN must contain 4 digits.',es:'El PIN debe contener 4 números.',fr:'Le PIN doit contenir 4 chiffres.',de:'Die PIN muss 4 Ziffern enthalten.',pt:'O PIN deve conter 4 dígitos.',pl:'PIN musi mieć 4 cyfry.',nl:'De PIN moet 4 cijfers bevatten.',ro:'PIN-ul trebuie să conțină 4 cifre.',el:'Το PIN πρέπει να περιέχει 4 ψηφία.'},
     'PIN salvato':{en:'PIN saved',es:'PIN guardado',fr:'PIN enregistré',de:'PIN gespeichert',pt:'PIN guardado',pl:'PIN zapisany',nl:'PIN opgeslagen',ro:'PIN salvat',el:'Το PIN αποθηκεύτηκε'},
+    'Il nuovo PIN deve essere diverso da quello attuale.':{en:'The new PIN must be different from the current one.',es:'El nuevo PIN debe ser diferente del actual.',fr:'Le nouveau PIN doit être différent du PIN actuel.',de:'Die neue PIN muss sich von der aktuellen unterscheiden.',pt:'O novo PIN deve ser diferente do atual.',pl:'Nowy PIN musi różnić się od obecnego.',nl:'De nieuwe pincode moet verschillen van de huidige.',ro:'Noul PIN trebuie să fie diferit de cel actual.',el:'Το νέο PIN πρέπει να είναι διαφορετικό από το τρέχον.'},
     'Salva PIN':{en:'Save PIN',es:'Guardar PIN',fr:'Enregistrer le PIN',de:'PIN speichern',pt:'Guardar PIN',pl:'Zapisz PIN',nl:'PIN opslaan',ro:'Salvează PIN-ul',el:'Αποθήκευση PIN'},
     'PIN configurato':{en:'PIN configured',es:'PIN configurado',fr:'PIN configuré',de:'PIN eingerichtet',pt:'PIN configurado',pl:'PIN skonfigurowany',nl:'PIN ingesteld',ro:'PIN configurat',el:'Το PIN ρυθμίστηκε'},
     'La password dell’account funziona per gli account creati con email e password. Gli account Google o Apple possono non avere una password fAInance verificabile localmente.':{en:'The account password works for accounts created with email and password. Google or Apple accounts may not have a fAInance password that can be verified locally.',es:'La contraseña de la cuenta funciona para cuentas creadas con email y contraseña. Las cuentas Google o Apple pueden no tener una contraseña fAInance verificable localmente.',fr:'Le mot de passe du compte fonctionne pour les comptes créés avec email et mot de passe. Les comptes Google ou Apple peuvent ne pas avoir de mot de passe fAInance vérifiable localement.',de:'Das Kontopasswort funktioniert für Konten mit E-Mail und Passwort. Google- oder Apple-Konten haben möglicherweise kein lokal prüfbares fAInance-Passwort.',pt:'A palavra-passe da conta funciona para contas criadas com email e palavra-passe. Contas Google ou Apple podem não ter uma palavra-passe fAInance verificável localmente.',pl:'Hasło konta działa dla kont utworzonych przez e-mail i hasło. Konta Google lub Apple mogą nie mieć lokalnie weryfikowalnego hasła fAInance.',nl:'Het accountwachtwoord werkt voor accounts die met e-mail en wachtwoord zijn gemaakt. Google- of Apple-accounts hebben mogelijk geen lokaal controleerbaar fAInance-wachtwoord.',ro:'Parola contului funcționează pentru conturile create cu email și parolă. Conturile Google sau Apple pot să nu aibă o parolă fAInance verificabilă local.',el:'Ο κωδικός λογαριασμού λειτουργεί για λογαριασμούς με email και κωδικό. Οι λογαριασμοί Google ή Apple μπορεί να μην έχουν τοπικά επαληθεύσιμο κωδικό fAInance.'},
@@ -10008,7 +10694,7 @@ export default AppWithLogin;
 // fAInance - guida primo accesso.
 (function(){
   var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
-  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||(c==="it"?k:(v.en||v.it||k));if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
   add('Guida rapida',{en:'Quick guide',es:'Guía rápida',fr:'Guide rapide',de:'Kurzanleitung',pt:'Guia rápido',pl:'Szybki przewodnik',nl:'Snelle gids',ro:'Ghid rapid',el:'Γρήγορος οδηγός'});
   add('Salta guida',{en:'Skip guide',es:'Saltar guía',fr:'Passer le guide',de:'Anleitung überspringen',pt:'Ignorar guia',pl:'Pomiń przewodnik',nl:'Gids overslaan',ro:'Omite ghidul',el:'Παράλειψη οδηγού'});
   add('Vai alla schermata',{en:'Go to screen',es:'Ir a la pantalla',fr:'Aller à l’écran',de:'Zu Bildschirm wechseln',pt:'Ir para o ecrã',pl:'Przejdź do ekranu',nl:'Ga naar scherm',ro:'Mergi la ecranul',el:'Μετάβαση στην οθόνη'});
