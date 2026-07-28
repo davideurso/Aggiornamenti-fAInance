@@ -10,7 +10,6 @@ class MainViewController: CAPBridgeViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        configureWebViewForReliableTouches()
         widgetRouteObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
@@ -22,14 +21,12 @@ class MainViewController: CAPBridgeViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        configureWebViewForReliableTouches()
         injectNativeSafeArea(force: true)
         dispatchPendingWidgetRoute()
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        configureWebViewForReliableTouches()
         injectNativeSafeArea()
     }
 
@@ -47,7 +44,6 @@ class MainViewController: CAPBridgeViewController {
         // Dopo tale azione, l’audio remoto può partire senza un secondo tocco.
         webView?.configuration.mediaTypesRequiringUserActionForPlayback = []
 
-        configureWebViewForReliableTouches()
         injectNativeSafeArea(force: true)
         dispatchPendingWidgetRoute()
     }
@@ -56,19 +52,6 @@ class MainViewController: CAPBridgeViewController {
         if let widgetRouteObserver {
             NotificationCenter.default.removeObserver(widgetRouteObserver)
         }
-    }
-
-    private func configureWebViewForReliableTouches() {
-        guard let scrollView = webView?.scrollView else {
-            return
-        }
-
-        // The interface scrolls inside the web content. Keep UIKit from
-        // delaying or cancelling the touch sequence before WebKit delivers the
-        // corresponding touchend/click to React.
-        scrollView.delaysContentTouches = false
-        scrollView.canCancelContentTouches = false
-        scrollView.contentInsetAdjustmentBehavior = .never
     }
 
     private func injectNativeSafeArea(force: Bool = false) {

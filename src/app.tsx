@@ -5,7 +5,7 @@
 // I pannelli principali sono in sezioni.tsx e statistiche.tsx.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo, createContext, Component } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, Component } from 'react';
 import { registerPlugin } from '@capacitor/core';
 import { AppCtx, useApp, fbAuth, fbDb, googleProvider, doc, setDoc, getDoc, getDocs, addDoc,
   deleteDoc, collection, query, where, limit, onSnapshot,
@@ -102,159 +102,6 @@ function GlobalNumericInputAssist(){
     }
     document.addEventListener('focusin',selectNumericValue,true);
     return function(){document.removeEventListener('focusin',selectNumericValue,true);};
-  },[]);
-  return null;
-}
-
-// iOS WKWebView can occasionally swallow a short tap while its scroll view is
-// settling. This native-only assist replays only taps for which no click event
-// was delivered, so Android and the web remain completely unchanged.
-function GlobalIosInteractionAssist(){
-  useEffect(function(){
-    if(fainanceNativePlatform()!=="ios"||typeof document==="undefined")return;
-
-    var root=document.documentElement;
-    root.classList.add("fainance-ios-native");
-
-    var style=document.createElement("style");
-    style.id="fainance-ios-interaction-assist";
-    style.textContent=[
-      ".fainance-ios-native button,.fainance-ios-native a[href],.fainance-ios-native [role='button'],.fainance-ios-native label,.fainance-ios-native input[type='checkbox'],.fainance-ios-native input[type='radio']{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}",
-      ".fainance-ios-native button{-webkit-appearance:none;}"
-    ].join("");
-    if(!document.getElementById(style.id))document.head.appendChild(style);
-
-    var activeTouch:any=null;
-    var syntheticClick:any=null;
-
-    function isDisabled(element:any){
-      if(!element)return true;
-      if(element.disabled)return true;
-      if(element.matches&&element.matches("[disabled],[aria-disabled='true'],[data-fainance-no-tap-assist='true']"))return true;
-      return false;
-    }
-
-    function isNativeFormControl(element:any){
-      if(!element||!element.tagName)return false;
-      var tag=String(element.tagName).toLowerCase();
-      if(tag==="textarea"||tag==="select")return true;
-      if(tag!=="input")return !!element.isContentEditable;
-      var type=String(element.getAttribute("type")||"text").toLowerCase();
-      return type!=="button"&&type!=="submit"&&type!=="reset"&&type!=="checkbox"&&type!=="radio";
-    }
-
-    function isActionableNode(element:any){
-      if(!element||element===document.documentElement||element===document.body)return false;
-      if(isDisabled(element)||isNativeFormControl(element))return false;
-      var tag=String(element.tagName||"").toLowerCase();
-      if(tag==="button"||tag==="a"||tag==="label")return true;
-      if(tag==="input")return true;
-      if(element.getAttribute&&element.getAttribute("role")==="button")return true;
-      if(element.hasAttribute&&element.hasAttribute("data-fainance-tap"))return true;
-      try{if(element.style&&String(element.style.cursor||"").toLowerCase()==="pointer")return true;}catch(_e){}
-      return false;
-    }
-
-    function actionable(target:any){
-      var element=target&&target.nodeType===1?target:target&&target.parentElement;
-      var depth=0;
-      while(element&&depth<12){
-        if(isNativeFormControl(element))return null;
-        if(isActionableNode(element)){
-          if(String(element.tagName||"").toLowerCase()==="label"){
-            var nativeField=element.querySelector&&element.querySelector("input:not([type='checkbox']):not([type='radio']),select,textarea,[contenteditable='true']");
-            if(nativeField)return null;
-          }
-          return element;
-        }
-        element=element.parentElement;
-        depth++;
-      }
-      return null;
-    }
-
-    function findTouch(list:any,identifier:any){
-      if(!list)return null;
-      for(var i=0;i<list.length;i++)if(list[i].identifier===identifier)return list[i];
-      return null;
-    }
-
-    function onTouchStart(event:any){
-      if(!event.touches||event.touches.length!==1){activeTouch=null;return;}
-      var element=actionable(event.target);
-      if(!element){activeTouch=null;return;}
-      var touch=event.touches[0];
-      activeTouch={
-        element:element,
-        identifier:touch.identifier,
-        startX:Number(touch.clientX||0),
-        startY:Number(touch.clientY||0),
-        moved:false
-      };
-    }
-
-    function onTouchMove(event:any){
-      if(!activeTouch)return;
-      var touch=findTouch(event.touches,activeTouch.identifier)||findTouch(event.changedTouches,activeTouch.identifier);
-      if(!touch)return;
-      if(Math.abs(Number(touch.clientX||0)-activeTouch.startX)>12||Math.abs(Number(touch.clientY||0)-activeTouch.startY)>12){
-        activeTouch.moved=true;
-      }
-    }
-
-    function onTouchCancel(){
-      activeTouch=null;
-    }
-
-    function onTouchEnd(event:any){
-      if(!activeTouch)return;
-      var current=activeTouch;
-      activeTouch=null;
-      var touch=findTouch(event.changedTouches,current.identifier);
-      if(!touch||current.moved||!current.element)return;
-      if(Math.abs(Number(touch.clientX||0)-current.startX)>12||Math.abs(Number(touch.clientY||0)-current.startY)>12)return;
-
-      var releasedOn=actionable(document.elementFromPoint(Number(touch.clientX||0),Number(touch.clientY||0)));
-      var clickElement=current.element.isConnected?current.element:releasedOn;
-      if(!clickElement||!clickElement.isConnected)return;
-      if(current.element.isConnected&&releasedOn&&releasedOn!==current.element&&!current.element.contains(releasedOn)&&!releasedOn.contains(current.element))return;
-
-      // Execute the React click synchronously inside the real touchend event.
-      // If React replaced the node while the finger was down, use the element
-      // currently visible at the release coordinates instead of losing the tap.
-      try{event.preventDefault();}catch(_e){}
-      syntheticClick={element:clickElement,at:Date.now()};
-      try{clickElement.click();}catch(_e){syntheticClick=null;}
-    }
-
-    function onClickCapture(event:any){
-      if(!syntheticClick||!event.isTrusted)return;
-      if(Date.now()-syntheticClick.at>900){syntheticClick=null;return;}
-      var element=actionable(event.target);
-      if(element===syntheticClick.element||
-         (element&&syntheticClick.element&&syntheticClick.element.contains(element))||
-         (element&&syntheticClick.element&&element.contains(syntheticClick.element))){
-        syntheticClick=null;
-        try{event.preventDefault();event.stopImmediatePropagation();}catch(_e){}
-      }
-    }
-
-    var touchOptions:any={capture:true,passive:false};
-    document.addEventListener("touchstart",onTouchStart,touchOptions);
-    document.addEventListener("touchmove",onTouchMove,touchOptions);
-    document.addEventListener("touchend",onTouchEnd,touchOptions);
-    document.addEventListener("touchcancel",onTouchCancel,touchOptions);
-    document.addEventListener("click",onClickCapture,true);
-
-    return function(){
-      document.removeEventListener("touchstart",onTouchStart,true);
-      document.removeEventListener("touchmove",onTouchMove,true);
-      document.removeEventListener("touchend",onTouchEnd,true);
-      document.removeEventListener("touchcancel",onTouchCancel,true);
-      document.removeEventListener("click",onClickCapture,true);
-      root.classList.remove("fainance-ios-native");
-      try{style.remove();}catch(_e){}
-    };
   },[]);
   return null;
 }
@@ -3350,16 +3197,16 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     try{(window as any).fainanceTranslateUi=function(value){return translateUiRuntimeText(value);};}catch(e){}
     return function(){try{delete (window as any).fainanceTranslateUi;}catch(e){}};
   },[lang]);
-  useLayoutEffect(function(){
-    // Le traduzioni legacy vengono applicate prima del rendering visibile e ai soli nodi modificati.
-    // In questo modo React non mostra prima il testo originale e poi quello tradotto, evitando lo sfarfallio.
+  useEffect(function(){
+    // Traduzione legacy senza osservatore continuo: la versione stabile usata
+    // prima della regressione esegue soltanto pochi passaggi dopo i cambi schermata.
+    // Non modifica continuamente il DOM durante un tocco e non sostituisce i
+    // testi della configurazione guidata, che usa la lingua scelta localmente.
     if(typeof document==="undefined")return;
     var root=document.getElementById("root");
     if(!root)return;
     var map=runtimeTranslationMap||{};
-    var normalizedMap={};
-    var translatedTextValues=new WeakMap();
-    var translatedAttributeValues=new WeakMap();
+    var normalizedMap:any={};
     function repairMojibake(value){
       var raw=String(value==null?"":value);
       if(!/[������]/.test(raw))return raw;
@@ -3405,67 +3252,32 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       if(!el||!el.tagName)return true;
       if(["SCRIPT","STYLE","NOSCRIPT","CODE","PRE","TEXTAREA"].includes(el.tagName))return true;
       if(el.closest&&el.closest('[data-no-translate="true"]'))return true;
+      if(el.closest&&el.closest('[data-fainance-local-i18n="true"]'))return true;
       return false;
     }
-    function translateTextNode(node){
+    function applyExactTranslations(){
       try{
-        if(!node||!node.nodeValue||!node.nodeValue.trim())return;
-        var parent=node.parentElement;
-        if(skip(parent))return;
-        var current=String(node.nodeValue);
-        if(translatedTextValues.get(node)===current)return;
-        var next=tx(current);
-        if(next!==current){
-          translatedTextValues.set(node,next);
-          node.nodeValue=next;
-        }else translatedTextValues.set(node,current);
-      }catch(e){}
-    }
-    function translateAttributes(el){
-      try{
-        if(!el||!el.getAttribute||skip(el))return;
-        var saved=translatedAttributeValues.get(el)||{};
-        ["placeholder","title","aria-label","label"].forEach(function(attr){
-          var value=el.getAttribute(attr);
-          if(!value||saved[attr]===value)return;
-          var next=tx(value);
-          saved[attr]=next;
-          if(next!==value)el.setAttribute(attr,next);
-        });
-        translatedAttributeValues.set(el,saved);
-      }catch(e){}
-    }
-    function translateSubtree(node){
-      try{
-        if(!node)return;
-        if(node.nodeType===Node.TEXT_NODE){translateTextNode(node);return;}
-        if(node.nodeType!==Node.ELEMENT_NODE&&node!==root)return;
-        var el=node;
-        if(el!==root&&skip(el))return;
-        if(el!==root)translateAttributes(el);
-        var walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,{acceptNode:function(textNode){
-          if(!textNode.nodeValue||!textNode.nodeValue.trim())return NodeFilter.FILTER_REJECT;
-          var parent=textNode.parentElement;
+        var walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:function(node){
+          if(!node.nodeValue||!node.nodeValue.trim())return NodeFilter.FILTER_REJECT;
+          var parent=(node as any).parentElement;
           return skip(parent)?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT;
         }});
-        while(walker.nextNode())translateTextNode(walker.currentNode);
-        if(el.querySelectorAll)el.querySelectorAll("input[placeholder],textarea[placeholder],[title],[aria-label],option[label]").forEach(translateAttributes);
+        var nodes:any[]=[];
+        while(walker.nextNode())nodes.push(walker.currentNode);
+        nodes.forEach(function(node){var next=tx(node.nodeValue);if(next!==node.nodeValue)node.nodeValue=next;});
+        root.querySelectorAll("input[placeholder],textarea[placeholder],[title],[aria-label],option[label]").forEach(function(el:any){
+          if(skip(el))return;
+          ["placeholder","title","aria-label","label"].forEach(function(attr){var value=el.getAttribute(attr);if(value){var next=tx(value);if(next!==value)el.setAttribute(attr,next);}});
+        });
       }catch(e){}
     }
-    translateSubtree(root);
-    var observer=null;
-    try{
-      observer=new MutationObserver(function(records){
-        records.forEach(function(record){
-          if(record.type==="childList")Array.prototype.forEach.call(record.addedNodes||[],translateSubtree);
-          else if(record.type==="characterData")translateTextNode(record.target);
-          else if(record.type==="attributes")translateAttributes(record.target);
-        });
-      });
-      observer.observe(root,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:["placeholder","title","aria-label","label"]});
-    }catch(e){}
-    return function(){try{if(observer)observer.disconnect();}catch(e){}};
-  },[lang,runtimeTranslationMap]);
+    var timers:any[]=[];
+    function schedule(ms){timers.push(setTimeout(applyExactTranslations,ms));}
+    schedule(20);
+    schedule(180);
+    schedule(650);
+    return function(){timers.forEach(function(timer){clearTimeout(timer);});};
+  },[lang,tab,settingsPage,speseSubTab,addSubTab,historyTab,shareProjectTab,patrimonioMode,aiTab,statsView,runtimeTranslationMap]);
   function monthShortName(index){
     var names={
       it:["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"],
@@ -4139,7 +3951,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var query=String(setupPickerSearch||"").trim().toLowerCase();
     var filtered=query?options.filter(function(x){return String(x.label).toLowerCase().indexOf(query)>=0||String(x.value).toLowerCase().indexOf(query)>=0}):options;
     var pickerLayer=setupPicker?<div role="presentation" onClick={function(e){if(e.target===e.currentTarget)closeSetupPicker()}} style={{position:"fixed",inset:0,zIndex:10090,background:"rgba(0,0,0,.52)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:isMobile?0:18,boxSizing:"border-box",overscrollBehavior:"contain"}}><div role="dialog" aria-modal="true" onClick={function(e){e.stopPropagation()}} style={{width:"100%",maxWidth:540,maxHeight:isMobile?"78vh":"74vh",background:cardBg,border:"1px solid "+borderC,borderRadius:isMobile?"24px 24px 0 0":24,padding:16,boxShadow:"0 -16px 50px rgba(0,0,0,.28)",display:"flex",flexDirection:"column",gap:12,overscrollBehavior:"contain"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><div style={{fontSize:17,fontWeight:950,color:textC}}>{SL("Seleziona un valore")}</div><button type="button" onClick={closeSetupPicker} style={{width:34,height:34,borderRadius:11,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#D92D20",fontSize:21,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>×</button></div>{options.length>12&&<input value={setupPickerSearch} onChange={function(e){setSetupPickerSearch(e.target.value)}} placeholder={SL("Cerca...")} style={{width:"100%",boxSizing:"border-box",border:"1px solid "+borderC,borderRadius:12,padding:"11px 12px",fontSize:14,background:dark?"#1E1E30":"#fff",color:textC,outline:"none"}}/>}<div style={{overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",touchAction:"pan-y",display:"flex",flexDirection:"column",gap:7,paddingBottom:4}}>{filtered.map(function(x){var active=String(currentPickerValue())===String(x.value);return <button key={x.value} type="button" onClick={function(e){e.preventDefault();e.stopPropagation();pickValue(x.value)}} style={{width:"100%",border:"1px solid "+(active?primary:borderC),background:active?(dark?primary+"28":primary+"12"):(dark?"#252535":"#fff"),color:textC,borderRadius:12,padding:"13px",fontSize:14,fontWeight:active?950:750,textAlign:"left",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span>{x.label}</span>{active&&<span style={{color:primary,fontWeight:950}}>✓</span>}</button>})}{filtered.length===0&&<div style={{textAlign:"center",padding:20,color:subC,fontSize:13}}>{SL("Nessun risultato")}</div>}</div></div></div>:null;
-    return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10060,background:dark?"rgba(8,10,18,.94)":"rgba(245,248,252,.97)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(calc(env(safe-area-inset-top, 0px) + 16px), calc(var(--fainance-native-safe-top, 0px) + 16px), 54px) 16px max(calc(env(safe-area-inset-bottom, 0px) + 16px), calc(var(--fainance-native-safe-bottom, 0px) + 16px), 24px)",boxSizing:"border-box",overscrollBehavior:"contain",overflowY:"auto"}}><div style={{width:"100%",maxWidth:isMobile?440:540,maxHeight:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:cardBg,border:"1px solid "+borderC,borderRadius:26,padding:isMobile?20:26,boxShadow:"0 24px 70px rgba(0,0,0,.22)",position:"relative"}}><button type="button" onClick={skipInitialSetup} aria-label={SL("Chiudi configurazione")} style={{position:"absolute",right:13,top:13,zIndex:2,width:36,height:36,border:"1px solid #F7B4B4",borderRadius:12,background:"#FFE7E7",color:"#D92D20",fontSize:23,fontWeight:950,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"}}>×</button><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:18,paddingRight:44}}><div><div style={{fontSize:11,fontWeight:950,color:primary,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{SL("Passaggio")} {step+1} {SL("di")} {maxStep+1}</div><div style={{fontSize:23,fontWeight:950,color:textC,lineHeight:1.15}}>{SL(title)}</div><div style={{fontSize:13,color:subC,marginTop:6,lineHeight:1.4}}>{SL(subtitle)}</div></div><div style={{fontSize:26}}>⚙️</div></div><div style={{height:6,borderRadius:999,background:dark?"#35354A":"#E8ECF2",overflow:"hidden",marginBottom:20}}><div style={{height:"100%",width:((step+1)/(maxStep+1)*100)+"%",background:"linear-gradient(90deg,"+primary+",#7F77DD)",transition:"width .2s"}}/></div><div style={{display:"flex",flexDirection:"column",gap:12}}>{body}</div>{essential&&step===4?<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginTop:22}}><button type="button" onClick={function(){completeEssentialSetup(false)}} style={{border:"1px solid "+primary,background:dark?"#252535":"#fff",color:primary,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button><button type="button" onClick={function(){completeEssentialSetup(true)}} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Configurazione avanzata")}</button></div>:(!essential&&step===2)?<button type="button" onClick={finishAdvancedSetup} style={{width:"100%",marginTop:22,border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:15,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button>:<><div style={{display:"grid",gridTemplateColumns:step>0?"1fr 1.5fr":"1fr",gap:10,marginTop:22}}>{step>0&&<button type="button" onClick={function(){setInitialSetupStep(step-1)}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer",touchAction:"manipulation"}}>{SL("Indietro")}</button>}<button type="button" onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL((!essential&&step===1)||(essential&&step===3)?"Termina":"Avanti")}</button></div><button type="button" onClick={skipInitialSetup} style={{width:"100%",marginTop:10,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:850,cursor:"pointer",padding:8,touchAction:"manipulation"}}>{SL("Salta configurazione")}</button></>}</div>{pickerLayer}</div>;
+    return <div role="dialog" aria-modal="true" data-fainance-local-i18n="true" style={{position:"fixed",inset:0,zIndex:10060,background:dark?"rgba(8,10,18,.94)":"rgba(245,248,252,.97)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(calc(env(safe-area-inset-top, 0px) + 16px), calc(var(--fainance-native-safe-top, 0px) + 16px), 54px) 16px max(calc(env(safe-area-inset-bottom, 0px) + 16px), calc(var(--fainance-native-safe-bottom, 0px) + 16px), 24px)",boxSizing:"border-box",overscrollBehavior:"contain",overflowY:"auto"}}><div style={{width:"100%",maxWidth:isMobile?440:540,maxHeight:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:cardBg,border:"1px solid "+borderC,borderRadius:26,padding:isMobile?20:26,boxShadow:"0 24px 70px rgba(0,0,0,.22)",position:"relative"}}><button type="button" onClick={skipInitialSetup} aria-label={SL("Chiudi configurazione")} style={{position:"absolute",right:13,top:13,zIndex:2,width:36,height:36,border:"1px solid #F7B4B4",borderRadius:12,background:"#FFE7E7",color:"#D92D20",fontSize:23,fontWeight:950,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"}}>×</button><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:18,paddingRight:44}}><div><div style={{fontSize:11,fontWeight:950,color:primary,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{SL("Passaggio")} {step+1} {SL("di")} {maxStep+1}</div><div style={{fontSize:23,fontWeight:950,color:textC,lineHeight:1.15}}>{SL(title)}</div><div style={{fontSize:13,color:subC,marginTop:6,lineHeight:1.4}}>{SL(subtitle)}</div></div><div style={{fontSize:26}}>⚙️</div></div><div style={{height:6,borderRadius:999,background:dark?"#35354A":"#E8ECF2",overflow:"hidden",marginBottom:20}}><div style={{height:"100%",width:((step+1)/(maxStep+1)*100)+"%",background:"linear-gradient(90deg,"+primary+",#7F77DD)",transition:"width .2s"}}/></div><div style={{display:"flex",flexDirection:"column",gap:12}}>{body}</div>{essential&&step===4?<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginTop:22}}><button type="button" onClick={function(){completeEssentialSetup(false)}} style={{border:"1px solid "+primary,background:dark?"#252535":"#fff",color:primary,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button><button type="button" onClick={function(){completeEssentialSetup(true)}} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Configurazione avanzata")}</button></div>:(!essential&&step===2)?<button type="button" onClick={finishAdvancedSetup} style={{width:"100%",marginTop:22,border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:15,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button>:<><div style={{display:"grid",gridTemplateColumns:step>0?"1fr 1.5fr":"1fr",gap:10,marginTop:22}}>{step>0&&<button type="button" onClick={function(){setInitialSetupStep(step-1)}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer",touchAction:"manipulation"}}>{SL("Indietro")}</button>}<button type="button" onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL((!essential&&step===1)||(essential&&step===3)?"Termina":"Avanti")}</button></div><button type="button" onClick={skipInitialSetup} style={{width:"100%",marginTop:10,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:850,cursor:"pointer",padding:8,touchAction:"manipulation"}}>{SL("Salta configurazione")}</button></>}</div>{pickerLayer}</div>;
   }
 
   function OnboardingGuideModal(){
@@ -10595,7 +10407,6 @@ function parseShareVoiceCommand(text){
     </div>}
     <GlobalToastHost/>
     <GlobalNumericInputAssist/>
-    <GlobalIosInteractionAssist/>
     {onboardingGuideOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&OnboardingGuideModal()}
     {initialSetupOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&InitialSetupModal()}
     {appUpdatePopup&&<AppUpdateModal/>}
