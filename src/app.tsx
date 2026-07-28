@@ -1249,6 +1249,70 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
   </div>;
 }
 
+function DiagnosticOverlay(){
+  var [open,setOpen]=useState(true);
+  var [lines,setLines]=useState<any>([]);
+  var [longTasks,setLongTasks]=useState(0);
+  var counterRef=useRef(0);
+  useEffect(function(){
+    function push(msg){
+      counterRef.current++;
+      var n=counterRef.current;
+      var t=new Date();
+      var ts=String(t.getMinutes()).padStart(2,"0")+":"+String(t.getSeconds()).padStart(2,"0")+"."+String(t.getMilliseconds()).padStart(3,"0");
+      setLines(function(prev){var next=prev.concat([n+" ["+ts+"] "+msg]);return next.length>40?next.slice(next.length-40):next;});
+    }
+    function describe(e){
+      var el=e.target;
+      var tag=el&&el.tagName?el.tagName.toLowerCase():"?";
+      var cls=(el&&el.className&&typeof el.className==="string")?("."+el.className.split(" ").slice(0,2).join(".")):"";
+      var x=Math.round(e.clientX!==undefined?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:-1));
+      var y=Math.round(e.clientY!==undefined?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:-1));
+      return e.type+" -> <"+tag+cls+"> ("+x+","+y+")";
+    }
+    function onTouchStart(e){push(describe(e));}
+    function onPointerDown(e){push(describe(e));}
+    function onClick(e){push(describe(e));}
+    document.addEventListener("touchstart",onTouchStart,true);
+    document.addEventListener("pointerdown",onPointerDown,true);
+    document.addEventListener("click",onClick,true);
+    var po:any=null;
+    try{
+      po=new (window as any).PerformanceObserver(function(list){
+        list.getEntries().forEach(function(entry){
+          setLongTasks(function(c){return c+1;});
+          push("LONGTASK "+Math.round(entry.duration)+"ms");
+        });
+      });
+      po.observe({entryTypes:["longtask"]});
+    }catch(e){}
+    push("diagnostica avviata");
+    return function(){
+      document.removeEventListener("touchstart",onTouchStart,true);
+      document.removeEventListener("pointerdown",onPointerDown,true);
+      document.removeEventListener("click",onClick,true);
+      try{if(po)po.disconnect();}catch(e){}
+    };
+  },[]);
+  function copyLog(){
+    var text=lines.join("\n");
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text);}
+    }catch(e){}
+  }
+  if(!open)return <button onClick={function(){setOpen(true);}} style={{position:"fixed",top:6,right:6,zIndex:2147483647,background:"#111",color:"#0f0",border:"1px solid #0f0",borderRadius:8,padding:"4px 8px",fontSize:10,fontFamily:"monospace"}}>DBG</button>;
+  return <div style={{position:"fixed",top:0,left:0,right:0,zIndex:2147483647,background:"rgba(0,0,0,0.88)",color:"#0f0",fontFamily:"monospace",fontSize:10,padding:"6px 6px 6px 6px",maxHeight:"38vh",overflowY:"auto",boxSizing:"border-box",WebkitOverflowScrolling:"touch"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+      <div style={{fontWeight:900}}>DIAGNOSTICA TAP — longtasks: {longTasks}</div>
+      <div style={{display:"flex",gap:6}}>
+        <button onClick={copyLog} style={{background:"#0f0",color:"#000",border:"none",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:900}}>Copia</button>
+        <button onClick={function(){setOpen(false);}} style={{background:"#333",color:"#fff",border:"1px solid #666",borderRadius:6,padding:"3px 8px",fontSize:10}}>×</button>
+      </div>
+    </div>
+    {lines.length===0?<div>in attesa di tocchi...</div>:lines.map(function(l,i){return <div key={i} style={{whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{l}</div>;})}
+  </div>;
+}
+
 function AppWithLogin(){
   var [fbUser,setFbUser]=useState(undefined); // undefined=loading, null=not logged in
   var [userData,setUserData]=useState(null);
@@ -1316,10 +1380,10 @@ function AppWithLogin(){
     return function(){cancelled=true;clearTimeout(timer);try{if(unsub)unsub();}catch(e){}};
   },[]);
 
-  if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
+  if(fbUser===undefined)return <><DiagnosticOverlay/><div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
     <FAInanceLogo size={72}/>
     <div style={{fontSize:13,color:"#888"}}>Caricamento...</div>
-  </div>;
+  </div></>;
 
   async function forceLogout(){
     try{
@@ -1337,7 +1401,7 @@ function AppWithLogin(){
   }
 
   if(!fbUser)return <LoginScreen onLogin={function(u,authUser){var realUser=authUser||(fbAuth&&fbAuth.currentUser?fbAuth.currentUser:null);if(realUser&&realUser.uid){finishAuthUser(realUser);}else if(u&&u.id){setUserData(u);setFbUser(fainanceMinimalAuthUser(u));}else{setUserData(null);setFbUser(null);}}}/>;
-  return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
+  return <><DiagnosticOverlay/><App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/></>;
 }
 
 function StableNestedPanelHost({render}:{render:()=>any}){
