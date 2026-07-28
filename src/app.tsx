@@ -106,6 +106,92 @@ function GlobalNumericInputAssist(){
   return null;
 }
 
+// iOS WKWebView can occasionally swallow a short tap while its scroll view is
+// settling. This native-only assist replays only taps for which no click event
+// was delivered, so Android and the web remain completely unchanged.
+function GlobalIosInteractionAssist(){
+  useEffect(function(){
+    if(fainanceNativePlatform()!=="ios"||typeof document==="undefined")return;
+    var root=document.documentElement;
+    root.classList.add("fainance-ios-native");
+    var style=document.createElement("style");
+    style.id="fainance-ios-interaction-assist";
+    style.textContent=[
+      ".fainance-ios-native button,.fainance-ios-native a[href],.fainance-ios-native [role='button'],.fainance-ios-native label{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}",
+      ".fainance-ios-native button{-webkit-appearance:none;}",
+      ".fainance-ios-native body{overscroll-behavior:none;}"
+    ].join("");
+    if(!document.getElementById(style.id))document.head.appendChild(style);
+
+    var press:any=null;
+    var pendingTap:any=null;
+    var suppressTrustedClick:any=null;
+    function actionable(target:any){
+      var element=target&&target.closest?target.closest("button,a[href],[role='button'],label,input[type='checkbox'],input[type='radio']"):null;
+      if(!element||!element.isConnected)return null;
+      if(element.matches&&element.matches("[disabled],[aria-disabled='true'],[data-fainance-no-tap-assist='true']"))return null;
+      return element;
+    }
+    function onPointerDown(event:any){
+      if(event.pointerType&&event.pointerType!=="touch")return;
+      var element=actionable(event.target);
+      if(!element)return;
+      pendingTap=null;
+      press={element:element,pointerId:event.pointerId,startX:Number(event.clientX||0),startY:Number(event.clientY||0),cancelled:false,clicked:false};
+    }
+    function onPointerMove(event:any){
+      if(!press||press.pointerId!==event.pointerId)return;
+      if(Math.abs(Number(event.clientX||0)-press.startX)>10||Math.abs(Number(event.clientY||0)-press.startY)>10)press.cancelled=true;
+    }
+    function onPointerCancel(event:any){
+      if(press&&press.pointerId===event.pointerId)press=null;
+    }
+    function onClickCapture(event:any){
+      var element=actionable(event.target);
+      if(suppressTrustedClick&&event.isTrusted&&element===suppressTrustedClick.element&&Date.now()-suppressTrustedClick.at<700){
+        suppressTrustedClick=null;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      if(press&&element===press.element)press.clicked=true;
+      if(pendingTap&&element===pendingTap.element)pendingTap.clicked=true;
+    }
+    function onPointerUp(event:any){
+      if(!press||press.pointerId!==event.pointerId)return;
+      var current=press;
+      press=null;
+      if(current.cancelled)return;
+      pendingTap=current;
+      setTimeout(function(){
+        if(pendingTap!==current)return;
+        pendingTap=null;
+        if(current.clicked||!current.element||!current.element.isConnected)return;
+        suppressTrustedClick={element:current.element,at:Date.now()};
+        try{current.element.click();}catch(e){suppressTrustedClick=null;}
+        setTimeout(function(){
+          if(suppressTrustedClick&&suppressTrustedClick.element===current.element)suppressTrustedClick=null;
+        },750);
+      },80);
+    }
+    document.addEventListener("pointerdown",onPointerDown,true);
+    document.addEventListener("pointermove",onPointerMove,true);
+    document.addEventListener("pointerup",onPointerUp,true);
+    document.addEventListener("pointercancel",onPointerCancel,true);
+    document.addEventListener("click",onClickCapture,true);
+    return function(){
+      document.removeEventListener("pointerdown",onPointerDown,true);
+      document.removeEventListener("pointermove",onPointerMove,true);
+      document.removeEventListener("pointerup",onPointerUp,true);
+      document.removeEventListener("pointercancel",onPointerCancel,true);
+      document.removeEventListener("click",onClickCapture,true);
+      root.classList.remove("fainance-ios-native");
+      try{style.remove();}catch(e){}
+    };
+  },[]);
+  return null;
+}
+
 function StableCurrencyPicker({value,onChange,exclude,allowNone,dark,textC,subC,borderC,translate}:any){
   var [query,setQuery]=useState("");
   var inputRef=useRef<any>(null);
@@ -2059,8 +2145,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [termsAccepted,setTermsAccepted]=useStorage(userKey("terms_accepted_v1"),false);
   var [privacyAccepted,setPrivacyAccepted]=useStorage(userKey("privacy_accepted_v1"),false);
   var [metaEventsConsent,setMetaEventsConsent]=useStorage(userKey("meta_events_consent_v1"),false);
-  // Keep the legal modal draft in the parent component. TermsAcceptanceModal is declared
-  // inside App and can otherwise be remounted whenever App rerenders, resetting taps.
+  // Keep the complete legal modal state in App. The modal function is nested and can
+  // otherwise be remounted during account synchronization on iOS.
+  var [legalView,setLegalView]=useState("main");
   var [legalTermsChecked,setLegalTermsChecked]=useState(!!termsAccepted);
   var [legalPrivacyChecked,setLegalPrivacyChecked]=useState(!!privacyAccepted);
   var [legalMetaChecked,setLegalMetaChecked]=useState(!!metaEventsConsent);
@@ -2071,6 +2158,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   useEffect(function(){
     var committed=readLegalAcceptanceCommittedLocal();
     legalAcceptingRef.current=false;
+    setLegalView("main");
     setLegalAcceptanceCommitted(committed);
     setLegalTermsChecked(committed?true:!!termsAccepted);
     setLegalPrivacyChecked(committed?true:!!privacyAccepted);
@@ -2115,6 +2203,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   var [setupPickerSearch,setSetupPickerSearch]=useState("");
   var setupPickerActionRef=useRef(false);
   var onboardingGuideTransitionRef=useRef(false);
+  var onboardingGuideImmediateRef=useRef(false);
   var onboardingGuideLocalSeenRef=useRef(false);
   var onboardingFlowCompleteRef=useRef(false);
   function readLocalOnboardingFlag(name){try{return localStorage.getItem(userKey(name))==="1";}catch(e){return false;}}
@@ -2126,6 +2215,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     onboardingFlowCompleteRef.current=flowDone;
     setupPickerActionRef.current=false;
     onboardingGuideTransitionRef.current=false;
+    onboardingGuideImmediateRef.current=false;
     if(flowDone){
       setOnboardingGuideSeen(true);
       setInitialSetupStatus("complete");
@@ -3774,7 +3864,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var t=setTimeout(function(){
       setOnboardingGuideStep(0);
       setOnboardingGuideOpen(true);
-    },850);
+    },160);
     return function(){clearTimeout(t);};
   },[appLocked,termsAccepted,privacyAccepted,onboardingGuideSeen,onboardingGuideOpen,initialSetupOpen,userId,legalAcceptanceDate]);
 
@@ -3871,7 +3961,9 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       try{
         var table:any=(TRANSLATIONS as any)[code]||(TRANSLATIONS as any).it||{};
         var translated=table[raw];
-        if(typeof translated==="string"&&translated)return translated;
+        if(typeof translated==="string"&&translated&&translated!==raw)return translated;
+        var complete=translateFainanceText(raw,code);
+        if(typeof complete==="string"&&complete)return complete;
       }catch(e){}
       return raw;
     }
@@ -3902,10 +3994,12 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     function cleanSetupOptionName(value:any){return String(value||"").replace(/^\s*[+＋]\s*/,"").trim();}
     function setupOptionIcon(item:any,kind:any){
       var icon=String((item&&item.icon)||"").trim();
-      if(icon!=="+"&&icon!=="＋")return icon;
-      var defaults=kind==="expense"?DEFAULT_CATS:(kind==="method"?DEFAULT_METHODS:[]);
+      if(icon&&icon!=="+"&&icon!=="＋")return icon;
+      var defaults=kind==="expense"?DEFAULT_CATS:(kind==="method"?DEFAULT_METHODS:(kind==="income"?INCOME_TYPES:[]));
       var canonical=(defaults||[]).find(function(x){return String(x.id)===String(item&&item.id);});
-      return String((canonical&&canonical.icon)||"").trim();
+      var fallback=String((canonical&&canonical.icon)||"").trim();
+      if(fallback&&fallback!=="+"&&fallback!=="＋")return fallback;
+      return kind==="income"?"💰":(kind==="method"?"💳":"📦");
     }
     function setupOptionLabel(item:any,kind:any){
       var icon=setupOptionIcon(item,kind);
@@ -3978,7 +4072,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     var query=String(setupPickerSearch||"").trim().toLowerCase();
     var filtered=query?options.filter(function(x){return String(x.label).toLowerCase().indexOf(query)>=0||String(x.value).toLowerCase().indexOf(query)>=0}):options;
     var pickerLayer=setupPicker?<div role="presentation" onClick={function(e){if(e.target===e.currentTarget)closeSetupPicker()}} style={{position:"fixed",inset:0,zIndex:10090,background:"rgba(0,0,0,.52)",display:"flex",alignItems:"flex-end",justifyContent:"center",padding:isMobile?0:18,boxSizing:"border-box",overscrollBehavior:"contain"}}><div role="dialog" aria-modal="true" onClick={function(e){e.stopPropagation()}} style={{width:"100%",maxWidth:540,maxHeight:isMobile?"78vh":"74vh",background:cardBg,border:"1px solid "+borderC,borderRadius:isMobile?"24px 24px 0 0":24,padding:16,boxShadow:"0 -16px 50px rgba(0,0,0,.28)",display:"flex",flexDirection:"column",gap:12,overscrollBehavior:"contain"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><div style={{fontSize:17,fontWeight:950,color:textC}}>{SL("Seleziona un valore")}</div><button type="button" onClick={closeSetupPicker} style={{width:34,height:34,borderRadius:11,border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:"#D92D20",fontSize:21,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>×</button></div>{options.length>12&&<input value={setupPickerSearch} onChange={function(e){setSetupPickerSearch(e.target.value)}} placeholder={SL("Cerca...")} style={{width:"100%",boxSizing:"border-box",border:"1px solid "+borderC,borderRadius:12,padding:"11px 12px",fontSize:14,background:dark?"#1E1E30":"#fff",color:textC,outline:"none"}}/>}<div style={{overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",touchAction:"pan-y",display:"flex",flexDirection:"column",gap:7,paddingBottom:4}}>{filtered.map(function(x){var active=String(currentPickerValue())===String(x.value);return <button key={x.value} type="button" onClick={function(e){e.preventDefault();e.stopPropagation();pickValue(x.value)}} style={{width:"100%",border:"1px solid "+(active?primary:borderC),background:active?(dark?primary+"28":primary+"12"):(dark?"#252535":"#fff"),color:textC,borderRadius:12,padding:"13px",fontSize:14,fontWeight:active?950:750,textAlign:"left",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,touchAction:"manipulation",WebkitTapHighlightColor:"transparent"}}><span>{x.label}</span>{active&&<span style={{color:primary,fontWeight:950}}>✓</span>}</button>})}{filtered.length===0&&<div style={{textAlign:"center",padding:20,color:subC,fontSize:13}}>{SL("Nessun risultato")}</div>}</div></div></div>:null;
-    return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10060,background:dark?"rgba(8,10,18,.94)":"rgba(245,248,252,.97)",display:"flex",alignItems:"center",justifyContent:"center",padding:16,boxSizing:"border-box",overscrollBehavior:"contain"}}><div style={{width:"100%",maxWidth:isMobile?440:540,maxHeight:"95vh",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:cardBg,border:"1px solid "+borderC,borderRadius:26,padding:isMobile?20:26,boxShadow:"0 24px 70px rgba(0,0,0,.22)",position:"relative"}}><button type="button" onClick={skipInitialSetup} aria-label={SL("Chiudi configurazione")} style={{position:"absolute",right:13,top:13,zIndex:2,width:36,height:36,border:"1px solid #F7B4B4",borderRadius:12,background:"#FFE7E7",color:"#D92D20",fontSize:23,fontWeight:950,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"}}>×</button><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:18,paddingRight:44}}><div><div style={{fontSize:11,fontWeight:950,color:primary,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{SL("Passaggio")} {step+1} {SL("di")} {maxStep+1}</div><div style={{fontSize:23,fontWeight:950,color:textC,lineHeight:1.15}}>{SL(title)}</div><div style={{fontSize:13,color:subC,marginTop:6,lineHeight:1.4}}>{SL(subtitle)}</div></div><div style={{fontSize:26}}>⚙️</div></div><div style={{height:6,borderRadius:999,background:dark?"#35354A":"#E8ECF2",overflow:"hidden",marginBottom:20}}><div style={{height:"100%",width:((step+1)/(maxStep+1)*100)+"%",background:"linear-gradient(90deg,"+primary+",#7F77DD)",transition:"width .2s"}}/></div><div style={{display:"flex",flexDirection:"column",gap:12}}>{body}</div>{essential&&step===4?<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginTop:22}}><button type="button" onClick={function(){completeEssentialSetup(false)}} style={{border:"1px solid "+primary,background:dark?"#252535":"#fff",color:primary,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button><button type="button" onClick={function(){completeEssentialSetup(true)}} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Configurazione avanzata")}</button></div>:(!essential&&step===2)?<button type="button" onClick={finishAdvancedSetup} style={{width:"100%",marginTop:22,border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:15,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button>:<><div style={{display:"grid",gridTemplateColumns:step>0?"1fr 1.5fr":"1fr",gap:10,marginTop:22}}>{step>0&&<button type="button" onClick={function(){setInitialSetupStep(step-1)}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer",touchAction:"manipulation"}}>{SL("Indietro")}</button>}<button type="button" onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL((!essential&&step===1)||(essential&&step===3)?"Termina":"Avanti")}</button></div><button type="button" onClick={skipInitialSetup} style={{width:"100%",marginTop:10,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:850,cursor:"pointer",padding:8,touchAction:"manipulation"}}>{SL("Salta configurazione")}</button></>}</div>{pickerLayer}</div>;
+    return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10060,background:dark?"rgba(8,10,18,.94)":"rgba(245,248,252,.97)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(calc(env(safe-area-inset-top, 0px) + 16px), calc(var(--fainance-native-safe-top, 0px) + 16px), 54px) 16px max(calc(env(safe-area-inset-bottom, 0px) + 16px), calc(var(--fainance-native-safe-bottom, 0px) + 16px), 24px)",boxSizing:"border-box",overscrollBehavior:"contain",overflowY:"auto"}}><div style={{width:"100%",maxWidth:isMobile?440:540,maxHeight:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:cardBg,border:"1px solid "+borderC,borderRadius:26,padding:isMobile?20:26,boxShadow:"0 24px 70px rgba(0,0,0,.22)",position:"relative"}}><button type="button" onClick={skipInitialSetup} aria-label={SL("Chiudi configurazione")} style={{position:"absolute",right:13,top:13,zIndex:2,width:36,height:36,border:"1px solid #F7B4B4",borderRadius:12,background:"#FFE7E7",color:"#D92D20",fontSize:23,fontWeight:950,lineHeight:1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",touchAction:"manipulation"}}>×</button><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:18,paddingRight:44}}><div><div style={{fontSize:11,fontWeight:950,color:primary,textTransform:"uppercase",letterSpacing:.6,marginBottom:6}}>{SL("Passaggio")} {step+1} {SL("di")} {maxStep+1}</div><div style={{fontSize:23,fontWeight:950,color:textC,lineHeight:1.15}}>{SL(title)}</div><div style={{fontSize:13,color:subC,marginTop:6,lineHeight:1.4}}>{SL(subtitle)}</div></div><div style={{fontSize:26}}>⚙️</div></div><div style={{height:6,borderRadius:999,background:dark?"#35354A":"#E8ECF2",overflow:"hidden",marginBottom:20}}><div style={{height:"100%",width:((step+1)/(maxStep+1)*100)+"%",background:"linear-gradient(90deg,"+primary+",#7F77DD)",transition:"width .2s"}}/></div><div style={{display:"flex",flexDirection:"column",gap:12}}>{body}</div>{essential&&step===4?<div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginTop:22}}><button type="button" onClick={function(){completeEssentialSetup(false)}} style={{border:"1px solid "+primary,background:dark?"#252535":"#fff",color:primary,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button><button type="button" onClick={function(){completeEssentialSetup(true)}} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Configurazione avanzata")}</button></div>:(!essential&&step===2)?<button type="button" onClick={finishAdvancedSetup} style={{width:"100%",marginTop:22,border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:15,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL("Aprire fAInance")}</button>:<><div style={{display:"grid",gridTemplateColumns:step>0?"1fr 1.5fr":"1fr",gap:10,marginTop:22}}>{step>0&&<button type="button" onClick={function(){setInitialSetupStep(step-1)}} style={{border:"1px solid "+borderC,background:dark?"#252535":"#fff",color:textC,borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:900,cursor:"pointer",touchAction:"manipulation"}}>{SL("Indietro")}</button>}<button type="button" onClick={next} style={{border:"none",background:"linear-gradient(135deg,"+primary+",#7F77DD)",color:"#fff",borderRadius:15,padding:"13px 14px",fontSize:14,fontWeight:950,cursor:"pointer",touchAction:"manipulation"}}>{SL((!essential&&step===1)||(essential&&step===3)?"Termina":"Avanti")}</button></div><button type="button" onClick={skipInitialSetup} style={{width:"100%",marginTop:10,border:"none",background:"transparent",color:subC,fontSize:12,fontWeight:850,cursor:"pointer",padding:8,touchAction:"manipulation"}}>{SL("Salta configurazione")}</button></>}</div>{pickerLayer}</div>;
   }
 
   function OnboardingGuideModal(){
@@ -4025,8 +4119,8 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         </div>
       </div>;
     }
-    return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10050,background:dark?"rgba(10,10,18,.92)":"rgba(255,255,255,.96)",display:"flex",alignItems:"center",justifyContent:"center",padding:18,boxSizing:"border-box"}}>
-      <div style={{width:"100%",maxWidth:isMobile?430:520,maxHeight:"94vh",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:dark?"#1E1E30":"#fff",border:"1px solid "+(dark?"#34344a":"#E7EAF5"),borderRadius:28,padding:isMobile?"22px 20px 18px":"28px 28px 22px",boxShadow:dark?"0 24px 70px rgba(0,0,0,.55)":"0 24px 70px rgba(31,60,120,.18)",position:"relative",textAlign:"center"}}>
+    return <div role="dialog" aria-modal="true" style={{position:"fixed",inset:0,zIndex:10050,background:dark?"rgba(10,10,18,.92)":"rgba(255,255,255,.96)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(calc(env(safe-area-inset-top, 0px) + 16px), calc(var(--fainance-native-safe-top, 0px) + 16px), 54px) 18px max(calc(env(safe-area-inset-bottom, 0px) + 16px), calc(var(--fainance-native-safe-bottom, 0px) + 16px), 24px)",boxSizing:"border-box",overflowY:"auto",overscrollBehavior:"contain"}}>
+      <div style={{width:"100%",maxWidth:isMobile?430:520,maxHeight:"100%",overflowY:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain",background:dark?"#1E1E30":"#fff",border:"1px solid "+(dark?"#34344a":"#E7EAF5"),borderRadius:28,padding:isMobile?"22px 20px 18px":"28px 28px 22px",boxShadow:dark?"0 24px 70px rgba(0,0,0,.55)":"0 24px 70px rgba(31,60,120,.18)",position:"relative",textAlign:"center"}}>
         <button type="button" onClick={markOnboardingGuideDone} aria-label={translateUiRuntimeText("Salta guida")} style={{position:"absolute",right:14,top:14,border:"1px solid "+borderC,background:dark?"#252535":"#F8FAFF",color:subC,borderRadius:12,width:36,height:36,fontSize:20,fontWeight:900,cursor:"pointer",lineHeight:1}}>×</button>
         <div style={{fontSize:11,fontWeight:900,color:primary,letterSpacing:.5,textTransform:"uppercase",marginBottom:12}}>{translateUiRuntimeText("Guida rapida")}</div>
         {illustration()}
@@ -7537,7 +7631,6 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   }
 
   function TermsAcceptanceModal(){
-    var [legalView,setLegalView]=useState("main");
     var termsChecked=!!legalTermsChecked;
     var privacyChecked=!!legalPrivacyChecked;
     var metaChecked=!!legalMetaChecked;
@@ -7576,6 +7669,15 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       setPrivacyAccepted(true);
       setMetaEventsConsent(!!metaChecked);
       setLegalAcceptanceDate(acceptedAt);
+      setLegalView("main");
+      if(!onboardingFlowCompleteRef.current&&!onboardingGuideLocalSeenRef.current&&!onboardingGuideImmediateRef.current){
+        onboardingGuideImmediateRef.current=true;
+        setTimeout(function(){
+          if(onboardingFlowCompleteRef.current||onboardingGuideLocalSeenRef.current)return;
+          setOnboardingGuideStep(0);
+          setOnboardingGuideOpen(true);
+        },120);
+      }
       setToast({text:LT("Autorizzazioni salvate"),type:"success",translated:true});
     }
     function LegalDetail({type}){
@@ -7586,29 +7688,29 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
           <div style={{fontSize:16,fontWeight:900,color:textC}}>{LT(isTerms?"Termini di utilizzo":"Informativa Privacy")}</div>
         </div>
         <div style={{maxHeight:"58vh",overflowY:"auto",paddingRight:4}}>{isTerms?<TermsAndConditionsContent/>:<PrivacyPolicyContent showConsentControl={false}/>}</div>
-        <button type="button" onClick={function(){if(isTerms)setLegalTermsChecked(true);else setLegalPrivacyChecked(true);setLegalView("main");}} style={{width:"100%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:800,cursor:"pointer",boxShadow:"0 4px 16px rgba(127,119,221,0.35)",marginTop:14}}>{LT("Ho letto")}</button>
+        <button type="button" onClick={function(){if(isTerms)setLegalTermsChecked(true);else setLegalPrivacyChecked(true);setLegalView("main");}} style={{width:"100%",background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",minHeight:48,fontSize:15,fontWeight:800,cursor:"pointer",touchAction:"manipulation",WebkitTapHighlightColor:"transparent",boxShadow:"0 4px 16px rgba(127,119,221,0.35)",marginTop:14}}>{LT("Ho letto")}</button>
       </div>;
     }
-    if(legalView==="terms")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="terms"/></div></div>;
-    if(legalView==="privacy")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="privacy"/></div></div>;
+    if(legalView==="terms")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:10080,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(calc(env(safe-area-inset-top, 0px) + 16px), calc(var(--fainance-native-safe-top, 0px) + 16px), 54px) 16px max(calc(env(safe-area-inset-bottom, 0px) + 16px), calc(var(--fainance-native-safe-bottom, 0px) + 16px), 24px)",boxSizing:"border-box",overflowY:"auto",overscrollBehavior:"contain"}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="terms"/></div></div>;
+    if(legalView==="privacy")return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:10080,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(calc(env(safe-area-inset-top, 0px) + 16px), calc(var(--fainance-native-safe-top, 0px) + 16px), 54px) 16px max(calc(env(safe-area-inset-bottom, 0px) + 16px), calc(var(--fainance-native-safe-bottom, 0px) + 16px), 24px)",boxSizing:"border-box",overflowY:"auto",overscrollBehavior:"contain"}}><div style={{width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}><LegalDetail type="privacy"/></div></div>;
     function checkMark(checked){return <span aria-hidden="true" style={{width:20,height:20,marginTop:1,borderRadius:4,border:"2px solid "+(checked?"#7F77DD":borderC),background:checked?"#7F77DD":"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:900,flexShrink:0,boxSizing:"border-box"}}>{checked?"✓":""}</span>;}
-    return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:900,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"17vh 16px 3vh",boxSizing:"border-box",overflowY:"auto"}}>
+    return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:10080,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"max(calc(env(safe-area-inset-top, 0px) + 16px), calc(var(--fainance-native-safe-top, 0px) + 16px), 54px) 16px max(calc(env(safe-area-inset-bottom, 0px) + 16px), calc(var(--fainance-native-safe-bottom, 0px) + 16px), 24px)",boxSizing:"border-box",overflowY:"auto",overscrollBehavior:"contain"}}>
       <div style={{width:"100%",maxWidth:520,maxHeight:"88vh",overflowY:"auto",background:cardBg,borderRadius:22,border:"1px solid "+borderC,boxShadow:"0 14px 60px rgba(0,0,0,0.32)",padding:20}}>
         <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14}}><FAInanceLogo size={44}/><div><div style={{fontSize:18,fontWeight:900,color:textC}}>{LT("Autorizzazioni")}</div><div style={{fontSize:12,color:subC}}>{LT("Prima di continuare devi leggere e accettare i documenti obbligatori.")}</div></div></div>
         <div style={{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:14}}>
-            <button type="button" aria-pressed={termsChecked} onClick={function(){setLegalTermsChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:0,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(termsChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}>{LT("Dichiaro di aver letto e accettato i Termini di utilizzo")} <span style={{color:"#E24B4A"}}>*</span></span></button>
-            <button type="button" onClick={function(){setLegalView("terms");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 30px",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{LT("Leggi i Termini di utilizzo")}</button>
+            <button type="button" aria-pressed={termsChecked} onClick={function(){setLegalTermsChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:"2px 0",minHeight:44,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(termsChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}>{LT("Dichiaro di aver letto e accettato i Termini di utilizzo")} <span style={{color:"#E24B4A"}}>*</span></span></button>
+            <button type="button" onClick={function(){setLegalView("terms");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 30px",minHeight:44,display:"flex",alignItems:"center",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{LT("Leggi i Termini di utilizzo")}</button>
           </div>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:14}}>
-            <button type="button" aria-pressed={privacyChecked} onClick={function(){setLegalPrivacyChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:0,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(privacyChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}>{LT("Dichiaro di aver letto e accettato l’Informativa Privacy")} <span style={{color:"#E24B4A"}}>*</span></span></button>
-            <button type="button" onClick={function(){setLegalView("privacy");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 30px",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{LT("Leggi l’Informativa Privacy")}</button>
+            <button type="button" aria-pressed={privacyChecked} onClick={function(){setLegalPrivacyChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:"2px 0",minHeight:44,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(privacyChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}>{LT("Dichiaro di aver letto e accettato l’Informativa Privacy")} <span style={{color:"#E24B4A"}}>*</span></span></button>
+            <button type="button" onClick={function(){setLegalView("privacy");}} style={{background:"transparent",border:"none",color:dark?"#BEB8FF":"#378ADD",padding:"8px 0 0 30px",minHeight:44,display:"flex",alignItems:"center",fontSize:13,fontWeight:700,cursor:"pointer",textAlign:"left",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{LT("Leggi l’Informativa Privacy")}</button>
           </div>
           <div style={{background:dark?"#1e1e30":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC,padding:14}}>
-            <button type="button" aria-pressed={metaChecked} onClick={function(){setLegalMetaChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:0,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(metaChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}><strong>{LT("Consenso facoltativo")}</strong><br/>{LT("Consento l’invio a Meta di eventi tecnici per misurare installazioni e risultati pubblicitari. Non vengono inviati dati finanziari.")}</span></button>
+            <button type="button" aria-pressed={metaChecked} onClick={function(){setLegalMetaChecked(function(v){return !v;});}} style={{width:"100%",display:"flex",alignItems:"flex-start",gap:10,background:"transparent",border:"none",padding:"2px 0",minHeight:44,color:textC,textAlign:"left",cursor:"pointer",WebkitTapHighlightColor:"transparent",touchAction:"manipulation"}}>{checkMark(metaChecked)}<span style={{fontSize:13,color:textC,lineHeight:1.45}}><strong>{LT("Consenso facoltativo")}</strong><br/>{LT("Consento l’invio a Meta di eventi tecnici per misurare installazioni e risultati pubblicitari. Non vengono inviati dati finanziari.")}</span></button>
           </div>
         </div>
-        <button type="button" onClick={acceptAll} disabled={!termsChecked||!privacyChecked||legalAcceptingRef.current} style={{width:"100%",background:(!termsChecked||!privacyChecked)?(dark?"#333":"#ddd"):"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:(!termsChecked||!privacyChecked)?(dark?"#777":"#999"):"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",fontSize:15,fontWeight:800,cursor:(!termsChecked||!privacyChecked)?"not-allowed":"pointer",boxShadow:(!termsChecked||!privacyChecked)?"none":"0 4px 16px rgba(127,119,221,0.35)"}}>{LT("Continua")}</button>
+        <button type="button" onClick={acceptAll} disabled={!termsChecked||!privacyChecked||legalAcceptingRef.current} style={{width:"100%",background:(!termsChecked||!privacyChecked)?(dark?"#333":"#ddd"):"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:(!termsChecked||!privacyChecked)?(dark?"#777":"#999"):"#fff",border:"none",borderRadius:btnRadius,padding:"13px 16px",minHeight:48,fontSize:15,fontWeight:800,cursor:(!termsChecked||!privacyChecked)?"not-allowed":"pointer",touchAction:"manipulation",WebkitTapHighlightColor:"transparent",boxShadow:(!termsChecked||!privacyChecked)?"none":"0 4px 16px rgba(127,119,221,0.35)"}}>{LT("Continua")}</button>
       </div>
     </div>;
   }
@@ -10400,7 +10502,7 @@ function parseShareVoiceCommand(text){
     {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
     isMobile?
-    <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100dvh",minHeight:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden",paddingTop:"env(safe-area-inset-top, 0px)",paddingBottom:"env(safe-area-inset-bottom, 0px)",boxSizing:"border-box",...({"--fainance-primary":confirmButtonColor,"--fainance-secondary":secondaryButtonColor} as any)}}>
+    <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100dvh",minHeight:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden",paddingTop:"max(env(safe-area-inset-top, 0px), var(--fainance-native-safe-top, 0px))",paddingBottom:"max(env(safe-area-inset-bottom, 0px), var(--fainance-native-safe-bottom, 0px))",boxSizing:"border-box",...({"--fainance-primary":confirmButtonColor,"--fainance-secondary":secondaryButtonColor} as any)}}>
       {(showAppSummaryHeader&&!(tab==="consulenteAI"&&aiTab==="chat"))&&<div style={{background:headerBg,borderBottom:"1px solid "+borderC,padding:"10px 16px 8px",flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:subC,marginBottom:4}}>fAInance</div><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Uscite")}</div><div style={{fontSize:19,fontWeight:600,color:expenseColor}}>{fmt(curMonthExp)}</div></div><div style={{textAlign:"center"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Saldo")}</div><div style={{fontSize:17,fontWeight:600,color:BALANCE_COLOR}}>{fmt(curMonthInc-curMonthExp)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Entrate")}</div><div style={{fontSize:19,fontWeight:600,color:incomeColor}}>{fmt(curMonthInc)}</div></div></div></div>}
       <TopAdBox/>
       <div style={{flex:1,overflowY:"auto",padding:14}}><SectionErrorBoundary resetKey={tab+"|"+(settingsPage||"")} dark={dark} tr={translateUiRuntimeText} onHome={function(){setTab("home");setSettingsPage(null);setMobileMenu(false);}}>{panelContent()}</SectionErrorBoundary></div>
@@ -10426,6 +10528,7 @@ function parseShareVoiceCommand(text){
     </div>}
     <GlobalToastHost/>
     <GlobalNumericInputAssist/>
+    <GlobalIosInteractionAssist/>
     {onboardingGuideOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&OnboardingGuideModal()}
     {initialSetupOpen&&(!appLocked&&termsAccepted&&privacyAccepted)&&InitialSetupModal()}
     {appUpdatePopup&&<AppUpdateModal/>}

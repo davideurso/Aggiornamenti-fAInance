@@ -34769,3 +34769,146 @@ function fainancePostProcessTranslation(value, lang){
   try{fainanceTranslationCache={};}catch(e){}
 })();
 
+
+
+// fAInance 1.4.1 - testi esatti della guida iniziale corrente e relative etichette.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(key,values){
+    LANGS.forEach(function(code){
+      var value=(values&&values[code])||(values&&values.en)||(values&&values.it)||key;
+      try{if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=value;}catch(e){}
+      try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};FAINANCE_UI_TRANSLATIONS[code][key]=value;}}catch(e){}
+      try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=value;}}catch(e){}
+    });
+  }
+
+  add('Le tue finanze in un unico posto',{
+    it:'Le tue finanze in un unico posto',
+    en:'Your finances in one place',
+    es:'Tus finanzas en un solo lugar',
+    fr:'Vos finances au même endroit',
+    de:'Deine Finanzen an einem Ort',
+    pt:'As tuas finanças num só lugar',
+    pl:'Twoje finanse w jednym miejscu',
+    nl:'Je financiën op één plek',
+    ro:'Finanțele tale într-un singur loc',
+    el:'Τα οικονομικά σου σε ένα μέρος'
+  });
+  add('Registra entrate, uscite, patrimonio, budget e obiettivi.\nTutto resta ordinato e sincronizzato sul tuo account.',{
+    it:'Registra entrate, uscite, patrimonio, budget e obiettivi.\nTutto resta ordinato e sincronizzato sul tuo account.',
+    en:'Record income, expenses, assets, budgets and goals.\nEverything stays organized and synchronized with your account.',
+    es:'Registra ingresos, gastos, patrimonio, presupuestos y objetivos.\nTodo permanece organizado y sincronizado con tu cuenta.',
+    fr:'Enregistrez revenus, dépenses, patrimoine, budgets et objectifs.\nTout reste organisé et synchronisé avec votre compte.',
+    de:'Erfasse Einnahmen, Ausgaben, Vermögen, Budgets und Ziele.\nAlles bleibt geordnet und mit deinem Konto synchronisiert.',
+    pt:'Regista receitas, despesas, património, orçamentos e objetivos.\nTudo fica organizado e sincronizado com a tua conta.',
+    pl:'Rejestruj przychody, wydatki, majątek, budżety i cele.\nWszystko pozostaje uporządkowane i zsynchronizowane z Twoim kontem.',
+    nl:'Registreer inkomsten, uitgaven, vermogen, budgetten en doelen.\nAlles blijft geordend en gesynchroniseerd met je account.',
+    ro:'Înregistrează venituri, cheltuieli, patrimoniu, bugete și obiective.\nTotul rămâne organizat și sincronizat cu contul tău.',
+    el:'Κατάγραψε έσοδα, έξοδα, περιουσία, προϋπολογισμούς και στόχους.\nΌλα παραμένουν οργανωμένα και συγχρονισμένα με τον λογαριασμό σου.'
+  });
+  add('Tieni traccia dei movimenti',{
+    it:'Tieni traccia dei movimenti',
+    en:'Keep track of your transactions',
+    es:'Controla tus movimientos',
+    fr:'Suivez vos mouvements',
+    de:'Behalte deine Buchungen im Blick',
+    pt:'Acompanha os teus movimentos',
+    pl:'Śledź swoje operacje',
+    nl:'Houd je transacties bij',
+    ro:'Urmărește-ți tranzacțiile',
+    el:'Παρακολούθησε τις κινήσεις σου'
+  });
+  add('Aggiungi Spese ed Entrate manualmente, vocalmente e con lo scontrino.\nAutomatizza le entrate e le uscite periodiche.',{
+    it:'Aggiungi Spese ed Entrate manualmente, vocalmente e con lo scontrino.\nAutomatizza le entrate e le uscite periodiche.',
+    en:'Add expenses and income manually, by voice, or from a receipt.\nAutomate recurring income and expenses.',
+    es:'Añade gastos e ingresos manualmente, por voz o con un recibo.\nAutomatiza los ingresos y gastos periódicos.',
+    fr:'Ajoutez dépenses et revenus manuellement, par la voix ou à partir d’un reçu.\nAutomatisez les revenus et dépenses périodiques.',
+    de:'Füge Ausgaben und Einnahmen manuell, per Sprache oder mit einem Beleg hinzu.\nAutomatisiere wiederkehrende Einnahmen und Ausgaben.',
+    pt:'Adiciona despesas e receitas manualmente, por voz ou com um recibo.\nAutomatiza receitas e despesas periódicas.',
+    pl:'Dodawaj wydatki i przychody ręcznie, głosowo lub z paragonu.\nAutomatyzuj cykliczne przychody i wydatki.',
+    nl:'Voeg uitgaven en inkomsten handmatig, met je stem of via een bon toe.\nAutomatiseer periodieke inkomsten en uitgaven.',
+    ro:'Adaugă cheltuieli și venituri manual, vocal sau dintr-un bon.\nAutomatizează veniturile și cheltuielile periodice.',
+    el:'Πρόσθεσε έξοδα και έσοδα χειροκίνητα, με φωνή ή από απόδειξη.\nΑυτοματοποίησε τα περιοδικά έσοδα και έξοδα.'
+  });
+  add('Controlla budget e statistiche',{
+    it:'Controlla budget e statistiche',
+    en:'Monitor budgets and statistics',
+    es:'Controla presupuestos y estadísticas',
+    fr:'Contrôlez budgets et statistiques',
+    de:'Überwache Budgets und Statistiken',
+    pt:'Controla orçamentos e estatísticas',
+    pl:'Kontroluj budżety i statystyki',
+    nl:'Beheer budgetten en statistieken',
+    ro:'Controlează bugetele și statisticile',
+    el:'Έλεγξε προϋπολογισμούς και στατιστικά'
+  });
+  add('Imposta limiti, guarda grafici chiari e capisci dove vanno i tuoi soldi mese per mese.',{
+    it:'Imposta limiti, guarda grafici chiari e capisci dove vanno i tuoi soldi mese per mese.',
+    en:'Set limits, view clear charts, and understand where your money goes each month.',
+    es:'Establece límites, consulta gráficos claros y descubre adónde va tu dinero cada mes.',
+    fr:'Définissez des limites, consultez des graphiques clairs et comprenez où va votre argent chaque mois.',
+    de:'Lege Limits fest, sieh dir übersichtliche Diagramme an und erkenne, wohin dein Geld jeden Monat fließt.',
+    pt:'Define limites, consulta gráficos claros e percebe para onde vai o teu dinheiro todos os meses.',
+    pl:'Ustawiaj limity, przeglądaj czytelne wykresy i sprawdzaj, na co co miesiąc wydajesz pieniądze.',
+    nl:'Stel limieten in, bekijk duidelijke grafieken en zie waar je geld elke maand naartoe gaat.',
+    ro:'Stabilește limite, consultă grafice clare și înțelege unde se duc banii tăi în fiecare lună.',
+    el:'Όρισε όρια, δες καθαρά γραφήματα και κατανόησε πού πηγαίνουν τα χρήματά σου κάθε μήνα.'
+  });
+  add('Organizza obiettivi, patrimonio e Share',{
+    it:'Organizza obiettivi, patrimonio e Share',
+    en:'Organize goals, assets and Share',
+    es:'Organiza objetivos, patrimonio y Share',
+    fr:'Organisez objectifs, patrimoine et Share',
+    de:'Organisiere Ziele, Vermögen und Share',
+    pt:'Organiza objetivos, património e Share',
+    pl:'Organizuj cele, majątek i Share',
+    nl:'Organiseer doelen, vermogen en Share',
+    ro:'Organizează obiectivele, patrimoniul și Share',
+    el:'Οργάνωσε στόχους, περιουσία και Share'
+  });
+  add('Tieni sotto controllo risparmi, debiti, crediti, liste della spesa, appunti e spese condivise.',{
+    it:'Tieni sotto controllo risparmi, debiti, crediti, liste della spesa, appunti e spese condivise.',
+    en:'Keep savings, debts, credits, shopping lists, notes, and shared expenses under control.',
+    es:'Controla ahorros, deudas, créditos, listas de la compra, notas y gastos compartidos.',
+    fr:'Gardez le contrôle sur l’épargne, les dettes, les créances, les listes de courses, les notes et les dépenses partagées.',
+    de:'Behalte Ersparnisse, Schulden, Forderungen, Einkaufslisten, Notizen und geteilte Ausgaben im Blick.',
+    pt:'Controla poupanças, dívidas, créditos, listas de compras, notas e despesas partilhadas.',
+    pl:'Kontroluj oszczędności, długi, należności, listy zakupów, notatki i wspólne wydatki.',
+    nl:'Houd spaargeld, schulden, tegoeden, boodschappenlijsten, notities en gedeelde uitgaven onder controle.',
+    ro:'Ține sub control economiile, datoriile, creanțele, listele de cumpărături, notițele și cheltuielile partajate.',
+    el:'Έλεγξε αποταμιεύσεις, χρέη, απαιτήσεις, λίστες αγορών, σημειώσεις και κοινόχρηστα έξοδα.'
+  });
+  add('Usa l’AI per migliorare',{
+    it:'Usa l’AI per migliorare',
+    en:'Use AI to improve',
+    es:'Usa la IA para mejorar',
+    fr:'Utilisez l’IA pour progresser',
+    de:'Nutze KI zur Verbesserung',
+    pt:'Usa a IA para melhorar',
+    pl:'Korzystaj z AI, aby się doskonalić',
+    nl:'Gebruik AI om te verbeteren',
+    ro:'Folosește IA pentru a te îmbunătăți',
+    el:'Χρησιμοποίησε την AI για βελτίωση'
+  });
+  add('Chiedi consigli, controlli e priorità per capire come ottimizzare le spese e risparmiare meglio.',{
+    it:'Chiedi consigli, controlli e priorità per capire come ottimizzare le spese e risparmiare meglio.',
+    en:'Ask for advice, checks, and priorities to understand how to optimize spending and save more effectively.',
+    es:'Pide consejos, controles y prioridades para saber cómo optimizar los gastos y ahorrar mejor.',
+    fr:'Demandez des conseils, des contrôles et des priorités pour mieux optimiser vos dépenses et épargner.',
+    de:'Bitte um Tipps, Kontrollen und Prioritäten, um Ausgaben zu optimieren und besser zu sparen.',
+    pt:'Pede conselhos, verificações e prioridades para perceber como otimizar as despesas e poupar melhor.',
+    pl:'Poproś o porady, kontrole i priorytety, aby lepiej optymalizować wydatki i oszczędzać.',
+    nl:'Vraag om advies, controles en prioriteiten om uitgaven te optimaliseren en beter te sparen.',
+    ro:'Cere sfaturi, verificări și priorități pentru a înțelege cum să optimizezi cheltuielile și să economisești mai bine.',
+    el:'Ζήτησε συμβουλές, ελέγχους και προτεραιότητες για να βελτιστοποιήσεις τα έξοδα και να αποταμιεύεις καλύτερα.'
+  });
+
+  add('Carte',{it:'Carte',en:'Cards',es:'Tarjetas',fr:'Cartes',de:'Karten',pt:'Cartões',pl:'Karty',nl:'Kaarten',ro:'Carduri',el:'Κάρτες'});
+  add('Grafici',{it:'Grafici',en:'Charts',es:'Gráficos',fr:'Graphiques',de:'Diagramme',pt:'Gráficos',pl:'Wykresy',nl:'Grafieken',ro:'Grafice',el:'Γραφήματα'});
+  add('Consigli',{it:'Consigli',en:'Advice',es:'Consejos',fr:'Conseils',de:'Tipps',pt:'Conselhos',pl:'Porady',nl:'Advies',ro:'Sfaturi',el:'Συμβουλές'});
+  add('Controlli',{it:'Controlli',en:'Checks',es:'Controles',fr:'Contrôles',de:'Kontrollen',pt:'Verificações',pl:'Kontrole',nl:'Controles',ro:'Verificări',el:'Έλεγχοι'});
+  add('Priorità',{it:'Priorità',en:'Priorities',es:'Prioridades',fr:'Priorités',de:'Prioritäten',pt:'Prioridades',pl:'Priorytety',nl:'Prioriteiten',ro:'Priorități',el:'Προτεραιότητες'});
+
+  try{fainanceTranslationCache={};}catch(e){}
+})();
