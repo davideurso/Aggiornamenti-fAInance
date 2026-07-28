@@ -23832,15 +23832,6 @@ export function translateFainanceText(value, lang){
   var text=raw.trim();
   if(!text)return raw;
   if(/^[\d\s.,:;€$%+\-()\/]+$/.test(text))return raw;
-  // Percorso esatto O(1): la configurazione guidata e la UI React usano chiavi
-  // canoniche presenti direttamente nella tabella della lingua. In precedenza
-  // anche una chiave esatta costruiva subito un indice incrociato di oltre
-  // centomila voci, congelando JavaScriptCore su iOS.
-  try{
-    var directTable=TRANSLATIONS[code]||{};
-    var directValue=directTable[text];
-    if(typeof directValue==="string"&&directValue)return finish(fainancePostProcessTranslation(leading+directValue+trailing,code));
-  }catch(e){}
   var lookup=getFainanceTranslationLookup(code);
   if(lookup.exact[text]!==undefined)return finish(fainancePostProcessTranslation(leading+lookup.exact[text]+trailing, code));
   var wanted=fainanceNormPhrase(text);
