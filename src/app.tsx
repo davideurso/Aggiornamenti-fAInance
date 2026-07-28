@@ -1286,7 +1286,9 @@ function DiagnosticOverlay(){
     function onMove(e){var id=idOf(e);var track=moveTrackRef.current[id];if(!track||track.moved)return;var pt=(e.touches&&e.touches[0])||e;var dx=Math.abs((pt.clientX||0)-track.x);var dy=Math.abs((pt.clientY||0)-track.y);if(dx>4||dy>4){track.moved=true;push(e.type+" MOVIMENTO rilevato dx:"+Math.round(dx)+" dy:"+Math.round(dy));}}
     function onEnd(e){var id=idOf(e);var track=moveTrackRef.current[id];push(describe(e)+" (moved:"+(track?track.moved:"?")+")");delete moveTrackRef.current[id];}
     function onCancel(e){push(describe(e)+" [CANCELLED]");}
-    function onClick(e){push(describe(e));}
+    function onClickCapture(e){push("[CAP] "+describe(e));}
+    function onClickBubbleDoc(e){push("[BUB-doc] "+describe(e));}
+    function onClickBubbleRoot(e){push("[BUB-root] "+describe(e));}
     document.addEventListener("touchstart",onStart,true);
     document.addEventListener("touchmove",onMove,true);
     document.addEventListener("touchend",onEnd,true);
@@ -1295,7 +1297,10 @@ function DiagnosticOverlay(){
     document.addEventListener("pointermove",onMove,true);
     document.addEventListener("pointerup",onEnd,true);
     document.addEventListener("pointercancel",onCancel,true);
-    document.addEventListener("click",onClick,true);
+    document.addEventListener("click",onClickCapture,true);
+    document.addEventListener("click",onClickBubbleDoc,false);
+    var rootEl:any=document.getElementById("root");
+    if(rootEl)rootEl.addEventListener("click",onClickBubbleRoot,false);
     var po:any=null;
     try{
       po=new (window as any).PerformanceObserver(function(list){
@@ -1316,7 +1321,9 @@ function DiagnosticOverlay(){
       document.removeEventListener("pointermove",onMove,true);
       document.removeEventListener("pointerup",onEnd,true);
       document.removeEventListener("pointercancel",onCancel,true);
-      document.removeEventListener("click",onClick,true);
+      document.removeEventListener("click",onClickCapture,true);
+      document.removeEventListener("click",onClickBubbleDoc,false);
+      if(rootEl)rootEl.removeEventListener("click",onClickBubbleRoot,false);
       try{if(po)po.disconnect();}catch(e){}
     };
   },[]);
