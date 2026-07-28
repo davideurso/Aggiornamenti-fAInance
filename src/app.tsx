@@ -1254,27 +1254,38 @@ function DiagnosticOverlay(){
   var [lines,setLines]=useState<any>([]);
   var [longTasks,setLongTasks]=useState(0);
   var counterRef=useRef(0);
+  var moveTrackRef=useRef<any>({});
   useEffect(function(){
     function push(msg){
       counterRef.current++;
       var n=counterRef.current;
       var t=new Date();
       var ts=String(t.getMinutes()).padStart(2,"0")+":"+String(t.getSeconds()).padStart(2,"0")+"."+String(t.getMilliseconds()).padStart(3,"0");
-      setLines(function(prev){var next=prev.concat([n+" ["+ts+"] "+msg]);return next.length>40?next.slice(next.length-40):next;});
+      setLines(function(prev){var next=prev.concat([n+" ["+ts+"] "+msg]);return next.length>60?next.slice(next.length-60):next;});
     }
     function describe(e){
       var el=e.target;
       var tag=el&&el.tagName?el.tagName.toLowerCase():"?";
       var cls=(el&&el.className&&typeof el.className==="string")?("."+el.className.split(" ").slice(0,2).join(".")):"";
-      var x=Math.round(e.clientX!==undefined?e.clientX:(e.touches&&e.touches[0]?e.touches[0].clientX:-1));
-      var y=Math.round(e.clientY!==undefined?e.clientY:(e.touches&&e.touches[0]?e.touches[0].clientY:-1));
+      var pt=(e.touches&&e.touches[0])||(e.changedTouches&&e.changedTouches[0])||e;
+      var x=Math.round(pt.clientX!==undefined?pt.clientX:-1);
+      var y=Math.round(pt.clientY!==undefined?pt.clientY:-1);
       return e.type+" -> <"+tag+cls+"> ("+x+","+y+")";
     }
-    function onTouchStart(e){push(describe(e));}
-    function onPointerDown(e){push(describe(e));}
+    function idOf(e){var pt=(e.touches&&e.touches[0])||(e.changedTouches&&e.changedTouches[0]);return pt?("t"+(pt.identifier!==undefined?pt.identifier:0)):("p"+(e.pointerId!==undefined?e.pointerId:0));}
+    function onStart(e){var id=idOf(e);var pt=(e.touches&&e.touches[0])||e;moveTrackRef.current[id]={x:pt.clientX,y:pt.clientY,moved:false};push(describe(e));}
+    function onMove(e){var id=idOf(e);var track=moveTrackRef.current[id];if(!track||track.moved)return;var pt=(e.touches&&e.touches[0])||e;var dx=Math.abs((pt.clientX||0)-track.x);var dy=Math.abs((pt.clientY||0)-track.y);if(dx>4||dy>4){track.moved=true;push(e.type+" MOVIMENTO rilevato dx:"+Math.round(dx)+" dy:"+Math.round(dy));}}
+    function onEnd(e){var id=idOf(e);var track=moveTrackRef.current[id];push(describe(e)+" (moved:"+(track?track.moved:"?")+")");delete moveTrackRef.current[id];}
+    function onCancel(e){push(describe(e)+" [CANCELLED]");}
     function onClick(e){push(describe(e));}
-    document.addEventListener("touchstart",onTouchStart,true);
-    document.addEventListener("pointerdown",onPointerDown,true);
+    document.addEventListener("touchstart",onStart,true);
+    document.addEventListener("touchmove",onMove,true);
+    document.addEventListener("touchend",onEnd,true);
+    document.addEventListener("touchcancel",onCancel,true);
+    document.addEventListener("pointerdown",onStart,true);
+    document.addEventListener("pointermove",onMove,true);
+    document.addEventListener("pointerup",onEnd,true);
+    document.addEventListener("pointercancel",onCancel,true);
     document.addEventListener("click",onClick,true);
     var po:any=null;
     try{
@@ -1288,8 +1299,14 @@ function DiagnosticOverlay(){
     }catch(e){}
     push("diagnostica avviata");
     return function(){
-      document.removeEventListener("touchstart",onTouchStart,true);
-      document.removeEventListener("pointerdown",onPointerDown,true);
+      document.removeEventListener("touchstart",onStart,true);
+      document.removeEventListener("touchmove",onMove,true);
+      document.removeEventListener("touchend",onEnd,true);
+      document.removeEventListener("touchcancel",onCancel,true);
+      document.removeEventListener("pointerdown",onStart,true);
+      document.removeEventListener("pointermove",onMove,true);
+      document.removeEventListener("pointerup",onEnd,true);
+      document.removeEventListener("pointercancel",onCancel,true);
       document.removeEventListener("click",onClick,true);
       try{if(po)po.disconnect();}catch(e){}
     };
@@ -1300,16 +1317,19 @@ function DiagnosticOverlay(){
       if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text);}
     }catch(e){}
   }
-  if(!open)return <button onClick={function(){setOpen(true);}} style={{position:"fixed",top:6,right:6,zIndex:2147483647,background:"#111",color:"#0f0",border:"1px solid #0f0",borderRadius:8,padding:"4px 8px",fontSize:10,fontFamily:"monospace"}}>DBG</button>;
-  return <div style={{position:"fixed",top:0,left:0,right:0,zIndex:2147483647,background:"rgba(0,0,0,0.88)",color:"#0f0",fontFamily:"monospace",fontSize:10,padding:"6px 6px 6px 6px",maxHeight:"38vh",overflowY:"auto",boxSizing:"border-box",WebkitOverflowScrolling:"touch"}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+  if(!open)return <button onClick={function(){setOpen(true);}} style={{position:"fixed",bottom:90,right:10,zIndex:2147483647,background:"#111",color:"#0f0",border:"1px solid #0f0",borderRadius:8,padding:"6px 10px",fontSize:12,fontFamily:"monospace"}}>DBG</button>;
+  return <div style={{position:"fixed",left:0,right:0,bottom:0,zIndex:2147483647,background:"rgba(0,0,0,0.92)",color:"#0f0",fontFamily:"monospace",fontSize:10,padding:"6px",boxSizing:"border-box",maxHeight:"55vh",display:"flex",flexDirection:"column"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4,flexShrink:0}}>
       <div style={{fontWeight:900}}>DIAGNOSTICA TAP — longtasks: {longTasks}</div>
-      <div style={{display:"flex",gap:6}}>
-        <button onClick={copyLog} style={{background:"#0f0",color:"#000",border:"none",borderRadius:6,padding:"3px 8px",fontSize:10,fontWeight:900}}>Copia</button>
-        <button onClick={function(){setOpen(false);}} style={{background:"#333",color:"#fff",border:"1px solid #666",borderRadius:6,padding:"3px 8px",fontSize:10}}>×</button>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={copyLog} style={{background:"#0f0",color:"#000",border:"none",borderRadius:6,padding:"6px 12px",fontSize:12,fontWeight:900}}>Copia</button>
+        <button onClick={function(){setLines([]);}} style={{background:"#333",color:"#fff",border:"1px solid #666",borderRadius:6,padding:"6px 12px",fontSize:12}}>Pulisci</button>
+        <button onClick={function(){setOpen(false);}} style={{background:"#333",color:"#fff",border:"1px solid #666",borderRadius:6,padding:"6px 12px",fontSize:12}}>×</button>
       </div>
     </div>
-    {lines.length===0?<div>in attesa di tocchi...</div>:lines.map(function(l,i){return <div key={i} style={{whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{l}</div>;})}
+    <div style={{overflowY:"auto",WebkitOverflowScrolling:"touch",flex:1}}>
+      {lines.length===0?<div>in attesa di tocchi...</div>:lines.map(function(l,i){return <div key={i} style={{whiteSpace:"pre-wrap",wordBreak:"break-all"}}>{l}</div>;})}
+    </div>
   </div>;
 }
 
