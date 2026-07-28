@@ -39,6 +39,15 @@ import { Btn, Badge, Toggle, Toast, StatCard, DonutChart, BarChart, LineChart,
 import { StatsPanel } from './statistiche';
 import { parseFainanceShareVoiceCommand } from './voiceParser';
 const FainanceFileNative:any = registerPlugin('FainanceFile');
+(function injectFainanceIosTouchFix(){
+  try{
+    if(typeof document==="undefined"||document.getElementById("fainance-ios-touch-fix"))return;
+    var style=document.createElement("style");
+    style.id="fainance-ios-touch-fix";
+    style.textContent="button,[role=\"button\"],.fainance-tap{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;touch-action:manipulation;}";
+    document.head.appendChild(style);
+  }catch(e){}
+})();
 import { HomePanel, SpesePanel, HistoryPanel, ConsulenteAIPanel,
   FloatingAIButton, CopyMonthWidget, PatrimonioPanel, SharePanel, MorePanel,
   VoiceEntryModal
