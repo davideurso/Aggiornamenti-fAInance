@@ -6,7 +6,6 @@ class MainViewController: CAPBridgeViewController {
     private let widgetAppGroup = "group.it.fainanceapp.app"
     private var widgetRouteObserver: NSObjectProtocol?
     private var widgetRouteDispatchToken = UUID()
-    private var lastInjectedSafeAreaInsets = UIEdgeInsets(top: -1, left: -1, bottom: -1, right: -1)
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -21,13 +20,7 @@ class MainViewController: CAPBridgeViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        injectNativeSafeArea(force: true)
         dispatchPendingWidgetRoute()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        injectNativeSafeArea()
     }
 
     override func capacitorDidLoad() {
@@ -44,7 +37,6 @@ class MainViewController: CAPBridgeViewController {
         // Dopo tale azione, l’audio remoto può partire senza un secondo tocco.
         webView?.configuration.mediaTypesRequiringUserActionForPlayback = []
 
-        injectNativeSafeArea(force: true)
         dispatchPendingWidgetRoute()
     }
 
@@ -52,46 +44,6 @@ class MainViewController: CAPBridgeViewController {
         if let widgetRouteObserver {
             NotificationCenter.default.removeObserver(widgetRouteObserver)
         }
-    }
-
-    private func injectNativeSafeArea(force: Bool = false) {
-        guard let webView else {
-            return
-        }
-
-        let insets = view.safeAreaInsets
-        let changed =
-            abs(insets.top - lastInjectedSafeAreaInsets.top) >= 0.5 ||
-            abs(insets.left - lastInjectedSafeAreaInsets.left) >= 0.5 ||
-            abs(insets.bottom - lastInjectedSafeAreaInsets.bottom) >= 0.5 ||
-            abs(insets.right - lastInjectedSafeAreaInsets.right) >= 0.5
-
-        guard force || changed else {
-            return
-        }
-
-        lastInjectedSafeAreaInsets = insets
-
-        let top = String(format: "%.2f", Double(insets.top))
-        let right = String(format: "%.2f", Double(insets.right))
-        let bottom = String(format: "%.2f", Double(insets.bottom))
-        let left = String(format: "%.2f", Double(insets.left))
-
-        let script = """
-        (function(){
-          var root=document.documentElement;
-          if(!root)return;
-          root.classList.add('fainance-ios-native');
-          root.style.setProperty('--fainance-native-safe-top','\(top)px');
-          root.style.setProperty('--fainance-native-safe-right','\(right)px');
-          root.style.setProperty('--fainance-native-safe-bottom','\(bottom)px');
-          root.style.setProperty('--fainance-native-safe-left','\(left)px');
-          window.__FAINANCE_IOS_SAFE_AREA__={top:\(top),right:\(right),bottom:\(bottom),left:\(left)};
-          try{window.dispatchEvent(new CustomEvent('fainance-safe-area-change',{detail:window.__FAINANCE_IOS_SAFE_AREA__}));}catch(e){}
-        })();
-        """
-
-        webView.evaluateJavaScript(script, completionHandler: nil)
     }
 
     private func dispatchPendingWidgetRoute() {

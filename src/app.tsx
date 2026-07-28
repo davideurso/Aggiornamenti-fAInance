@@ -3198,6 +3198,10 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     return function(){try{delete (window as any).fainanceTranslateUi;}catch(e){}};
   },[lang]);
   useEffect(function(){
+    // Su iOS i testi vengono tradotti esclusivamente durante il rendering React.
+    // Riscrivere i nodi del DOM dopo un tocco provoca lampi visivi e può far
+    // perdere il click a WKWebView. Android e Web mantengono il flusso esistente.
+    if(fainanceNativePlatform()==="ios")return;
     // Traduzione legacy senza osservatore continuo: la versione stabile usata
     // prima della regressione esegue soltanto pochi passaggi dopo i cambi schermata.
     // Non modifica continuamente il DOM durante un tocco e non sostituisce i
@@ -3911,9 +3915,16 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
       setupPickerActionRef.current=true;
       var pickerId=String(setupPicker||"");
       var selected=String(value);
-      // Prima chiudiamo il pannello. Il valore viene applicato nel fotogramma
-      // successivo, così Android non deve smontare il selettore e ritradurre
-      // contemporaneamente tutta la configurazione.
+      // Su iOS la lingua deve aggiornare immediatamente la configurazione,
+      // senza un fotogramma intermedio in italiano. Per le altre piattaforme
+      // conserviamo il comportamento già esistente.
+      if(pickerId==="language"&&fainanceNativePlatform()==="ios"){
+        setSetupLang(selected);
+        setSetupPicker("");
+        setSetupPickerSearch("");
+        setupPickerActionRef.current=false;
+        return;
+      }
       setSetupPicker("");
       setSetupPickerSearch("");
       var applySelection=function(){
