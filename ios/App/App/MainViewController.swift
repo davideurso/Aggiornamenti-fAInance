@@ -63,10 +63,11 @@ class MainViewController: CAPBridgeViewController {
             return
         }
 
-        // The app handles its own safe areas in CSS. Disabling UIKit's delayed
-        // touch delivery makes short taps reach buttons immediately on iPhone.
+        // The interface scrolls inside the web content. Keep UIKit from
+        // delaying or cancelling the touch sequence before WebKit delivers the
+        // corresponding touchend/click to React.
         scrollView.delaysContentTouches = false
-        scrollView.canCancelContentTouches = true
+        scrollView.canCancelContentTouches = false
         scrollView.contentInsetAdjustmentBehavior = .never
     }
 

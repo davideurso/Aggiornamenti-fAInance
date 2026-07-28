@@ -112,81 +112,148 @@ function GlobalNumericInputAssist(){
 function GlobalIosInteractionAssist(){
   useEffect(function(){
     if(fainanceNativePlatform()!=="ios"||typeof document==="undefined")return;
+
     var root=document.documentElement;
     root.classList.add("fainance-ios-native");
+
     var style=document.createElement("style");
     style.id="fainance-ios-interaction-assist";
     style.textContent=[
-      ".fainance-ios-native button,.fainance-ios-native a[href],.fainance-ios-native [role='button'],.fainance-ios-native label{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}",
-      ".fainance-ios-native button{-webkit-appearance:none;}",
-      ".fainance-ios-native body{overscroll-behavior:none;}"
+      ".fainance-ios-native button,.fainance-ios-native a[href],.fainance-ios-native [role='button'],.fainance-ios-native label,.fainance-ios-native input[type='checkbox'],.fainance-ios-native input[type='radio']{touch-action:manipulation;-webkit-tap-highlight-color:transparent;}",
+      ".fainance-ios-native button{-webkit-appearance:none;}"
     ].join("");
     if(!document.getElementById(style.id))document.head.appendChild(style);
 
-    var press:any=null;
-    var pendingTap:any=null;
-    var suppressTrustedClick:any=null;
+    var activeTouch:any=null;
+    var syntheticClick:any=null;
+
+    function isDisabled(element:any){
+      if(!element)return true;
+      if(element.disabled)return true;
+      if(element.matches&&element.matches("[disabled],[aria-disabled='true'],[data-fainance-no-tap-assist='true']"))return true;
+      return false;
+    }
+
+    function isNativeFormControl(element:any){
+      if(!element||!element.tagName)return false;
+      var tag=String(element.tagName).toLowerCase();
+      if(tag==="textarea"||tag==="select")return true;
+      if(tag!=="input")return !!element.isContentEditable;
+      var type=String(element.getAttribute("type")||"text").toLowerCase();
+      return type!=="button"&&type!=="submit"&&type!=="reset"&&type!=="checkbox"&&type!=="radio";
+    }
+
+    function isActionableNode(element:any){
+      if(!element||element===document.documentElement||element===document.body)return false;
+      if(isDisabled(element)||isNativeFormControl(element))return false;
+      var tag=String(element.tagName||"").toLowerCase();
+      if(tag==="button"||tag==="a"||tag==="label")return true;
+      if(tag==="input")return true;
+      if(element.getAttribute&&element.getAttribute("role")==="button")return true;
+      if(element.hasAttribute&&element.hasAttribute("data-fainance-tap"))return true;
+      try{if(element.style&&String(element.style.cursor||"").toLowerCase()==="pointer")return true;}catch(_e){}
+      return false;
+    }
+
     function actionable(target:any){
-      var element=target&&target.closest?target.closest("button,a[href],[role='button'],label,input[type='checkbox'],input[type='radio']"):null;
-      if(!element||!element.isConnected)return null;
-      if(element.matches&&element.matches("[disabled],[aria-disabled='true'],[data-fainance-no-tap-assist='true']"))return null;
-      return element;
-    }
-    function onPointerDown(event:any){
-      if(event.pointerType&&event.pointerType!=="touch")return;
-      var element=actionable(event.target);
-      if(!element)return;
-      pendingTap=null;
-      press={element:element,pointerId:event.pointerId,startX:Number(event.clientX||0),startY:Number(event.clientY||0),cancelled:false,clicked:false};
-    }
-    function onPointerMove(event:any){
-      if(!press||press.pointerId!==event.pointerId)return;
-      if(Math.abs(Number(event.clientX||0)-press.startX)>10||Math.abs(Number(event.clientY||0)-press.startY)>10)press.cancelled=true;
-    }
-    function onPointerCancel(event:any){
-      if(press&&press.pointerId===event.pointerId)press=null;
-    }
-    function onClickCapture(event:any){
-      var element=actionable(event.target);
-      if(suppressTrustedClick&&event.isTrusted&&element===suppressTrustedClick.element&&Date.now()-suppressTrustedClick.at<700){
-        suppressTrustedClick=null;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
+      var element=target&&target.nodeType===1?target:target&&target.parentElement;
+      var depth=0;
+      while(element&&depth<12){
+        if(isNativeFormControl(element))return null;
+        if(isActionableNode(element)){
+          if(String(element.tagName||"").toLowerCase()==="label"){
+            var nativeField=element.querySelector&&element.querySelector("input:not([type='checkbox']):not([type='radio']),select,textarea,[contenteditable='true']");
+            if(nativeField)return null;
+          }
+          return element;
+        }
+        element=element.parentElement;
+        depth++;
       }
-      if(press&&element===press.element)press.clicked=true;
-      if(pendingTap&&element===pendingTap.element)pendingTap.clicked=true;
+      return null;
     }
-    function onPointerUp(event:any){
-      if(!press||press.pointerId!==event.pointerId)return;
-      var current=press;
-      press=null;
-      if(current.cancelled)return;
-      pendingTap=current;
-      setTimeout(function(){
-        if(pendingTap!==current)return;
-        pendingTap=null;
-        if(current.clicked||!current.element||!current.element.isConnected)return;
-        suppressTrustedClick={element:current.element,at:Date.now()};
-        try{current.element.click();}catch(e){suppressTrustedClick=null;}
-        setTimeout(function(){
-          if(suppressTrustedClick&&suppressTrustedClick.element===current.element)suppressTrustedClick=null;
-        },750);
-      },80);
+
+    function findTouch(list:any,identifier:any){
+      if(!list)return null;
+      for(var i=0;i<list.length;i++)if(list[i].identifier===identifier)return list[i];
+      return null;
     }
-    document.addEventListener("pointerdown",onPointerDown,true);
-    document.addEventListener("pointermove",onPointerMove,true);
-    document.addEventListener("pointerup",onPointerUp,true);
-    document.addEventListener("pointercancel",onPointerCancel,true);
+
+    function onTouchStart(event:any){
+      if(!event.touches||event.touches.length!==1){activeTouch=null;return;}
+      var element=actionable(event.target);
+      if(!element){activeTouch=null;return;}
+      var touch=event.touches[0];
+      activeTouch={
+        element:element,
+        identifier:touch.identifier,
+        startX:Number(touch.clientX||0),
+        startY:Number(touch.clientY||0),
+        moved:false
+      };
+    }
+
+    function onTouchMove(event:any){
+      if(!activeTouch)return;
+      var touch=findTouch(event.touches,activeTouch.identifier)||findTouch(event.changedTouches,activeTouch.identifier);
+      if(!touch)return;
+      if(Math.abs(Number(touch.clientX||0)-activeTouch.startX)>12||Math.abs(Number(touch.clientY||0)-activeTouch.startY)>12){
+        activeTouch.moved=true;
+      }
+    }
+
+    function onTouchCancel(){
+      activeTouch=null;
+    }
+
+    function onTouchEnd(event:any){
+      if(!activeTouch)return;
+      var current=activeTouch;
+      activeTouch=null;
+      var touch=findTouch(event.changedTouches,current.identifier);
+      if(!touch||current.moved||!current.element)return;
+      if(Math.abs(Number(touch.clientX||0)-current.startX)>12||Math.abs(Number(touch.clientY||0)-current.startY)>12)return;
+
+      var releasedOn=actionable(document.elementFromPoint(Number(touch.clientX||0),Number(touch.clientY||0)));
+      var clickElement=current.element.isConnected?current.element:releasedOn;
+      if(!clickElement||!clickElement.isConnected)return;
+      if(current.element.isConnected&&releasedOn&&releasedOn!==current.element&&!current.element.contains(releasedOn)&&!releasedOn.contains(current.element))return;
+
+      // Execute the React click synchronously inside the real touchend event.
+      // If React replaced the node while the finger was down, use the element
+      // currently visible at the release coordinates instead of losing the tap.
+      try{event.preventDefault();}catch(_e){}
+      syntheticClick={element:clickElement,at:Date.now()};
+      try{clickElement.click();}catch(_e){syntheticClick=null;}
+    }
+
+    function onClickCapture(event:any){
+      if(!syntheticClick||!event.isTrusted)return;
+      if(Date.now()-syntheticClick.at>900){syntheticClick=null;return;}
+      var element=actionable(event.target);
+      if(element===syntheticClick.element||
+         (element&&syntheticClick.element&&syntheticClick.element.contains(element))||
+         (element&&syntheticClick.element&&element.contains(syntheticClick.element))){
+        syntheticClick=null;
+        try{event.preventDefault();event.stopImmediatePropagation();}catch(_e){}
+      }
+    }
+
+    var touchOptions:any={capture:true,passive:false};
+    document.addEventListener("touchstart",onTouchStart,touchOptions);
+    document.addEventListener("touchmove",onTouchMove,touchOptions);
+    document.addEventListener("touchend",onTouchEnd,touchOptions);
+    document.addEventListener("touchcancel",onTouchCancel,touchOptions);
     document.addEventListener("click",onClickCapture,true);
+
     return function(){
-      document.removeEventListener("pointerdown",onPointerDown,true);
-      document.removeEventListener("pointermove",onPointerMove,true);
-      document.removeEventListener("pointerup",onPointerUp,true);
-      document.removeEventListener("pointercancel",onPointerCancel,true);
+      document.removeEventListener("touchstart",onTouchStart,true);
+      document.removeEventListener("touchmove",onTouchMove,true);
+      document.removeEventListener("touchend",onTouchEnd,true);
+      document.removeEventListener("touchcancel",onTouchCancel,true);
       document.removeEventListener("click",onClickCapture,true);
       root.classList.remove("fainance-ios-native");
-      try{style.remove();}catch(e){}
+      try{style.remove();}catch(_e){}
     };
   },[]);
   return null;
