@@ -756,7 +756,7 @@ function LoginScreen({onLogin}){
   }
 
 
-  return <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:20,overflowY:"auto"}}>
+  return <div style={{minHeight:"100dvh",background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",alignItems:"center",justifyContent:"center",padding:"max(env(safe-area-inset-top, 0px), 24px) 20px max(env(safe-area-inset-bottom, 0px), 20px)",overflowY:"auto",boxSizing:"border-box"}}>
     <div style={{width:"100%",maxWidth:400}}>
       <div style={{textAlign:"center",marginBottom:24}}>
         <img src={appBanner} alt="fAInance" style={{width:"100%",maxWidth:280,height:"auto",objectFit:"contain",marginBottom:10}}/>
@@ -1230,7 +1230,7 @@ function ProfileCard({currentUser,onLogout,dark,textC,subC,borderC,cardBg,btnRad
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Nome")}</label><input value={pName} onChange={function(e){setPName(e.target.value);}} style={sinp}/></div>
       <div><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Telefono")}</label><div style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:8}}><input list="phone-prefixes" value={pPhonePrefix} onChange={function(e){setPPhonePrefix(e.target.value);}} style={sinp} placeholder="+39"/><input type="tel" value={pPhone} onChange={function(e){setPPhone(e.target.value.replace(/[^0-9 ]/g,""));}} style={sinp} placeholder="333 1234567"/></div><datalist id="phone-prefixes">{PHONE_PREFIXES.map(function(p){return <option key={p.code} value={p.code}>{p.country}</option>;})}</datalist><div style={{fontSize:10,color:subC,marginTop:3}}>{PL("Cerca il prefisso nazionale e inserisci solo numeri nel telefono.")}</div></div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:10}}>
-        <div style={{minWidth:0}}><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Data nascita")}</label><input type="date" value={pBirth} onChange={function(e){setPBirth(e.target.value);}} style={{...sinp,minWidth:0,boxSizing:"border-box"}}/></div>
+        <div style={{minWidth:0,maxWidth:"100%",overflow:"hidden"}}><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Data nascita")}</label><input type="date" value={pBirth} onChange={function(e){setPBirth(e.target.value);}} style={{...sinp,width:"100%",maxWidth:"100%",minWidth:0,display:"block",boxSizing:"border-box",WebkitAppearance:"none",appearance:"none"}}/></div>
         <div style={{minWidth:0}}><label style={{fontSize:11,color:subC,display:"block",marginBottom:3}}>{PL("Sesso")}</label>
           <select value={pGender} onChange={function(e){setPGender(e.target.value);}} style={{...sinp,minWidth:0,boxSizing:"border-box"}}><option value="">—</option><option value="M">{PL("Maschile")}</option><option value="F">{PL("Femminile")}</option><option value="X">{PL("Non spec.")}</option></select>
         </div>
@@ -2347,7 +2347,14 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
         if(!isFirstSnapshot&&Number(pendingSync.revision||0)>0){
           var incomingSyncToken=String(d.syncClientWriteToken||"");
           if(pendingSync.token&&incomingSyncToken===String(pendingSync.token)){
+            // Questo e' l'eco della modifica appena effettuata su questo dispositivo.
+            // Non riapplicare l'intero documento Firestore: su iOS causava centinaia
+            // di aggiornamenti React, reset delle impostazioni e tocchi apparentemente ignorati.
             pendingAccountSyncRef.current={revision:0,token:""};
+            firestoreHydratedRef.current=true;
+            setFirestoreReady(true);
+            endRemoteApply();
+            return;
           }else{
             // Non applicare uno snapshot precedente alla modifica locale: altrimenti
             // l'elemento appena creato scompare prima del salvataggio sul cloud.
@@ -2768,7 +2775,7 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   // Auto-save to Firestore whenever data changes
   useEffect(function(){
     if(!firestoreReady||applyingFirestoreRef.current)return;
-    var timer=setTimeout(saveToFirestore,140); // salva prima che uno snapshot remoto obsoleto possa prevalere
+    var timer=setTimeout(saveToFirestore,900); // lascia terminare i tocchi e raggruppa le modifiche prima della sincronizzazione
     return function(){clearTimeout(timer);};
   },[accountDeletedRecords,expenses,incomes,cats,methods,recurring,goals,alerts,budgetPlan,patrimonioValues,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioNotes,patrimonioMode,expenseGroups,incomeGroups,methodGroups,customIncomeTypes,incomeTypeOverrides,catOrder,methodOrder,catSortMode,methodSortMode,defaultExpenseCat,defaultExpenseMethod,defaultIncomeType,defaultExpenseArea,defaultIncomeArea,defaultMethodArea,incomeTypeOrder,historyFutureMode,historySortDate,historySortDirection,historySortSecondary,historySortSecondaryDirection,currency,secondaryCurrency,showSecInHistory,showSecInStats,showSecInBudget,showSecInPatrimonio,dateFmt,firstDayOfWeek,statsView,btnStyle,expenseColor,incomeColor,homeBalanceView,homeWorklets,showAppSummaryHeader,mobileNavOrder,mobileNavIconCount,mobileMenuOrder,mobileAllNavOrderRaw,appuntiDocuments,appuntiNotes,bankCoords,creditCards,notifPrefs,customNotifs,termsAccepted,privacyAccepted,metaEventsConsent,legalAcceptanceDate,aiDismissed,aiChat,aiDataAccess,aiFloatingEnabled,aiExternalConsent,aiExternalConsentAt,shareProjects,showShareInHistory,debtCredits,shoppingCards,shoppingItems,shoppingLists,shoppingDeletedRecords,shoppingAreas,shoppingAreaIcons,shoppingBoughtColor,shoppingProductSort,showDebtCreditsInPatrimonio,showDebtCreditsInExpenses,shoppingDefaultArea,shareReceiptUploads,confirmButtonColor,secondaryButtonColor,currentPlan,planUsage,shownAlertIds,onboardingGuideSeen,initialSetupStatus,accountSyncRetryPulse,isOffline]);
   useEffect(function(){
@@ -7729,7 +7736,7 @@ var row=D[raw]||D[raw.trim()];
       {id:"data",icon:"💾",label:"Dati",desc:"Importa, esporta, backup, elimina"},
       {id:"info",icon:"ℹ️",label:"Info",desc:"Versione, termini, privacy e aggiornamenti"}
     ]}/></div>;
-    function Segmented({items,value,onChange,columns}){var cols=Number(columns)||((isMobile&&items.length>2)?2:Math.max(1,items.length));var activeC=secondaryButtonColor||"#7FC8F8";return <div style={{display:"grid",gridTemplateColumns:"repeat("+cols+",minmax(0,1fr))",gap:4,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3,marginBottom:12}}>{items.map(function(it){var active=value===it.id;var disabled=!!it.disabled;return <button type="button" key={it.id} disabled={disabled} onClick={function(e){if(e&&e.stopPropagation)e.stopPropagation();if(disabled){if(it.lockedMessage)setToast(it.lockedMessage);return;}onChange(it.id);}} style={{minWidth:0,minHeight:40,padding:isMobile?"8px 5px":"9px 10px",border:"none",borderRadius:10,background:active?activeC:"transparent",color:active?"#fff":(disabled?(dark?"#555":"#aaa"):subC),fontSize:isMobile?11:13,lineHeight:1.18,whiteSpace:"normal",overflowWrap:"anywhere",cursor:disabled?"not-allowed":"pointer",fontWeight:active?800:400,boxShadow:active?"0 3px 10px "+activeC+"40":"none",opacity:disabled?0.55:1}}>{L(it.label)}{disabled?" 🔒":""}</button>;})}</div>;}
+    function Segmented({items,value,onChange,columns}){var cols=Number(columns)||((isMobile&&items.length>2)?2:Math.max(1,items.length));var activeC=secondaryButtonColor||"#7FC8F8";return <div style={{display:"grid",gridTemplateColumns:"repeat("+cols+",minmax(0,1fr))",gap:4,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3,marginBottom:12}}>{items.map(function(it){var active=value===it.id;var disabled=!!it.disabled;return <button type="button" key={it.id} disabled={disabled} onClick={function(e){if(e&&e.stopPropagation)e.stopPropagation();if(disabled){if(it.lockedMessage)setToast(it.lockedMessage);return;}onChange(it.id);}} style={{minWidth:0,minHeight:44,touchAction:"manipulation",WebkitTapHighlightColor:"transparent",padding:isMobile?"8px 5px":"9px 10px",border:"none",borderRadius:10,background:active?activeC:"transparent",color:active?"#fff":(disabled?(dark?"#555":"#aaa"):subC),fontSize:isMobile?11:13,lineHeight:1.18,whiteSpace:"normal",overflowWrap:"anywhere",cursor:disabled?"not-allowed":"pointer",fontWeight:active?800:400,boxShadow:active?"0 3px 10px "+activeC+"40":"none",opacity:disabled?0.55:1}}>{L(it.label)}{disabled?" 🔒":""}</button>;})}</div>;}
     
 
     function WidgetAppearancePanel(){
@@ -8045,7 +8052,7 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return activeCa
               {id:"summary",icon:"📊",title:"Analisi limitata",desc:"Solo riassunto delle spese: totali mensili/annuali, saldo, categorie principali, budget e ricorrenti."},
               {id:"areas",icon:"📂",title:"Analisi media",desc:"Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di più."},
               {id:"full",icon:"🔎",title:"Analisi completa",desc:"Tutte le transazioni essenziali: data, importo, categoria/metodo o tipo entrata e descrizione."}
-            ].map(function(opt){var active=aiDataAccess===opt.id;return <button key={opt.id} onClick={function(){setAiDataAccess(opt.id);setToast("Impostazioni IA aggiornate");}} style={{width:"100%",textAlign:"left",display:"flex",gap:12,alignItems:"flex-start",padding:"13px 14px",borderRadius:12,border:"1.5px solid "+(active?"#7F77DD":borderC),background:active?"linear-gradient(135deg,#f0edff,#e8f4ff)":(dark?"#252535":"#fff"),cursor:"pointer",boxShadow:active?"0 3px 12px rgba(127,119,221,0.16)":"none"}}>
+            ].map(function(opt){var active=aiDataAccess===opt.id;return <button key={opt.id} onClick={function(){setAiDataAccess(opt.id);setToast("Impostazioni IA aggiornate");}} style={{width:"100%",textAlign:"left",display:"flex",gap:12,alignItems:"flex-start",minHeight:64,touchAction:"manipulation",WebkitTapHighlightColor:"transparent",padding:"13px 14px",borderRadius:12,border:"1.5px solid "+(active?"#7F77DD":borderC),background:active?"linear-gradient(135deg,#f0edff,#e8f4ff)":(dark?"#252535":"#fff"),cursor:"pointer",boxShadow:active?"0 3px 12px rgba(127,119,221,0.16)":"none"}}>
               <span style={{fontSize:22,lineHeight:1.1}}>{opt.icon}</span>
               <span style={{flex:1}}>
                 <span style={{display:"block",fontSize:13,fontWeight:800,color:active?"#534AB7":textC,marginBottom:3}}>{L(opt.title)}</span>
@@ -10378,7 +10385,7 @@ function parseShareVoiceCommand(text){
     {!firestoreReady?<div style={{position:"fixed",inset:0,background:dark?"#1a1a2e":"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16,zIndex:999}}><FAInanceLogo size={72}/><div style={{fontSize:13,color:dark?"#aaa":"#888"}}>Caricamento dati account...</div></div>:
     appLocked?<BiometricLockScreen/>:
     isMobile?
-    <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100dvh",minHeight:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden",paddingTop:"env(safe-area-inset-top, 0px)",paddingBottom:"env(safe-area-inset-bottom, 0px)",boxSizing:"border-box",...({"--fainance-primary":confirmButtonColor,"--fainance-secondary":secondaryButtonColor} as any)}}>
+    <div style={{fontFamily:"system-ui,sans-serif",maxWidth:430,margin:"0 auto",height:"100dvh",minHeight:"100vh",display:"flex",flexDirection:"column",background:bgColor,overflow:"hidden",paddingTop:"max(env(safe-area-inset-top, 0px), 24px)",paddingBottom:"env(safe-area-inset-bottom, 0px)",boxSizing:"border-box",...({"--fainance-primary":confirmButtonColor,"--fainance-secondary":secondaryButtonColor} as any)}}>
       {(showAppSummaryHeader&&!(tab==="consulenteAI"&&aiTab==="chat"))&&<div style={{background:headerBg,borderBottom:"1px solid "+borderC,padding:"10px 16px 8px",flexShrink:0}}><div style={{fontSize:11,fontWeight:600,color:subC,marginBottom:4}}>fAInance</div><div style={{display:"flex",justifyContent:"space-between"}}><div><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Uscite")}</div><div style={{fontSize:19,fontWeight:600,color:expenseColor}}>{fmt(curMonthExp)}</div></div><div style={{textAlign:"center"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Saldo")}</div><div style={{fontSize:17,fontWeight:600,color:BALANCE_COLOR}}>{fmt(curMonthInc-curMonthExp)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,color:subC}}>{translateUiRuntimeText("Entrate")}</div><div style={{fontSize:19,fontWeight:600,color:incomeColor}}>{fmt(curMonthInc)}</div></div></div></div>}
       <TopAdBox/>
       <div style={{flex:1,overflowY:"auto",padding:14}}><SectionErrorBoundary resetKey={tab+"|"+(settingsPage||"")} dark={dark} tr={translateUiRuntimeText} onHome={function(){setTab("home");setSettingsPage(null);setMobileMenu(false);}}>{panelContent()}</SectionErrorBoundary></div>
