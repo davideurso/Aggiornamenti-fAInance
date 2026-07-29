@@ -10,42 +10,22 @@ import appBanner from "../assets/splash.png";
 import aiGrilloMascot from "../assets/ai_grillo_mascot_transparent.png";
 export { appLogo, appBanner, aiGrilloMascot };
 import { initializeApp } from "firebase/app";
-import { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser } from "firebase/auth";
-export { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser };
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser } from "firebase/auth";
+export { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser };
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, query, where, limit, getDocs, addDoc } from "firebase/firestore";
 export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, query, where, limit, getDocs, addDoc };
 
 // ── FIREBASE CONFIG ───────────────────────────────────────────────────────────
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "fainance-a7794.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "fainance-a7794",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "fainance-a7794.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "739607555867",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:739607555867:web:fainanceweb"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 export const firebaseApp = initializeApp(firebaseConfig);
-function fainanceCoreIsNativePlatform(){
-  try{
-    var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
-    if(cap&&typeof cap.isNativePlatform==="function")return !!cap.isNativePlatform();
-    if(cap&&typeof cap.getPlatform==="function"){var p=String(cap.getPlatform()||"").toLowerCase();return p==="ios"||p==="android";}
-  }catch(e){}
-  return false;
-}
-function createFainanceAuth(){
-  try{
-    if(!fainanceCoreIsNativePlatform()){
-      // Sul web usiamo getAuth: registra le dipendenze standard necessarie a signInWithPopup.
-      return getAuth(firebaseApp);
-    }
-    // Su app nativa manteniamo l'inizializzazione già presente.
-    return initializeAuth(firebaseApp,{persistence:browserLocalPersistence});
-  }catch(e){
-    return getAuth(firebaseApp);
-  }
-}
-export const fbAuth = createFainanceAuth();
+export const fbAuth = getAuth(firebaseApp);
 export const fbDb = getFirestore(firebaseApp);
 export const googleProvider = new GoogleAuthProvider();
 export const AI_AGENT_ENDPOINT = "https://europe-west1-fainance-a7794.cloudfunctions.net/askFinanceAI";
@@ -100,11 +80,11 @@ export const PLAN_LABELS={
   ro:{free:"Gratuit",base:"Bază",premium:"Complet"},
   el:{free:"Δωρεάν",base:"Βασικό",premium:"Πλήρες"}
 };
-export const PLAN_PRICES={free:{monthly:0,yearly:0},base:{monthly:2.5,yearly:20},premium:{monthly:3.5,yearly:35}};
+export const PLAN_PRICES={free:{monthly:0,yearly:0},base:{monthly:2.5,yearly:20},premium:{monthly:4.0,yearly:35}};
 export const PLAN_LIMITS={
   free:{ads:true,dailySingleMovements:2,rewardedExtraMovements:2,dailyMultipleMovements:1,dailyReceiptScans:1,rewardedExtraReceiptScans:1,dailyVoiceEntries:1,rewardedExtraVoiceEntries:1,aiDailyReplies:4,rewardedExtraAiReplies:2,aiMonthlyReplies:4,aiMonthlyTips:2,recurringMovements:1,instalmentEnabled:true,dailyInstalments:2,rewardedExtraInstalments:0,instalmentOptions:[6,12],instalmentMonthsMin:6,instalmentMonthsMax:12,baseCategoriesOnly:true,categoryEdits:2,canEditAreas:false,canReorderCategories:false,basePaymentMethodsOnly:true,canCustomizePaymentMethods:false,historyLevel:"full",statsLevel:"base",budgetLevel:"full",widgets:3,goals:1,notes:1,bankNotes:1,documents:0,patrimonioLevel:"complete",patrimonioCopyMonthly:2,rewardedExtraPatrimonioCopy:2,alerts:1,shareProjects:1,shareDailyExpenses:2,rewardedExtraShareDailyExpenses:2,settingsLevel:"base",debtCredits:1,shoppingLists:1,shoppingCards:2,shoppingListItems:25,shareReceiptScans:1,shareReceiptRetentionMonths:0},
-  base:{ads:false,dailySingleMovements:4,rewardedExtraMovements:2,dailyMultipleMovements:2,dailyReceiptScans:3,rewardedExtraReceiptScans:1,dailyVoiceEntries:3,rewardedExtraVoiceEntries:1,aiDailyReplies:10,rewardedExtraAiReplies:3,aiMonthlyReplies:10,aiMonthlyTips:4,recurringMovements:3,instalmentEnabled:true,dailyInstalments:4,rewardedExtraInstalments:0,instalmentOptions:[3,6,12,24],instalmentMonthsMin:3,instalmentMonthsMax:24,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"advanced",budgetLevel:"full",widgets:7,goals:2,notes:3,bankNotes:3,documents:1,patrimonioLevel:"complete",patrimonioCopyMonthly:5,rewardedExtraPatrimonioCopy:2,alerts:3,shareProjects:2,shareDailyExpenses:4,rewardedExtraShareDailyExpenses:2,settingsLevel:"advanced",debtCredits:3,shoppingLists:2,shoppingCards:10,shoppingListItems:100,shareReceiptScans:2,shareReceiptRetentionMonths:0},
-  premium:{ads:false,dailySingleMovements:Infinity,rewardedExtraMovements:0,dailyMultipleMovements:Infinity,dailyReceiptScans:Infinity,rewardedExtraReceiptScans:0,dailyVoiceEntries:Infinity,rewardedExtraVoiceEntries:0,aiDailyReplies:Infinity,rewardedExtraAiReplies:0,aiMonthlyReplies:300,aiCommercialLabel:"unlimited",aiMonthlyTips:Infinity,recurringMovements:Infinity,instalmentEnabled:true,dailyInstalments:Infinity,rewardedExtraInstalments:0,instalmentOptions:null,instalmentMonthsMin:1,instalmentMonthsMax:Infinity,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"complete",budgetLevel:"full",widgets:8,goals:Infinity,notes:Infinity,bankNotes:Infinity,documents:Infinity,patrimonioLevel:"complete",patrimonioCopyMonthly:Infinity,rewardedExtraPatrimonioCopy:0,alerts:Infinity,shareProjects:Infinity,shareDailyExpenses:Infinity,rewardedExtraShareDailyExpenses:0,settingsLevel:"full",debtCredits:Infinity,shoppingLists:Infinity,shoppingCards:Infinity,shoppingListItems:Infinity,shareReceiptScans:Infinity,shareReceiptRetentionMonths:6}
+  base:{ads:false,dailySingleMovements:4,rewardedExtraMovements:2,dailyMultipleMovements:2,dailyReceiptScans:3,rewardedExtraReceiptScans:1,dailyVoiceEntries:3,rewardedExtraVoiceEntries:1,aiDailyReplies:10,rewardedExtraAiReplies:3,aiMonthlyReplies:10,aiMonthlyTips:4,recurringMovements:3,instalmentEnabled:true,dailyInstalments:4,rewardedExtraInstalments:0,instalmentOptions:[3,6,12,24],instalmentMonthsMin:3,instalmentMonthsMax:24,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"advanced",budgetLevel:"full",widgets:5,goals:2,notes:3,bankNotes:3,documents:1,patrimonioLevel:"complete",patrimonioCopyMonthly:5,rewardedExtraPatrimonioCopy:2,alerts:3,shareProjects:2,shareDailyExpenses:4,rewardedExtraShareDailyExpenses:2,settingsLevel:"advanced",debtCredits:3,shoppingLists:2,shoppingCards:10,shoppingListItems:100,shareReceiptScans:2,shareReceiptRetentionMonths:0},
+  premium:{ads:false,dailySingleMovements:Infinity,rewardedExtraMovements:0,dailyMultipleMovements:Infinity,dailyReceiptScans:Infinity,rewardedExtraReceiptScans:0,dailyVoiceEntries:Infinity,rewardedExtraVoiceEntries:0,aiDailyReplies:Infinity,rewardedExtraAiReplies:0,aiMonthlyReplies:300,aiCommercialLabel:"unlimited",aiMonthlyTips:Infinity,recurringMovements:Infinity,instalmentEnabled:true,dailyInstalments:Infinity,rewardedExtraInstalments:0,instalmentOptions:null,instalmentMonthsMin:1,instalmentMonthsMax:Infinity,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"complete",budgetLevel:"full",widgets:7,goals:Infinity,notes:Infinity,bankNotes:Infinity,documents:Infinity,patrimonioLevel:"complete",patrimonioCopyMonthly:Infinity,rewardedExtraPatrimonioCopy:0,alerts:Infinity,shareProjects:Infinity,shareDailyExpenses:Infinity,rewardedExtraShareDailyExpenses:0,settingsLevel:"full",debtCredits:Infinity,shoppingLists:Infinity,shoppingCards:Infinity,shoppingListItems:Infinity,shareReceiptScans:Infinity,shareReceiptRetentionMonths:6}
 };
 export function planLabel(plan,lang){var dict=PLAN_LABELS[lang]||PLAN_LABELS.en;return dict[plan]||dict.free;}
 export function planLimitLabel(v){return v===Infinity?"∞":String(v);}
@@ -148,8 +128,7 @@ export const DEFAULT_METHOD_NAMES={
   4:{it:"Contanti",en:"Cash",es:"Efectivo",fr:"Especes",de:"Bargeld",pt:"Dinheiro",pl:"Gotowka",nl:"Contant",ro:"Numerar",el:"Μετρητα"},
   5:{it:"PayPal",en:"PayPal",es:"PayPal",fr:"PayPal",de:"PayPal",pt:"PayPal",pl:"PayPal",nl:"PayPal",ro:"PayPal",el:"PayPal"},
   6:{it:"Buoni pasto",en:"Meal vouchers",es:"Vales de comida",fr:"Tickets restaurant",de:"Essensgutscheine",pt:"Vales refeicao",pl:"Bony obiadowe",nl:"Maaltijdbonnen",ro:"Tichete de masa",el:"Κουπονια γευματος"},
-  7:{it:"Altro",en:"Other",es:"Otro",fr:"Autre",de:"Sonstiges",pt:"Outro",pl:"Inne",nl:"Overig",ro:"Altele",el:"Άλλο"},
-  8:{it:"Carta di credito",en:"Credit card",es:"Tarjeta de crédito",fr:"Carte de crédit",de:"Kreditkarte",pt:"Cartão de crédito",pl:"Karta kredytowa",nl:"Creditcard",ro:"Card de credit",el:"Πιστωτική κάρτα"}
+  7:{it:"Altro",en:"Other",es:"Otro",fr:"Autre",de:"Sonstiges",pt:"Outro",pl:"Inne",nl:"Overig",ro:"Altele",el:"Άλλο"}
 };
 export const DEFAULT_METHOD_GROUP_NAMES={
   conti_carte:{it:"Conti e carte",en:"Accounts and cards",es:"Cuentas y tarjetas",fr:"Comptes et cartes",de:"Konten und Karten",pt:"Contas e cartoes",pl:"Konta i karty",nl:"Rekeningen en kaarten",ro:"Conturi si carduri",el:"Λογαριασμοι και καρτες"},
@@ -169,7 +148,7 @@ export function translateDefaultCollection(items,defaults,dict,lang){
 }
 export function sameNamedItems(a,b){return JSON.stringify((a||[]).map(function(x){return{x:x.id,n:x.name};}))===JSON.stringify((b||[]).map(function(x){return{x:x.id,n:x.name};}));}
 
-export const DEFAULT_METHODS=[{id:1,name:"Conto corrente",icon:"🏦",color:"#378ADD",group:"conti_carte"},{id:2,name:"Carta di debito",icon:"💳",color:"#5DCAA5",group:"conti_carte"},{id:3,name:"Prepagata",icon:"💳",color:"#9F77DD",group:"conti_carte"},{id:8,name:"Carta di credito",icon:"💳",color:"#F2C94C",group:"conti_carte"},{id:4,name:"Contanti",icon:"💵",color:"#F0997B",group:"altri"},{id:5,name:"PayPal",icon:"💠",color:"#185FA5",group:"altri"},{id:6,name:"Buoni pasto",icon:"🍱",color:"#D3D1C7",group:"altri"},{id:7,name:"Altro",icon:"📦",color:"#B4B2A9",group:"altri"}];
+export const DEFAULT_METHODS=[{id:1,name:"Conto corrente",icon:"🏦",color:"#378ADD",group:"conti_carte"},{id:2,name:"Carta di debito",icon:"💳",color:"#5DCAA5",group:"conti_carte"},{id:3,name:"Prepagata",icon:"💳",color:"#9F77DD",group:"conti_carte"},{id:4,name:"Contanti",icon:"💵",color:"#F0997B",group:"altri"},{id:5,name:"PayPal",icon:"💠",color:"#185FA5",group:"altri"},{id:6,name:"Buoni pasto",icon:"🍱",color:"#D3D1C7",group:"altri"},{id:7,name:"Altro",icon:"📦",color:"#B4B2A9",group:"altri"}];
 export const INCOME_TYPES=[{id:"salario",icon:"💼",color:"#5DCAA5",name:"Stipendio",group:"lavoro"},{id:"bonus",icon:"🎯",color:"#EF9F27",name:"Bonus",group:"lavoro"},{id:"dividendi",icon:"📈",color:"#378ADD",name:"Dividendi",group:"investimenti"},{id:"interessi",icon:"💰",color:"#FAC775",name:"Interessi",group:"investimenti"},{id:"regali",icon:"🎁",color:"#D4A8F0",name:"Regali",group:"extra_inc"},{id:"rimborsi",icon:"↩️",color:"#9FE1CB",name:"Rimborsi",group:"extra_inc"},{id:"extra",icon:"⭐",color:"#D4A8F0",name:"Entrate extra",group:"extra_inc"},{id:"altro_inc",icon:"📦",color:"#D3D1C7",name:"Altro",group:"extra_inc"}];
 export function getAllIncomeTypes(extra,overrides){
   var custom=Array.isArray(extra)?extra:null;
@@ -201,7 +180,7 @@ export function getAllIncomeTypes(extra,overrides){
   }));
 }
 
-export const EMOJI_LIST=["🏠","💡","🛋","🔧","🛒","💆","💊","🎱","🍽","☕","👗","🎟","🏋","🎁","❤","✈","🅿","🚖","⛽","📦","💳","💵","🏦","💰","🍱","📈","💼","🎯","⭐","💠","🏛","🎮","🎵","📚","🏖","🚗","🚌","🛵","🎬","🍕","🍷","💻","📱","🎓","👶","🐶","🌱","🔑","🏥","⚽","🎾","🌍","🎄","🧾","🧮","📑","📌","📍","🧷","🗃️","🗄️","🧺","🛍️","🥩","🐟","🥬","🍎","🥕","🧀","🥛","🥚","🍞","🥐","🍝","🍚","🥫","🧃","🧴","🧼","🪥","🧻","🧽","🧹","🪣","🧊","🔥","❄️","☂️","👓","🧢","👟","💍","⌚","📷","🎧","🖨️","🖥️","🖱️","⌨️","🔌","🔋","🧯","🛠️","🪛","🔩","⚙️","🧰","🏗️","🏡","🏢","🏬","🏪","🏫","🏟️","🛏️","🚿","🛁","🚽","🪑","🚪","🪟","🪴","🌵","🌿","🌸","🍀","🐱","🐭","🐠","🦜","🐢","🚲","🛴","🚆","🚇","🚁","🛫","🛳️","🏕️","🧭","🗺️","🏔️","🏝️","🎭","🎨","🎤","🎹","🥁","🎲","♟️","🧩","🏆","🥇","🧘","🏊","🚴","🥾","🩺","🩹","🦷","👨‍⚕️","⚖️","📜","💹","📉","📊","🪙","💶","💷","💴","💲","🔐","🔔","🚨","✅","❌","➕","➖","🔄","📅","⏳","🅽","🅷","🤖","🧠","🅿️","▶️","🏰","🎞️","🟢","🟣","☁️","🅰️","📺","🛰️","📶","📞","🌐","📡","☎️","","🔎"];
+export const EMOJI_LIST=["🏠","💡","🛋","🔧","🛒","💆","💊","🎱","🍽","☕","👗","🎟","🏋","🎁","❤","✈","🅿","🚖","⛽","📦","💳","💵","🏦","💰","🍱","📈","💼","🎯","⭐","💠","🏛","🎮","🎵","📚","🏖","🚗","🚌","🛵","🎬","🍕","🍷","💻","📱","🎓","👶","🐶","🌱","🔑","🏥","⚽","🎾","🌍","🎄","📦","🧾","🧮","📑","📌","📍","🧷","🗃️","🗄️","🧺","🛍️","🥩","🐟","🥬","🍎","🥕","🧀","🥛","🥚","🍞","🥐","🍝","🍚","🥫","🧃","🧴","🧼","🪥","🧻","🧽","🧹","🪣","🧊","🔥","❄️","☂️","👓","🧢","👟","💍","⌚","📷","🎧","🖨️","🖥️","🖱️","⌨️","🔌","🔋","🧯","🛠️","🪛","🔩","⚙️","🧰","🏗️","🏡","🏢","🏬","🏪","🏫","🏟️","🛏️","🚿","🛁","🚽","🪑","🚪","🪟","🪴","🌵","🌿","🌸","🍀","🐱","🐭","🐠","🦜","🐢","🚲","🛴","🚆","🚇","🚁","🛫","🛳️","🏕️","🧭","🗺️","🏔️","🏝️","🎭","🎨","🎤","🎹","🥁","🎲","♟️","🧩","🎯","🏆","🥇","🧘","🏊","🚴","🥾","🩺","🩹","🦷","👨‍⚕️","⚖️","📜","🧾","💹","📉","📊","🪙","💶","💷","💴","💲","🔐","🔔","🚨","✅","❌","➕","➖","🔄","📅","⏳"];
 export const COLORS=["#9FE1CB","#5DCAA5","#B5D4F4","#378ADD","#F5C4B3","#D85A30","#FAC775","#EF9F27","#D4A8F0","#9F77DD","#F4C0D1","#D4537E","#C0DD97","#639922","#D3D1C7","#888780","#E24B4A","#1D9E75"];
 export const GOAL_ICONS=["🎯","🏖","🚗","🏠","✈","🎓","💰","🏋","🎮","📱","💻","👶","🌍","🎄","🏆","🌱","🔑","❤"];
 export const BG_THEMES=[{id:"default",label:"Default",bg:"#f7f7f7",dark:false},{id:"slate",label:"Slate",bg:"#e8ecf0",dark:false},{id:"warm",label:"Warm",bg:"#f5f0ea",dark:false},{id:"ocean",label:"Ocean",bg:"#e6f0f5",dark:false},{id:"forest",label:"Forest",bg:"#e8f2ec",dark:false},{id:"viola",label:"Viola",bg:"#f0ecf8",dark:false},{id:"dark",label:"Dark",bg:"#1a1a2e",dark:true},{id:"darkslate",label:"Dark Slate",bg:"#16213e",dark:true}];
@@ -260,54 +239,20 @@ export function getDefaultCurrency(){var loc=getDeviceLocale().toUpperCase();var
 export function getDefaultDateFormat(){var loc=getDeviceLocale().toUpperCase();var country=(loc.split("-")[1]||"");if(country==="US")return "mdy";if(country==="JP"||country==="CN"||country==="KR")return "ymd";return "dmy";}
 
 
-function readFainanceStorageValue(key,dv){
-  try{
-    var s=localStorage.getItem(key);
-    return s?JSON.parse(s):dv;
-  }catch(e){return dv;}
-}
 export function useStorage(key,dv){
-  var [v,setV]=useState(function(){return readFainanceStorageValue(key,dv);});
-  useEffect(function(){
-    setV(readFainanceStorageValue(key,dv));
-  },[key]);
+  var [v,setV]=useState(function(){try{var s=localStorage.getItem(key);return s?JSON.parse(s):dv;}catch(e){return dv;}});
   var save=useCallback(function(val){
     setV(function(prev){
       var next=typeof val==="function"?val(prev):val;
-      if(Object.is(prev,next))return prev;
-      try{
-        if(JSON.stringify(prev)===JSON.stringify(next))return prev;
-      }catch(e){}
       try{localStorage.setItem(key,JSON.stringify(next));}catch(e){}
-      // L'evento parte solo quando il valore è davvero cambiato e dopo che la
-      // copia locale è stata aggiornata. La sincronizzazione può quindi leggere
-      // immediatamente il dato nuovo senza scambiare un no-op per una modifica.
-      try{
-        if(typeof window!=="undefined"&&window.dispatchEvent){
-          var ev;
-          try{ev=new CustomEvent("fainance-storage-write",{detail:{key:key}});}catch(_e){ev=new Event("fainance-storage-write");(ev as any).detail={key:key};}
-          window.dispatchEvent(ev);
-        }
-      }catch(e){}
       return next;
     });
   },[key]);
   return [v,save];
 }
-export function clearFainanceLocalAccountData(uid){
-  var keys=["ai_chat_v1","ai_data_access_v1","ai_dismissed_v1","ai_floating_enabled_v1","ai_floating_pos_v1","ai_tab_v1","alerts_v1","account_deleted_records_v1","appunti_documents_v1","appunti_notes_v1","bank_coords_v1","credit_cards_v1","budget_plan_v1","cat_order_v1","cat_sort_mode","cats_v10","custom_income_types_v1","custom_notifs_v1","default_expense_area_v1","default_expense_cat_v1","default_expense_method_v1","default_income_area_v1","default_income_type_v1","default_method_area_v1","debt_credits_v1","debt_credits_show_patrimonio_v1","debt_credits_show_expenses_v1","exp_v10","expense_cats_settings_view_v1","expense_groups_v1","expense_methods_settings_view_v1","goals_v1","history_future_mode_v1","history_sort_date_v1","history_sort_direction_v1","history_sort_secondary_v1","history_sort_secondary_direction_v1","inc_v10","income_cats_settings_view_v1","income_groups_v1","income_type_order_v1","income_type_overrides_v1","initial_setup_status_v1","legal_acceptance_date_v1","meta_events_consent_v1","meta_complete_registration_logged_v1","meth_v10","method_groups_v1","method_order_v1","method_sort_mode","notif_prefs_v1","onboarding_guide_seen_v1","patrimonio_areas_v1","patrimonio_entries_v1","patrimonio_history_v1","patrimonio_mode_v1","patrimonio_notes_v1","patrimonio_settings_area_view","patrimonio_settings_entry_view","patrimonio_values_v1","plan_usage_v1","pref_bg","pref_biometric_lock_enabled_v1","pref_biometric_lock_timeout_v1","pref_btn_style","pref_confirm_color","pref_cur","pref_datefmt","pref_exp_color","pref_first_day_week","pref_home_balance","pref_inc_color","pref_local_lock_method_v1","pref_mobile_all_nav_order_v1","pref_mobile_menu_order_v1","pref_mobile_nav_icon_count_v1","pref_mobile_nav_order_v1","pref_sec_budget","pref_sec_cur","pref_sec_history","pref_sec_patrimonio","pref_sec_stats","pref_secondary_button_color_v1","pref_show_app_summary_header_v1","pref_statsview","privacy_accepted_v1","rec_v10","share_projects_v1","share_receipt_uploads_v1","share_show_history_v1","shopping_active_list_id_v2","shopping_area_icons_v1","shopping_areas_v1","shopping_bought_color_v1","shopping_cards_v1","shopping_default_area_v1","shopping_deleted_records_v2","shopping_items_v1","shopping_lists_v2","shopping_product_sort_v1","shown_alert_ids_v2","stats_mode_v1","stats_month_v1","stats_range_from_v1","stats_range_to_v1","stats_year_v1","terms_accepted_v1","widget2_accent_color_v1","widget2_auto_update_v1","widget2_bank_id_v1","widget2_bg_alpha_v1","widget2_body_color_v1","widget2_enabled_v1","widget2_max_chars_v1","widget2_note_id_v1","widget2_text_size_v1","widget2_title_color_v1","widget2_type_v1","widget3_accent_color_v1","widget3_auto_update_v1","widget3_bg_alpha_v1","widget3_enabled_v1","widget3_goal_id_v1","widget3_percent_color_v1","widget3_show_amounts_v1","widget3_show_percent_v1","widget3_text_color_v1","widget_bg_alpha_v1","widget_bg_color_v1","widget_button_style_v1","widget_voice_enabled_v1","widget_expense_color_v1","widget_expense_label_v1","widget_income_color_v1","widget_income_label_v1","widget_show_header_v1","widget_subtitle_v1","widget_title_v1"];
-  try{
-    var prefix=uid?"user_"+String(uid)+"_":"";
-    if(prefix){
-      keys.forEach(function(k){localStorage.removeItem(prefix+k);localStorage.removeItem(prefix+k+"_updated_at");});
-      Object.keys(localStorage).forEach(function(k){if(k.indexOf(prefix)===0||k.indexOf("gsp_view_"+String(uid)+"_")===0)localStorage.removeItem(k);});
-    }else{
-      // Compatibilità con installazioni precedenti: rimuove soltanto le vecchie
-      // chiavi non associate a un account, senza toccare i dati degli altri utenti.
-      keys.forEach(function(k){localStorage.removeItem(k);localStorage.removeItem(k+"_updated_at");});
-      Object.keys(localStorage).forEach(function(k){if(k.indexOf("gsp_view_")===0&&k.indexOf("user_")!==0)localStorage.removeItem(k);});
-    }
-  }catch(e){}
+export function clearFainanceLocalAccountData(){
+  var keys=["ai_chat_v1","ai_data_access_v1","ai_dismissed_v1","ai_floating_enabled_v1","ai_floating_pos_v1","ai_tab_v1","alerts_v1","appunti_documents_v1","appunti_notes_v1","bank_coords_v1","budget_plan_v1","cat_order_v1","cat_sort_mode","cats_v10","custom_income_types_v1","custom_notifs_v1","default_expense_area_v1","default_expense_cat_v1","default_expense_method_v1","default_income_area_v1","default_income_type_v1","default_method_area_v1","exp_v10","expense_cats_settings_view_v1","expense_groups_v1","expense_methods_settings_view_v1","goals_v1","history_future_mode_v1","history_sort_date_v1","history_sort_direction_v1","history_sort_secondary_v1","history_sort_secondary_direction_v1","inc_v10","income_cats_settings_view_v1","income_groups_v1","income_type_order_v1","income_type_overrides_v1","legal_acceptance_date_v1","meth_v10","method_groups_v1","method_order_v1","method_sort_mode","notif_prefs_v1","patrimonio_areas_v1","patrimonio_entries_v1","patrimonio_history_v1","patrimonio_mode_v1","patrimonio_notes_v1","patrimonio_settings_area_view","patrimonio_settings_entry_view","patrimonio_values_v1","pref_bg","pref_btn_style","pref_cur","pref_datefmt","pref_exp_color","pref_first_day_week","pref_home_balance","pref_inc_color","pref_sec_budget","pref_sec_cur","pref_sec_history","pref_sec_patrimonio","pref_sec_stats","pref_statsview","privacy_accepted_v1","rec_v10","stats_mode_v1","stats_month_v1","stats_range_from_v1","stats_range_to_v1","stats_year_v1","terms_accepted_v1","widget2_accent_color_v1","widget2_auto_update_v1","widget2_bank_id_v1","widget2_bg_alpha_v1","widget2_body_color_v1","widget2_enabled_v1","widget2_max_chars_v1","widget2_note_id_v1","widget2_text_size_v1","widget2_title_color_v1","widget2_type_v1","widget3_accent_color_v1","widget3_auto_update_v1","widget3_bg_alpha_v1","widget3_enabled_v1","widget3_goal_id_v1","widget3_percent_color_v1","widget3_show_amounts_v1","widget3_show_percent_v1","widget3_text_color_v1","widget_bg_alpha_v1","widget_bg_color_v1","widget_button_style_v1","widget_voice_enabled_v1","widget_expense_color_v1","widget_expense_label_v1","widget_income_color_v1","widget_income_label_v1","widget_show_header_v1","widget_subtitle_v1","widget_title_v1"];
+  try{keys.forEach(function(k){localStorage.removeItem(k);});Object.keys(localStorage).forEach(function(k){if(k.indexOf("gsp_view_")===0||k.indexOf("user_")===0)localStorage.removeItem(k);});}catch(e){}
 }
 export function dateOffset(n){var d=new Date();d.setDate(d.getDate()-n);return d.toISOString().split("T")[0];}
 export function todayStr(){return dateOffset(0);}
@@ -416,130 +361,9 @@ export function androidDownload(filename,blob,onDone){
 }
 
 export function exportToCSV(expenses,incomes,cats,methods,dateFmt,cb,filename){var rows=[["Tipo","Data","Importo","Categoria","Metodo","Descrizione","Rateizzato","Rate"]];for(var i=0;i<expenses.length;i++){var e=expenses[i];var c=cats.find(function(x){return x.id===e.catId;})||{name:""};var m=methods.find(function(x){return x.id===e.methodId;})||{name:""};rows.push(["Uscita",fmtDate(e.date,dateFmt),e.amount,c.name,m.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);}for(var j=0;j<incomes.length;j++){var inc=incomes[j];var it=getAllIncomeTypes().find(function(x){return x.id===inc.type;})||{name:inc.type||""};rows.push(["Entrata",fmtDate(inc.date,dateFmt),inc.amount,it.name,"",inc.desc||"",inc.rateizzato?"SI":"NO",inc.rateizzato?inc.rate:""]);}var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c==null?"":c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");androidDownload(filename||"fainance.csv",new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}),cb);}
-export function exportToXLSX(expenses,incomes,cats,methods,dateFmt,cb,filename){
-  function xmlText(value){
-    var s=String(value==null?"":value);
-    s=s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"");
-    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
-  }
-  function colName(index){
-    var name="";
-    var n=index+1;
-    while(n>0){
-      var r=(n-1)%26;
-      name=String.fromCharCode(65+r)+name;
-      n=Math.floor((n-1)/26);
-    }
-    return name;
-  }
-  function mkSheet(rows){
-    var x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
-    for(var ri=0;ri<rows.length;ri++){
-      x+='<row r="'+(ri+1)+'">';
-      for(var ci=0;ci<rows[ri].length;ci++){
-        var cell=rows[ri][ci];
-        var addr=colName(ci)+(ri+1);
-        if(typeof cell==="number"&&isFinite(cell)){
-          x+='<c r="'+addr+'" t="n"><v>'+String(cell).replace(",",".")+'</v></c>';
-        }else{
-          x+='<c r="'+addr+'" t="inlineStr"><is><t>'+xmlText(cell)+'</t></is></c>';
-        }
-      }
-      x+='</row>';
-    }
-    return x+'</sheetData></worksheet>';
-  }
-  var eRows=[["Data","Importo","Categoria","Metodo","Descrizione","Rateizzato","Rate"]];
-  for(var ei=0;ei<(expenses||[]).length;ei++){
-    var e=expenses[ei];
-    var ec=(cats||[]).find(function(x){return x.id===e.catId;})||{name:""};
-    var em=(methods||[]).find(function(x){return x.id===e.methodId;})||{name:""};
-    eRows.push([fmtDate(e.date,dateFmt),Number(e.amount)||0,ec.name,em.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);
-  }
-  var iRows=[["Data","Importo","Tipo","Descrizione","Rateizzato","Rate"]];
-  for(var ii=0;ii<(incomes||[]).length;ii++){
-    var inc2=incomes[ii];
-    var iit=getAllIncomeTypes().find(function(x){return x.id===inc2.type;})||{name:inc2.type||""};
-    iRows.push([fmtDate(inc2.date,dateFmt),Number(inc2.amount)||0,iit.name,inc2.desc||"",inc2.rateizzato?"SI":"NO",inc2.rateizzato?inc2.rate:""]);
-  }
-  var fname=String(filename||"fainance.xlsx").toLowerCase();
-  var hasExpenses=(expenses||[]).length>0;
-  var hasIncomes=(incomes||[]).length>0;
-  var onlyExpenses=fname.indexOf("uscite")>=0||fname.indexOf("expenses")>=0;
-  var onlyIncomes=fname.indexOf("entrate")>=0||fname.indexOf("income")>=0||fname.indexOf("incomes")>=0;
-  var sheets=[];
-  if(onlyExpenses){sheets.push({name:"Uscite",rows:eRows});}
-  else if(onlyIncomes){sheets.push({name:"Entrate",rows:iRows});}
-  else{
-    if(hasExpenses)sheets.push({name:"Uscite",rows:eRows});
-    if(hasIncomes)sheets.push({name:"Entrate",rows:iRows});
-    if(!sheets.length)sheets.push({name:"Dati",rows:[["Nessun dato"]]});
-  }
-  function safeSheetName(name){return String(name||"Dati").replace(/[\\/\?\*\[\]:]/g," ").slice(0,31)||"Dati";}
-  var sheetTags=[];
-  var relTags=[];
-  var overrideTags=['<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'];
-  var entries=[];
-  for(var si=0;si<sheets.length;si++){
-    var sid=si+1;
-    var rId="rId"+sid;
-    sheetTags.push('<sheet name="'+xmlText(safeSheetName(sheets[si].name))+'" sheetId="'+sid+'" r:id="'+rId+'"/>');
-    relTags.push('<Relationship Id="'+rId+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+sid+'.xml"/>');
-    overrideTags.push('<Override PartName="/xl/worksheets/sheet'+sid+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>');
-    entries.push({name:"xl/worksheets/sheet"+sid+".xml",data:mkSheet(sheets[si].rows)});
-  }
-  var wbXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+sheetTags.join("")+'</sheets></workbook>';
-  var relsXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+relTags.join("")+'</Relationships>';
-  var ctXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'+overrideTags.join("")+'</Types>';
-  var rootRels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
-  var enc=new TextEncoder();
-  function strBytes(s){return enc.encode(String(s));}
-  function u16(n){return[n&0xFF,(n>>8)&0xFF];}
-  function u32(n){return[n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];}
-  function calcCrc(data){
-    var tbl=[];
-    for(var n=0;n<256;n++){var cv=n;for(var k=0;k<8;k++)cv=cv&1?(0xEDB88320^(cv>>>1)):cv>>>1;tbl[n]=cv;}
-    var r=0xFFFFFFFF;
-    for(var i=0;i<data.length;i++)r=tbl[(r^data[i])&0xFF]^(r>>>8);
-    return(r^0xFFFFFFFF)>>>0;
-  }
-  function mkEntry(name,dataStr){
-    var nb=strBytes(name);
-    var db=strBytes(dataStr);
-    var cr=calcCrc(db);
-    var utf8Flag=0x0800;
-    var lh=[0x50,0x4B,0x03,0x04,20,0].concat(u16(utf8Flag),u16(0),u16(0),u16(0));
-    lh=lh.concat(u32(cr),u32(db.length),u32(db.length),u16(nb.length),u16(0));
-    return{lh:lh,nb:nb,db:db,cr:cr,off:0};
-  }
-  var allEntries=[mkEntry("[Content_Types].xml",ctXml),mkEntry("_rels/.rels",rootRels),mkEntry("xl/workbook.xml",wbXml),mkEntry("xl/_rels/workbook.xml.rels",relsXml)].concat(entries.map(function(e){return mkEntry(e.name,e.data);}));
-  var zip=[];
-  var off=0;
-  for(var j=0;j<allEntries.length;j++){
-    allEntries[j].off=off;
-    var rec=allEntries[j].lh.concat(Array.from(allEntries[j].nb),Array.from(allEntries[j].db));
-    zip=zip.concat(rec);
-    off+=rec.length;
-  }
-  var cdStart=off;
-  var cd=[];
-  var utf8Flag=0x0800;
-  for(var j2=0;j2<allEntries.length;j2++){
-    var en=allEntries[j2];
-    var cde=[0x50,0x4B,0x01,0x02,20,0,20,0].concat(u16(utf8Flag),u16(0),u16(0),u16(0));
-    cde=cde.concat(u32(en.cr),u32(en.db.length),u32(en.db.length),u16(en.nb.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(en.off));
-    cde=cde.concat(Array.from(en.nb));
-    cd=cd.concat(cde);
-  }
-  zip=zip.concat(cd);
-  var eocd=[0x50,0x4B,0x05,0x06,0,0,0,0].concat(u16(allEntries.length),u16(allEntries.length),u32(cd.length),u32(cdStart),u16(0));
-  zip=zip.concat(eocd);
-  var ua=new Uint8Array(zip);
-  androidDownload(filename||"fainance.xlsx",new Blob([ua],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),cb);
-}
+export function exportToXLSX(expenses,incomes,cats,methods,dateFmt,cb,filename){function esc(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}function mkSheet(rows){var x='<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';for(var ri=0;ri<rows.length;ri++){x+='<row r="'+(ri+1)+'">';for(var ci=0;ci<rows[ri].length;ci++){var cell=rows[ri][ci];var col=String.fromCharCode(65+ci);var addr=col+(ri+1);var v=esc(cell);if(typeof cell==="number"){x+='<c r="'+addr+'" t="n"><v>'+v+'</v></c>';}else{x+='<c r="'+addr+'" t="inlineStr"><is><t>'+v+'</t></is></c>';}}x+='</row>';}return x+'</sheetData></worksheet>';}var eRows=[["Data","Importo","Categoria","Metodo","Descrizione","Rateizzato","Rate"]];for(var ei=0;ei<expenses.length;ei++){var e=expenses[ei];var ec=cats.find(function(x){return x.id===e.catId;})||{name:""};var em=methods.find(function(x){return x.id===e.methodId;})||{name:""};eRows.push([fmtDate(e.date,dateFmt),e.amount,ec.name,em.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);}var iRows=[["Data","Importo","Tipo","Descrizione","Rateizzato","Rate"]];for(var ii=0;ii<incomes.length;ii++){var inc2=incomes[ii];var iit=getAllIncomeTypes().find(function(x){return x.id===inc2.type;})||{name:inc2.type||""};iRows.push([fmtDate(inc2.date,dateFmt),inc2.amount,iit.name,inc2.desc||"",inc2.rateizzato?"SI":"NO",inc2.rateizzato?inc2.rate:""]);}var s1=mkSheet(eRows);var s2=mkSheet(iRows);var wbXml='<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Uscite" sheetId="1" r:id="rId1"/><sheet name="Entrate" sheetId="2" r:id="rId2"/></sheets></workbook>';var relsXml='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/></Relationships>';var ctXml='<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>';var rootRels='<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';function strBytes(s){var b=new Uint8Array(s.length);for(var i=0;i<s.length;i++)b[i]=s.charCodeAt(i)&0xFF;return b;}function u16(n){return[n&0xFF,(n>>8)&0xFF];}function u32(n){return[n&0xFF,(n>>8)&0xFF,(n>>16)&0xFF,(n>>24)&0xFF];}function calcCrc(data){var tbl=[];for(var n=0;n<256;n++){var cv=n;for(var k=0;k<8;k++)cv=cv&1?(0xEDB88320^(cv>>>1)):cv>>>1;tbl[n]=cv;}var r=0xFFFFFFFF;for(var i=0;i<data.length;i++)r=tbl[(r^data[i])&0xFF]^(r>>>8);return(r^0xFFFFFFFF)>>>0;}function mkEntry(name,dataStr){var nb=strBytes(name);var db=strBytes(dataStr);var cr=calcCrc(db);var lh=[0x50,0x4B,0x03,0x04,20,0,0,0,0,0,0,0,0,0];lh=lh.concat(u32(cr),u32(db.length),u32(db.length),u16(nb.length),u16(0));return{lh:lh,nb:nb,db:db,cr:cr,off:0};}var entries=[mkEntry("[Content_Types].xml",ctXml),mkEntry("_rels/.rels",rootRels),mkEntry("xl/workbook.xml",wbXml),mkEntry("xl/_rels/workbook.xml.rels",relsXml),mkEntry("xl/worksheets/sheet1.xml",s1),mkEntry("xl/worksheets/sheet2.xml",s2)];var zip=[];var off=0;for(var j=0;j<entries.length;j++){entries[j].off=off;var rec=entries[j].lh.concat(Array.from(entries[j].nb),Array.from(entries[j].db));zip=zip.concat(rec);off+=rec.length;}var cdStart=off;var cd=[];for(var j2=0;j2<entries.length;j2++){var en=entries[j2];var cde=[0x50,0x4B,0x01,0x02,20,0,20,0,0,0,0,0,0,0,0,0];cde=cde.concat(u32(en.cr),u32(en.db.length),u32(en.db.length),u16(en.nb.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(en.off));cde=cde.concat(Array.from(en.nb));cd=cd.concat(cde);}zip=zip.concat(cd);var eocd=[0x50,0x4B,0x05,0x06,0,0,0,0].concat(u16(entries.length),u16(entries.length),u32(cd.length),u32(cdStart),u16(0));zip=zip.concat(eocd);var ua=new Uint8Array(zip);androidDownload(filename||"fainance.xlsx",new Blob([ua],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),cb);}
 export function parseCSVText(text){var lines=text.split(/\r?\n/).filter(function(l){return l.trim();});if(lines.length<2)return null;return lines.map(function(line){var cols=[],cur="",inQ=false;for(var i=0;i<line.length;i++){var ch=line[i];if(ch==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}else if((ch===','||ch===';')&&!inQ){cols.push(cur.trim());cur="";}else cur+=ch;}cols.push(cur.trim());return cols;});}
-function sortBySavedIds(items,order){var list=Array.isArray(items)?items.slice():[];var ids=(Array.isArray(order)?order:[]).map(function(id){return String(id);}).filter(Boolean);if(!ids.length)return list;var pos={};ids.forEach(function(id,i){if(pos[id]===undefined)pos[id]=i;});return list.map(function(item,index){var key=String(item&&item.id);return{item:item,index:index,rank:pos[key]===undefined?Number.MAX_SAFE_INTEGER:pos[key]};}).sort(function(a,b){if(a.rank!==b.rank)return a.rank-b.rank;return a.index-b.index;}).map(function(x){return x.item;});}
-export function sortedCats(cats,catOrder,catSortMode,expGrps){var list=Array.isArray(cats)?cats:[];var savedOrder=Array.isArray(catOrder)?catOrder:[];if(savedOrder.length)return sortBySavedIds(list,savedOrder);var grps=expGrps||DEFAULT_EXPENSE_GROUPS;return list.slice().sort(function(a,b){var gi=grps.findIndex(function(g){return String(g.id)===String(a.group);});var gj=grps.findIndex(function(g){return String(g.id)===String(b.group);});if(gi<0)gi=grps.length;if(gj<0)gj=grps.length;return gi-gj;});}
-export function sortedMethods(methods,methodOrder,methodSortMode){var active=(Array.isArray(methods)?methods:[]).filter(function(m){return !m.archived&&!m.deleted;});var savedOrder=Array.isArray(methodOrder)?methodOrder:[];if(savedOrder.length)return sortBySavedIds(active,savedOrder);if(methodSortMode==="group"){return active.slice().sort(function(a,b){var gl=["conti","carte","altri"];var ga=gl.indexOf(a.group||"altri"),gb=gl.indexOf(b.group||"altri");if(ga<0)ga=gl.length;if(gb<0)gb=gl.length;return ga-gb;});}return active;}
+export function sortedCats(cats,catOrder,catSortMode,expGrps){var grps=expGrps||DEFAULT_EXPENSE_GROUPS;if(catSortMode==="custom"){return cats.slice().sort(function(a,b){var ia=catOrder.indexOf(a.id),ib=catOrder.indexOf(b.id);if(ia===-1&&ib===-1)return 0;if(ia===-1)return 1;if(ib===-1)return -1;return ia-ib;});}return cats.slice().sort(function(a,b){var gi=grps.findIndex(function(g){return g.id===a.group;});var gj=grps.findIndex(function(g){return g.id===b.group;});return gi-gj;});}
+export function sortedMethods(methods,methodOrder,methodSortMode){var active=methods.filter(function(m){return !m.archived;});if(methodSortMode==="custom"){return active.slice().sort(function(a,b){var ia=methodOrder.indexOf(a.id),ib=methodOrder.indexOf(b.id);if(ia===-1&&ib===-1)return 0;if(ia===-1)return 1;if(ib===-1)return -1;return ia-ib;});}if(methodSortMode==="group"){return active.slice().sort(function(a,b){var gl=["conti","carte","altri"];return gl.indexOf(a.group||"altri")-gl.indexOf(b.group||"altri");});}return active;}
 
 // ── CHARTS ───────────────────────────────────────────────────────────────────

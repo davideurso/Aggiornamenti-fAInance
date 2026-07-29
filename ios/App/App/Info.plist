@@ -19,7 +19,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.6.71</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -30,41 +30,21 @@
 				<string>com.googleusercontent.apps.739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72</string>
 			</array>
 		</dict>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>it.fainanceapp.app</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>fainance</string>
-			</array>
-		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>192</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
 	<true/>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
 	<false/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-4502496181111632~7115058902</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>fAInance uses the camera to scan receipts, invoices and financial documents that you choose to analyse or attach.</string>
+	<string>Serve per scansionare scontrini e carte fidelity.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>fAInance usa la rubrica solo per inserire il titolare di un debito o credito.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>fAInance uses the microphone for voice entry and for conversations with the financial voice assistant.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>fAInance saves exported files or generated images to your photo library only when you request it.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>fAInance uses your photo library only when you choose a receipt, invoice or financial document to analyse or attach.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>fAInance converts your spoken requests into text for voice entry and the financial assistant.</string>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>
@@ -95,7 +75,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSFaceIDUsageDescription</key>
-	<string>fAInance uses Face ID only when you enable biometric protection for the app.</string>
 </dict>
 </plist>
