@@ -5892,7 +5892,13 @@ var ordered=(cleanCatOrder.length?cleanCatOrder.map(function(id){return cats.fin
   </AppCtx.Provider>;
 }
 
-export default AppWithLogin;
+function TouchDiagnosticApp(){
+  // Modalità diagnostica: apre l'app senza Firebase per verificare esclusivamente i tocchi su iOS.
+  var diagnosticUser={id:"",email:"touch-test@local",name:"Test Touch iOS"};
+  return <App currentUser={diagnosticUser} onLogout={function(){}} fbUser={null} onProfileUpdate={function(){}}/>;
+}
+
+export default TouchDiagnosticApp;
 
 
 // fAInance 1.6.31 - Debiti, Spesa e widget: traduzioni complete aggiuntive.
