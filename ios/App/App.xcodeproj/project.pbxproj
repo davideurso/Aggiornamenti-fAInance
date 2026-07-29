@@ -21,8 +21,42 @@
 		FAI00000000000000000102 /* FainanceBillingPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000202 /* FainanceBillingPlugin.m */; };
 		FAI00000000000000000103 /* FainanceAdsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000203 /* FainanceAdsPlugin.swift */; };
 		FAI00000000000000000104 /* FainanceAdsPlugin.m in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000204 /* FainanceAdsPlugin.m */; };
+		FAI00000000000000000106 /* FainanceSpeechRecognitionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000205 /* FainanceSpeechRecognitionPlugin.swift */; };
 		FAI00000000000000000105 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = FAI00000000000000000402 /* GoogleMobileAds */; };
+		FAI00000000000000000108 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000207 /* MainViewController.swift */; };
+		FAI00000000000000000109 /* FainanceAudioPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000208 /* FainanceAudioPlugin.swift */; };
+		FAI0000000000000000010A /* FainanceFilePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000000209 /* FainanceFilePlugin.swift */; };
+		A10000000000000000000001 /* FainanceWidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* FainanceWidgetBridge.swift */; };
+		A10000000000000000000002 /* FainanceWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* FainanceWidgets.swift */; };
+		A10000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* Assets.xcassets */; };
+		A10000000000000000000004 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* WidgetKit.framework */; };
+		A10000000000000000000005 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SwiftUI.framework */; };
+		A10000000000000000000006 /* FainanceWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* FainanceWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A70000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A40000000000000000000001;
+			remoteInfo = FainanceWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A30000000000000000000004 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A10000000000000000000006 /* FainanceWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		FAI00000000000000210 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = GoogleService-Info.plist; sourceTree = "<group>"; };
@@ -42,6 +76,18 @@
 		FAI00000000000000000202 /* FainanceBillingPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FainanceBillingPlugin.m; sourceTree = "<group>"; };
 		FAI00000000000000000203 /* FainanceAdsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceAdsPlugin.swift; sourceTree = "<group>"; };
 		FAI00000000000000000204 /* FainanceAdsPlugin.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = FainanceAdsPlugin.m; sourceTree = "<group>"; };
+		FAI00000000000000000205 /* FainanceSpeechRecognitionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceSpeechRecognitionPlugin.swift; sourceTree = "<group>"; };
+		FAI00000000000000000207 /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
+		FAI00000000000000000208 /* FainanceAudioPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceAudioPlugin.swift; sourceTree = "<group>"; };
+		FAI00000000000000000209 /* FainanceFilePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceFilePlugin.swift; sourceTree = "<group>"; };
+		A20000000000000000000001 /* FainanceWidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceWidgetBridge.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* FainanceWidgets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceWidgets.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A20000000000000000000005 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000006 /* FainanceWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FainanceWidgets.entitlements; sourceTree = "<group>"; };
+		A20000000000000000000007 /* FainanceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FainanceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000008 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		A20000000000000000000009 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -54,6 +100,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A30000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000004 /* WidgetKit.framework in Frameworks */,
+				A10000000000000000000005 /* SwiftUI.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -62,6 +117,8 @@
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
+				A50000000000000000000001 /* FainanceWidgets */,
+				A50000000000000000000002 /* Frameworks */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -70,6 +127,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				A20000000000000000000007 /* FainanceWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -79,12 +137,17 @@
 			children = (
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				FAI00000000000000000207 /* MainViewController.swift */,
+				FAI00000000000000000208 /* FainanceAudioPlugin.swift */,
+				FAI00000000000000000209 /* FainanceFilePlugin.swift */,
+				A20000000000000000000001 /* FainanceWidgetBridge.swift */,
 				FAI00000000000000210 /* GoogleService-Info.plist */,
 				FAI00000000000000211 /* App.entitlements */,
 				FAI00000000000000000201 /* FainanceBillingPlugin.swift */,
 				FAI00000000000000000202 /* FainanceBillingPlugin.m */,
 				FAI00000000000000000203 /* FainanceAdsPlugin.swift */,
 				FAI00000000000000000204 /* FainanceAdsPlugin.m */,
+				FAI00000000000000000205 /* FainanceSpeechRecognitionPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -93,6 +156,26 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000001 /* FainanceWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000003 /* FainanceWidgets.swift */,
+				A20000000000000000000004 /* Assets.xcassets */,
+				A20000000000000000000005 /* Info.plist */,
+				A20000000000000000000006 /* FainanceWidgets.entitlements */,
+			);
+			path = FainanceWidgets;
+			sourceTree = "<group>";
+		};
+		A50000000000000000000002 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A20000000000000000000008 /* WidgetKit.framework */,
+				A20000000000000000000009 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -105,10 +188,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				A30000000000000000000004 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A70000000000000000000001 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -118,6 +203,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		A40000000000000000000001 /* FainanceWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A60000000000000000000003 /* Build configuration list for PBXNativeTarget "FainanceWidgets" */;
+			buildPhases = (
+				A30000000000000000000001 /* Sources */,
+				A30000000000000000000002 /* Frameworks */,
+				A30000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FainanceWidgets;
+			productName = FainanceWidgets;
+			productReference = A20000000000000000000007 /* FainanceWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -137,6 +239,10 @@
 								enabled = 1;
 							};
 						};
+					};
+					A40000000000000000000001 = {
+						CreatedOnToolsVersion = 16.0;
+						ProvisioningStyle = Manual;
 					};
 				};
 			};
@@ -158,6 +264,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				A40000000000000000000001 /* FainanceWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -177,6 +284,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A30000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000003 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -185,14 +300,35 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				FAI00000000000000000108 /* MainViewController.swift in Sources */,
+				FAI00000000000000000109 /* FainanceAudioPlugin.swift in Sources */,
+				FAI0000000000000000010A /* FainanceFilePlugin.swift in Sources */,
+				A10000000000000000000001 /* FainanceWidgetBridge.swift in Sources */,
 				FAI00000000000000000101 /* FainanceBillingPlugin.swift in Sources */,
 				FAI00000000000000000102 /* FainanceBillingPlugin.m in Sources */,
 				FAI00000000000000000103 /* FainanceAdsPlugin.swift in Sources */,
 				FAI00000000000000000104 /* FainanceAdsPlugin.m in Sources */,
+				FAI00000000000000000106 /* FainanceSpeechRecognitionPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A30000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000002 /* FainanceWidgets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A70000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A40000000000000000000001 /* FainanceWidgets */;
+			targetProxy = A70000000000000000000002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -332,7 +468,7 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "fainance-appstore-profile";
 				DEVELOPMENT_TEAM = SSV4P8694F;
-				CURRENT_PROJECT_VERSION = 211;
+				CURRENT_PROJECT_VERSION = 212;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -357,7 +493,7 @@
 				CODE_SIGN_STYLE = Manual;
 				PROVISIONING_PROFILE_SPECIFIER = "fainance-appstore-profile";
 				DEVELOPMENT_TEAM = SSV4P8694F;
-				CURRENT_PROJECT_VERSION = 211;
+				CURRENT_PROJECT_VERSION = 212;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -367,6 +503,58 @@
 				MARKETING_VERSION = 1.6.72;
 				PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A60000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = FainanceWidgets/FainanceWidgets.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 212;
+				DEVELOPMENT_TEAM = SSV4P8694F;
+				INFOPLIST_FILE = FainanceWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.6.72;
+				PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "fainance-widgets-appstore-profile";
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A60000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = FainanceWidgets/FainanceWidgets.entitlements;
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 212;
+				DEVELOPMENT_TEAM = SSV4P8694F;
+				INFOPLIST_FILE = FainanceWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.6.72;
+				PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "fainance-widgets-appstore-profile";
+				SKIP_INSTALL = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -390,6 +578,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A60000000000000000000003 /* Build configuration list for PBXNativeTarget "FainanceWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A60000000000000000000001 /* Debug */,
+				A60000000000000000000002 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
