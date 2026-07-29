@@ -1,4 +1,4 @@
-workflows:
+﻿workflows:
   ios-capacitor-workflow:
     name: iOS Capacitor App Store Build
     max_build_duration: 60
@@ -26,7 +26,7 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APP_VERSION: "1.6.72"
-        IOS_BUILD_NUMBER: "217"
+        IOS_BUILD_NUMBER: "218"
         EXPECTED_VERSION: "1.6.72"
         VITE_FIREBASE_API_KEY: "AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
