@@ -290,3 +290,20 @@ workflows:
         notify:
           success: false
           failure: true
+
+  assign-build-219-to-testflight:
+    name: Assegna build 219 a TestFlight
+    max_build_duration: 10
+    instance_type: mac_mini_m2
+
+    integrations:
+      app_store_connect: Codemagic fAInance
+
+    scripts:
+      - name: Assegna la build 219 al gruppo interno
+        script: |
+          app-store-connect beta-groups add-build \
+            d839f0d9-ed69-42ae-afc2-5dac1a20590a \
+            --beta-group "Tester interni fAInance Manuale" \
+            --api-server-error-retries 10 \
+            --verbose
