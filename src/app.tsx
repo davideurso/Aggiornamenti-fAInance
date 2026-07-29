@@ -3200,6 +3200,15 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
     // Le traduzioni legacy vengono ora applicate solo in pochi passaggi programmati
     // quando cambia la lingua o la schermata visibile.
     if(typeof document==="undefined")return;
+    // Nell'app nativa Capacitor i testi sono già tradotti durante il render React.
+    // La scansione successiva dell'intero DOM è molto costosa sulle schermate complete
+    // e su iOS può bloccare il thread principale, facendo perdere o ritardare i tocchi.
+    // index.html imposta il flag nativo; il controllo del protocollo è un'ulteriore tutela.
+    var nativeDomTranslationDisabled=false;
+    try{
+      nativeDomTranslationDisabled=!!(window as any).__FAINANCE_DISABLE_DOM_TRANSLATION__||String(window.location&&window.location.protocol||"").toLowerCase()==="capacitor:";
+    }catch(e){}
+    if(nativeDomTranslationDisabled)return;
     var root=document.getElementById("root");
     if(!root)return;
     var map=runtimeTranslationMap||{};
