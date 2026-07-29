@@ -47,11 +47,6 @@ class MainViewController: CAPBridgeViewController {
     }
 
     private func dispatchPendingWidgetRoute() {
-        // Temporaneamente disattivato per isolare un problema di reattività dei tap su iOS.
-        // Nessuna funzionalità legata al deep-link dai widget viene eseguita finché non
-        // viene riattivato esplicitamente.
-        return
-        /*
         guard let defaults = UserDefaults(suiteName: widgetAppGroup),
               let route = defaults.string(forKey: "widget_pending_route_v1"),
               !route.isEmpty else {
@@ -107,6 +102,5 @@ class MainViewController: CAPBridgeViewController {
                 }
             }
         }
-        */
     }
 }

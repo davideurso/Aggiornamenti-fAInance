@@ -1,23 +1,27 @@
 {
-	"appId": "it.fainanceapp.app",
-	"appName": "fAInance",
-	"webDir": "dist",
-	"plugins": {
-		"FirebaseAuthentication": {
-			"skipNativeAuth": true,
-			"providers": [
-				"google.com",
-				"apple.com"
-			]
-		}
-	},
-	"packageClassList": [
-		"SpeechRecognition",
-		"FirebaseAuthenticationPlugin",
-		"AppPlugin",
-		"CAPCameraPlugin",
-		"FilesystemPlugin",
-		"PreferencesPlugin",
-		"SharePlugin"
-	]
+  "appId": "it.fainanceapp.app",
+  "appName": "fAInance",
+  "webDir": "dist",
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": true,
+      "providers": [
+        "google.com",
+        "apple.com"
+      ]
+    }
+  },
+  "packageClassList": [
+    "SpeechRecognition",
+    "FirebaseAuthenticationPlugin",
+    "AppPlugin",
+    "CAPCameraPlugin",
+    "FilesystemPlugin",
+    "PreferencesPlugin",
+    "SharePlugin",
+    "BiometricAuthNative",
+    "CapacitorContactsPlugin",
+    "FainanceBillingPlugin",
+    "FainanceAdsPlugin"
+  ]
 }
