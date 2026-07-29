@@ -26,7 +26,7 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APP_VERSION: "1.6.73"
-        IOS_BUILD_NUMBER: "221"
+        IOS_BUILD_NUMBER: "222"
         EXPECTED_VERSION: "1.6.73"
         VITE_FIREBASE_API_KEY: "AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
@@ -237,8 +237,6 @@ workflows:
             <true/>
             <key>uploadSymbols</key>
             <true/>
-            <key>testFlightInternalTestingOnly</key>
-            <true/>
           </dict>
           </plist>
           EOF
@@ -290,20 +288,3 @@ workflows:
         notify:
           success: false
           failure: true
-
-  assign-build-219-to-testflight:
-    name: Assegna build 219 a TestFlight
-    max_build_duration: 10
-    instance_type: mac_mini_m2
-
-    integrations:
-      app_store_connect: Codemagic fAInance
-
-    scripts:
-      - name: Assegna la build 219 al gruppo interno
-        script: |
-          app-store-connect beta-groups add-build \
-            d839f0d9-ed69-42ae-afc2-5dac1a20590a \
-            --beta-group "Tester interni fAInance Manuale" \
-            --api-server-error-retries 10 \
-            --verbose
