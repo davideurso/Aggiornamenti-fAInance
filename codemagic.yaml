@@ -25,7 +25,7 @@ workflows:
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
         APP_VERSION: "1.6.72"
-        IOS_BUILD_NUMBER: "208"
+        IOS_BUILD_NUMBER: "209"
         EXPECTED_VERSION: "1.6.72"
         VITE_FIREBASE_API_KEY: "AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
@@ -117,14 +117,22 @@ workflows:
 
           keychain add-certificates
 
-          PROFILE_PATH=$(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision" | head -n 1)
+          PROFILE_PATH=""
+          for candidate in "$HOME/Library/MobileDevice/Provisioning Profiles"/*.mobileprovision; do
+            [ -f "$candidate" ] || continue
+            security cms -D -i "$candidate" > "$CM_BUILD_DIR/candidate-profile.plist"
+            APP_IDENTIFIER=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" "$CM_BUILD_DIR/candidate-profile.plist" 2>/dev/null || true)
+            if [ "$APP_IDENTIFIER" = "${APPLE_TEAM_ID}.${BUNDLE_ID}" ]; then
+              PROFILE_PATH="$candidate"
+              cp "$CM_BUILD_DIR/candidate-profile.plist" "$CM_BUILD_DIR/profile.plist"
+              break
+            fi
+          done
 
           if [ -z "$PROFILE_PATH" ]; then
-            echo "Nessun provisioning profile trovato."
+            echo "Nessun provisioning profile compatibile con ${BUNDLE_ID}."
             exit 1
           fi
-
-          security cms -D -i "$PROFILE_PATH" > "$CM_BUILD_DIR/profile.plist"
 
           PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$CM_BUILD_DIR/profile.plist")
           PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$CM_BUILD_DIR/profile.plist")

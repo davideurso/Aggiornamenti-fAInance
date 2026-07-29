@@ -1,18 +1,2 @@
-fAInance iOS backup diagnostic build
-
-Configured version: 1.6.72
-Configured build: 208
-Bundle identifier: it.fainanceapp.app
-
-Purpose:
-- Build the older backup code with a new App Store version/build.
-- Determine whether the iOS issue also occurs from the backup.
-
-Version controls applied:
-- codemagic.yaml APP_VERSION = 1.6.72
-- codemagic.yaml IOS_BUILD_NUMBER = 208
-- codemagic.yaml EXPECTED_VERSION = 1.6.72
-- project.pbxproj MARKETING_VERSION = 1.6.72
-- project.pbxproj CURRENT_PROJECT_VERSION = 208
-- Info.plist reads $(MARKETING_VERSION) and $(CURRENT_PROJECT_VERSION)
-- Codemagic validates the archived .app before export and stops if it is not 1.6.72 (208).
+iOS backup touch test 1.6.72 build 209
+Provisioning profile selected by exact application-identifier.
