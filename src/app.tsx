@@ -383,11 +383,10 @@ function LoginScreen({onLogin}){
     setLoading(true);
     createUserWithEmailAndPassword(fbAuth,email,password)
       .then(function(cred){
-        // Save name to Firestore
-        return setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
-          .then(function(){
-            onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
-          });
+        // Entra subito nell'app: il salvataggio del profilo Firestore non deve bloccare l'accesso.
+        onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()});
+        setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:email.toLowerCase(),createdAt:new Date().toISOString()})
+          .catch(function(err){console.warn("profile create deferred",(err&&err.code)||err);});
       })
       .catch(function(err){
         setError(err.code==="auth/email-already-in-use"?L("Email già registrata."):L("Errore: ")+err.message);
@@ -1052,19 +1051,18 @@ function AppWithLogin(){
       authResolved=true;
       window.clearTimeout(authTimeout);
       if(user){
-        // Load user profile from Firestore
+        // Non attendere Firestore: consenti subito l'accesso e aggiorna il profilo in background.
+        var initialEmail=String(user.email||"").toLowerCase();
+        setFbUser(user);
+        setUserData({id:user.uid,email:initialEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",birthDate:"",gender:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
         getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
           var profile=snap.exists()?snap.data():{};
           var displayName=profile.name||user.displayName||"Utente";
           var normalizedEmail=String(user.email||profile.email||"").toLowerCase();
           setDoc(doc(fbDb,"users",user.uid),{name:displayName,email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
           setUserData({id:user.uid,email:normalizedEmail,name:displayName,phone:profile.phone||"",phonePrefix:profile.phonePrefix||"+39",birthDate:profile.birthDate||"",gender:profile.gender||"",nationality:profile.nationality||"",country:profile.country||"",province:profile.province||"",city:profile.city||"",address:profile.address||"",jobType:profile.jobType||"",appUseReason:profile.appUseReason||""});
-          setFbUser(user);
         }).catch(function(){
-          var normalizedEmail=String(user.email||"").toLowerCase();
-          setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:normalizedEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
-          setUserData({id:user.uid,email:normalizedEmail,name:user.displayName||"Utente",phonePrefix:"+39",phone:"",nationality:"",country:"",province:"",city:"",address:"",jobType:"",appUseReason:""});
-          setFbUser(user);
+          setDoc(doc(fbDb,"users",user.uid),{name:user.displayName||"Utente",email:initialEmail,updatedAt:new Date().toISOString()},{merge:true}).catch(function(){});
         });
       } else {
         setFbUser(null);
@@ -1097,7 +1095,7 @@ function AppWithLogin(){
     }
   }
 
-  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);}}/>;
+  if(!fbUser)return <LoginScreen onLogin={function(u){setUserData(u);var current=fbAuth.currentUser;if(current)setFbUser(current);}}/>;
   return <App currentUser={userData||{id:fbUser.uid,email:fbUser.email,name:fbUser.displayName||"Utente"}} onLogout={forceLogout} fbUser={fbUser} onProfileUpdate={function(upd){setUserData(function(p){return {...(p||{}),id:fbUser.uid,email:fbUser.email,...upd};});}}/>;
 }
 
