@@ -1040,7 +1040,17 @@ function AppWithLogin(){
   var [userData,setUserData]=useState(null);
 
   useEffect(function(){
+    var authResolved=false;
+    var authTimeout=window.setTimeout(function(){
+      if(!authResolved){
+        console.warn("Firebase auth timeout: apertura schermata di accesso");
+        setFbUser(null);
+        setUserData(null);
+      }
+    },5000);
     var unsub=onAuthStateChanged(fbAuth,function(user){
+      authResolved=true;
+      window.clearTimeout(authTimeout);
       if(user){
         // Load user profile from Firestore
         getDoc(doc(fbDb,"users",user.uid)).then(function(snap){
@@ -1061,7 +1071,10 @@ function AppWithLogin(){
         setUserData(null);
       }
     });
-    return unsub;
+    return function(){
+      window.clearTimeout(authTimeout);
+      unsub();
+    };
   },[]);
 
   if(fbUser===undefined)return <div style={{position:"fixed",inset:0,background:"linear-gradient(160deg,#f0edff 0%,#e8f4ff 100%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
