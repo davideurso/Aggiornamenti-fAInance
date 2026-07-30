@@ -12,8 +12,8 @@ export { appLogo, appBanner, aiGrilloMascot };
 import { initializeApp } from "firebase/app";
 import { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser } from "firebase/auth";
 export { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser };
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, query, where, limit, getDocs, addDoc } from "firebase/firestore";
-export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, collection, query, where, limit, getDocs, addDoc };
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteField, collection, query, where, limit, getDocs, addDoc } from "firebase/firestore";
+export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteField, collection, query, where, limit, getDocs, addDoc };
 
 // ── FIREBASE CONFIG ───────────────────────────────────────────────────────────
 export const firebaseConfig = {
