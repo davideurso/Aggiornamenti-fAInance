@@ -23822,6 +23822,192 @@ function getFainanceTranslationLookup(code){
   return fainanceTranslationCache[safe];
 }
 
+
+// fAInance - statistiche mensili e anteprime dei piani.
+// Le nuove stringhe restano centralizzate in questo file, come tutte le traduzioni dell'app.
+(function(){
+  var rows:any={
+    it:{
+      "Medie mensili del periodo":"Medie mensili del periodo",
+      "Uscite medie mensili":"Uscite medie mensili",
+      "Entrate medie mensili":"Entrate medie mensili",
+      "Saldo medio mensile":"Saldo medio mensile",
+      "Spesa media mensile per area":"Spesa media mensile per area",
+      "Spesa media mensile per categoria":"Spesa media mensile per categoria",
+      "Entrata media mensile per tipo":"Entrata media mensile per tipo",
+      "Spesa media mensile rispetto al budget per area":"Spesa media mensile rispetto al budget per area",
+      "Spesa media mensile rispetto al budget per categoria":"Spesa media mensile rispetto al budget per categoria",
+      "Scostamento medio mensile dal budget":"Scostamento medio mensile dal budget",
+      "Statistiche incluse nel piano Base":"Statistiche incluse nel piano Base",
+      "Statistiche incluse nel piano Completo":"Statistiche incluse nel piano Completo",
+      "al mese":"al mese",
+      "Archiviata":"Archiviata",
+      "Budget mensile":"Budget mensile"
+    },
+    en:{
+      "Medie mensili del periodo":"Monthly averages for the period",
+      "Uscite medie mensili":"Average monthly expenses",
+      "Entrate medie mensili":"Average monthly income",
+      "Saldo medio mensile":"Average monthly balance",
+      "Spesa media mensile per area":"Average monthly spending by area",
+      "Spesa media mensile per categoria":"Average monthly spending by category",
+      "Entrata media mensile per tipo":"Average monthly income by type",
+      "Spesa media mensile rispetto al budget per area":"Average monthly spending vs budget by area",
+      "Spesa media mensile rispetto al budget per categoria":"Average monthly spending vs budget by category",
+      "Scostamento medio mensile dal budget":"Average monthly budget variance",
+      "Statistiche incluse nel piano Base":"Statistics included in the Base plan",
+      "Statistiche incluse nel piano Completo":"Statistics included in the Premium plan",
+      "al mese":"per month",
+      "Archiviata":"Archived",
+      "Budget mensile":"Monthly budget"
+    },
+    es:{
+      "Medie mensili del periodo":"Promedios mensuales del período",
+      "Uscite medie mensili":"Gastos mensuales medios",
+      "Entrate medie mensili":"Ingresos mensuales medios",
+      "Saldo medio mensile":"Saldo mensual medio",
+      "Spesa media mensile per area":"Gasto mensual medio por área",
+      "Spesa media mensile per categoria":"Gasto mensual medio por categoría",
+      "Entrata media mensile per tipo":"Ingreso mensual medio por tipo",
+      "Spesa media mensile rispetto al budget per area":"Gasto mensual medio frente al presupuesto por área",
+      "Spesa media mensile rispetto al budget per categoria":"Gasto mensual medio frente al presupuesto por categoría",
+      "Scostamento medio mensile dal budget":"Desviación mensual media del presupuesto",
+      "Statistiche incluse nel piano Base":"Estadísticas incluidas en el plan Base",
+      "Statistiche incluse nel piano Completo":"Estadísticas incluidas en el plan Completo",
+      "al mese":"al mes",
+      "Archiviata":"Archivada",
+      "Budget mensile":"Presupuesto mensual"
+    },
+    fr:{
+      "Medie mensili del periodo":"Moyennes mensuelles de la période",
+      "Uscite medie mensili":"Dépenses mensuelles moyennes",
+      "Entrate medie mensili":"Revenus mensuels moyens",
+      "Saldo medio mensile":"Solde mensuel moyen",
+      "Spesa media mensile per area":"Dépense mensuelle moyenne par domaine",
+      "Spesa media mensile per categoria":"Dépense mensuelle moyenne par catégorie",
+      "Entrata media mensile per tipo":"Revenu mensuel moyen par type",
+      "Spesa media mensile rispetto al budget per area":"Dépense mensuelle moyenne par rapport au budget par domaine",
+      "Spesa media mensile rispetto al budget per categoria":"Dépense mensuelle moyenne par rapport au budget par catégorie",
+      "Scostamento medio mensile dal budget":"Écart mensuel moyen par rapport au budget",
+      "Statistiche incluse nel piano Base":"Statistiques incluses dans le forfait Base",
+      "Statistiche incluse nel piano Completo":"Statistiques incluses dans le forfait Complet",
+      "al mese":"par mois",
+      "Archiviata":"Archivée",
+      "Budget mensile":"Budget mensuel"
+    },
+    de:{
+      "Medie mensili del periodo":"Monatliche Durchschnittswerte des Zeitraums",
+      "Uscite medie mensili":"Durchschnittliche monatliche Ausgaben",
+      "Entrate medie mensili":"Durchschnittliche monatliche Einnahmen",
+      "Saldo medio mensile":"Durchschnittlicher monatlicher Saldo",
+      "Spesa media mensile per area":"Durchschnittliche monatliche Ausgaben nach Bereich",
+      "Spesa media mensile per categoria":"Durchschnittliche monatliche Ausgaben nach Kategorie",
+      "Entrata media mensile per tipo":"Durchschnittliche monatliche Einnahmen nach Typ",
+      "Spesa media mensile rispetto al budget per area":"Durchschnittliche monatliche Ausgaben im Vergleich zum Budget nach Bereich",
+      "Spesa media mensile rispetto al budget per categoria":"Durchschnittliche monatliche Ausgaben im Vergleich zum Budget nach Kategorie",
+      "Scostamento medio mensile dal budget":"Durchschnittliche monatliche Budgetabweichung",
+      "Statistiche incluse nel piano Base":"Im Base-Plan enthaltene Statistiken",
+      "Statistiche incluse nel piano Completo":"Im Komplett-Plan enthaltene Statistiken",
+      "al mese":"pro Monat",
+      "Archiviata":"Archiviert",
+      "Budget mensile":"Monatliches Budget"
+    },
+    pt:{
+      "Medie mensili del periodo":"Médias mensais do período",
+      "Uscite medie mensili":"Despesas médias mensais",
+      "Entrate medie mensili":"Receitas médias mensais",
+      "Saldo medio mensile":"Saldo médio mensal",
+      "Spesa media mensile per area":"Despesa média mensal por área",
+      "Spesa media mensile per categoria":"Despesa média mensal por categoria",
+      "Entrata media mensile per tipo":"Receita média mensal por tipo",
+      "Spesa media mensile rispetto al budget per area":"Despesa média mensal face ao orçamento por área",
+      "Spesa media mensile rispetto al budget per categoria":"Despesa média mensal face ao orçamento por categoria",
+      "Scostamento medio mensile dal budget":"Desvio médio mensal do orçamento",
+      "Statistiche incluse nel piano Base":"Estatísticas incluídas no plano Base",
+      "Statistiche incluse nel piano Completo":"Estatísticas incluídas no plano Completo",
+      "al mese":"por mês",
+      "Archiviata":"Arquivada",
+      "Budget mensile":"Orçamento mensal"
+    },
+    pl:{
+      "Medie mensili del periodo":"Średnie miesięczne dla okresu",
+      "Uscite medie mensili":"Średnie miesięczne wydatki",
+      "Entrate medie mensili":"Średnie miesięczne przychody",
+      "Saldo medio mensile":"Średnie miesięczne saldo",
+      "Spesa media mensile per area":"Średnie miesięczne wydatki według obszaru",
+      "Spesa media mensile per categoria":"Średnie miesięczne wydatki według kategorii",
+      "Entrata media mensile per tipo":"Średnie miesięczne przychody według typu",
+      "Spesa media mensile rispetto al budget per area":"Średnie miesięczne wydatki względem budżetu według obszaru",
+      "Spesa media mensile rispetto al budget per categoria":"Średnie miesięczne wydatki względem budżetu według kategorii",
+      "Scostamento medio mensile dal budget":"Średnie miesięczne odchylenie od budżetu",
+      "Statistiche incluse nel piano Base":"Statystyki dostępne w planie Base",
+      "Statistiche incluse nel piano Completo":"Statystyki dostępne w planie Kompletnym",
+      "al mese":"miesięcznie",
+      "Archiviata":"Zarchiwizowana",
+      "Budget mensile":"Budżet miesięczny"
+    },
+    nl:{
+      "Medie mensili del periodo":"Maandgemiddelden van de periode",
+      "Uscite medie mensili":"Gemiddelde maandelijkse uitgaven",
+      "Entrate medie mensili":"Gemiddelde maandelijkse inkomsten",
+      "Saldo medio mensile":"Gemiddeld maandelijks saldo",
+      "Spesa media mensile per area":"Gemiddelde maandelijkse uitgaven per gebied",
+      "Spesa media mensile per categoria":"Gemiddelde maandelijkse uitgaven per categorie",
+      "Entrata media mensile per tipo":"Gemiddelde maandelijkse inkomsten per type",
+      "Spesa media mensile rispetto al budget per area":"Gemiddelde maandelijkse uitgaven versus budget per gebied",
+      "Spesa media mensile rispetto al budget per categoria":"Gemiddelde maandelijkse uitgaven versus budget per categorie",
+      "Scostamento medio mensile dal budget":"Gemiddelde maandelijkse budgetafwijking",
+      "Statistiche incluse nel piano Base":"Statistieken in het Base-abonnement",
+      "Statistiche incluse nel piano Completo":"Statistieken in het Complete-abonnement",
+      "al mese":"per maand",
+      "Archiviata":"Gearchiveerd",
+      "Budget mensile":"Maandbudget"
+    },
+    ro:{
+      "Medie mensili del periodo":"Medii lunare pentru perioadă",
+      "Uscite medie mensili":"Cheltuieli medii lunare",
+      "Entrate medie mensili":"Venituri medii lunare",
+      "Saldo medio mensile":"Sold mediu lunar",
+      "Spesa media mensile per area":"Cheltuială medie lunară pe domeniu",
+      "Spesa media mensile per categoria":"Cheltuială medie lunară pe categorie",
+      "Entrata media mensile per tipo":"Venit mediu lunar pe tip",
+      "Spesa media mensile rispetto al budget per area":"Cheltuială medie lunară față de buget pe domeniu",
+      "Spesa media mensile rispetto al budget per categoria":"Cheltuială medie lunară față de buget pe categorie",
+      "Scostamento medio mensile dal budget":"Abatere medie lunară de la buget",
+      "Statistiche incluse nel piano Base":"Statistici incluse în planul Base",
+      "Statistiche incluse nel piano Completo":"Statistici incluse în planul Complet",
+      "al mese":"pe lună",
+      "Archiviata":"Arhivată",
+      "Budget mensile":"Buget lunar"
+    },
+    el:{
+      "Medie mensili del periodo":"Μηνιαίοι μέσοι όροι περιόδου",
+      "Uscite medie mensili":"Μέσες μηνιαίες δαπάνες",
+      "Entrate medie mensili":"Μέσα μηνιαία έσοδα",
+      "Saldo medio mensile":"Μέσο μηνιαίο υπόλοιπο",
+      "Spesa media mensile per area":"Μέση μηνιαία δαπάνη ανά τομέα",
+      "Spesa media mensile per categoria":"Μέση μηνιαία δαπάνη ανά κατηγορία",
+      "Entrata media mensile per tipo":"Μέσο μηνιαίο έσοδο ανά τύπο",
+      "Spesa media mensile rispetto al budget per area":"Μέση μηνιαία δαπάνη σε σχέση με τον προϋπολογισμό ανά τομέα",
+      "Spesa media mensile rispetto al budget per categoria":"Μέση μηνιαία δαπάνη σε σχέση με τον προϋπολογισμό ανά κατηγορία",
+      "Scostamento medio mensile dal budget":"Μέση μηνιαία απόκλιση από τον προϋπολογισμό",
+      "Statistiche incluse nel piano Base":"Στατιστικά που περιλαμβάνονται στο πρόγραμμα Base",
+      "Statistiche incluse nel piano Completo":"Στατιστικά που περιλαμβάνονται στο Πλήρες πρόγραμμα",
+      "al mese":"ανά μήνα",
+      "Archiviata":"Αρχειοθετημένη",
+      "Budget mensile":"Μηνιαίος προϋπολογισμός"
+    }
+  };
+  Object.keys(rows).forEach(function(code){
+    if(!TRANSLATIONS[code])TRANSLATIONS[code]={};
+    Object.assign(TRANSLATIONS[code],rows[code]);
+    if(typeof FAINANCE_I18N_PHRASES!=="undefined"){
+      if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};
+      Object.assign(FAINANCE_I18N_PHRASES[code],rows[code]);
+    }
+  });
+})();
+
 export function translateFainanceText(value, lang){
   var raw=repairFainanceEncoding(String(value==null?"":value));
   var code=lang||"it";
@@ -34769,3 +34955,151 @@ function fainancePostProcessTranslation(value, lang){
   try{fainanceTranslationCache={};}catch(e){}
 })();
 
+// fAInance 1.4.x — conferma e completamento dell'accorpamento categorie.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(key,values){
+    LANGS.forEach(function(code){
+      var value=(values&&values[code])||(values&&values.en)||(values&&values.it)||key;
+      try{if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=value;}catch(e){}
+      try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};FAINANCE_UI_TRANSLATIONS[code][key]=value;}}catch(e){}
+      try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=value;}}catch(e){}
+    });
+  }
+  add('Confermi l’accorpamento? Tutti i movimenti della categoria “{from}” saranno assegnati a “{to}”. La categoria “{from}” verrà eliminata.',{
+    it:'Confermi l’accorpamento? Tutti i movimenti della categoria “{from}” saranno assegnati a “{to}”. La categoria “{from}” verrà eliminata.',
+    en:'Confirm the merge? All transactions in the “{from}” category will be assigned to “{to}”. The “{from}” category will be deleted.',
+    es:'¿Confirmas la fusión? Todos los movimientos de la categoría «{from}» se asignarán a «{to}». La categoría «{from}» se eliminará.',
+    fr:'Confirmer la fusion ? Tous les mouvements de la catégorie « {from} » seront attribués à « {to} ». La catégorie « {from} » sera supprimée.',
+    de:'Zusammenführung bestätigen? Alle Buchungen der Kategorie „{from}“ werden „{to}“ zugeordnet. Die Kategorie „{from}“ wird gelöscht.',
+    pt:'Confirmas a fusão? Todos os movimentos da categoria “{from}” serão atribuídos a “{to}”. A categoria “{from}” será eliminada.',
+    pl:'Potwierdzić scalenie? Wszystkie operacje z kategorii „{from}” zostaną przypisane do „{to}”. Kategoria „{from}” zostanie usunięta.',
+    nl:'Samenvoegen bevestigen? Alle transacties in de categorie ‘{from}’ worden toegewezen aan ‘{to}’. De categorie ‘{from}’ wordt verwijderd.',
+    ro:'Confirmi comasarea? Toate tranzacțiile din categoria „{from}” vor fi atribuite categoriei „{to}”. Categoria „{from}” va fi ștearsă.',
+    el:'Επιβεβαιώνετε τη συγχώνευση; Όλες οι κινήσεις της κατηγορίας «{from}» θα αντιστοιχιστούν στην «{to}». Η κατηγορία «{from}» θα διαγραφεί.'
+  });
+  add('Categorie accorpate correttamente.',{
+    it:'Categorie accorpate correttamente.',
+    en:'Categories merged successfully.',
+    es:'Categorías fusionadas correctamente.',
+    fr:'Catégories fusionnées avec succès.',
+    de:'Kategorien wurden erfolgreich zusammengeführt.',
+    pt:'Categorias agrupadas com sucesso.',
+    pl:'Kategorie zostały pomyślnie scalone.',
+    nl:'Categorieën zijn succesvol samengevoegd.',
+    ro:'Categoriile au fost comasate cu succes.',
+    el:'Οι κατηγορίες συγχωνεύτηκαν με επιτυχία.'
+  });
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance — protezione sincronizzazione cataloghi e impostazioni (schema v10).
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Operazione bloccata per proteggere le personalizzazioni. Riprova dopo aver verificato i dati.',{
+    it:'Operazione bloccata per proteggere le personalizzazioni. Riprova dopo aver verificato i dati.',
+    en:'The operation was blocked to protect your customizations. Check the data and try again.',
+    es:'La operación se bloqueó para proteger tus personalizaciones. Comprueba los datos e inténtalo de nuevo.',
+    fr:'L’opération a été bloquée pour protéger vos personnalisations. Vérifiez les données et réessayez.',
+    de:'Der Vorgang wurde zum Schutz deiner Anpassungen blockiert. Prüfe die Daten und versuche es erneut.',
+    pt:'A operação foi bloqueada para proteger as tuas personalizações. Verifica os dados e tenta novamente.',
+    pl:'Operacja została zablokowana, aby chronić personalizacje. Sprawdź dane i spróbuj ponownie.',
+    nl:'De bewerking is geblokkeerd om je aanpassingen te beschermen. Controleer de gegevens en probeer het opnieuw.',
+    ro:'Operațiunea a fost blocată pentru a proteja personalizările. Verifică datele și încearcă din nou.',
+    el:'Η ενέργεια αποκλείστηκε για την προστασία των προσαρμογών σας. Ελέγξτε τα δεδομένα και δοκιμάστε ξανά.'
+  });
+  add('Sincronizzazione bloccata: è stato rilevato un possibile reset delle personalizzazioni. I dati precedenti sono stati ripristinati.',{
+    it:'Sincronizzazione bloccata: è stato rilevato un possibile reset delle personalizzazioni. I dati precedenti sono stati ripristinati.',
+    en:'Sync blocked: a possible customization reset was detected. The previous data has been restored.',
+    es:'Sincronización bloqueada: se detectó un posible restablecimiento de las personalizaciones. Se restauraron los datos anteriores.',
+    fr:'Synchronisation bloquée : une possible réinitialisation des personnalisations a été détectée. Les données précédentes ont été restaurées.',
+    de:'Synchronisierung blockiert: Ein mögliches Zurücksetzen der Anpassungen wurde erkannt. Die vorherigen Daten wurden wiederhergestellt.',
+    pt:'Sincronização bloqueada: foi detetada uma possível reposição das personalizações. Os dados anteriores foram restaurados.',
+    pl:'Synchronizacja została zablokowana: wykryto możliwe zresetowanie personalizacji. Przywrócono poprzednie dane.',
+    nl:'Synchronisatie geblokkeerd: er is een mogelijke reset van aanpassingen gedetecteerd. De vorige gegevens zijn hersteld.',
+    ro:'Sincronizare blocată: a fost detectată o posibilă resetare a personalizărilor. Datele anterioare au fost restaurate.',
+    el:'Ο συγχρονισμός αποκλείστηκε: εντοπίστηκε πιθανή επαναφορά των προσαρμογών. Τα προηγούμενα δεδομένα αποκαταστάθηκαν.'
+  });
+  add('Sincronizzazione bloccata: è stato rilevato un possibile reset delle impostazioni. Le impostazioni precedenti sono state ripristinate.',{
+    it:'Sincronizzazione bloccata: è stato rilevato un possibile reset delle impostazioni. Le impostazioni precedenti sono state ripristinate.',
+    en:'Sync blocked: a possible settings reset was detected. The previous settings have been restored.',
+    es:'Sincronización bloqueada: se detectó un posible restablecimiento de los ajustes. Se restauraron los ajustes anteriores.',
+    fr:'Synchronisation bloquée : une possible réinitialisation des paramètres a été détectée. Les paramètres précédents ont été restaurés.',
+    de:'Synchronisierung blockiert: Ein mögliches Zurücksetzen der Einstellungen wurde erkannt. Die vorherigen Einstellungen wurden wiederhergestellt.',
+    pt:'Sincronização bloqueada: foi detetada uma possível reposição das definições. As definições anteriores foram restauradas.',
+    pl:'Synchronizacja została zablokowana: wykryto możliwe zresetowanie ustawień. Przywrócono poprzednie ustawienia.',
+    nl:'Synchronisatie geblokkeerd: er is een mogelijke reset van instellingen gedetecteerd. De vorige instellingen zijn hersteld.',
+    ro:'Sincronizare blocată: a fost detectată o posibilă resetare a setărilor. Setările anterioare au fost restaurate.',
+    el:'Ο συγχρονισμός αποκλείστηκε: εντοπίστηκε πιθανή επαναφορά των ρυθμίσεων. Οι προηγούμενες ρυθμίσεις αποκαταστάθηκαν.'
+  });
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance — statistiche mensili dedicate, categorie storiche e import backup v13.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Medie mensili',{it:'Medie mensili',en:'Monthly averages',es:'Medias mensuales',fr:'Moyennes mensuelles',de:'Monatliche Durchschnittswerte',pt:'Médias mensais',pl:'Średnie miesięczne',nl:'Maandgemiddelden',ro:'Medii lunare',el:'Μηνιαίοι μέσοι όροι'});
+  add('mesi considerati, inclusi quelli senza movimenti',{it:'mesi considerati, inclusi quelli senza movimenti',en:'months included, including months with no transactions',es:'meses incluidos, también los meses sin movimientos',fr:'mois pris en compte, y compris ceux sans opération',de:'berücksichtigte Monate, einschließlich Monaten ohne Buchungen',pt:'meses considerados, incluindo os meses sem movimentos',pl:'uwzględnione miesiące, także bez operacji',nl:'meegetelde maanden, inclusief maanden zonder transacties',ro:'luni incluse, inclusiv cele fără tranzacții',el:'μήνες που υπολογίστηκαν, συμπεριλαμβανομένων όσων δεν έχουν κινήσεις'});
+  add('Entrate e Uscite medie mensili',{it:'Entrate e Uscite medie mensili',en:'Average monthly income and expenses',es:'Ingresos y gastos medios mensuales',fr:'Revenus et dépenses mensuels moyens',de:'Durchschnittliche monatliche Einnahmen und Ausgaben',pt:'Receitas e despesas médias mensais',pl:'Średnie miesięczne przychody i wydatki',nl:'Gemiddelde maandelijkse inkomsten en uitgaven',ro:'Venituri și cheltuieli medii lunare',el:'Μέσα μηνιαία έσοδα και έξοδα'});
+  add('Entrate medie mensili',{it:'Entrate medie mensili',en:'Average monthly income',es:'Ingresos medios mensuales',fr:'Revenus mensuels moyens',de:'Durchschnittliche monatliche Einnahmen',pt:'Receitas médias mensais',pl:'Średnie miesięczne przychody',nl:'Gemiddelde maandelijkse inkomsten',ro:'Venituri medii lunare',el:'Μέσα μηνιαία έσοδα'});
+  add('Uscite medie mensili',{it:'Uscite medie mensili',en:'Average monthly expenses',es:'Gastos medios mensuales',fr:'Dépenses mensuelles moyennes',de:'Durchschnittliche monatliche Ausgaben',pt:'Despesas médias mensais',pl:'Średnie miesięczne wydatki',nl:'Gemiddelde maandelijkse uitgaven',ro:'Cheltuieli medii lunare',el:'Μέσα μηνιαία έξοδα'});
+  add('Saldo medio mensile',{it:'Saldo medio mensile',en:'Average monthly balance',es:'Saldo medio mensual',fr:'Solde mensuel moyen',de:'Durchschnittlicher Monatssaldo',pt:'Saldo médio mensal',pl:'Średnie saldo miesięczne',nl:'Gemiddeld maandsaldo',ro:'Sold mediu lunar',el:'Μέσο μηνιαίο υπόλοιπο'});
+  add('Media mensile',{it:'Media mensile',en:'Monthly average',es:'Media mensual',fr:'Moyenne mensuelle',de:'Monatsdurchschnitt',pt:'Média mensal',pl:'Średnia miesięczna',nl:'Maandgemiddelde',ro:'Medie lunară',el:'Μηνιαίος μέσος όρος'});
+  add('Nessuna entrata nel periodo selezionato.',{it:'Nessuna entrata nel periodo selezionato.',en:'No income in the selected period.',es:'No hay ingresos en el período seleccionado.',fr:'Aucun revenu sur la période sélectionnée.',de:'Keine Einnahmen im ausgewählten Zeitraum.',pt:'Não existem receitas no período selecionado.',pl:'Brak przychodów w wybranym okresie.',nl:'Geen inkomsten in de geselecteerde periode.',ro:'Nu există venituri în perioada selectată.',el:'Δεν υπάρχουν έσοδα στην επιλεγμένη περίοδο.'});
+  add('Configura un budget per visualizzare i grafici mensili rispetto al budget.',{it:'Configura un budget per visualizzare i grafici mensili rispetto al budget.',en:'Set up a budget to view monthly budget comparison charts.',es:'Configura un presupuesto para ver los gráficos mensuales comparados con el presupuesto.',fr:'Configurez un budget pour afficher les graphiques mensuels comparés au budget.',de:'Richte ein Budget ein, um monatliche Budgetvergleichsdiagramme anzuzeigen.',pt:'Configura um orçamento para ver os gráficos mensais comparados com o orçamento.',pl:'Skonfiguruj budżet, aby zobaczyć miesięczne wykresy porównawcze.',nl:'Stel een budget in om maandelijkse budgetvergelijkingen te bekijken.',ro:'Configurează un buget pentru a vedea graficele lunare comparate cu bugetul.',el:'Ρυθμίστε έναν προϋπολογισμό για να δείτε τα μηνιαία γραφήματα σύγκρισης.'});
+  add('Seleziona il file di backup JSON.',{it:'Seleziona il file di backup JSON.',en:'Select the JSON backup file.',es:'Selecciona el archivo de copia de seguridad JSON.',fr:'Sélectionnez le fichier de sauvegarde JSON.',de:'Wähle die JSON-Sicherungsdatei aus.',pt:'Seleciona o ficheiro de cópia de segurança JSON.',pl:'Wybierz plik kopii zapasowej JSON.',nl:'Selecteer het JSON-back-upbestand.',ro:'Selectează fișierul de backup JSON.',el:'Επιλέξτε το αρχείο αντιγράφου ασφαλείας JSON.'});
+  add('Nessun file selezionato.',{it:'Nessun file selezionato.',en:'No file selected.',es:'No se ha seleccionado ningún archivo.',fr:'Aucun fichier sélectionné.',de:'Keine Datei ausgewählt.',pt:'Nenhum ficheiro selecionado.',pl:'Nie wybrano pliku.',nl:'Geen bestand geselecteerd.',ro:'Niciun fișier selectat.',el:'Δεν επιλέχθηκε αρχείο.'});
+  add('Lettura del backup in corso...',{it:'Lettura del backup in corso...',en:'Reading the backup...',es:'Leyendo la copia de seguridad...',fr:'Lecture de la sauvegarde...',de:'Sicherung wird gelesen...',pt:'A ler a cópia de segurança...',pl:'Odczytywanie kopii zapasowej...',nl:'Back-up wordt gelezen...',ro:'Se citește copia de siguranță...',el:'Ανάγνωση αντιγράφου ασφαλείας...'});
+  add('Backup letto correttamente. Conferma il ripristino.',{it:'Backup letto correttamente. Conferma il ripristino.',en:'Backup read successfully. Confirm the restore.',es:'Copia de seguridad leída correctamente. Confirma la restauración.',fr:'Sauvegarde lue correctement. Confirmez la restauration.',de:'Sicherung erfolgreich gelesen. Wiederherstellung bestätigen.',pt:'Cópia de segurança lida com sucesso. Confirma o restauro.',pl:'Kopia zapasowa została odczytana. Potwierdź przywracanie.',nl:'Back-up correct gelezen. Bevestig het herstel.',ro:'Copia de siguranță a fost citită. Confirmă restaurarea.',el:'Το αντίγραφο ασφαλείας διαβάστηκε. Επιβεβαιώστε την επαναφορά.'});
+  add('Ripristino annullato.',{it:'Ripristino annullato.',en:'Restore cancelled.',es:'Restauración cancelada.',fr:'Restauration annulée.',de:'Wiederherstellung abgebrochen.',pt:'Restauro cancelado.',pl:'Przywracanie anulowane.',nl:'Herstel geannuleerd.',ro:'Restaurare anulată.',el:'Η επαναφορά ακυρώθηκε.'});
+  add('Backup ripristinato correttamente.',{it:'Backup ripristinato correttamente.',en:'Backup restored successfully.',es:'Copia de seguridad restaurada correctamente.',fr:'Sauvegarde restaurée avec succès.',de:'Sicherung erfolgreich wiederhergestellt.',pt:'Cópia de segurança restaurada com sucesso.',pl:'Kopia zapasowa została przywrócona.',nl:'Back-up succesvol hersteld.',ro:'Copia de siguranță a fost restaurată.',el:'Το αντίγραφο ασφαλείας επαναφέρθηκε επιτυχώς.'});
+  add('Impossibile leggere il file selezionato. Riprova.',{it:'Impossibile leggere il file selezionato. Riprova.',en:'The selected file could not be read. Try again.',es:'No se pudo leer el archivo seleccionado. Inténtalo de nuevo.',fr:'Impossible de lire le fichier sélectionné. Réessayez.',de:'Die ausgewählte Datei konnte nicht gelesen werden. Versuche es erneut.',pt:'Não foi possível ler o ficheiro selecionado. Tenta novamente.',pl:'Nie można odczytać wybranego pliku. Spróbuj ponownie.',nl:'Het geselecteerde bestand kon niet worden gelezen. Probeer opnieuw.',ro:'Fișierul selectat nu a putut fi citit. Încearcă din nou.',el:'Δεν ήταν δυνατή η ανάγνωση του επιλεγμένου αρχείου. Δοκιμάστε ξανά.'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance — categorie storiche e worklet medie mensili v14.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add("Confronta entrate e uscite medie mensili",{"it":"Confronta entrate e uscite medie mensili","en":"Compare average monthly income and expenses","es":"Compara los ingresos y gastos medios mensuales","fr":"Compare les revenus et dépenses mensuels moyens","de":"Vergleicht durchschnittliche monatliche Einnahmen und Ausgaben","pt":"Compara receitas e despesas médias mensais","pl":"Porównuje średnie miesięczne przychody i wydatki","nl":"Vergelijkt gemiddelde maandelijkse inkomsten en uitgaven","ro":"Compară veniturile și cheltuielile medii lunare","el":"Συγκρίνει τα μέσα μηνιαία έσοδα και έξοδα"});
+  add("Mostra il saldo medio mensile",{"it":"Mostra il saldo medio mensile","en":"Shows the average monthly balance","es":"Muestra el saldo medio mensual","fr":"Affiche le solde mensuel moyen","de":"Zeigt den durchschnittlichen Monatssaldo","pt":"Mostra o saldo médio mensal","pl":"Pokazuje średnie saldo miesięczne","nl":"Toont het gemiddelde maandsaldo","ro":"Afișează soldul mediu lunar","el":"Εμφανίζει το μέσο μηνιαίο υπόλοιπο"});
+  add("Mostra la spesa media mensile per area",{"it":"Mostra la spesa media mensile per area","en":"Shows average monthly spending by area","es":"Muestra el gasto medio mensual por área","fr":"Affiche les dépenses mensuelles moyennes par domaine","de":"Zeigt durchschnittliche monatliche Ausgaben nach Bereich","pt":"Mostra a despesa média mensal por área","pl":"Pokazuje średnie miesięczne wydatki według obszaru","nl":"Toont gemiddelde maandelijkse uitgaven per gebied","ro":"Afișează cheltuiala medie lunară pe domeniu","el":"Εμφανίζει τη μέση μηνιαία δαπάνη ανά τομέα"});
+  add("Mostra la spesa media mensile per categoria",{"it":"Mostra la spesa media mensile per categoria","en":"Shows average monthly spending by category","es":"Muestra el gasto medio mensual por categoría","fr":"Affiche les dépenses mensuelles moyennes par catégorie","de":"Zeigt durchschnittliche monatliche Ausgaben nach Kategorie","pt":"Mostra a despesa média mensal por categoria","pl":"Pokazuje średnie miesięczne wydatki według kategorii","nl":"Toont gemiddelde maandelijkse uitgaven per categorie","ro":"Afișează cheltuiala medie lunară pe categorie","el":"Εμφανίζει τη μέση μηνιαία δαπάνη ανά κατηγορία"});
+  add("Mostra l'entrata media mensile per tipo",{"it":"Mostra l'entrata media mensile per tipo","en":"Shows average monthly income by type","es":"Muestra el ingreso medio mensual por tipo","fr":"Affiche le revenu mensuel moyen par type","de":"Zeigt durchschnittliche monatliche Einnahmen nach Typ","pt":"Mostra a receita média mensal por tipo","pl":"Pokazuje średni miesięczny przychód według typu","nl":"Toont gemiddelde maandelijkse inkomsten per type","ro":"Afișează venitul mediu lunar pe tip","el":"Εμφανίζει το μέσο μηνιαίο έσοδο ανά τύπο"});
+  add("Confronta la spesa media mensile con il budget per area",{"it":"Confronta la spesa media mensile con il budget per area","en":"Compares average monthly spending with the budget by area","es":"Compara el gasto medio mensual con el presupuesto por área","fr":"Compare les dépenses mensuelles moyennes au budget par domaine","de":"Vergleicht durchschnittliche monatliche Ausgaben mit dem Budget nach Bereich","pt":"Compara a despesa média mensal com o orçamento por área","pl":"Porównuje średnie miesięczne wydatki z budżetem według obszaru","nl":"Vergelijkt gemiddelde maandelijkse uitgaven met het budget per gebied","ro":"Compară cheltuiala medie lunară cu bugetul pe domeniu","el":"Συγκρίνει τη μέση μηνιαία δαπάνη με τον προϋπολογισμό ανά τομέα"});
+  add("Confronta la spesa media mensile con il budget per categoria",{"it":"Confronta la spesa media mensile con il budget per categoria","en":"Compares average monthly spending with the budget by category","es":"Compara el gasto medio mensual con el presupuesto por categoría","fr":"Compare les dépenses mensuelles moyennes au budget par catégorie","de":"Vergleicht durchschnittliche monatliche Ausgaben mit dem Budget nach Kategorie","pt":"Compara a despesa média mensal com o orçamento por categoria","pl":"Porównuje średnie miesięczne wydatki z budżetem według kategorii","nl":"Vergelijkt gemiddelde maandelijkse uitgaven met het budget per categorie","ro":"Compară cheltuiala medie lunară cu bugetul pe categorie","el":"Συγκρίνει τη μέση μηνιαία δαπάνη με τον προϋπολογισμό ανά κατηγορία"});
+  add("Mostra lo scostamento medio mensile dal budget",{"it":"Mostra lo scostamento medio mensile dal budget","en":"Shows the average monthly variance from the budget","es":"Muestra la desviación media mensual respecto al presupuesto","fr":"Affiche l’écart mensuel moyen par rapport au budget","de":"Zeigt die durchschnittliche monatliche Budgetabweichung","pt":"Mostra o desvio médio mensal em relação ao orçamento","pl":"Pokazuje średnie miesięczne odchylenie od budżetu","nl":"Toont de gemiddelde maandelijkse afwijking van het budget","ro":"Afișează abaterea medie lunară față de buget","el":"Εμφανίζει τη μέση μηνιαία απόκλιση από τον προϋπολογισμό"});
+  add("Statistica non disponibile nel piano attuale.",{"it":"Statistica non disponibile nel piano attuale.","en":"This statistic is not available in the current plan.","es":"Esta estadística no está disponible en el plan actual.","fr":"Cette statistique n’est pas disponible dans le forfait actuel.","de":"Diese Statistik ist im aktuellen Tarif nicht verfügbar.","pt":"Esta estatística não está disponível no plano atual.","pl":"Ta statystyka nie jest dostępna w obecnym planie.","nl":"Deze statistiek is niet beschikbaar in het huidige abonnement.","ro":"Această statistică nu este disponibilă în planul actual.","el":"Αυτό το στατιστικό δεν είναι διαθέσιμο στο τρέχον πρόγραμμα."});
+  add("Distribuzione uscite —",{"it":"Distribuzione uscite","en":"Expense distribution","es":"Distribución de gastos","fr":"Répartition des dépenses","de":"Ausgabenverteilung","pt":"Distribuição das despesas","pl":"Rozkład wydatków","nl":"Uitgavenverdeling","ro":"Distribuția cheltuielilor","el":"Κατανομή εξόδων"});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance — recupero sicuro categorie storiche v15.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Movimenti storici',{it:'Movimenti storici',en:'Historical transactions',es:'Movimientos históricos',fr:'Opérations historiques',de:'Historische Buchungen',pt:'Movimentos históricos',pl:'Transakcje historyczne',nl:'Historische transacties',ro:'Tranzacții istorice',el:'Ιστορικές κινήσεις'});
+  add('Recupera nomi categorie storiche',{it:'Recupera nomi categorie storiche',en:'Recover historical category names',es:'Recuperar nombres de categorías históricas',fr:'Récupérer les noms des catégories historiques',de:'Namen historischer Kategorien wiederherstellen',pt:'Recuperar nomes de categorias históricas',pl:'Odzyskaj nazwy historycznych kategorii',nl:'Namen van historische categorieën herstellen',ro:'Recuperează numele categoriilor istorice',el:'Ανάκτηση ονομάτων ιστορικών κατηγοριών'});
+  add('Legge soltanto il catalogo categorie da un backup. Non modifica movimenti, importi, metodi o impostazioni.',{it:'Legge soltanto il catalogo categorie da un backup. Non modifica movimenti, importi, metodi o impostazioni.',en:'Reads only the category catalogue from a backup. It does not change transactions, amounts, methods or settings.',es:'Lee solo el catálogo de categorías de una copia de seguridad. No modifica movimientos, importes, métodos ni ajustes.',fr:'Lit uniquement le catalogue des catégories depuis une sauvegarde. Ne modifie ni opérations, ni montants, ni moyens de paiement, ni paramètres.',de:'Liest nur den Kategorienkatalog aus einer Sicherung. Buchungen, Beträge, Zahlungsmethoden und Einstellungen bleiben unverändert.',pt:'Lê apenas o catálogo de categorias de uma cópia de segurança. Não altera movimentos, valores, métodos ou definições.',pl:'Odczytuje tylko katalog kategorii z kopii zapasowej. Nie zmienia transakcji, kwot, metod ani ustawień.',nl:'Leest alleen de categoriecatalogus uit een back-up. Transacties, bedragen, methoden en instellingen blijven ongewijzigd.',ro:'Citește doar catalogul de categorii dintr-un backup. Nu modifică tranzacții, sume, metode sau setări.',el:'Διαβάζει μόνο τον κατάλογο κατηγοριών από αντίγραφο ασφαλείας. Δεν αλλάζει κινήσεις, ποσά, μεθόδους ή ρυθμίσεις.'});
+  add('Seleziona backup',{it:'Seleziona backup',en:'Select backup',es:'Seleccionar copia de seguridad',fr:'Sélectionner la sauvegarde',de:'Sicherung auswählen',pt:'Selecionar cópia de segurança',pl:'Wybierz kopię zapasową',nl:'Back-up selecteren',ro:'Selectează backupul',el:'Επιλογή αντιγράφου ασφαλείας'});
+  add('Ricerca delle categorie storiche nel backup...',{it:'Ricerca delle categorie storiche nel backup...',en:'Searching the backup for historical categories...',es:'Buscando categorías históricas en la copia de seguridad...',fr:'Recherche des catégories historiques dans la sauvegarde...',de:'Historische Kategorien werden in der Sicherung gesucht...',pt:'A procurar categorias históricas na cópia de segurança...',pl:'Wyszukiwanie historycznych kategorii w kopii zapasowej...',nl:'Zoeken naar historische categorieën in de back-up...',ro:'Se caută categoriile istorice în backup...',el:'Αναζήτηση ιστορικών κατηγοριών στο αντίγραφο ασφαλείας...'});
+  add('Nomi delle categorie storiche recuperati senza modificare movimenti o impostazioni.',{it:'Nomi delle categorie storiche recuperati senza modificare movimenti o impostazioni.',en:'Historical category names recovered without changing transactions or settings.',es:'Nombres de categorías históricas recuperados sin modificar movimientos ni ajustes.',fr:'Noms des catégories historiques récupérés sans modifier les opérations ni les paramètres.',de:'Namen historischer Kategorien wurden wiederhergestellt, ohne Buchungen oder Einstellungen zu ändern.',pt:'Nomes das categorias históricas recuperados sem alterar movimentos ou definições.',pl:'Nazwy historycznych kategorii odzyskano bez zmiany transakcji ani ustawień.',nl:'Namen van historische categorieën hersteld zonder transacties of instellingen te wijzigen.',ro:'Numele categoriilor istorice au fost recuperate fără a modifica tranzacțiile sau setările.',el:'Τα ονόματα των ιστορικών κατηγοριών ανακτήθηκαν χωρίς αλλαγή κινήσεων ή ρυθμίσεων.'});
+  add('Nel backup non sono presenti nomi recuperabili per le categorie storiche.',{it:'Nel backup non sono presenti nomi recuperabili per le categorie storiche.',en:'The backup does not contain recoverable historical category names.',es:'La copia de seguridad no contiene nombres recuperables de categorías históricas.',fr:'La sauvegarde ne contient aucun nom récupérable de catégorie historique.',de:'Die Sicherung enthält keine wiederherstellbaren Namen historischer Kategorien.',pt:'A cópia de segurança não contém nomes recuperáveis de categorias históricas.',pl:'Kopia zapasowa nie zawiera możliwych do odzyskania nazw historycznych kategorii.',nl:'De back-up bevat geen herstelbare namen van historische categorieën.',ro:'Backupul nu conține nume recuperabile pentru categoriile istorice.',el:'Το αντίγραφο ασφαλείας δεν περιέχει ανακτήσιμα ονόματα ιστορικών κατηγοριών.'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance — import affidabile e cataloghi storici semplificati v16.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  add('Categorie archiviate',{it:'Categorie archiviate',en:'Archived categories',es:'Categorías archivadas',fr:'Catégories archivées',de:'Archivierte Kategorien',pt:'Categorias arquivadas',pl:'Zarchiwizowane kategorie',nl:'Gearchiveerde categorieën',ro:'Categorii arhivate',el:'Αρχειοθετημένες κατηγορίες'});
+  add('Tutte le categorie usate nei movimenti hanno già un nome.',{it:'Tutte le categorie usate nei movimenti hanno già un nome.',en:'All categories used by transactions already have a name.',es:'Todas las categorías usadas en los movimientos ya tienen un nombre.',fr:'Toutes les catégories utilisées dans les opérations ont déjà un nom.',de:'Alle in Buchungen verwendeten Kategorien haben bereits einen Namen.',pt:'Todas as categorias usadas nos movimentos já têm um nome.',pl:'Wszystkie kategorie używane w transakcjach mają już nazwę.',nl:'Alle categorieën die in transacties worden gebruikt hebben al een naam.',ro:'Toate categoriile folosite în tranzacții au deja un nume.',el:'Όλες οι κατηγορίες που χρησιμοποιούνται στις κινήσεις έχουν ήδη όνομα.'});
+  add('File JSON non valido o impossibile da leggere.',{it:'File JSON non valido o impossibile da leggere.',en:'The JSON file is invalid or cannot be read.',es:'El archivo JSON no es válido o no se puede leer.',fr:'Le fichier JSON est invalide ou illisible.',de:'Die JSON-Datei ist ungültig oder kann nicht gelesen werden.',pt:'O ficheiro JSON é inválido ou não pode ser lido.',pl:'Plik JSON jest nieprawidłowy lub nie można go odczytać.',nl:'Het JSON-bestand is ongeldig of kan niet worden gelezen.',ro:'Fișierul JSON nu este valid sau nu poate fi citit.',el:'Το αρχείο JSON δεν είναι έγκυρο ή δεν μπορεί να διαβαστεί.'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();

@@ -543,3 +543,4 @@ export function sortedCats(cats,catOrder,catSortMode,expGrps){var list=Array.isA
 export function sortedMethods(methods,methodOrder,methodSortMode){var active=(Array.isArray(methods)?methods:[]).filter(function(m){return !m.archived&&!m.deleted;});var savedOrder=Array.isArray(methodOrder)?methodOrder:[];if(savedOrder.length)return sortBySavedIds(active,savedOrder);if(methodSortMode==="group"){return active.slice().sort(function(a,b){var gl=["conti","carte","altri"];var ga=gl.indexOf(a.group||"altri"),gb=gl.indexOf(b.group||"altri");if(ga<0)ga=gl.length;if(gb<0)gb=gl.length;return ga-gb;});}return active;}
 
 // ── CHARTS ───────────────────────────────────────────────────────────────────
+export { deleteField } from 'firebase/firestore';

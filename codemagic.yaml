@@ -24,7 +24,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        FAINANCE_IOS_VERSION: "1.6.71"
+        FAINANCE_IOS_VERSION: "1.6.74"
         APP_STORE_APPLE_ID: "6777812477"
         VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
@@ -374,7 +374,7 @@ workflows:
           set -euo pipefail
 
           BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
-          EXPECTED_VERSION="${FAINANCE_IOS_VERSION:?FAINANCE_IOS_VERSION non impostata}"
+          EXPECTED_VERSION="1.6.74"
           if [ "$EXPECTED_VERSION" != "1.6.71" ]; then
             echo "ERRORE: versione iOS inattesa: $EXPECTED_VERSION. Attesa: 1.6.71"
             exit 1

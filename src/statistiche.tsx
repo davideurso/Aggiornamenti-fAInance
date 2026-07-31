@@ -6,14 +6,14 @@
 
 import { useState, useMemo } from 'react';
 import { useApp, useStorage, MONTHS_FULL, MONTHS_SHORT, BALANCE_COLOR,
-  DEFAULT_EXPENSE_GROUPS, rateMonth, dateOffset, todayStr } from './core';
+  DEFAULT_EXPENSE_GROUPS, getAllIncomeTypes, rateMonth, dateOffset, todayStr } from './core';
 import { DonutChart, BarChart, LineChart, StatCard, Btn } from './widget';
 import { TRANSLATIONS, translateFainanceText } from './traduzioni';
 
 export function StatsPanel(){
   // ── Destructure completo dal context ─────────────────────────────────────
   var _ctx:any=useApp();
-  var {lang,cats,setCats,methods,setMethods,methodGroups,setMethodGroups,expenseGroups}:any=_ctx;
+  var {lang,cats,historicalExpenseCats,setCats,methods,setMethods,methodGroups,setMethodGroups,expenseGroups}:any=_ctx;
   var {setExpenseGroups,incomeGroups,setIncomeGroups,incomeTypes,customIncomeTypes,setCustomIncomeTypes,incomeTypeOverrides,setIncomeTypeOverrides}:any=_ctx;
   var {recurring,setRecurring,goals,setGoals,alerts,setAlerts,expenses,setExpenses}:any=_ctx;
   var {incomes,setIncomes,sym,fmt,dark,dateFmt,curMonthKey,addExpenses}:any=_ctx;
@@ -74,23 +74,38 @@ export function StatsPanel(){
   var canSavingAdvanced=canPlan("premium");
   var effectiveStatMode=(statMode==="range"&&!canRangeFilter)?"last12":(statMode==="year"&&!canYearFilter?"last12":(["month","year","range","last12"].indexOf(statMode)>=0?statMode:"last12"));
   var effectiveStatsView=canRateView?statsView:"reale";
-  var lockedStats=[
-    {name:"Filtro anno",plan:"base"},{name:"Filtro intervallo date personalizzato",plan:"premium"},{name:"Distribuzione uscite per categoria",plan:"base"},{name:"Dettaglio categorie dentro ogni area",plan:"base"},{name:"Entrate per tipo",plan:"base"},{name:"Entrate vs uscite mensili",plan:"base"},{name:"Saldo mensile dell’anno",plan:"base"},{name:"Vista reale / rateizzata",plan:"base"},{name:"Categorie sforate",plan:"base"},{name:"Budget per area",plan:"base"},{name:"Budget per categoria",plan:"base"},{name:"Importo avanzato / sforato per categoria",plan:"premium"},{name:"Score attendibilità del risparmio",plan:"premium"},{name:"Scostamento medio dal piano",plan:"premium"},{name:"Trend miglioramento / peggioramento",plan:"premium"},{name:"Tabella mensile dettagliata",plan:"premium"}
-  ].filter(function(x){return !canPlan(x.plan);});
-  var lockedBox={background:dark?"#3a321a":"#FFF8E1",border:"1px solid "+(dark?"#7a6220":"#F2D36B"),borderRadius:14,padding:"12px 14px",color:dark?"#F8D981":"#856404"};
-  function effectiveStatsExpenseGroups(){
-    var base=(Array.isArray(expenseGroups)&&expenseGroups.length)?expenseGroups:DEFAULT_EXPENSE_GROUPS;
-    var out=(base||[]).slice();
-    if(!out.some(function(g){return String(g.id)==="altro";})){
-      var altro=(DEFAULT_EXPENSE_GROUPS||[]).find(function(g){return String(g.id)==="altro";})||{id:"altro",name:"Altro",icon:"📦",color:"#D3D1C7"};
-      out.push(altro);
-    }
-    return out;
+  var lockedBox={background:dark?"#252535":"#F6F7F9",border:"1px solid "+borderC,borderRadius:14,padding:"12px 14px",color:subC};
+  function usableStatsCategoryName(value,id){var name=String(value||"").trim(),sid=String(id||"");if(!name)return false;if(sid&&(name===sid||name.toLowerCase()===("categoria "+sid).toLowerCase()||name.toLowerCase()===("category "+sid).toLowerCase()))return false;if(/^(categoria|category|catégorie|kategorie|categoría|categorie|kategoria|κατηγορία)\s+[0-9_-]{5,}$/i.test(name)||/^[0-9_-]{5,}$/.test(name))return false;return true;}
+  function unresolvedStatsCategory(){return{id:"__history_unresolved__",name:L("Movimenti storici"),icon:"🗂️",color:"#B4B2A9",group:"__history_unresolved__",archived:true,historical:true,unresolved:true};}
+  function normalizeStatsCategoryName(value){try{return String(value||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim().toLowerCase().replace(/\s+/g," ");}catch(e){return String(value||"").trim().toLowerCase().replace(/\s+/g," ");}}
+  function statsCategoryFromMovement(e){
+    var id=String(e&&e.catId!==undefined?e.catId:"");
+    var movementName=String((e&&(e.catName||e.categoryName||e.categoryLabel))||"").trim();
+    var currentById=(cats||[]).find(function(c){return c&&!c.deleted&&String(c.id)===id;});
+    if(currentById&&usableStatsCategoryName(currentById.name,currentById.id))return {...currentById,archived:!!currentById.archived};
+    if(movementName){var nn=normalizeStatsCategoryName(movementName);var currentByName=(cats||[]).find(function(c){return c&&!c.deleted&&normalizeStatsCategoryName(c.name)===nn;});if(currentByName)return {...currentByName,archived:!!currentByName.archived};}
+    var historicalById=(historicalExpenseCats||[]).find(function(c){return c&&!c.deleted&&String(c.id)===id;});
+    if(historicalById&&usableStatsCategoryName(historicalById.name,historicalById.id))return {...historicalById,archived:false};
+    if(movementName){var nh=normalizeStatsCategoryName(movementName);var historicalByName=(historicalExpenseCats||[]).find(function(c){return c&&!c.deleted&&normalizeStatsCategoryName(c.name)===nh;});if(historicalByName)return {...historicalByName,archived:false};}
+    if(usableStatsCategoryName(movementName,id))return{id:id||("history_"+normalizeStatsCategoryName(movementName)),name:movementName,icon:String((e&&(e.catIcon||e.categoryIcon))||"🏷️"),color:String((e&&(e.catColor||e.categoryColor))||"#B4B2A9"),group:String((e&&(e.catGroup||e.categoryGroup||e.groupId))||""),archived:false,historical:true};
+    return unresolvedStatsCategory();
   }
-  var grps=effectiveStatsExpenseGroups();
-  function catsForStatsGroup(group){
-    var ids=(grps||[]).map(function(g){return String(g.id);});
-    return (cats||[]).filter(function(c){var cg=String(c.group||"");return cg===String(group.id)||((!cg||ids.indexOf(cg)<0)&&String(group.id)==="altro");});
+  var statsCats=useMemo(function(){var map:any={},order:string[]=[];var hasUnresolved=false;(Array.isArray(expenses)?expenses:[]).forEach(function(e){var c=statsCategoryFromMovement(e);if(!c)return;if(c.unresolved){hasUnresolved=true;return;}var id=String(c.id);if(!map[id])order.push(id);map[id]={...(map[id]||{}),...c,id:id,archived:c.archived===true};});var out=order.map(function(id){return map[id];});if(hasUnresolved)out.push(unresolvedStatsCategory());return out;},[historicalExpenseCats,cats,expenses]);
+  var grps=useMemo(function(){var base=((Array.isArray(expenseGroups)&&expenseGroups.length)?expenseGroups:DEFAULT_EXPENSE_GROUPS).slice(),known:any={};base.forEach(function(g){known[String(g.id)]=true;});if(statsCats.some(function(c){return c&&c.unresolved;}))base.push({id:"__history_unresolved__",name:L("Movimenti storici"),icon:"🗂️",color:"#B4B2A9",historical:true});if(statsCats.some(function(c){return c&&!c.unresolved&&(!c.group||!known[String(c.group)]);}))base.push({id:"__history_archived__",name:L("Categorie archiviate"),icon:"🗂️",color:"#B4B2A9",historical:true});return base;},[expenseGroups,statsCats]);
+  function statsGroupIdForCat(c){if(c&&c.unresolved)return "__history_unresolved__";var gid=String(c&&c.group||"");if(gid&&(grps||[]).some(function(g){return String(g.id)===gid;}))return gid;return "__history_archived__";}
+  function catsForStatsGroup(group){return (statsCats||[]).filter(function(c){return statsGroupIdForCat(c)===String(group.id);});}
+  function openHistoryForStatsCategory(cat){
+    if(setHistoryTab)setHistoryTab("expenses");
+    if(setFilterCat)setFilterCat("all");
+    if(setFilterCats)setFilterCats(["expense:"+String(cat&&cat.id||"")]);
+    if(setFilterCatExclude)setFilterCatExclude(false);
+    if(setFilterGroup)setFilterGroup("all");
+    if(setFilterYear)setFilterYear("all");
+    if(setFilterMonth)setFilterMonth("");
+    if(setFilterMonths)setFilterMonths([]);
+    if(setFilterDateFrom)setFilterDateFrom("");
+    if(setFilterDateTo)setFilterDateTo("");
+    if(setTab)setTab("history");
   }
   function last12StatsMonthKeys(){
     var n=new Date();var start=new Date(n.getFullYear(),n.getMonth()-11,1);
@@ -121,33 +136,43 @@ export function StatsPanel(){
   var fExp=getFExp();var fInc=getFInc();
   var mExp=effectiveStatsView==="rateizzato"?expenses.reduce(function(a,e){return a+rateInPeriod(e);},0):fExp.reduce(function(a,e){return a+e.amount;},0);
   var mInc=effectiveStatsView==="rateizzato"?incomes.reduce(function(a,i){return a+rateInPeriod(i);},0):fInc.reduce(function(a,i){return a+i.amount;},0);
-  var knownStatsCatIds=(cats||[]).map(function(c){return String(c.id);});
-  var groupStatsLocal=grps.map(function(g){var gc=catsForStatsGroup(g);var ids=gc.map(function(c){return String(c.id);});var isOther=String(g.id)==="altro";function expBelongs(e){var cid=String(e&&e.catId);return ids.indexOf(cid)>=0||(isOther&&knownStatsCatIds.indexOf(cid)<0);}var total=effectiveStatsView==="rateizzato"?expenses.reduce(function(a,e){return expBelongs(e)?a+rateInPeriod(e):a;},0):fExp.filter(expBelongs).reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);var unknownTotal=isOther?(effectiveStatsView==="rateizzato"?expenses.reduce(function(a,e){return knownStatsCatIds.indexOf(String(e&&e.catId))<0?a+rateInPeriod(e):a;},0):fExp.filter(function(e){return knownStatsCatIds.indexOf(String(e&&e.catId))<0;}).reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0)):0;var catBreakdown=gc.map(function(c){var ct=effectiveStatsView==="rateizzato"?expenses.reduce(function(a,e){return String(e.catId)===String(c.id)?a+rateInPeriod(e):a;},0):fExp.filter(function(e){return String(e.catId)===String(c.id);}).reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);return{...c,total:ct};}).concat(unknownTotal>0?[{id:"_unknown",name:L("Altro"),icon:"📦",total:unknownTotal}]:[]).filter(function(c){return c.total>0;}).sort(function(a,b){return b.total-a.total;});return{...g,total:total,catBreakdown:catBreakdown};}).filter(function(g){return g.total>0;});
+  var groupStatsLocal=grps.map(function(g){var gc=catsForStatsGroup(g);var ids=gc.map(function(c){return String(c.id);});function resolvedId(e){var r=statsCategoryFromMovement(e);return r?String(r.id):"";}function expBelongs(e){var resolved=statsCategoryFromMovement(e);if(String(g.id)==="__history_unresolved__")return !!(resolved&&resolved.unresolved);return ids.indexOf(resolvedId(e))>=0;}var total=effectiveStatsView==="rateizzato"?expenses.reduce(function(a,e){return expBelongs(e)?a+rateInPeriod(e):a;},0):fExp.filter(expBelongs).reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);var catBreakdown=gc.map(function(c){var ct=effectiveStatsView==="rateizzato"?expenses.reduce(function(a,e){return resolvedId(e)===String(c.id)?a+rateInPeriod(e):a;},0):fExp.filter(function(e){return resolvedId(e)===String(c.id);}).reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);return{...c,total:ct};}).filter(function(c){return c.total>0;}).sort(function(a,b){return b.total-a.total;});return{...g,total:total,catBreakdown:catBreakdown};}).filter(function(g){return g.total>0;});
+  groupStatsLocal.sort(function(a,b){return b.total-a.total;});
   var donutData=groupStatsLocal.map(function(g){return{value:g.total,color:g.color,label:g.name};});
-  var incByType=incomeTypes.map(function(it){return{label:it.icon,value:fInc.filter(function(i){return i.type===it.id;}).reduce(function(a,i){return a+i.amount;},0),color:it.color};}).filter(function(x){return x.value>0;});
+  var allStatsIncomeTypes=getAllIncomeTypes(customIncomeTypes,incomeTypeOverrides).filter(function(x){return !x.deleted;});
+  var incByType=allStatsIncomeTypes.map(function(it){return{label:it.icon,value:fInc.filter(function(i){return String(i.type)===String(it.id);}).reduce(function(a,i){return a+i.amount;},0),color:it.color,name:it.name,archived:!!it.archived};}).filter(function(x){return x.value>0;});
   var titleLabel=effectiveStatMode==="last12"?L("Ultimi 12 mesi"):(effectiveStatMode==="year"?statYear:effectiveStatMode==="month"?MONTHS_FULL[parseInt(statMonth.split("-")[1])-1]+" "+statMonth.split("-")[0]:rangeFrom+" - "+rangeTo);
   var statsMonthlyTotals=useMemo(function(){return periodMonths.map(function(mk){var exp=effectiveStatsView==="rateizzato"?expenses.reduce(function(a,e){return a+rateMonth(e,mk);},0):expenses.filter(function(e){return e.date&&e.date.startsWith(mk);}).reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);var inc=effectiveStatsView==="rateizzato"?incomes.reduce(function(a,i){return a+rateMonth(i,mk);},0):incomes.filter(function(i){return i.date&&i.date.startsWith(mk);}).reduce(function(a,i){return a+(parseFloat(i.amount)||0);},0);return{label:monthKeyLabel(mk),exp:exp,inc:inc,value:inc-exp};});},[periodMonths.join("|"),expenses,incomes,effectiveStatsView,effectiveStatMode]);
+  var monthlyDivisor=Math.max(1,periodMonths.length);
+  var monthlyAverageSummary=[
+    {id:"expenses",label:L("Uscite medie mensili"),value:mExp/monthlyDivisor,color:expenseColor},
+    {id:"income",label:L("Entrate medie mensili"),value:mInc/monthlyDivisor,color:incomeColor},
+    {id:"balance",label:L("Saldo medio mensile"),value:(mInc-mExp)/monthlyDivisor,color:BALANCE_COLOR}
+  ];
+  var monthlyAreaStats=groupStatsLocal.map(function(g){return{id:g.id,label:g.name,value:g.total/monthlyDivisor,color:g.color};}).filter(function(x){return Math.abs(x.value)>0;});
+  var monthlyCategoryStats=groupStatsLocal.reduce(function(out,g){return out.concat((g.catBreakdown||[]).map(function(c){return{id:String(c.id),label:(c.icon?c.icon+" ":"")+c.name+(c.archived?(" · "+L("Archiviata")):""),value:c.total/monthlyDivisor,color:c.color||g.color};}));},[]).filter(function(x){return Math.abs(x.value)>0;}).sort(function(a,b){return b.value-a.value;});
+  var monthlyIncomeTypeStats=allStatsIncomeTypes.map(function(it){var total=effectiveStatsView==="rateizzato"?incomes.reduce(function(a,i){return String(i.type)===String(it.id)?a+rateInPeriod(i):a;},0):fInc.filter(function(i){return String(i.type)===String(it.id);}).reduce(function(a,i){return a+(parseFloat(i.amount)||0);},0);return{id:String(it.id),label:(it.icon?it.icon+" ":"")+it.name+(it.archived?(" · "+L("Archiviata")):""),value:total/monthlyDivisor,color:it.color};}).filter(function(x){return Math.abs(x.value)>0;}).sort(function(a,b){return b.value-a.value;});
 
   // Budget stats
   var budgetPlanRef=budgetPlan;
   var budgetStats=useMemo(function(){
     if(!budgetPlanRef||!budgetPlanRef.items)return null;
-    return cats.map(function(c){
+    return statsCats.map(function(c){
       var bi=budgetPlanRef.items.find(function(i){return i.catId===c.id;});var budgeted=bi?bi.amount:0;if(!budgeted)return null;
       var spent;if(effectiveStatsView==="rateizzato")spent=expenses.reduce(function(a,e){return e.catId===c.id?a+rateInPeriod(e):a;},0);else spent=fExp.filter(function(e){return e.catId===c.id;}).reduce(function(a,e){return a+e.amount;},0);
       return{cat:c,budgeted:budgeted,spent:spent,pct:budgeted>0?Math.min(200,(spent/budgeted)*100):0,diff:budgeted-spent};
     }).filter(Boolean);
-  },[budgetPlanRef,fExp,statMonth,statMode,effectiveStatsView,expenses,cats]);
+  },[budgetPlanRef,fExp,statMonth,statMode,effectiveStatsView,expenses,statsCats]);
 
   var budgetGroupStats=useMemo(function(){
     if(!budgetPlanRef||!budgetPlanRef.items)return null;
     return grps.map(function(g){
-      var gc=cats.filter(function(c){return c.group===g.id;});
+      var gc=statsCats.filter(function(c){return statsGroupIdForCat(c)===String(g.id);});
       var totalBudgeted=gc.reduce(function(a,c){var bi=budgetPlanRef.items.find(function(i){return i.catId===c.id;});return a+(bi?bi.amount:0);},0);if(!totalBudgeted)return null;
       var totalSpent;if(effectiveStatsView==="rateizzato")totalSpent=expenses.reduce(function(a,e){return gc.some(function(c){return c.id===e.catId;})?a+rateInPeriod(e):a;},0);else totalSpent=fExp.filter(function(e){return gc.some(function(c){return c.id===e.catId;});}).reduce(function(a,e){return a+e.amount;},0);
       return{group:g,budgeted:totalBudgeted,spent:totalSpent,pct:totalBudgeted>0?Math.min(200,(totalSpent/totalBudgeted)*100):0,diff:totalBudgeted-totalSpent};
     }).filter(Boolean);
-  },[budgetPlanRef,fExp,grps,cats,statMonth,statMode,effectiveStatsView,expenses]);
+  },[budgetPlanRef,fExp,grps,statsCats,statMonth,statMode,effectiveStatsView,expenses]);
 
   // Monthly saving trend: planned vs real, defaulting to the selected period / last 12 months
   var savingTrend=useMemo(function(){
@@ -181,6 +206,39 @@ export function StatsPanel(){
     return{score:score,hits:hits,total:withData.length,avgDiff:avgDiff,improving:improving};
   },[savingTrend]);
 
+  function MonthlyValueRows(props:any){
+    var items=(props.items||[]).slice(0,props.limit||10);
+    if(!items.length)return <div style={{color:subC,fontSize:13,textAlign:"center",padding:"18px 0"}}>{L("Nessun dato")}</div>;
+    var max=Math.max.apply(null,items.map(function(x){return Math.abs(Number(x.value)||0);}));if(!max)max=1;
+    return <div>{items.map(function(item){var v=Number(item.value)||0;return <div key={String(item.id)} style={{marginBottom:11}}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",marginBottom:4}}><span style={{fontSize:12,color:textC,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span><span style={{fontSize:12,color:textC,fontWeight:800,whiteSpace:"nowrap"}}>{fmt(v)} <span style={{fontSize:10,color:subC,fontWeight:500}}>{L("al mese")}</span></span></div><div style={{height:9,borderRadius:999,background:dark?"#303043":"#EEF0F4",overflow:"hidden"}}><div style={{height:"100%",width:Math.max(v?3:0,Math.min(100,Math.abs(v)/max*100))+"%",background:item.color||"#7F77DD",borderRadius:999,opacity:v<0?0.65:1}}/></div></div>;})}</div>;
+  }
+  function MonthlyBudgetRows(props:any){
+    var items=(props.items||[]).slice(0,props.limit||10);
+    if(!items.length)return <div style={{color:subC,fontSize:13,textAlign:"center",padding:"18px 0"}}>{L("Nessun dato")}</div>;
+    var max=Math.max.apply(null,items.reduce(function(a,x){return a.concat([Math.abs(Number(x.average)||0),Math.abs(Number(x.budget)||0)]);},[]));if(!max)max=1;
+    return <div>{items.map(function(item){var av=Number(item.average)||0,bg=Number(item.budget)||0;return <div key={String(item.id)} style={{marginBottom:14}}><div style={{display:"flex",justifyContent:"space-between",gap:8,marginBottom:5}}><span style={{fontSize:12,color:textC,fontWeight:650,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.label}</span><span style={{fontSize:11,color:subC,whiteSpace:"nowrap"}}>{fmt(av)} / {fmt(bg)}</span></div><div style={{display:"grid",gap:4}}><div style={{height:8,borderRadius:999,background:dark?"#303043":"#EEF0F4",overflow:"hidden"}}><div style={{height:"100%",width:Math.min(100,Math.abs(av)/max*100)+"%",background:item.color||expenseColor,borderRadius:999}}/></div><div style={{height:5,borderRadius:999,background:dark?"#303043":"#EEF0F4",overflow:"hidden"}}><div style={{height:"100%",width:Math.min(100,Math.abs(bg)/max*100)+"%",background:"#7F77DD",borderRadius:999,opacity:.65}}/></div></div></div>;})}<div style={{display:"flex",gap:14,flexWrap:"wrap",fontSize:10,color:subC,marginTop:4}}><span>● {L("Uscite medie mensili")}</span><span style={{color:"#7F77DD"}}>● {L("Budget mensile")}</span></div></div>;
+  }
+  function PreviewGraphic(props:any){
+    var type=String(props.type||"bar"),stroke=dark?"#B9B6C8":"#8B879A",fill=dark?"#6F6B82":"#B6B2C2";
+    if(type==="donut")return <svg width="100%" height="44" viewBox="0 0 120 44"><circle cx="23" cy="22" r="14" fill="none" stroke={fill} strokeWidth="8" opacity=".62"/><path d="M23 8 A14 14 0 0 1 36 26" fill="none" stroke={stroke} strokeWidth="8" strokeLinecap="round"/><rect x="49" y="8" width="56" height="4" rx="2" fill={fill}/><rect x="49" y="19" width="44" height="4" rx="2" fill={fill}/><rect x="49" y="30" width="35" height="4" rx="2" fill={fill}/></svg>;
+    if(type==="line")return <svg width="100%" height="44" viewBox="0 0 120 44"><line x1="4" y1="38" x2="116" y2="38" stroke={fill}/><polyline points="6,32 24,24 42,28 60,13 78,21 96,9 114,17" fill="none" stroke={stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    if(type==="budget")return <svg width="100%" height="44" viewBox="0 0 120 44">{[7,21,35].map(function(y,i){return <g key={y}><rect x="5" y={y} width="110" height="7" rx="3.5" fill={fill}/><rect x="5" y={y} width={[76,49,91][i]} height="7" rx="3.5" fill={stroke}/></g>;})}</svg>;
+    return <svg width="100%" height="44" viewBox="0 0 120 44">{[19,33,25,38,22,31].map(function(h,i){return <rect key={i} x={8+i*18} y={41-h} width="10" height={h} rx="2" fill={i%2?fill:stroke}/>;})}</svg>;
+  }
+  var planPreviewMap:any={
+    general:{base:[{title:L("Distribuzione per categoria"),type:"donut"},{title:L("Entrate vs Uscite mensili"),type:"bar"},{title:L("Saldo mensile"),type:"line"},{title:L("Entrate per tipo"),type:"donut"}],premium:[]},
+    budget:{base:[{title:L("Categorie sforate"),type:"budget"},{title:L("Budget per area"),type:"budget"},{title:L("Budget per categoria"),type:"budget"}],premium:[{title:L("Importo avanzato o sforato"),type:"budget"}]},
+    saving:{base:[],premium:[{title:L("Attendibilità del risparmio"),type:"bar"},{title:L("Scostamento medio"),type:"line"},{title:L("Trend"),type:"line"},{title:L("Dettaglio mensile"),type:"bar"}]},
+    monthly:{base:[{title:L("Entrate e Uscite medie mensili"),type:"bar"},{title:L("Saldo medio mensile"),type:"line"},{title:L("Spesa media mensile per area"),type:"budget"},{title:L("Spesa media mensile per categoria"),type:"budget"},{title:L("Entrata media mensile per tipo"),type:"budget"},{title:L("Spesa media mensile rispetto al budget per area"),type:"budget"},{title:L("Spesa media mensile rispetto al budget per categoria"),type:"budget"}],premium:[{title:L("Scostamento medio mensile dal budget"),type:"budget"}]}
+  };
+  function PlanPreviewSection(plan,items){
+    if(!items||!items.length)return null;if(currentPlan==="premium")return null;if(plan==="base"&&currentPlan!=="free")return null;if(plan==="premium"&&currentPlan!=="free"&&currentPlan!=="base")return null;
+    var title=plan==="base"?L("Statistiche incluse nel piano Base"):L("Statistiche incluse nel piano Completo");
+    return <section style={{marginTop:8,paddingTop:4}}><div style={{display:"flex",alignItems:"center",gap:9,marginBottom:10,padding:"9px 11px",borderRadius:12,background:plan==="base"?(dark?"#29253B":"#F1EEFF"):(dark?"#21342F":"#EAF8F2"),border:"1px solid "+(plan==="base"?(dark?"#4A416B":"#D8D0FF"):(dark?"#31584D":"#BFE7D8"))}}><span aria-hidden="true" style={{fontSize:17}}>{plan==="base"?"✨":"💎"}</span><div style={{fontSize:14,fontWeight:900,color:plan==="base"?(dark?"#D9D2FF":"#534AB7"):(dark?"#BFE8DA":"#146B55"),lineHeight:1.2}}>{title}</div><div style={{height:2,flex:1,borderRadius:2,background:plan==="base"?(dark?"#6F63A6":"#AFA5E8"):(dark?"#4D8B78":"#73C5A8"),opacity:.55}}/></div><div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>{items.map(function(item,index){return <div key={item.title+index} style={{background:cardBg,border:"1px solid "+borderC,borderRadius:11,padding:"9px 8px",overflow:"hidden",minWidth:0}}><div style={{fontSize:10.5,fontWeight:800,color:textC,marginBottom:4,lineHeight:1.2,minHeight:25,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{item.title}</div><div aria-hidden="true" style={{opacity:.20,filter:"grayscale(.35)",pointerEvents:"none"}}><PreviewGraphic type={item.type}/></div></div>;})}</div></section>;
+  }
+  function LockedPreviews(props:any){var tabName=props&&props.tabName;var cfg=planPreviewMap[tabName]||{base:[],premium:[]};return <>{PlanPreviewSection("base",cfg.base)}{PlanPreviewSection("premium",cfg.premium)}</>;}
+
+
   return <div style={{display:"flex",flexDirection:"column",gap:16}}>
     <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
       <div style={{display:"flex",gap:0,marginBottom:14,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3,boxShadow:dark?"none":"inset 0 0 0 1px #eee"}}><button onClick={function(){setStatMode("month");}} style={{...sb,flex:1,background:effectiveStatMode==="month"?"#378ADD":"transparent",color:effectiveStatMode==="month"?"#fff":subC,borderRadius:10,fontWeight:effectiveStatMode==="month"?700:500}}>{L("Mese")}</button><button onClick={function(){setStatMode("last12");}} style={{...sb,flex:1,background:effectiveStatMode==="last12"?"#378ADD":"transparent",color:effectiveStatMode==="last12"?"#fff":subC,borderRadius:10,fontWeight:effectiveStatMode==="last12"?700:500}}>{L("Ultimi 12 mesi")}</button><button onClick={function(){if(canYearFilter)setStatMode("year");}} disabled={!canYearFilter} style={{...sb,flex:1,background:effectiveStatMode==="year"?"#378ADD":"transparent",color:!canYearFilter?"#bbb":(effectiveStatMode==="year"?"#fff":subC),borderRadius:10,fontWeight:effectiveStatMode==="year"?700:500,cursor:canYearFilter?"pointer":"not-allowed",opacity:canYearFilter?1:.45}}>{canYearFilter?L("Anno"):L("Anno 🔒")}</button><button onClick={function(){if(canRangeFilter)setStatMode("range");}} disabled={!canRangeFilter} style={{...sb,flex:1,background:effectiveStatMode==="range"?"#378ADD":"transparent",color:!canRangeFilter?"#bbb":(effectiveStatMode==="range"?"#fff":subC),borderRadius:10,fontWeight:effectiveStatMode==="range"?700:500,cursor:canRangeFilter?"pointer":"not-allowed",opacity:canRangeFilter?1:.45}}>{canRangeFilter?L("Range"):L("Range 🔒")}</button></div>
@@ -192,21 +250,45 @@ export function StatsPanel(){
       </div>
     </div>
 
-    <div style={{display:"flex",gap:0,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3}}>
-      <button onClick={function(){setStatsTab("general");}} style={{flex:1,padding:"8px",border:"none",borderRadius:10,background:statsTab==="general"?(dark?"#444":"#fff"):"transparent",color:statsTab==="general"?textC:subC,fontSize:13,cursor:"pointer",fontWeight:statsTab==="general"?600:400}}>{"📊 "+L("Generali")}</button>
-      <button onClick={function(){setStatsTab("budget");}} style={{flex:1,padding:"8px",border:"none",borderRadius:10,background:statsTab==="budget"?(dark?"#444":"#fff"):"transparent",color:statsTab==="budget"?textC:subC,fontSize:13,cursor:"pointer",fontWeight:statsTab==="budget"?600:400}}>{"💰 "+L("Budget")}</button>
-      <button onClick={function(){setStatsTab("saving");}} style={{flex:1,padding:"8px",border:"none",borderRadius:10,background:statsTab==="saving"?(dark?"#444":"#fff"):"transparent",color:statsTab==="saving"?textC:subC,fontSize:13,cursor:"pointer",fontWeight:statsTab==="saving"?600:400}}>{"📈 "+L("Risparmio")}</button>
+    <div style={{display:"grid",gridTemplateColumns:isMobile?"repeat(2,minmax(0,1fr))":"repeat(4,minmax(0,1fr))",background:dark?"linear-gradient(145deg,#202033,#292941)":"linear-gradient(145deg,#EEF4FF,#F7F3FF)",border:"1px solid "+(dark?"#3D3D59":"#DCE6F6"),borderRadius:16,padding:6,gap:7,boxShadow:dark?"none":"0 7px 22px rgba(55,138,221,.10)"}}>
+      {[{id:"general",icon:"📊",label:L("Generali")},{id:"monthly",icon:"🗓️",label:L("Medie mensili")},{id:"budget",icon:"💰",label:L("Budget")},{id:"saving",icon:"📈",label:L("Risparmio")}].map(function(item){var active=statsTab===item.id;return <button key={item.id} onClick={function(){setStatsTab(item.id);}} style={{minWidth:0,minHeight:44,padding:"9px 7px",border:"1px solid "+(active?"transparent":(dark?"#45455F":"#DDE5F0")),borderRadius:12,background:active?("linear-gradient(135deg,"+(confirmButtonColor||"#378ADD")+",#5FAFE5)"):(dark?"rgba(255,255,255,.045)":"rgba(255,255,255,.78)"),color:active?"#fff":textC,fontSize:isMobile?11.5:13,cursor:"pointer",fontWeight:active?900:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",boxShadow:active?"0 6px 15px rgba(55,138,221,.28)":(dark?"none":"0 2px 7px rgba(15,23,42,.05)"),transform:active?"translateY(-1px)":"none",transition:"all .18s ease"}}><span style={{fontSize:isMobile?14:16,marginRight:4}}>{item.icon}</span>{item.label}</button>;})}
     </div>
 
     {statsTab==="general"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":(canYearFilter?"repeat(4,1fr)":"repeat(3,1fr)"),gap:12}}><StatCard title={L("Uscite")} value={fmt(mExp)} color={expenseColor} bg={expenseColor+"22"} sub={showSecInStats?fmtSec(mExp)||undefined:undefined}/><StatCard title={L("Entrate")} value={fmt(mInc)} color={incomeColor} bg={incomeColor+"22"} sub={showSecInStats?fmtSec(mInc)||undefined:undefined}/><StatCard title={L("Saldo")} value={fmt(mInc-mExp)} color={BALANCE_COLOR} bg="#e8f4ff" sub={showSecInStats?fmtSec(mInc-mExp)||undefined:undefined}/>{canYearFilter&&<StatCard title={L("Anno")+" "+curYear} value={fmt(yearExp)} color="#534AB7" bg="#f0f0ff" sub={showSecInStats?fmtSec(yearExp)||undefined:undefined}/>}</div>
       <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}>
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:10,color:subC}}>{L("Distribuzione")+" — "+titleLabel}</div>{donutData.length===0?<div style={{color:"#ccc",fontSize:13,textAlign:"center",padding:"24px 0"}}>{L("Nessun dato")}</div>:<div style={{display:"flex",gap:16,alignItems:"center"}}><DonutChart data={donutData} size={120}/><div style={{flex:1}}>{donutData.map(function(d,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><div style={{width:8,height:8,borderRadius:"50%",background:d.color,flexShrink:0}}/><span style={{fontSize:11,flex:1,color:subC}}>{d.label}</span><span style={{fontSize:11,fontWeight:500,color:textC}}>{fmt(d.value)}</span></div>;})}</div></div>}</div>
-        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:6,color:subC}}>{L("Per area")+" — "+titleLabel}</div>{groupStatsLocal.length===0?<div style={{color:"#ccc",fontSize:13}}>{t.noData}</div>:groupStatsLocal.map(function(g){return <div key={g.id} style={{marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:13,fontWeight:500,color:textC}}>{g.name}</span><span style={{fontSize:13,fontWeight:500,color:textC}}>{fmt(g.total)}</span></div><div style={{background:dark?"#333":"#f5f5f5",borderRadius:4,height:8,marginBottom:4}}><div style={{background:g.color,height:8,borderRadius:4,width:(groupStatsLocal[0].total>0?g.total/groupStatsLocal[0].total*100:0)+"%"}}/></div>{canCategoryStats&&g.catBreakdown.map(function(c){return <div key={c.id} style={{display:"flex",justifyContent:"space-between",padding:"2px 0 2px 12px"}}><span style={{fontSize:12,color:subC}}>{c.icon} {c.name}</span><span style={{fontSize:12,color:subC}}>{fmt(c.total)}</span></div>;})}</div>;})} </div>
+        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:6,color:subC}}>{L("Per area")+" — "+titleLabel}</div>{groupStatsLocal.length===0?<div style={{color:"#ccc",fontSize:13}}>{t.noData}</div>:groupStatsLocal.map(function(g){return <div key={g.id} style={{marginBottom:12}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:13,fontWeight:500,color:textC}}>{g.name}</span><span style={{fontSize:13,fontWeight:500,color:textC}}>{fmt(g.total)}</span></div><div style={{background:dark?"#333":"#f5f5f5",borderRadius:4,height:8,marginBottom:4}}><div style={{background:g.color,height:8,borderRadius:4,width:(groupStatsLocal[0].total>0?g.total/groupStatsLocal[0].total*100:0)+"%"}}/></div>{canCategoryStats&&g.catBreakdown.map(function(c){return <button type="button" key={c.id} onClick={function(){openHistoryForStatsCategory(c);}} style={{width:"100%",display:"flex",justifyContent:"space-between",padding:"5px 4px 5px 12px",border:"none",background:"transparent",cursor:"pointer",textAlign:"left",borderRadius:7}}><span style={{fontSize:12,color:subC}}>{c.icon} {c.name}{(c.archived||c.deleted)?" [A]":""}</span><span style={{fontSize:12,color:subC,fontWeight:700}}>{fmt(c.total)} ›</span></button>;})}</div>;})} </div>
       </div>
       {canMonthlyCharts&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:8,color:subC}}>{L("Entrate vs Uscite")} — {titleLabel}</div><BarChart data={statsMonthlyTotals} width={isMobile?300:580} height={160}/></div>}
       {canMonthlyCharts&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:6,color:subC}}>{L("Saldo mensile")} — {titleLabel}</div><LineChart data={statsMonthlyTotals} width={isMobile?300:580} height={120} color={BALANCE_COLOR}/></div>}
       {canIncomeTypeStats&&incByType.length>0&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:10,color:subC}}>{L("Entrate per tipo —")} {titleLabel}</div><div style={{display:"flex",gap:14,alignItems:"center"}}><DonutChart data={incByType} size={100}/><div style={{flex:1}}>{incByType.map(function(d,i){return <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><span style={{fontSize:20}}>{d.label}</span><span style={{fontSize:11,fontWeight:500,color:textC}}>{fmt(d.value)}</span></div>;})}</div></div></div>}
+      <LockedPreviews tabName="general"/>
+    </div>}
+
+    {statsTab==="monthly"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
+      {canMonthlyCharts&&<>
+        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
+          <div style={{fontSize:15,fontWeight:900,color:textC,marginBottom:4}}>{L("Medie mensili")}</div>
+          <div style={{fontSize:11,color:subC,marginBottom:14}}>{titleLabel+" · "+monthlyDivisor+" "+L("mesi considerati, inclusi quelli senza movimenti")}</div>
+          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(3,1fr)",gap:10}}>
+            <StatCard title={L("Entrate medie mensili")} value={fmt(monthlyAverageSummary[1].value)} color={incomeColor} bg={incomeColor+"22"}/>
+            <StatCard title={L("Uscite medie mensili")} value={fmt(monthlyAverageSummary[0].value)} color={expenseColor} bg={expenseColor+"22"}/>
+            <StatCard title={L("Saldo medio mensile")} value={fmt(monthlyAverageSummary[2].value)} color={BALANCE_COLOR} bg="#e8f4ff"/>
+          </div>
+        </div>
+        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,marginBottom:12,color:textC}}>{L("Entrate e Uscite medie mensili")}</div><BarChart data={[{label:L("Media mensile"),exp:monthlyAverageSummary[0].value,inc:monthlyAverageSummary[1].value}]} width={isMobile?300:580} height={150}/></div>
+        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,marginBottom:12,color:textC}}>{L("Saldo medio mensile")}</div><MonthlyValueRows items={[monthlyAverageSummary[2]]}/></div>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:14}}><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,marginBottom:12,color:textC}}>{L("Spesa media mensile per area")}</div><MonthlyValueRows items={monthlyAreaStats}/></div><div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,marginBottom:12,color:textC}}>{L("Spesa media mensile per categoria")}</div><MonthlyValueRows items={monthlyCategoryStats} limit={12}/></div></div>
+        <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,marginBottom:12,color:textC}}>{L("Entrata media mensile per tipo")}</div>{monthlyIncomeTypeStats.length?<MonthlyValueRows items={monthlyIncomeTypeStats}/>:<div style={{fontSize:13,color:subC,textAlign:"center",padding:"18px 0"}}>{L("Nessuna entrata nel periodo selezionato.")}</div>}</div>
+        {budgetPlan&&budgetStats&&<>
+          {canBudgetArea&&budgetGroupStats&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:12}}>{L("Spesa media mensile rispetto al budget per area")}</div><MonthlyBudgetRows items={budgetGroupStats.map(function(x){return{id:x.group.id,label:x.group.name,average:x.spent/monthlyDivisor,budget:x.budgeted,color:x.group.color};})}/></div>}
+          {canBudgetCategory&&budgetStats&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:12}}>{L("Spesa media mensile rispetto al budget per categoria")}</div><MonthlyBudgetRows items={budgetStats.map(function(x){return{id:x.cat.id,label:(x.cat.icon?x.cat.icon+" ":"")+x.cat.name+(x.cat.archived?(" · "+L("Archiviata")):""),average:x.spent/monthlyDivisor,budget:x.budgeted,color:x.cat.color};}).sort(function(a,b){return b.average-a.average;})} limit={12}/></div>}
+          {canBudgetCategoryDelta&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:800,color:textC,marginBottom:12}}>{L("Scostamento medio mensile dal budget")}</div><MonthlyValueRows items={budgetStats.map(function(x){var value=x.budgeted-(x.spent/monthlyDivisor);return{id:x.cat.id,label:(x.cat.icon?x.cat.icon+" ":"")+x.cat.name+(x.cat.archived?(" · "+L("Archiviata")):""),value:value,color:value>=0?"#1D9E75":"#E24B4A"};}).sort(function(a,b){return Math.abs(b.value)-Math.abs(a.value);})} limit={12}/></div>}
+        </>}
+        {!budgetPlan&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20,textAlign:"center",fontSize:13,color:subC}}>{L("Configura un budget per visualizzare i grafici mensili rispetto al budget.")}</div>}
+      </>}
+      <LockedPreviews tabName="monthly"/>
     </div>}
 
     {statsTab==="budget"&&<div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -218,6 +300,7 @@ export function StatsPanel(){
         </div>}
         {canBudgetRisk&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}><div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:12}}>{L("🔴 Categorie sforate / a rischio")}</div>{budgetStats.filter(function(s){return s.pct>=80;}).length===0?<div style={{fontSize:13,color:"#1D9E75",textAlign:"center",padding:"16px 0"}}>{L("✅ Nessuna categoria sforata o a rischio!")}</div>:budgetStats.filter(function(s){return s.pct>=80;}).sort(function(a,b){return b.pct-a.pct;}).map(function(s){var barColor=s.pct>=100?"#E24B4A":"#EF9F27";return <div key={s.cat.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 12px",borderRadius:10,background:dark?"#252535":"#fafafa",border:"1px solid "+(s.pct>=100?"#fcc":(dark?"#444":"#eee")),marginBottom:8}}><span style={{fontSize:18}}>{s.cat.icon}</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:500,color:s.pct>=100?"#E24B4A":textC}}>{s.cat.name}</div><div style={{fontSize:11,color:subC}}>{fmt(s.spent)} {L("di")} {fmt(s.budgeted)}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:700,color:barColor}}>{Math.round(s.pct)}%</div><div style={{fontSize:11,color:s.diff>=0?"#EF9F27":"#E24B4A"}}>{s.diff>=0?L("rimane")+" "+fmt(s.diff):L("sfora")+" "+fmt(Math.abs(s.diff))}</div></div></div>;})}
         </div>}
+        <LockedPreviews tabName="budget"/>
       </>}
     </div>}
 
@@ -272,15 +355,7 @@ export function StatsPanel(){
           <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead><tr style={{background:dark?"#252535":"#f5f5f5"}}>{["Mese","Entrate","Uscite","Risparmio reale","Risparmio pianif.","Scostamento"].map(function(h){return <th key={h} style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:subC}}>{L(h)}</th>;})}</tr></thead><tbody>{savingTrend.map(function(m,i){if(!m.hasData)return null;var monthKey=m.key||savingTrendMonths[i];var mInc2=incomes.filter(function(inc){return inc.date&&inc.date.startsWith(monthKey);}).reduce(function(a,inc){return a+inc.amount;},0);var mExp2=expenses.filter(function(e){return e.date&&e.date.startsWith(monthKey);}).reduce(function(a,e){return a+e.amount;},0);return <tr key={i} style={{borderBottom:"1px solid "+(dark?"#333":"#f0f0f0"),background:m.real>=m.planned?(dark?"#1a2a1e22":"#f0faf5"):(dark?"#2a1a1a22":"#fff8f8")}}><td style={{padding:"7px 10px",fontWeight:500,color:textC}}>{m.label}</td><td style={{padding:"7px 10px",color:"#1D9E75"}}>{fmt(mInc2)}</td><td style={{padding:"7px 10px",color:"#E24B4A"}}>{fmt(mExp2)}</td><td style={{padding:"7px 10px",fontWeight:600,color:m.real>=0?"#1D9E75":"#E24B4A"}}>{fmt(m.real)}</td><td style={{padding:"7px 10px",color:"#7F77DD"}}>{fmt(m.planned)}</td><td style={{padding:"7px 10px",fontWeight:600,color:m.diff>=0?"#1D9E75":"#E24B4A"}}>{m.diff>=0?"+":""}{fmt(m.diff)}</td></tr>;})} </tbody></table></div>
         </div>}
       </>}
-    </div>}
-
-    {lockedStats.length>0&&<div style={{...lockedBox,display:"flex",flexDirection:"column",gap:10}}>
-      <div style={{fontSize:14,fontWeight:800}}>{L("🔒 Statistiche non disponibili nel piano")} {planNameLocal(currentPlan)}</div>
-      <div style={{fontSize:12,lineHeight:1.4}}>{L("Alla fine della pagina trovi le statistiche e i grafici che non possono essere visualizzati con il piano attuale.")}</div>
-      <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:8}}>
-        {lockedStats.map(function(item){return <div key={item.name} style={{background:dark?"rgba(255,255,255,0.06)":"rgba(255,255,255,0.55)",border:"1px dashed "+(dark?"#7a6220":"#E4C85F"),borderRadius:10,padding:"8px 10px",fontSize:12,display:"flex",justifyContent:"space-between",gap:8}}><span>{L(item.name)}</span><b>{planNameLocal(item.plan)}</b></div>;})}
-      </div>
-      <button onClick={openInfo} style={{alignSelf:"flex-start",background:"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"9px 14px",fontSize:13,fontWeight:800,cursor:"pointer"}}>{L("Info / Cambia piano")}</button>
+      <LockedPreviews tabName="saving"/>
     </div>}
   </div>;
 }
