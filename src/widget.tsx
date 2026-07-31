@@ -35,7 +35,7 @@ function focusFainanceInput(ref:any, delay?:number){
 const GOOGLE_PICKER_CLIENT_ID = '739607555867-i5uhrj1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com';
 const GOOGLE_PICKER_API_KEY = 'AIzaSyBub3sUOwWqQsutPMAGjK_GInzqgrKTUno';
 const GOOGLE_PICKER_APP_ID = '739607555867';
-const GOOGLE_PICKER_SCOPE = 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/spreadsheets.readonly';
+const GOOGLE_PICKER_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 var FAINANCE_GOOGLE_PICKER_TOKEN = '';
 var FAINANCE_GOOGLE_SCRIPT_PROMISES:any = {};
 
@@ -1165,15 +1165,15 @@ export function EditModal({item,isExp,onSave,onClose}){var ctx=useApp();var t=ct
 export function ImportData(props:any={}){
   var ctx=useApp();
   var onBackupJsonText=props&&props.onBackupJsonText;
-  var cats=effectiveExpenseCats(ctx.cats),setCats=ctx.setCats,methods=effectiveMethods(ctx.methods),setMethods=ctx.setMethods,addExpenses=ctx.addExpenses,addIncomes=ctx.addIncomes,dark=ctx.dark,sym=ctx.sym,setToast=ctx.setToast;
+  var cats=effectiveExpenseCats(ctx.cats),setCats=ctx.setCats,methods=effectiveMethods(ctx.methods),setMethods=ctx.setMethods,addExpenses=ctx.addExpenses,addIncomes=ctx.addIncomes,dark=ctx.dark,sym=ctx.sym;
   var patrimonioEntries=ctx.patrimonioEntries,patrimonioHistory=ctx.patrimonioHistory,setPatrimonioHistory=ctx.setPatrimonioHistory,setPatrimonioNotes=ctx.setPatrimonioNotes,setPatrimonioEntries=ctx.setPatrimonioEntries;
   var incomeTypes=ctx.incomeTypes||getAllIncomeTypes(ctx.customIncomeTypes,ctx.incomeTypeOverrides),setCustomIncomeTypes=ctx.setCustomIncomeTypes;
   var pEntries=patrimonioEntries||DEFAULT_PATRIMONIO_ENTRIES;
-  var [importType,setImportType]=useState("expense");var [step,setStep]=useState(0);var [rows,setRows]=useState<any[]>([]);var [cols,setCols]=useState<any[]>([]);var [map,setMap]=useState<any>({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});var [importDateFmt,setImportDateFmt]=useState("auto");var [preview,setPreview]=useState<any[]>([]);var [msg,setMsg]=useState("");var [importSuccess,setImportSuccess]=useState<any>(null);var [importLoading,setImportLoading]=useState<any>(null);
+  var [importType,setImportType]=useState("expense");var [step,setStep]=useState(0);var [rows,setRows]=useState<any[]>([]);var [cols,setCols]=useState<any[]>([]);var [map,setMap]=useState<any>({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});var [importDateFmt,setImportDateFmt]=useState("auto");var [preview,setPreview]=useState<any[]>([]);var [msg,setMsg]=useState("");var [importSuccess,setImportSuccess]=useState<any>(null);var [importLoading,setImportLoading]=useState<any>(null);var [importNotice,setImportNotice]=useState<any>(null);
   var [unknowns,setUnknowns]=useState<any>({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});
   var [unknownDecision,setUnknownDecision]=useState("create");
   var [replacementMap,setReplacementMap]=useState<any>({});
-  var fileRef=useRef<any>();
+  var fileRef=useRef<any>();var driveFileRef=useRef<any>();var importAttemptRef=useRef(0);
   useEffect(function(){
     try{
       loadFainanceExternalScript("https://apis.google.com/js/api.js","fainance-google-api-client").then(function(){
@@ -1185,6 +1185,27 @@ export function ImportData(props:any={}){
   var sinp={borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"6px 10px",fontSize:13,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333"};
   var tc=dark?"#eee":"#333";var sc=dark?"#aaa":"#888";
   function L(s){return ctx.translateUiRuntimeText?ctx.translateUiRuntimeText(s):s;}
+  function isNativeImportPlatform(){
+    try{var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;if(cap&&typeof cap.isNativePlatform==="function")return !!cap.isNativePlatform();if(cap&&typeof cap.getPlatform==="function"){var p=String(cap.getPlatform()||"").toLowerCase();return p==="ios"||p==="android";}}catch(e){}
+    return false;
+  }
+  function importErrorText(err:any,fallback?:string){var raw=String((err&&err.message)||err||fallback||"Errore sconosciuto").trim();return raw||String(fallback||"Errore sconosciuto");}
+  function showImportNotice(kind:string,title:string,detail:string){
+    var payload={kind:kind,title:L(title),detail:L(detail)};setImportNotice(payload);setMsg((kind==="success"?"✅ ":"⚠️ ")+payload.title+"\n"+payload.detail);
+  }
+  function failImport(title:string,detail:string){setImportLoading(null);showImportNotice("error",title,detail);return false;}
+  function succeedFileRead(fileName:string,rowCount:number,colCount:number){
+    showImportNotice("success","File letto correttamente",String(fileName||"File")+": "+String(rowCount)+" righe e "+String(colCount)+" colonne rilevate. Ora associa le colonne e continua con l'anteprima.");
+  }
+  function withImportTimeout<T>(promise:Promise<T>,ms:number,message:string):Promise<T>{return new Promise(function(resolve,reject){var done=false;var timer=setTimeout(function(){if(done)return;done=true;reject(new Error(message));},ms);Promise.resolve(promise).then(function(v){if(done)return;done=true;clearTimeout(timer);resolve(v);}).catch(function(e){if(done)return;done=true;clearTimeout(timer);reject(e);});});}
+  function readFileAsArrayBuffer(file:any):Promise<ArrayBuffer>{
+    if(file&&typeof file.arrayBuffer==="function")return withImportTimeout(file.arrayBuffer(),45000,"Il dispositivo non ha terminato la lettura del file entro 45 secondi.");
+    return withImportTimeout(new Promise(function(resolve,reject){try{var r=new FileReader();r.onerror=function(){reject(new Error("Errore del dispositivo durante la lettura del file."));};r.onabort=function(){reject(new Error("Lettura del file interrotta."));};r.onload=function(ev:any){resolve(ev&&ev.target?ev.target.result:null);};r.readAsArrayBuffer(file);}catch(e){reject(e);}}) as Promise<ArrayBuffer>,45000,"Il dispositivo non ha terminato la lettura del file entro 45 secondi.");
+  }
+  function readFileAsText(file:any):Promise<string>{
+    if(file&&typeof file.text==="function")return withImportTimeout(file.text(),45000,"Il dispositivo non ha terminato la lettura del file entro 45 secondi.");
+    return withImportTimeout(new Promise(function(resolve,reject){try{var r=new FileReader();r.onerror=function(){reject(new Error("Errore del dispositivo durante la lettura del file."));};r.onabort=function(){reject(new Error("Lettura del file interrotta."));};r.onload=function(ev:any){resolve(String(ev&&ev.target&&ev.target.result||""));};r.readAsText(file,"UTF-8");}catch(e){reject(e);}}) as Promise<string>,45000,"Il dispositivo non ha terminato la lettura del file entro 45 secondi.");
+  }
   function looksLikeBackupJsonText(text){
     var raw=String(text||"").replace(/^\uFEFF/,"").trim();
     if(!raw||!(raw.charAt(0)==="{"||raw.charAt(0)==="["))return false;
@@ -1195,21 +1216,26 @@ export function ImportData(props:any={}){
     if(!/\.json$/i.test(String(fileName||""))&&!looksLikeBackupJsonText(text))return false;
     return Promise.resolve(onBackupJsonText(text,fileName)).then(function(){setImportLoading(null);setMsg("");setStep(0);return true;});
   }
-  function resetAll(){setStep(0);setRows([]);setCols([]);setPreview([]);setUnknowns({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});setReplacementMap({});setUnknownDecision("create");setMap({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});setImportLoading(null);setMsg("");}
+  function resetAll(){setStep(0);setRows([]);setCols([]);setPreview([]);setUnknowns({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});setReplacementMap({});setUnknownDecision("create");setMap({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});setImportLoading(null);setImportNotice(null);setMsg("");}
   function setImportProgress(file,stage,pct){setImportLoading({file:file||"",stage:L(stage),pct:Math.max(0,Math.min(100,Math.round(pct||0)))});}
-  function finishImportLoad(file){setImportProgress(file||"", "File caricato", 100);setTimeout(function(){setImportLoading(null);},250);}
+  function finishImportLoad(file){setImportProgress(file||"", "File caricato", 100);setTimeout(function(){setImportLoading(null);},450);}
   function applyImportedRows(data,fileName){
-    var clean=(data||[]).map(function(r){return Array.isArray(r)?r.map(function(c){return c==null?"":String(c);}) : [];}).filter(function(r){return r.some(function(c){return String(c||"").trim()!=="";});});
-    if(!clean||clean.length<2){setImportLoading(null);setMsg(L("Nessun dato trovato nel foglio selezionato."));return false;}
-    var header=(clean[0]||[]).map(function(h,i){var v=String(h||"").trim();return v||(L("Colonna")+" "+(i+1));});
+    var clean=(data||[]).map(function(r){return Array.isArray(r)?r.map(function(c){return c==null?"":c;}) : [];}).filter(function(r){return r.some(function(c){return String(c==null?"":c).trim()!=="";});});
+    if(!clean||clean.length<2)return failImport("File non importabile","Il file è stato aperto, ma non contiene almeno una riga di intestazioni e una riga di dati.");
+    var header=(clean[0]||[]).map(function(h,i){var v=String(h==null?"":h).trim();return v||(L("Colonna")+" "+(i+1));});
     var body=clean.slice(1).filter(function(r){return r.some(function(c){return c!==undefined&&c!==null&&String(c).trim()!=="";});});
-    if(!body.length){setImportLoading(null);setMsg(L("Nessuna riga dati trovata nel foglio selezionato."));return false;}
-    setImportProgress(fileName||"Drive","Preparazione colonne",92);
-    setCols(header);setRows(body);setPreview([]);setUnknowns({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});setReplacementMap({});setUnknownDecision("create");setMap({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});setStep(1);setMsg("");finishImportLoad(fileName||"Drive");return true;
+    if(!body.length)return failImport("File senza righe dati","Sono state trovate le intestazioni, ma non è presente nessuna riga da importare.");
+    setImportProgress(fileName||"File","Preparazione colonne",92);
+    setCols(header);setRows(body);setPreview([]);setUnknowns({expenseCategory:[],paymentMethod:[],incomeType:[],patrimonioEntry:[]});setReplacementMap({});setUnknownDecision("create");setMap({date:"",amount:"",desc:"",cat:"",method:"",itype:"",rate:"",entryId:"",monthKey:"",patNote:""});setStep(1);setMsg("");finishImportLoad(fileName||"File");succeedFileRead(fileName||"File",body.length,header.length);return true;
   }
   function base64ToArrayBuffer(b64){var bin=atob(String(b64||""));var len=bin.length;var bytes=new Uint8Array(len);for(var i=0;i<len;i++)bytes[i]=bin.charCodeAt(i);return bytes.buffer;}
   function base64ToText(b64){try{return new TextDecoder("utf-8").decode(new Uint8Array(base64ToArrayBuffer(b64)));}catch(e){return atob(String(b64||""));}}
-  function parseImportedDelimitedText(text){var raw=String(text||"").replace(/^\uFEFF/,"");var first=(raw.split(/\r?\n/).find(function(l){return l.trim();})||"");if(first.indexOf("\t")>=0&&first.indexOf(",")<0&&first.indexOf(";")<0)raw=raw.replace(/\t/g,";");return parseCSVText(raw);}
+  function parseImportedDelimitedText(text){
+    var raw=String(text||"").replace(/^\uFEFF/,"");var lines=raw.split(/\r?\n/).filter(function(l){return String(l||"").trim()!=="";});if(lines.length<2)return null;
+    function countOutsideQuotes(line,sep){var count=0,inQ=false;for(var i=0;i<line.length;i++){var ch=line.charAt(i);if(ch==='"'){if(inQ&&line.charAt(i+1)==='"'){i++;continue;}inQ=!inQ;}else if(ch===sep&&!inQ)count++;}return count;}
+    var first=lines[0]||"";var candidates=[";",",","\t"];var delimiter=candidates[0],best=-1;candidates.forEach(function(sep){var n=countOutsideQuotes(first,sep);if(n>best){best=n;delimiter=sep;}});if(best<=0)return null;
+    return lines.map(function(line){var cols:any[]=[],cur="",inQ=false;for(var i=0;i<line.length;i++){var ch=line.charAt(i);if(ch==='"'){if(inQ&&line.charAt(i+1)==='"'){cur+='"';i++;}else inQ=!inQ;}else if(ch===delimiter&&!inQ){cols.push(cur.trim());cur="";}else cur+=ch;}cols.push(cur.trim());return cols;});
+  }
   function parseImportMoney(value){
     if(typeof value==="number"&&isFinite(value))return value;
     var raw=String(value==null?"":value).trim();
@@ -1294,9 +1320,9 @@ export function ImportData(props:any={}){
     applyImportedRows(data,name);
   }
   function openImportPicker(){
-    setMsg("");setImportLoading(null);
-    try{if(fileRef.current)fileRef.current.value="";}catch(_clear){}
-    if(fileRef.current)fileRef.current.click();
+    setImportNotice(null);setMsg("");setImportProgress("","Apertura selettore file",2);
+    try{if(fileRef.current){fileRef.current.value="";fileRef.current.click();return;}}catch(e){}
+    failImport("Selettore file non disponibile","Il dispositivo non ha consentito l'apertura del selettore. Riprova toccando direttamente il pulsante Importa dal Telefono.");
   }
   async function ensureGooglePickerLibraries(){
     await loadFainanceExternalScript("https://apis.google.com/js/api.js","fainance-google-api-client");
@@ -1330,34 +1356,29 @@ export function ImportData(props:any={}){
   }
   async function requestGooglePickerToken(google:any,forceConsent?:boolean){
     if(FAINANCE_GOOGLE_PICKER_TOKEN&&!forceConsent)return FAINANCE_GOOGLE_PICKER_TOKEN;
-    try{
-      return await requestNativeGoogleDriveFileToken(forceConsent);
-    }catch(nativeErr){
+    if(isNativeImportPlatform())return await requestNativeGoogleDriveFileToken(forceConsent);
+    await loadFainanceExternalScript("https://accounts.google.com/gsi/client","fainance-google-gsi-client");
+    var googleNow=(window as any).google||google;
+    if(!googleNow||!googleNow.accounts||!googleNow.accounts.oauth2)throw new Error("Google Identity Services non disponibile nel browser.");
+    return await withImportTimeout(new Promise(function(resolve,reject){
       try{
-        await loadFainanceExternalScript("https://accounts.google.com/gsi/client","fainance-google-gsi-client");
-        var googleNow=(window as any).google||google;
-        if(!googleNow||!googleNow.accounts||!googleNow.accounts.oauth2)throw nativeErr||new Error("Google Identity Services non disponibile.");
-        return await new Promise(function(resolve,reject){
-          try{
-            var client=googleNow.accounts.oauth2.initTokenClient({
-              client_id:GOOGLE_PICKER_CLIENT_ID,
-              scope:GOOGLE_PICKER_SCOPE,
-              prompt:forceConsent?"consent":"",
-              callback:function(resp:any){
-                if(resp&&resp.error){reject(new Error(resp.error_description||resp.error));return;}
-                var token=resp&&resp.access_token;
-                if(!token){reject(new Error("Token Google non disponibile."));return;}
-                FAINANCE_GOOGLE_PICKER_TOKEN=token;
-                resolve(token);
-              }
-            });
-            client.requestAccessToken({prompt:forceConsent?"consent":""});
-          }catch(e){reject(e);}
+        var settled=false;
+        var client=googleNow.accounts.oauth2.initTokenClient({
+          client_id:GOOGLE_PICKER_CLIENT_ID,
+          scope:GOOGLE_PICKER_SCOPE,
+          prompt:forceConsent?"consent":"",
+          callback:function(resp:any){
+            if(settled)return;settled=true;
+            if(resp&&resp.error){reject(new Error(resp.error_description||resp.error));return;}
+            var token=resp&&resp.access_token;
+            if(!token){reject(new Error("Google non ha restituito il permesso di leggere il file selezionato."));return;}
+            FAINANCE_GOOGLE_PICKER_TOKEN=token;resolve(token);
+          },
+          error_callback:function(resp:any){if(settled)return;settled=true;var t=String((resp&&resp.type)||(resp&&resp.message)||"Autorizzazione Google annullata o bloccata dal browser.");reject(new Error(t));}
         });
-      }catch(webErr){
-        throw webErr||nativeErr;
-      }
-    }
+        client.requestAccessToken({prompt:forceConsent?"consent":""});
+      }catch(e){reject(e);}
+    }),30000,"Google non ha completato l'autorizzazione entro 30 secondi. Il popup potrebbe essere stato bloccato o chiuso.");
   }
   async function getGooglePickerTokenWithConsent(google:any){
     try{return await requestGooglePickerToken(google,false);}catch(e){FAINANCE_GOOGLE_PICKER_TOKEN="";return await requestGooglePickerToken(google,true);}
@@ -1375,38 +1396,36 @@ export function ImportData(props:any={}){
     return await res.arrayBuffer();
   }
   async function importDriveSpreadsheetFile(fileId:string,fileName:string,mimeType:string,token:any){
-    var name=String(fileName||"File Drive");
-    var mime=String(mimeType||"");
-    var id=encodeURIComponent(fileId);
+    var name=String(fileName||"File Drive");var mime=String(mimeType||"");var id=encodeURIComponent(fileId);
+    if(!fileId)throw new Error("Google Drive non ha restituito l'identificativo del file selezionato.");
     var isGoogleSheet=/google-apps\.spreadsheet/i.test(mime);
     if(isGoogleSheet){
-      try{await importGoogleSheetById(fileId,name,token);return;}
-      catch(sheetErr){
-        setImportProgress(name,"Esportazione Foglio Google",62);
-        var exportUrl="https://www.googleapis.com/drive/v3/files/"+id+"/export?mimeType="+encodeURIComponent("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        var exported=await googleDriveFetchBlob(exportUrl,token,false);
-        var exportedRows=await parseXLSXBuffer(exported);
-        if(!exportedRows||exportedRows.length<2)throw sheetErr;
-        applyImportedRows(exportedRows,name);return;
-      }
+      setImportProgress(name,"Esportazione Foglio Google",52);
+      var exportUrl="https://www.googleapis.com/drive/v3/files/"+id+"/export?mimeType="+encodeURIComponent("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      var exported=await withImportTimeout(googleDriveFetchBlob(exportUrl,token,false),45000,"Google Drive non ha terminato l'esportazione del Foglio Google.");
+      setImportProgress(name,"Analisi file Excel",78);
+      var exportedRows=await withImportTimeout(parseXLSXBuffer(exported),45000,"Il Foglio Google è stato scaricato, ma l'analisi del file non è terminata.");
+      if(exportedRows&&exportedRows.__unsupported)throw new Error("Il Foglio Google è stato esportato in un formato non leggibile.");
+      if(!exportedRows||exportedRows.length<2)throw new Error("Il Foglio Google non contiene intestazioni e righe dati leggibili.");
+      applyImportedRows(exportedRows,name);return;
     }
-    setImportProgress(name,"Download file Drive",52);
+    setImportProgress(name,"Download file Drive",45);
     var mediaUrl="https://www.googleapis.com/drive/v3/files/"+id+"?alt=media";
-    var ab=await googleDriveFetchBlob(mediaUrl,token,false);
+    var ab=await withImportTimeout(googleDriveFetchBlob(mediaUrl,token,false),45000,"Google Drive non ha terminato il download del file.");
     var lower=name.toLowerCase();
     if(/\.csv$/.test(lower)||/csv|text\//i.test(mime)){
-      var txt=new TextDecoder("utf-8").decode(new Uint8Array(ab));
-      var parsed=parseImportedDelimitedText(txt);
-      if(!parsed||parsed.length<2){setImportLoading(null);setMsg(L("File CSV vuoto o non valido."));return;}
+      setImportProgress(name,"Analisi file CSV",82);var txt=new TextDecoder("utf-8").decode(new Uint8Array(ab));var parsed=parseImportedDelimitedText(txt);
+      if(!parsed||parsed.length<2)throw new Error("Il CSV è vuoto oppure non contiene intestazioni e righe dati.");
       applyImportedRows(parsed,name);return;
     }
-    if(/\.xlsx?$/.test(lower)||/spreadsheet|excel|vnd\.ms-excel/i.test(mime)){
-      var data=await parseXLSXBuffer(ab);
-      if(data&&data.__unsupported){setImportLoading(null);setMsg(L("Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."));return;}
-      if(!data||data.length<2){setImportLoading(null);setMsg(L("Nessun dato nel file Excel."));return;}
+    if(/\.xls$/i.test(lower)&&!/\.xlsx$/i.test(lower))throw new Error("Il vecchio formato .xls non è supportato. Apri il file in Excel e salvalo come .xlsx oppure .csv.");
+    if(/\.xlsx$/i.test(lower)||/spreadsheetml\.sheet|excel/i.test(mime)){
+      setImportProgress(name,"Analisi file Excel",78);var data=await withImportTimeout(parseXLSXBuffer(ab),45000,"Il file Excel è stato scaricato, ma l'analisi non è terminata.");
+      if(data&&data.__unsupported)throw new Error("Il file non è un .xlsx valido. Salvalo nuovamente come Cartella di lavoro Excel (.xlsx).");
+      if(!data||data.length<2)throw new Error("Il file Excel non contiene intestazioni e righe dati leggibili.");
       applyImportedRows(data,name);return;
     }
-    setImportLoading(null);setMsg(L("Formato file non supportato. Usa un file .xlsx, .xls o .csv."));
+    throw new Error("Formato non supportato. Seleziona un file .xlsx oppure .csv.");
   }
   async function importGoogleSheetById(fileId:string,fileName:string,token:any){
     setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
@@ -1427,36 +1446,41 @@ export function ImportData(props:any={}){
     applyImportedRows(values,fileName||"Google Sheets");
   }
   async function openGoogleSheetsPicker(){
-    setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
-    setImportProgress("Google Sheets","Preparazione Google Picker",5);
+    setImportNotice(null);setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
+    if(isNativeImportPlatform()){
+      setImportProgress("Google Drive","Apertura selettore documenti",2);
+      try{if(driveFileRef.current){driveFileRef.current.value="";driveFileRef.current.click();return;}}catch(e){}
+      failImport("Google Drive non disponibile","Non è stato possibile aprire il selettore documenti del telefono.");return;
+    }
+    setImportProgress("Google Drive","Preparazione Google Drive",5);
     try{
       var google:any=await ensureGooglePickerLibraries();
-      setImportProgress("Google Sheets","Autorizzazione Google",18);
+      setImportProgress("Google Drive","Autorizzazione Google",18);
       var token:any=await getGooglePickerTokenWithConsent(google);
-      setImportProgress("Google Sheets","Apertura Google Drive",30);
-      await new Promise(function(resolve){
-        var view=new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
-        try{view.setIncludeFolders(false);view.setSelectFolderEnabled(false);}catch(e){}
-        var builder=new google.picker.PickerBuilder()
-          .setDeveloperKey(GOOGLE_PICKER_API_KEY)
-          .setOAuthToken(token)
-          .setAppId(GOOGLE_PICKER_APP_ID)
-          .addView(view)
-          .setCallback(async function(data:any){
+      setImportProgress("Google Drive","Apertura elenco file",30);
+      await withImportTimeout(new Promise(function(resolve,reject){
+        var completed=false;
+        function finish(v:any){if(completed)return;completed=true;resolve(v);}
+        try{
+          var view=new google.picker.DocsView(google.picker.ViewId.SPREADSHEETS);
+          try{view.setIncludeFolders(false);view.setSelectFolderEnabled(false);view.setMimeTypes("application/vnd.google-apps.spreadsheet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv,application/vnd.ms-excel");}catch(e){}
+          var builder=new google.picker.PickerBuilder().setDeveloperKey(GOOGLE_PICKER_API_KEY).setOAuthToken(token).setAppId(GOOGLE_PICKER_APP_ID).addView(view).setCallback(async function(data:any){
             try{
-              if(data&&data.action===google.picker.Action.CANCEL){setImportLoading(null);resolve(true);return;}
-              if(data&&data.action===google.picker.Action.PICKED&&data.docs&&data.docs[0]){
-                var doc=data.docs[0];
-                await importDriveSpreadsheetFile(String(doc.id||""),String(doc.name||doc.title||"Google Drive"),String(doc.mimeType||""),token);
-                resolve(true);return;
+              if(data&&data.action===google.picker.Action.CANCEL){setImportLoading(null);showImportNotice("error","Selezione annullata","Non è stato selezionato alcun file da Google Drive.");finish(true);return;}
+              if(data&&data.action===google.picker.Action.PICKED){
+                if(!data.docs||!data.docs[0])throw new Error("Google Drive non ha restituito il file selezionato.");
+                var doc=data.docs[0];await importDriveSpreadsheetFile(String(doc.id||""),String(doc.name||doc.title||"Google Drive"),String(doc.mimeType||""),token);finish(true);return;
               }
-            }catch(e){setImportLoading(null);var detail=String((e&&e.message)||e||"");setMsg(L("Non riesco a leggere il file selezionato da Google Drive. Controlla che il file non sia vuoto e che l'autorizzazione Google sia attiva.")+(detail?"\n"+detail:""));resolve(true);}
+            }catch(e){reject(e);}
           });
-        try{builder.enableFeature(google.picker.Feature.SUPPORT_DRIVES);}catch(e){}
-        var picker=builder.build();
-        picker.setVisible(true);
-      });
-    }catch(e){setImportLoading(null);var m=String((e&&e.message)||e||"");setMsg(L("Non riesco ad aprire Google Sheets. Verifica che Google Picker API, Drive API e Sheets API siano abilitate, che il dominio sia autorizzato e che l’account Google abbia concesso l’accesso al file selezionato.")+(m?"\n"+m:""));}
+          try{builder.enableFeature(google.picker.Feature.SUPPORT_DRIVES);}catch(e){}
+          var picker=builder.build();picker.setVisible(true);
+        }catch(e){reject(e);}
+      }),90000,"Google Drive è rimasto aperto senza restituire un file. Chiudi il selettore e riprova.");
+    }catch(e){
+      var m=importErrorText(e,"Errore Google Drive");
+      failImport("Importazione da Google Drive non riuscita","Motivo: "+m+". Se Google mostra 'app non verificata', la schermata OAuth del progetto deve essere pubblicata o verificata nella Google Cloud Console; il caricamento locale continua a funzionare senza questa autorizzazione.");
+    }
   }
   function normName(v){return String(v==null?"":v).trim().toLowerCase();}
   function findByName(list,name){var n=normName(name);if(!n)return null;return (list||[]).find(function(x){return normName(x.name)===n||normName(x.id)===n;})||null;}
@@ -1468,101 +1492,94 @@ export function ImportData(props:any={}){
   function optionList(kind){if(kind==="expenseCategory")return (cats||[]).filter(function(c:any){return !c.deleted&&!c.archived;});if(kind==="paymentMethod")return (methods||[]).filter(function(m:any){return !m.deleted&&!m.archived;});if(kind==="incomeType")return (incomeTypes||[]).filter(function(it:any){return !it.deleted&&!it.archived;});return pEntries;}
   function replacementKey(kind,name){return kind+"::"+normName(name);}
   function selectedReplacement(kind,name){var opts=optionList(kind)||[];if(!opts.length)return null;var key=replacementKey(kind,name);var raw=replacementMap[key];return opts.find(function(x){return String(x.id)===String(raw);})||opts[0];}
-  function parseXLSXBuffer(ab){
-    return new Promise(function(resolve){
-      try{
-        var u8=new Uint8Array(ab);
-        if(!u8.length||u8[0]!==0x50||u8[1]!==0x4B){resolve({__unsupported:true});return;}
-        var dv=new DataView(ab),entries={},idx=0;
-        while(idx<u8.length-4){if(u8[idx]===0x50&&u8[idx+1]===0x4B&&u8[idx+2]===0x03&&u8[idx+3]===0x04){var cm=dv.getUint16(idx+8,true),cs=dv.getUint32(idx+18,true),fl=dv.getUint16(idx+26,true),el=dv.getUint16(idx+28,true);var fn=String.fromCharCode.apply(null,u8.slice(idx+30,idx+30+fl));var ds2=idx+30+fl+el;entries[fn]={cm:cm,data:u8.slice(ds2,ds2+cs)};idx=ds2+cs;}else idx++;}
-        function decomp(data,cb){if(typeof DecompressionStream!=="undefined"){var ds3=new DecompressionStream("deflate-raw"),w=ds3.writable.getWriter(),r=ds3.readable.getReader(),chunks=[];function pump(res){if(res.done){cb(chunks.reduce(function(a,c){var n=new Uint8Array(a.length+c.length);n.set(a);n.set(c,a.length);return n;},new Uint8Array()));return;}chunks.push(res.value);r.read().then(pump);}r.read().then(pump);w.write(data);w.close();}else cb(data);}
-        function u8ToStr(u82){return new TextDecoder("utf-8").decode(u82);}
-        function getSS(xml){var arr=[],re=/<si>[\s\S]*?<\/si>/g,m;while((m=re.exec(xml))!==null){var tr=/<t[^>]*>([^<]*)<\/t>/g,tm,v="";while((tm=tr.exec(m[0]))!==null)v+=tm[1];arr.push(v);}return arr;}
-        function parseSheet(xml,ss){
-          var rows2=[],rowRe=/<row[^>]*>([\s\S]*?)<\/row>/g,rm;
-          while((rm=rowRe.exec(xml))!==null){
-            var cells={},cRe=/<c r="([A-Z]+)(\d+)"([^>]*)>([\s\S]*?)<\/c>/g,cm2;
-            while((cm2=cRe.exec(rm[1]))!==null){
-              var col=cm2[1],attrs=cm2[3],inner=cm2[4];var vm=inner.match(/<v>([^<]*)<\/v>/);var rawVal=vm?vm[1]:"";var val;
-              if(attrs.indexOf('t="s"')>=0){val=ss[parseInt(rawVal,10)]||"";}else if(attrs.indexOf('t="inlineStr"')>=0){var tm2=inner.match(/<t[^>]*>([^<]*)<\/t>/);val=tm2?tm2[1]:"";}else if(rawVal!==""){var num=parseFloat(rawVal);val=isNaN(num)?rawVal:num;}else{val="";}
-              var ci3=0;for(var ci4=0;ci4<col.length;ci4++)ci3=ci3*26+(col.charCodeAt(ci4)-64);cells[ci3]=val;
-            }
-            if(Object.keys(cells).length){var mx=Math.max.apply(null,Object.keys(cells).map(Number));var arr2=[];for(var jj=1;jj<=mx;jj++)arr2.push(cells[jj]!==undefined?cells[jj]:"");rows2.push(arr2);}
-          }
-          return rows2;
+  async function parseXLSXBuffer(ab:any):Promise<any>{
+    try{
+      if(!ab)return {__unsupported:true,__reason:"File vuoto"};
+      var u8=ab instanceof Uint8Array?ab:new Uint8Array(ab);var buffer=u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength);
+      if(u8.length<22||u8[0]!==0x50||u8[1]!==0x4B)return {__unsupported:true,__reason:"Il file non è un archivio XLSX valido"};
+      var dv=new DataView(buffer);
+      function u16(pos){return dv.getUint16(pos,true);}function u32(pos){return dv.getUint32(pos,true);}
+      function decodeBytes(bytes){return new TextDecoder("utf-8").decode(bytes);}
+      function xmlDecode(v){return String(v||"").replace(/&lt;/g,"<").replace(/&gt;/g,">").replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#39;/g,"'").replace(/&amp;/g,"&").replace(/&#(\d+);/g,function(_m,n){return String.fromCharCode(parseInt(n,10)||0);}).replace(/&#x([0-9a-f]+);/ig,function(_m,n){return String.fromCharCode(parseInt(n,16)||0);});}
+      var eocd=-1;var min=Math.max(0,u8.length-65557);for(var pos=u8.length-22;pos>=min;pos--){if(u32(pos)===0x06054b50){eocd=pos;break;}}
+      if(eocd<0)return {__unsupported:true,__reason:"Struttura ZIP incompleta"};
+      var entries:any={};var total=u16(eocd+10);var cdPos=u32(eocd+16);
+      for(var ei=0;ei<total&&cdPos+46<=u8.length;ei++){
+        if(u32(cdPos)!==0x02014b50)break;
+        var method=u16(cdPos+10),compressedSize=u32(cdPos+20),fnLen=u16(cdPos+28),extraLen=u16(cdPos+30),commentLen=u16(cdPos+32),localOffset=u32(cdPos+42);
+        var name=decodeBytes(u8.slice(cdPos+46,cdPos+46+fnLen));
+        if(localOffset+30<=u8.length&&u32(localOffset)===0x04034b50){
+          var localFn=u16(localOffset+26),localExtra=u16(localOffset+28),dataStart=localOffset+30+localFn+localExtra,dataEnd=dataStart+compressedSize;
+          if(dataStart>=0&&dataEnd<=u8.length)entries[name]={name:name,method:method,data:u8.slice(dataStart,dataEnd)};
         }
-        var ssKey=Object.keys(entries).find(function(k){return k.indexOf("sharedStrings")>=0;});var shKey=Object.keys(entries).find(function(k){return /xl\/worksheets\/[Ss]heet1/.test(k);})||Object.keys(entries).find(function(k){return /xl\/worksheets\/sheet/.test(k);});
-        if(!shKey){resolve(null);return;}function withSS(cb){if(!ssKey){cb([]);return;}var e=entries[ssKey];if(e.cm===0){cb(getSS(u8ToStr(e.data)));return;}decomp(e.data,function(raw){cb(getSS(u8ToStr(raw)));});}
-        withSS(function(ss){var e2=entries[shKey];if(e2.cm===0){resolve(parseSheet(u8ToStr(e2.data),ss));return;}decomp(e2.data,function(raw){resolve(parseSheet(u8ToStr(raw),ss));});});
-      }catch(err){resolve(null);}
-    });
+        cdPos+=46+fnLen+extraLen+commentLen;
+      }
+      async function entryBytes(name){
+        var ent=entries[name];if(!ent)return null;if(ent.method===0)return ent.data;if(ent.method!==8)throw new Error("Compressione XLSX non supportata: "+ent.method);
+        var DS=(typeof DecompressionStream!=="undefined")?DecompressionStream:null;if(!DS)throw new Error("Il browser non supporta la decompressione dei file Excel. Usa CSV oppure aggiorna l'app/browser.");
+        var stream=new Blob([ent.data]).stream().pipeThrough(new DS("deflate-raw"));return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+      async function entryText(name){var bytes=await entryBytes(name);return bytes?decodeBytes(bytes):"";}
+      function normalizePath(path){var out:any[]=[];String(path||"").replace(/^\//,"").split("/").forEach(function(x){if(!x||x===".")return;if(x==="..")out.pop();else out.push(x);});return out.join("/");}
+      var sheetPath="";var workbook=await entryText("xl/workbook.xml");var rels=await entryText("xl/_rels/workbook.xml.rels");
+      if(workbook&&rels){
+        var relMap:any={};var rr=/<Relationship\b([^>]*)\/?\s*>/g,rm:any;while((rm=rr.exec(rels))!==null){var attrs=rm[1]||"";var idm=attrs.match(/\bId="([^"]+)"/);var tm=attrs.match(/\bTarget="([^"]+)"/);if(idm&&tm){var target=xmlDecode(tm[1]);relMap[idm[1]]=normalizePath(target.charAt(0)==="/"?target:("xl/"+target));}}
+        var sr=/<sheet\b([^>]*)\/?\s*>/g,sm:any;while((sm=sr.exec(workbook))!==null){var attrs2=sm[1]||"";if(/\bstate="(hidden|veryHidden)"/i.test(attrs2))continue;var rid=attrs2.match(/\br:id="([^"]+)"/);if(rid&&relMap[rid[1]]){sheetPath=relMap[rid[1]];break;}}
+      }
+      if(!sheetPath)sheetPath=Object.keys(entries).filter(function(k){return /^xl\/worksheets\/sheet\d+\.xml$/i.test(k);}).sort(function(a,b){var na=parseInt((a.match(/sheet(\d+)/i)||[])[1]||"0",10),nb=parseInt((b.match(/sheet(\d+)/i)||[])[1]||"0",10);return na-nb;})[0]||"";
+      if(!sheetPath||!entries[sheetPath])return {__unsupported:true,__reason:"Nessun foglio di lavoro trovato nel file"};
+      var shared:any[]=[];if(entries["xl/sharedStrings.xml"]){var ssXml=await entryText("xl/sharedStrings.xml");var siRe=/<si\b[^>]*>([\s\S]*?)<\/si>/g,si:any;while((si=siRe.exec(ssXml))!==null){var text="";var tr=/<t\b[^>]*>([\s\S]*?)<\/t>/g,tm2:any;while((tm2=tr.exec(si[1]))!==null)text+=xmlDecode(tm2[1]);shared.push(text);}}
+      var sheet=await entryText(sheetPath);if(!sheet)return {__unsupported:true,__reason:"Il foglio di lavoro è vuoto"};
+      var rows2:any[]=[];var rowRe=/<row\b[^>]*>([\s\S]*?)<\/row>/g,rowMatch:any;
+      while((rowMatch=rowRe.exec(sheet))!==null){
+        var cells:any={};var cellRe=/<c\b([^>]*)>([\s\S]*?)<\/c>/g,cell:any;
+        while((cell=cellRe.exec(rowMatch[1]))!==null){
+          var attrs3=cell[1]||"",inner=cell[2]||"";var ref=attrs3.match(/\br="([A-Z]+)(\d+)"/i);if(!ref)continue;var col=String(ref[1]||"").toUpperCase();var typeM=attrs3.match(/\bt="([^"]+)"/);var typ=typeM?typeM[1]:"";var raw="";var value:any="";
+          if(typ==="inlineStr"){var it=/<t\b[^>]*>([\s\S]*?)<\/t>/g,im:any;while((im=it.exec(inner))!==null)raw+=xmlDecode(im[1]);value=raw;}
+          else{var vm=inner.match(/<v\b[^>]*>([\s\S]*?)<\/v>/);raw=vm?xmlDecode(vm[1]):"";if(typ==="s")value=shared[parseInt(raw,10)]||"";else if(typ==="str"||typ==="d"||typ==="e")value=raw;else if(typ==="b")value=raw==="1"?"TRUE":"FALSE";else if(raw!==""){var num=Number(raw);value=isNaN(num)?raw:num;}else value="";}
+          var ci=0;for(var cc=0;cc<col.length;cc++)ci=ci*26+(col.charCodeAt(cc)-64);if(ci>0&&ci<=16384)cells[ci]=value;
+        }
+        var keys=Object.keys(cells).map(Number);if(keys.length){var mx=Math.max.apply(null,keys);var arr:any[]=[];for(var jj=1;jj<=mx;jj++)arr.push(cells[jj]!==undefined?cells[jj]:"");rows2.push(arr);}
+      }
+      return rows2;
+    }catch(err){return {__unsupported:true,__reason:importErrorText(err,"Errore durante l'analisi del file Excel")};}
   }
-  function handleFile(e){
-    var inputEl=e&&((e.currentTarget)||(e.target));
-    var file=inputEl&&inputEl.files?inputEl.files[0]:null;if(!file)return;
-    function clearPickedFile(){try{if(inputEl)inputEl.value="";}catch(_clearErr){}}
-    setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
-    setImportProgress(file.name,"Caricamento file",0);
-    var fileName=String(file.name||"");var fileType=String(file.type||"");
-    var isJson=/\.json$/i.test(fileName)||/json/i.test(fileType);
-    var isTextJsonCandidate=isJson||/\.(txt|backup)$/i.test(fileName)||/text\//i.test(fileType)||!fileType;
-    if(isTextJsonCandidate&&onBackupJsonText){
-      var jsonReader=new FileReader();
-      jsonReader.onprogress=function(ev){if(ev.lengthComputable)setImportProgress(file.name,"Lettura file",Math.min(85,(ev.loaded/ev.total)*85));else setImportProgress(file.name,"Lettura file",35);};
-      jsonReader.onerror=function(){clearPickedFile();setImportLoading(null);setMsg(L("Errore durante la lettura del file."));};
-      jsonReader.onload=function(ev){
-        setImportProgress(file.name,"Analisi file",90);
-        var text=String(ev&&ev.target&&ev.target.result||"");
-        if(isJson||looksLikeBackupJsonText(text)){
-          importBackupJsonFromGenericPicker(text,file.name).then(function(done){
-            clearPickedFile();
-            if(done)return;
-            var parsed=parseImportedDelimitedText(text);
-            if(!parsed||parsed.length<2){setImportLoading(null);setMsg(L("File CSV vuoto o non valido."));return;}
-            applyImportedRows(parsed,file.name);
-          }).catch(function(err){clearPickedFile();console.error("Backup JSON import error",err);setImportLoading(null);setMsg(L("File JSON non valido"));});
-          return;
-        }
-        clearPickedFile();
-        var parsed=parseImportedDelimitedText(text);
-        if(!parsed||parsed.length<2){setImportLoading(null);setMsg(L("File CSV vuoto o non valido."));return;}
-        applyImportedRows(parsed,file.name);
-      };
-      jsonReader.readAsText(file,"UTF-8");
-      return;
-    }
-    var isGoogleSheetNative=/\.gsheet$/i.test(fileName)||fileType==="application/vnd.google-apps.spreadsheet";
-    if(isGoogleSheetNative)setImportProgress(file.name,"Apertura Foglio Google",8);
-    var isExcel=isGoogleSheetNative||/\.(xlsx|xls)$/i.test(fileName)||/spreadsheetml\.sheet|vnd\.ms-excel/i.test(fileType);
-    if(isExcel){
-      var reader=new FileReader();
-      reader.onprogress=function(ev){if(ev.lengthComputable)setImportProgress(file.name,"Lettura file",Math.min(70,(ev.loaded/ev.total)*70));else setImportProgress(file.name,"Lettura file",25);};
-      reader.onerror=function(){clearPickedFile();setImportLoading(null);setMsg(L("Errore durante la lettura del file."));};
-      reader.onload=function(ev){
-        clearPickedFile();
-        setImportProgress(file.name,"Analisi file",78);
-        setTimeout(function(){parseXLSXBuffer(ev.target.result).then(function(data){
-          if(data&&data.__unsupported){setImportLoading(null);setMsg(isGoogleSheetNative?L("Il Foglio Google nativo non ha fornito dati leggibili all’app. Da Drive apri il menu del file e scegli Scarica/Esporta come .xlsx oppure .csv, poi importalo qui."):L("Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."));return;}
-          if(!data||data.length<2){setImportLoading(null);setMsg(isGoogleSheetNative?L("Il Foglio Google nativo non ha fornito dati leggibili all’app. Da Drive apri il menu del file e scegli Scarica/Esporta come .xlsx oppure .csv, poi importalo qui."):L("Nessun dato nel file Excel."));return;}
-          applyImportedRows(data,file.name);
-        }).catch(function(){setImportLoading(null);setMsg(L("Errore durante l'analisi del file Excel."));});},0);
-      };
-      reader.readAsArrayBuffer(file);
-    }else{
-      var reader2=new FileReader();
-      reader2.onprogress=function(ev){if(ev.lengthComputable)setImportProgress(file.name,"Lettura file",Math.min(85,(ev.loaded/ev.total)*85));else setImportProgress(file.name,"Lettura file",35);};
-      reader2.onerror=function(){clearPickedFile();setImportLoading(null);setMsg(L("Errore durante la lettura del file."));};
-      reader2.onload=function(ev){
-        setImportProgress(file.name,"Analisi file",90);
-        var text=String(ev&&ev.target&&ev.target.result||"");
-        if(onBackupJsonText&&looksLikeBackupJsonText(text)){importBackupJsonFromGenericPicker(text,file.name).then(function(){clearPickedFile();}).catch(function(err){clearPickedFile();console.error("Backup JSON import error",err);setImportLoading(null);setMsg(L("File JSON non valido"));});return;}
-        clearPickedFile();
-        var parsed=parseImportedDelimitedText(text);
-        if(!parsed||parsed.length<2){setImportLoading(null);setMsg(L("File CSV vuoto o non valido."));return;}
-        applyImportedRows(parsed,file.name);
-      };
-      reader2.readAsText(file,"UTF-8");
-    }
+  async function processSelectedFile(file:any,source:string,inputEl?:any){
+    var attempt=++importAttemptRef.current;var name=String((file&&file.name)||"File senza nome");var mime=String((file&&file.type)||"").toLowerCase();var lower=name.toLowerCase();
+    setImportNotice(null);setMsg("");setRows([]);setCols([]);setPreview([]);setImportSuccess(null);setStep(0);
+    if(!file)return failImport("Nessun file selezionato","Il selettore non ha restituito alcun file.");
+    if(Number(file.size||0)===0)return failImport("File vuoto",name+" ha dimensione zero e non contiene dati leggibili.");
+    if(Number(file.size||0)>50*1024*1024)return failImport("File troppo grande",name+" supera 50 MB. Dividilo in file più piccoli e riprova.");
+    setImportProgress(name,(source||"File")+": lettura in corso",8);
+    try{
+      if(/\.gsheet$/i.test(lower)||mime==="application/vnd.google-apps.spreadsheet")throw new Error("È stato selezionato un collegamento .gsheet, non il contenuto del foglio. Da Google Drive scegli Scarica > Microsoft Excel (.xlsx) oppure usa il pulsante Importa da Google Drive.");
+      var isLegacyXls=/\.xls$/i.test(lower)&&!/\.xlsx$/i.test(lower);if(isLegacyXls)throw new Error("Il vecchio formato .xls non è supportato. Apri il file in Excel e salvalo come .xlsx oppure .csv.");
+      var isXlsx=/\.xlsx$/i.test(lower)||/spreadsheetml\.sheet/.test(mime);
+      var isJson=/\.json$/i.test(lower)||/json/.test(mime);
+      var isText=/\.(csv|txt|backup)$/i.test(lower)||/csv|text\//.test(mime)||isJson;
+      if(isXlsx){
+        setImportProgress(name,"Lettura file Excel",24);var ab=await readFileAsArrayBuffer(file);if(attempt!==importAttemptRef.current)return false;
+        setImportProgress(name,"Analisi struttura Excel",72);var data=await withImportTimeout(parseXLSXBuffer(ab),45000,"L'analisi del file Excel non è terminata entro 45 secondi.");if(attempt!==importAttemptRef.current)return false;
+        if(data&&data.__unsupported)throw new Error(String(data.__reason||"Il file non è un .xlsx valido o usa una struttura non supportata."));
+        if(!data||data.length<2)throw new Error("Il file Excel non contiene almeno una riga di intestazioni e una riga di dati.");
+        return applyImportedRows(data,name);
+      }
+      if(isText||!mime){
+        setImportProgress(name,"Lettura file di testo",35);var text=await readFileAsText(file);if(attempt!==importAttemptRef.current)return false;
+        setImportProgress(name,"Analisi contenuto",84);
+        if((isJson||looksLikeBackupJsonText(text))&&onBackupJsonText){var done=await importBackupJsonFromGenericPicker(text,name);if(done){showImportNotice("success","Backup letto correttamente",name+" è stato elaborato correttamente.");return true;}}
+        var parsed=parseImportedDelimitedText(text);if(!parsed||parsed.length<2)throw new Error("Il file CSV è vuoto, usa un separatore non riconosciuto oppure non contiene intestazioni e righe dati.");
+        return applyImportedRows(parsed,name);
+      }
+      var probe=await readFileAsArrayBuffer(file);var sig=new Uint8Array(probe).slice(0,4);if(sig[0]===0x50&&sig[1]===0x4B){setImportProgress(name,"Analisi file Excel",72);var guessed=await parseXLSXBuffer(probe);if(guessed&&guessed.__unsupported)throw new Error(String(guessed.__reason||"File Excel non leggibile"));return applyImportedRows(guessed,name);}
+      throw new Error("Formato non supportato. Usa .xlsx oppure .csv.");
+    }catch(err){if(attempt!==importAttemptRef.current)return false;return failImport("Caricamento del file fallito","File: "+name+". Origine: "+String(source||"dispositivo")+". Motivo: "+importErrorText(err,"errore sconosciuto"));}
+    finally{try{if(inputEl)inputEl.value="";}catch(_e2){}}
+  }
+  function handleFile(e:any,source?:string){
+    var inputEl=e&&((e.currentTarget)||(e.target));var file=inputEl&&inputEl.files?inputEl.files[0]:null;
+    if(!file){setImportLoading(null);return;}
+    processSelectedFile(file,source||"Telefono",inputEl);
   }
   function buildPreview(){
     if(importType==="patrimonio"){if(!map.monthKey||!map.entryId||!map.amount){setMsg(L("Mappa almeno Data/Mese, Categoria/Voce e Importo"));return;}}else if(!map.date||!map.amount){setMsg(L("Mappa almeno Data e Importo"));return;}
@@ -1576,20 +1593,21 @@ export function ImportData(props:any={}){
   }
   function resolvePreviewRows(){var mode=unknownTotal()>0?unknownDecision:"create";if(mode==="skip")return preview.filter(function(r){return !rowHasUnknown(r);});var catMap={},methodMap={},incomeMap={},patMap={};if(mode==="create"){var now=Date.now();var newCats=(unknowns.expenseCategory||[]).filter(function(n){return !findByName(cats,n);}).map(function(n,i){return{id:now+i+11,name:n,icon:"📦",color:"#D3D1C7",group:"altro"};});var newMethods=(unknowns.paymentMethod||[]).filter(function(n){return !findByName(methods,n);}).map(function(n,i){return{id:now+i+1011,name:n,icon:"💳",color:"#D3D1C7",group:"altri"};});var newIncome=(unknowns.incomeType||[]).filter(function(n){return !findByName(incomeTypes,n);}).map(function(n,i){return{id:cleanId("income",n),name:n,icon:"💰",color:"#9FE1CB",group:"extra_inc",custom:true};});var newPat=(unknowns.patrimonioEntry||[]).filter(function(n){return !findByName(pEntries,n);}).map(function(n,i){return{id:cleanId("pat",n),name:n,icon:"📦",areaId:"altro"};});newCats.forEach(function(x){catMap[normName(x.name)]=x.id;});newMethods.forEach(function(x){methodMap[normName(x.name)]=x.id;});newIncome.forEach(function(x){incomeMap[normName(x.name)]=x.id;});newPat.forEach(function(x){patMap[normName(x.name)]=x.id;});if(newCats.length&&setCats)setCats(function(list){return (list||[]).concat(newCats);});if(newMethods.length&&setMethods)setMethods(function(list){return (list||[]).concat(newMethods);});if(newIncome.length&&setCustomIncomeTypes)setCustomIncomeTypes(function(list){return (list||[]).concat(newIncome);});if(newPat.length&&setPatrimonioEntries)setPatrimonioEntries(function(list){return (list||DEFAULT_PATRIMONIO_ENTRIES).concat(newPat);});}
     return preview.map(function(r){var out={...r,unknowns:{}};if(rowHasUnknown(r)){if(mode==="replace"){if(r.unknowns.expenseCategory){var c=selectedReplacement("expenseCategory",r.unknowns.expenseCategory);if(c)out.catId=c.id;}if(r.unknowns.paymentMethod){var m=selectedReplacement("paymentMethod",r.unknowns.paymentMethod);if(m)out.methodId=m.id;}if(r.unknowns.incomeType){var it=selectedReplacement("incomeType",r.unknowns.incomeType);if(it)out.itype=it.id;}if(r.unknowns.patrimonioEntry){var pe=selectedReplacement("patrimonioEntry",r.unknowns.patrimonioEntry);if(pe)out.entryId=pe.id;}}else{if(r.unknowns.expenseCategory)out.catId=catMap[normName(r.unknowns.expenseCategory)]||out.catId;if(r.unknowns.paymentMethod)out.methodId=methodMap[normName(r.unknowns.paymentMethod)]||out.methodId;if(r.unknowns.incomeType)out.itype=incomeMap[normName(r.unknowns.incomeType)]||out.itype;if(r.unknowns.patrimonioEntry)out.entryId=patMap[normName(r.unknowns.patrimonioEntry)]||out.entryId;}}return out;});}
-  function doImport(){var finalPreview=resolvePreviewRows();if(!finalPreview.length){setMsg(L("Nessuna voce valida da importare."));return;}var importedOk=true;if(importType==="expense")importedOk=addExpenses(finalPreview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,catId:p.catId,methodId:p.methodId,methodName:p.methodName,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");else if(importType==="income")importedOk=addIncomes(finalPreview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,type:p.itype,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");else if(importType==="patrimonio"){var byMonth={};var byMonthNotes={};finalPreview.forEach(function(row){if(!row.monthKey)return;if(!byMonth[row.monthKey])byMonth[row.monthKey]={};if(!byMonthNotes[row.monthKey])byMonthNotes[row.monthKey]={};byMonth[row.monthKey][row.entryId]=row.amount;if(row.note)byMonthNotes[row.monthKey][row.entryId]=row.note;});var newHist={...(patrimonioHistory||{})};Object.keys(byMonth).forEach(function(mk){var snap={...(newHist[mk]||{}),...byMonth[mk]};snap._total=Object.keys(snap).filter(function(k){return !String(k).startsWith("_");}).reduce(function(a,k){return a+(parseFloat(snap[k])||0);},0);snap._savedAt=new Date().toISOString();newHist[mk]=snap;});setPatrimonioHistory(newHist);if(Object.keys(byMonthNotes).length>0){var allNotes={};Object.keys(byMonthNotes).forEach(function(mk){Object.assign(allNotes,byMonthNotes[mk]);});setPatrimonioNotes(function(n){return{...(n||{}),...allNotes};});}}if(!importedOk)return;var typeLabel=importType==="expense"?"uscite":importType==="income"?"entrate":"voci patrimonio";setImportSuccess({count:finalPreview.length,type:typeLabel});if(unknownTotal()>0&&setToast)setToast({text:L("Importazione completata con gestione dei valori sconosciuti"),type:"success",icon:"✅"});resetAll();}
+  function doImport(){var finalPreview=resolvePreviewRows();if(!finalPreview.length){setMsg(L("Nessuna voce valida da importare."));return;}var importedOk=true;if(importType==="expense")importedOk=addExpenses(finalPreview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,catId:p.catId,methodId:p.methodId,methodName:p.methodName,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");else if(importType==="income")importedOk=addIncomes(finalPreview.map(function(p){return{id:Date.now()+Math.random(),amount:p.amount,type:p.itype,desc:p.desc,date:p.date,rateizzato:p.rateizzato,rate:p.rate};}),"import");else if(importType==="patrimonio"){var byMonth={};var byMonthNotes={};finalPreview.forEach(function(row){if(!row.monthKey)return;if(!byMonth[row.monthKey])byMonth[row.monthKey]={};if(!byMonthNotes[row.monthKey])byMonthNotes[row.monthKey]={};byMonth[row.monthKey][row.entryId]=row.amount;if(row.note)byMonthNotes[row.monthKey][row.entryId]=row.note;});var newHist={...(patrimonioHistory||{})};Object.keys(byMonth).forEach(function(mk){var snap={...(newHist[mk]||{}),...byMonth[mk]};snap._total=Object.keys(snap).filter(function(k){return !String(k).startsWith("_");}).reduce(function(a,k){return a+(parseFloat(snap[k])||0);},0);snap._savedAt=new Date().toISOString();newHist[mk]=snap;});setPatrimonioHistory(newHist);if(Object.keys(byMonthNotes).length>0){var allNotes={};Object.keys(byMonthNotes).forEach(function(mk){Object.assign(allNotes,byMonthNotes[mk]);});setPatrimonioNotes(function(n){return{...(n||{}),...allNotes};});}}if(!importedOk)return;var typeLabel=importType==="expense"?"uscite":importType==="income"?"entrate":"voci patrimonio";setImportSuccess({count:finalPreview.length,type:typeLabel});resetAll();}
   function unknownSection(kind,title,items){if(!items||!items.length)return null;var opts=optionList(kind)||[];return <div style={{background:dark?"#202033":"#fff",border:"1px solid "+(dark?"#444":"#eee"),borderRadius:10,padding:10,marginTop:8}}><div style={{fontSize:12,fontWeight:700,color:tc,marginBottom:6}}>{L(title)} ({items.length})</div>{items.map(function(name){var key=replacementKey(kind,name);return <div key={key} style={{display:"grid",gridTemplateColumns:unknownDecision==="replace"?"1fr 1fr":"1fr",gap:8,alignItems:"center",padding:"5px 0",borderTop:"1px solid "+(dark?"#333":"#f0f0f0")}}><div style={{fontSize:12,color:sc,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>• {name}</div>{unknownDecision==="replace"&&<select value={String((replacementMap[key]!==undefined?replacementMap[key]:(opts[0]?opts[0].id:"")))} onChange={function(e){var v=e.target.value;setReplacementMap(function(m){return{...m,[key]:v};});}} style={{...sinp,width:"100%"}}>{opts.map(function(o){return <option key={String(o.id)} value={String(o.id)}>{o.icon?o.icon+" ":""}{o.name}</option>;})}</select>}</div>;})}</div>;}
   function unknownResolutionBox(){var total=unknownTotal();if(!total)return null;return <div style={{background:dark?"#2a2414":"#FFF8E1",border:"1px solid "+(dark?"#6a5520":"#FFD54F"),borderRadius:12,padding:14,marginBottom:12}}><div style={{fontSize:14,fontWeight:800,color:dark?"#FFD54F":"#856404",marginBottom:5}}>⚠️ {L("Valori non presenti in fAInance")}</div><div style={{fontSize:12,color:dark?"#f5d98a":"#856404",lineHeight:1.45,marginBottom:12}}>{L("Prima di importare scegli come gestire categorie, metodi o voci sconosciute trovate nel file.")}</div><div style={{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:10}}>{[{id:"create",label:"Creiamo queste nuove categorie"},{id:"replace",label:"Sostituiamo queste categorie sconosciute con una già esistente"},{id:"skip",label:"Non importiamo queste transazioni e importiamo solo quelle corrette"}].map(function(o){var active=unknownDecision===o.id;return <button key={o.id} onClick={function(){setUnknownDecision(o.id);}} style={{background:active?(ctx.confirmButtonColor||"#7F77DD"):(dark?"#252535":"#fff"),color:active?"#fff":tc,border:"1px solid "+(active?(ctx.confirmButtonColor||"#7F77DD"):(dark?"#555":"#ddd")),borderRadius:10,padding:"10px 12px",fontSize:12,fontWeight:700,textAlign:"left",cursor:"pointer"}}>{L(o.label)}</button>;})}</div>{unknownDecision==="skip"&&<div style={{fontSize:12,color:dark?"#f5d98a":"#856404",marginBottom:8}}>{L("Le righe con valori sconosciuti saranno escluse dall'importazione.")}</div>}{unknownSection("expenseCategory","Categorie di Uscita sconosciute",unknowns.expenseCategory)}{unknownSection("paymentMethod","Metodi di Pagamento sconosciuti",unknowns.paymentMethod)}{unknownSection("incomeType","Categorie di Entrata sconosciute",unknowns.incomeType)}{unknownSection("patrimonioEntry","Categorie del Patrimonio sconosciute",unknowns.patrimonioEntry)}</div>;}
   var tabColor=importType==="expense"?"#E24B4A":importType==="income"?"#1D9E75":"#7F77DD";
   var IMPORT_GUIDELINES={expense:{title:"Formato file Uscite",body:"Il file deve avere le colonne:\n• Data (es. 31/12/2025)\n• Importo (es. 150,00 oppure € 150)\n• Categoria (nome della categoria, es. Supermercato)\n• Metodo (es. Revolut)\n• Descrizione (testo libero, opzionale)\n• Rate (numero di mesi, opzionale)"},income:{title:"Formato file Entrate",body:"Il file deve avere le colonne:\n• Data (es. 31/12/2025)\n• Importo (es. 1500,00)\n• Tipo entrata (es. Busta paga / Salario)\n• Descrizione (testo libero, opzionale)\n• Rate (numero di mesi, opzionale)"},patrimonio:{title:"Formato file Patrimonio",body:"Il file deve avere le colonne:\n• Data (es. 01/04/2026) — verrà convertita in mese YYYY-MM\n• Importo (es. € 20.000)\n• Categoria (nome voce patrimonio, es. Conto corrente)\n• Note (testo libero, opzionale)\n\nOgni riga = valore di una voce per un determinato mese."}};
   return <div style={{display:"flex",flexDirection:"column",gap:14}}>{importSuccess&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:"10vh 16px 2vh",boxSizing:"border-box",overflowY:"auto"}} onClick={function(){setImportSuccess(null);}}><div style={{background:dark?"#1e1e30":"#fff",borderRadius:20,padding:32,textAlign:"center",maxWidth:320,width:"100%",boxShadow:"0 8px 40px rgba(0,0,0,0.2)"}}><div style={{fontSize:56,marginBottom:12}}>✅</div><div style={{fontSize:20,fontWeight:700,color:tc,marginBottom:8}}>{L("Importazione completata!")}</div><div style={{fontSize:15,color:sc,marginBottom:6}}><span style={{fontSize:28,fontWeight:700,color:tabColor,display:"block",marginBottom:4}}>{importSuccess.count}</span>{L(importSuccess.type)} {L("importate con successo")}</div><button onClick={function(){setImportSuccess(null);}} style={{marginTop:16,background:"linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#7FC8F8))",color:"#fff",border:"none",borderRadius:12,padding:"12px 32px",fontSize:14,fontWeight:600,cursor:"pointer"}}>OK</button></div></div>}
+    {importNotice&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.58)",zIndex:1200,display:"flex",alignItems:"center",justifyContent:"center",padding:"max(28px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom))",boxSizing:"border-box"}} onClick={function(e){if(e.target===e.currentTarget)setImportNotice(null);}}><div style={{background:dark?"#1e1e30":"#fff",borderRadius:20,padding:"26px 22px",textAlign:"center",maxWidth:430,width:"100%",boxShadow:"0 14px 50px rgba(0,0,0,.34)",border:"1px solid "+(importNotice.kind==="success"?"#1D9E75":"#E24B4A")}}><div style={{fontSize:46,marginBottom:10}}>{importNotice.kind==="success"?"✅":"🚫"}</div><div style={{fontSize:19,fontWeight:900,color:importNotice.kind==="success"?"#1D9E75":"#E24B4A",marginBottom:10}}>{importNotice.title}</div><div style={{fontSize:14,color:tc,lineHeight:1.5,whiteSpace:"pre-line",overflowWrap:"anywhere"}}>{importNotice.detail}</div><button type="button" onClick={function(){setImportNotice(null);}} style={{marginTop:18,background:importNotice.kind==="success"?"#1D9E75":"#E24B4A",color:"#fff",border:"none",borderRadius:12,padding:"11px 28px",fontSize:14,fontWeight:900,cursor:"pointer"}}>OK</button></div></div>}
     {importLoading&&<div style={{background:dark?"#202033":"#EEF4FF",border:"1px solid "+(dark?"#3d376a":"#BFD7FF"),borderRadius:12,padding:"12px 14px"}}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",marginBottom:8}}><div style={{fontSize:13,fontWeight:800,color:tc}}>📥 {importLoading.stage||L("Caricamento file")}</div><div style={{fontSize:12,fontWeight:900,color:tabColor}}>{importLoading.pct||0}%</div></div><div style={{fontSize:11,color:sc,marginBottom:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{importLoading.file}</div><div style={{height:7,borderRadius:99,background:dark?"#333":"#DDE8FF",overflow:"hidden"}}><div style={{height:"100%",width:(importLoading.pct||0)+"%",background:tabColor,borderRadius:99,transition:"width .15s linear"}}/></div></div>}
     <div style={{display:"flex",gap:0,background:dark?"#333":"#f5f5f5",borderRadius:12,padding:3}}><button onClick={function(){setImportType("expense");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="expense"?"#E24B4A":"transparent",color:importType==="expense"?"#fff":sc,fontSize:14,cursor:"pointer",fontWeight:importType==="expense"?500:400}}>{"💸 "+L("Uscite")}</button><button onClick={function(){setImportType("income");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="income"?"#1D9E75":"transparent",color:importType==="income"?"#fff":sc,fontSize:14,cursor:"pointer",fontWeight:importType==="income"?500:400}}>{"💰 "+L("Entrate")}</button><button onClick={function(){setImportType("patrimonio");resetAll();}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:importType==="patrimonio"?"#7F77DD":"transparent",color:importType==="patrimonio"?"#fff":sc,fontSize:14,cursor:"pointer",fontWeight:importType==="patrimonio"?500:400}}>{"💎 "+L("Patrimonio")}</button></div>
     {step===0&&<div style={{background:importType==="patrimonio"?(dark?"#252535":"#f0edff"):importType==="expense"?(dark?"#2a1e1e":"#fff5f5"):(dark?"#1e2a1e":"#f0faf5"),borderRadius:10,border:"1px solid "+(importType==="patrimonio"?(dark?"#44408a":"#c8c0f8"):importType==="expense"?(dark?"#5a2a2a":"#fcc"):( dark?"#2a5a2a":"#a8e6c8")),padding:"12px 16px"}}><div style={{fontSize:12,fontWeight:700,color:importType==="patrimonio"?"#534AB7":importType==="expense"?"#E24B4A":"#1D9E75",marginBottom:6}}>{L(IMPORT_GUIDELINES[importType].title)}</div><div style={{fontSize:12,color:sc,lineHeight:1.7,whiteSpace:"pre-line"}}>{L(IMPORT_GUIDELINES[importType].body)}</div></div>}
     {msg&&<div style={{background:msg.startsWith("Import")?"#e8f8f0":msg.startsWith("⚠")?"#fff8e1":"#fff3cd",borderRadius:8,padding:"10px 14px",fontSize:13,color:msg.startsWith("Import")?"#1D9E75":"#856404"}}>{msg}</div>}
-    {step===0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignItems:"stretch"}} onDragOver={function(e){e.preventDefault();}} onDrop={function(e){e.preventDefault();var f=e.dataTransfer.files[0];if(f){var fake={target:{files:[f],value:""}};handleFile(fake);}}}>
-      <button type="button" onClick={openImportPicker} style={{width:"100%",border:"1px solid "+(dark?"#444":"#d7d7d7"),background:dark?"#252535":"#f7f7f7",borderRadius:12,padding:"13px 10px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:tc,fontSize:13,fontWeight:800,cursor:"pointer",minHeight:54,boxShadow:"none"}}><span style={{fontSize:18}}>📁</span><span>{L("Importa dal Telefono")}</span></button>
-      <button type="button" onClick={openGoogleSheetsPicker} style={{width:"100%",border:"1px solid "+(dark?"#444":"#d7d7d7"),background:dark?"#252535":"#f7f7f7",borderRadius:12,padding:"13px 10px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:tc,fontSize:13,fontWeight:800,cursor:"pointer",minHeight:54,boxShadow:"none"}}><span style={{fontSize:18}}>☁️</span><span>{L("Importa da Google Drive")}</span></button>
-    </div>}<input ref={fileRef} type="file" accept=".xlsx,.xls,.csv,.json,.txt,text/csv,application/json,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{display:"none"}} onChange={handleFile}/>
+    {step===0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,alignItems:"stretch"}} onDragOver={function(e){e.preventDefault();}} onDrop={function(e){e.preventDefault();var f=e.dataTransfer&&e.dataTransfer.files?e.dataTransfer.files[0]:null;if(f)processSelectedFile(f,"Trascinamento");else failImport("Nessun file rilevato","Trascina un file .xlsx oppure .csv nell'area di importazione.");}}>
+      <div style={{position:"relative",width:"100%",minHeight:54}}><button type="button" tabIndex={-1} aria-hidden="true" style={{pointerEvents:"none",width:"100%",height:"100%",border:"1px solid "+(dark?"#444":"#d7d7d7"),background:dark?"#252535":"#f7f7f7",borderRadius:12,padding:"13px 10px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:tc,fontSize:13,fontWeight:800,minHeight:54,boxShadow:"none"}}><span style={{fontSize:18}}>📁</span><span>{L("Importa dal Telefono")}</span></button><input ref={fileRef} aria-label={L("Importa dal Telefono")} type="file" accept=".xlsx,.xls,.csv,.json,.txt,text/csv,application/json,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onClick={function(e:any){try{e.currentTarget.value="";}catch(_e){}setImportNotice(null);setMsg("");}} onChange={function(e){handleFile(e,"Telefono");}} style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:"pointer",zIndex:2}}/></div>
+      {isNativeImportPlatform()?<div style={{position:"relative",width:"100%",minHeight:54}}><button type="button" tabIndex={-1} aria-hidden="true" style={{pointerEvents:"none",width:"100%",height:"100%",border:"1px solid "+(dark?"#444":"#d7d7d7"),background:dark?"#252535":"#f7f7f7",borderRadius:12,padding:"13px 10px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:tc,fontSize:13,fontWeight:800,minHeight:54,boxShadow:"none"}}><span style={{fontSize:18}}>☁️</span><span>{L("Importa da Google Drive")}</span></button><input ref={driveFileRef} aria-label={L("Importa da Google Drive")} type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onClick={function(e:any){try{e.currentTarget.value="";}catch(_e){}setImportNotice(null);setMsg("");}} onChange={function(e){handleFile(e,"Google Drive");}} style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:0,cursor:"pointer",zIndex:2}}/></div>:<button type="button" onClick={openGoogleSheetsPicker} style={{width:"100%",border:"1px solid "+(dark?"#444":"#d7d7d7"),background:dark?"#252535":"#f7f7f7",borderRadius:12,padding:"13px 10px",display:"flex",alignItems:"center",justifyContent:"center",gap:8,color:tc,fontSize:13,fontWeight:800,cursor:"pointer",minHeight:54,boxShadow:"none"}}><span style={{fontSize:18}}>☁️</span><span>{L("Importa da Google Drive")}</span></button>}
+    </div>}
     {step===1&&<div style={{background:dark?"#252535":"#f9f9f9",borderRadius:12,border:"1px solid "+(dark?"#444":"#eee"),padding:16}}><div style={{fontSize:13,fontWeight:500,marginBottom:12,color:tc}}>{L("Mappa colonne")} ({rows.length} {L("righe")})</div><div style={{marginBottom:14,background:dark?"#1e1e30":"#f0f8ff",borderRadius:10,padding:"12px 14px",border:"1px solid "+(dark?"#334":"#c8e0ff")}}><label style={{fontSize:12,fontWeight:600,color:dark?"#8bf":"#1a5fa8",display:"block",marginBottom:6}}>📅 {L("Formato delle date nel file")}</label><select value={importDateFmt} onChange={function(e){setImportDateFmt(e.target.value);}} style={{...sinp,width:"100%"}}><option value="dmy">GG/MM/AAAA (europeo)</option><option value="mdy">MM/GG/AAAA (americano)</option><option value="ymd">{L("AAAA-MM-GG (ISO)")}</option><option value="ym">{L("AAAA-MM (già nel formato corretto)")}</option><option value="auto">{L("Rilevamento automatico")}</option></select></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>{(importType==="patrimonio"?[["monthKey","Data / Mese *"],["entryId","Categoria / Voce *"],["amount","Importo / Valore *"],["patNote","Note (opzionale)"]]:(importType==="expense"?[["date","Data *"],["amount","Importo *"],["desc","Descrizione"],["cat","Categoria"],["method","Metodo di pagamento"],["rate","Rate (mesi)"]]:[["date","Data *"],["amount","Importo *"],["desc","Descrizione"],["cat","Tipo entrata"],["rate","Rate (mesi)"]])).map(function(pair){var k=pair[0],l=pair[1];return <div key={k}><label style={{fontSize:12,color:sc,display:"block",marginBottom:3}}>{L(l)}</label><select value={map[k]||""} onChange={function(e){var v=e.target.value;setMap(function(p){return{...p,[k]:v};});}} style={{...sinp,width:"100%"}}><option value="">{L("-- nessuna --")}</option>{cols.map(function(c,ci5){return <option key={ci5} value={c}>{c||("(col. "+(ci5+1)+")")}</option>;})}</select></div>;})}</div><div style={{display:"flex",gap:8}}><Btn onClick={buildPreview}>{L("Anteprima")}</Btn><Btn onClick={function(){setStep(0);}} bg={dark?"#333":"#f0f0f0"} color={tc}>{L("Indietro")}</Btn></div></div>}
     {step===2&&<div>{unknownResolutionBox()}<div style={{fontSize:13,color:sc,marginBottom:10}}>{preview.length} {L("voci trovate")}{unknownTotal()>0?" · "+unknownTotal()+" "+L("valori sconosciuti"):""}</div><div style={{overflowX:"auto",maxHeight:260,overflowY:"auto",border:"1px solid "+(dark?"#444":"#eee"),borderRadius:8}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}><thead style={{background:dark?"#252535":"#f5f5f5",position:"sticky",top:0}}><tr>{(importType==="patrimonio"?["Mese","Categoria","Valore","Note","Stato"]:["Data","Importo","Descrizione","Cat/Tipo","Stato"]).map(function(h){return <th key={h} style={{padding:"8px 10px",textAlign:"left",fontWeight:500,color:sc}}>{L(h)}</th>;})}</tr></thead><tbody>{preview.map(function(r,i){var warn=rowHasUnknown(r);return <tr key={i} style={{borderBottom:"1px solid "+(dark?"#333":"#f5f5f5"),background:warn?(dark?"#2a2414":"#fffaf0"):"transparent"}}>{importType==="patrimonio"?<><td style={{padding:"6px 10px",color:tc}}>{r.monthKey}</td><td style={{padding:"6px 10px",color:tc}}>{r.entryName}</td><td style={{padding:"6px 10px",color:"#7F77DD",fontWeight:500}}>{fmtAmt(r.amount,sym)}</td><td style={{padding:"6px 10px",color:sc,fontSize:11,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.note||"—"}</td><td style={{padding:"6px 10px",color:warn?"#EF9F27":sc,fontSize:11}}>{warn?L("Da gestire"):L("OK")}</td></>:<><td style={{padding:"6px 10px",color:tc}}>{fmtDate(r.date,ctx.dateFmt)}</td><td style={{padding:"6px 10px",color:tabColor,fontWeight:500}}>{fmtAmt(r.amount,sym)}</td><td style={{padding:"6px 10px",color:tc}}>{r.desc}</td><td style={{padding:"6px 10px",fontSize:11,color:sc}}>{importType==="expense"?(r.catName||"-"):(r.typeName||r.itype)}</td><td style={{padding:"6px 10px",color:warn?"#EF9F27":sc,fontSize:11}}>{warn?L("Da gestire"):L("OK")}</td></>}</tr>;})}</tbody></table></div><div style={{display:"flex",gap:8,marginTop:12}}><Btn onClick={doImport} bg={tabColor} style={{padding:"10px 20px",fontSize:14,fontWeight:500}}>{L("Importa")} {unknownDecision==="skip"?preview.filter(function(r){return !rowHasUnknown(r);}).length:preview.length} {L("voci")}</Btn><Btn onClick={function(){setStep(1);}} bg={dark?"#333":"#f0f0f0"} color={tc}>{L("Indietro")}</Btn></div></div>}
   </div>;
