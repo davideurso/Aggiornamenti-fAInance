@@ -72,6 +72,31 @@ workflows:
             echo "Nessun Podfile trovato. Continuo senza pod install."
           fi
 
+<<<<<<< HEAD
+=======
+      - name: Determine next iOS build number from TestFlight
+        script: |
+          set -euo pipefail
+
+          MINIMUM_BUILD=226
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          LATEST_BUILD=$(printf '%s' "$LATEST_BUILD" | tr -cd '0-9')
+          LATEST_BUILD=${LATEST_BUILD:-0}
+          NEXT_BUILD=$((LATEST_BUILD + 1))
+
+          if [ "$NEXT_BUILD" -lt "$MINIMUM_BUILD" ]; then
+            NEXT_BUILD="$MINIMUM_BUILD"
+          fi
+
+          if [ "$NEXT_BUILD" -le 224 ]; then
+            echo "ERRORE: build iOS non valida: $NEXT_BUILD. Deve essere superiore a 224."
+            exit 1
+          fi
+
+          echo "Latest TestFlight build: $LATEST_BUILD"
+          echo "Next iOS build: $NEXT_BUILD"
+          echo "IOS_BUILD_NUMBER=$NEXT_BUILD" >> "$CM_ENV"
+>>>>>>> 6e743f8 (Fix versioning iOS Codemagic)
       - name: Set iOS version, build number, privacy permissions and encryption compliance
         script: |
           cd ios/App
@@ -104,6 +129,57 @@ workflows:
           xcrun agvtool new-marketing-version "$APP_VERSION" || true
           xcrun agvtool new-version -all "$BUILD_NUMBER" || true
 
+<<<<<<< HEAD
+=======
+          python3 - <<'PY_VERSION'
+          import os
+          import plistlib
+          import re
+          from pathlib import Path
+
+          version = os.environ["FAINANCE_IOS_VERSION"]
+          build = os.environ["IOS_BUILD_NUMBER"]
+
+          pbx = Path("App.xcodeproj/project.pbxproj")
+          text = pbx.read_text(encoding="utf-8", errors="ignore")
+          text = re.sub(r"CURRENT_PROJECT_VERSION = [^;]+;", f"CURRENT_PROJECT_VERSION = {build};", text)
+          text = re.sub(r"MARKETING_VERSION = [^;]+;", f"MARKETING_VERSION = {version};", text)
+          pbx.write_text(text, encoding="utf-8")
+
+          excluded = {"Pods", "build", "DerivedData", "node_modules"}
+          updated = []
+          for plist_path in Path(".").rglob("Info.plist"):
+              if any(part in excluded for part in plist_path.parts):
+                  continue
+              try:
+                  with plist_path.open("rb") as handle:
+                      plist = plistlib.load(handle)
+              except Exception:
+                  continue
+              plist["CFBundleShortVersionString"] = version
+              plist["CFBundleVersion"] = build
+              with plist_path.open("wb") as handle:
+                  plistlib.dump(plist, handle, fmt=plistlib.FMT_XML, sort_keys=False)
+              updated.append(str(plist_path))
+
+          if not updated:
+              raise SystemExit("Nessun Info.plist iOS aggiornato")
+
+          print("Info.plist aggiornati:")
+          for item in updated:
+              print("- " + item)
+          PY_VERSION
+
+          ACTUAL_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" App/Info.plist)
+          ACTUAL_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" App/Info.plist)
+          if [ "$ACTUAL_VERSION" != "$FAINANCE_IOS_VERSION" ] || [ "$ACTUAL_BUILD" != "$BUILD_NUMBER" ]; then
+            echo "Impostazione versione fallita: ${ACTUAL_VERSION} (${ACTUAL_BUILD})"
+            exit 1
+          fi
+
+          echo "File di progetto impostati su ${ACTUAL_VERSION} (${ACTUAL_BUILD})"
+          grep -n "CURRENT_PROJECT_VERSION\|MARKETING_VERSION" App.xcodeproj/project.pbxproj
+>>>>>>> 6e743f8 (Fix versioning iOS Codemagic)
           cat App/Info.plist
 
           cd ../..
@@ -245,6 +321,31 @@ workflows:
 
       - name: Build iOS IPA
         script: |
+<<<<<<< HEAD
+=======
+          grep -q "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;" ios/App/App.xcodeproj/project.pbxproj
+          grep -q "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;" ios/App/App.xcodeproj/project.pbxproj
+          grep -q "PROVISIONING_PROFILE_SPECIFIER = \"${APP_PROFILE_NAME}\";" ios/App/App.xcodeproj/project.pbxproj
+          grep -q "PROVISIONING_PROFILE_SPECIFIER = \"${WIDGET_PROFILE_NAME}\";" ios/App/App.xcodeproj/project.pbxproj
+          echo "Firma app e widget verificata"
+
+
+      - name: Build and verify iOS IPA
+        script: |
+          set -euo pipefail
+
+          BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
+          EXPECTED_VERSION="${FAINANCE_IOS_VERSION:?FAINANCE_IOS_VERSION is missing}"
+
+          if [ "$BUILD_NUMBER" -le 224 ]; then
+            echo "ERRORE: build iOS non valida: $BUILD_NUMBER. Deve essere superiore a 224."
+            exit 1
+          fi
+
+          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
+          EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
+
+>>>>>>> 6e743f8 (Fix versioning iOS Codemagic)
           rm -rf "$CM_BUILD_DIR/build/ios"
 
           xcodebuild \
@@ -255,6 +356,7 @@ workflows:
             -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
             archive
 
+<<<<<<< HEAD
           ARCHIVE_INFO="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive/Info.plist"
           ARCHIVED_APP_PLIST="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive/Products/Applications/App.app/Info.plist"
 
@@ -266,6 +368,36 @@ workflows:
             echo "ERROR: archived version is not $EXPECTED_VERSION ($IOS_BUILD_NUMBER)"
             exit 1
           fi
+=======
+          ARCHIVE_APP="$ARCHIVE_PATH/Products/Applications/App.app"
+          ARCHIVE_APP_PLIST="$ARCHIVE_APP/Info.plist"
+          if [ ! -f "$ARCHIVE_APP_PLIST" ]; then
+            echo "Info.plist dell'app archiviata non trovato: $ARCHIVE_APP_PLIST"
+            exit 1
+          fi
+
+          verify_bundle_plist() {
+            local plist_path="$1"
+            local label="$2"
+            local actual_version
+            local actual_build
+
+            actual_version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist_path")
+            actual_build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist_path")
+            echo "$label verificato: ${actual_version} (${actual_build})"
+
+            if [ "$actual_version" != "$EXPECTED_VERSION" ] || [ "$actual_build" != "$BUILD_NUMBER" ]; then
+              echo "ERRORE: $label contiene ${actual_version} (${actual_build}); atteso ${EXPECTED_VERSION} (${BUILD_NUMBER})."
+              exit 1
+            fi
+          }
+
+          verify_bundle_plist "$ARCHIVE_APP_PLIST" "Archive app"
+
+          while IFS= read -r plist_path; do
+            verify_bundle_plist "$plist_path" "Archive extension $(dirname "$plist_path")"
+          done < <(find "$ARCHIVE_APP/PlugIns" -type f -name Info.plist 2>/dev/null || true)
+>>>>>>> 6e743f8 (Fix versioning iOS Codemagic)
 
           xcodebuild \
             -exportArchive \
@@ -273,6 +405,34 @@ workflows:
             -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
             -exportOptionsPlist "$CM_BUILD_DIR/export_options.plist"
 
+<<<<<<< HEAD
+=======
+          IPA_PATH=$(find "$EXPORT_PATH" -maxdepth 1 -name "*.ipa" | head -n 1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "Nessun file IPA generato."
+            exit 1
+          fi
+
+          VERIFY_DIR=$(mktemp -d)
+          trap 'rm -rf "$VERIFY_DIR"' EXIT
+          unzip -q "$IPA_PATH" -d "$VERIFY_DIR"
+
+          IPA_APP=$(find "$VERIFY_DIR/Payload" -maxdepth 1 -type d -name "*.app" | head -n 1)
+          IPA_APP_PLIST="$IPA_APP/Info.plist"
+          if [ ! -f "$IPA_APP_PLIST" ]; then
+            echo "Info.plist dell'app non trovato dentro l'IPA."
+            exit 1
+          fi
+
+          verify_bundle_plist "$IPA_APP_PLIST" "IPA app"
+
+          while IFS= read -r plist_path; do
+            verify_bundle_plist "$plist_path" "IPA extension $(dirname "$plist_path")"
+          done < <(find "$IPA_APP/PlugIns" -type f -name Info.plist 2>/dev/null || true)
+
+          echo "IPA pronta per Apple: ${EXPECTED_VERSION} (${BUILD_NUMBER})"
+
+>>>>>>> 6e743f8 (Fix versioning iOS Codemagic)
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
