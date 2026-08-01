@@ -135,14 +135,17 @@ workflows:
         script: |
           set -euo pipefail
 
+          MINIMUM_BUILD=226
           LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID")
           NEXT_BUILD=$((LATEST_BUILD + 1))
 
+          if [ "$NEXT_BUILD" -lt "$MINIMUM_BUILD" ]; then
+            NEXT_BUILD="$MINIMUM_BUILD"
+          fi
+
           echo "Latest TestFlight build: $LATEST_BUILD"
           echo "Next iOS build: $NEXT_BUILD"
-
           echo "IOS_BUILD_NUMBER=$NEXT_BUILD" >> "$CM_ENV"
-
       - name: Set iOS version, build number, privacy permissions and encryption compliance
         script: |
           cd ios/App
