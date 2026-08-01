@@ -21,7 +21,7 @@ import { AppCtx, useApp, fbAuth, fbDb, googleProvider, doc, setDoc, getDoc, getD
   COLORS, GOAL_ICONS, INCOME_TYPES, EMOJI_LIST,
   getDefaultLang, getDefaultCurrency, getDefaultDateFormat,
   getAllIncomeTypes, translateDefaultCollection, sameNamedItems,
-  useStorage, clearFainanceLocalAccountData, fmtDate, fmtAmt, rateMonth,
+  useStorage, clearFainanceLocalAccountData, releaseFainanceAuthStorageQuota, fmtDate, fmtAmt, rateMonth,
   todayStr, dateOffset, DATE_FORMATS, IMPORT_DATE_FORMATS, parseDateWithFormat, parseMoney, androidDownload, exportToCSV, exportToXLSX,
   AI_AGENT_ENDPOINT, AI_AGENT_SCOPE_INSTRUCTION, AI_OUT_OF_SCOPE_MESSAGE, RECEIPT_OCR_ENDPOINT,
   PLAN_IDS, PLAN_LABELS, PLAN_PRICES, PLAN_LIMITS, planLabel, planLimitLabel, todayUsageKey, monthUsageKey,
@@ -632,6 +632,11 @@ const FAINANCE_LOGIN_BOOTSTRAP_I18N:any={
 };
 function fainanceLoginBootstrapText(value:any,lang:any){var code=String(lang||"it").split("-")[0];var table=FAINANCE_LOGIN_BOOTSTRAP_I18N[code]||FAINANCE_LOGIN_BOOTSTRAP_I18N.it;return table&&table[value]!==undefined?table[value]:translateFainanceText(value,code);}
 
+function fainanceIsAuthStorageQuotaError(err:any){
+  var msg=String((err&&err.message)||err||"").toLowerCase();
+  var code=String((err&&err.code)||"").toLowerCase();
+  return msg.indexOf("exceeded the quota")>=0||msg.indexOf("quotaexceeded")>=0||msg.indexOf("quota exceeded")>=0||(msg.indexOf("setitem")>=0&&msg.indexOf("storage")>=0)||code.indexOf("quota")>=0;
+}
 function LoginScreen({onLogin}){
   var [mode,setMode]=useState("login");
   var [email,setEmail]=useState("");
@@ -674,10 +679,20 @@ function LoginScreen({onLogin}){
 
   var inp={width:"100%",borderRadius:10,border:"1px solid #e0e0e0",padding:"12px 14px",fontSize:15,background:"#fff",color:"#333",boxSizing:"border-box",outline:"none"};
 
+  async function signInWithStorageRecovery(action:()=>Promise<any>){
+    releaseFainanceAuthStorageQuota(true);
+    try{return await action();}
+    catch(err:any){
+      if(!fainanceIsAuthStorageQuotaError(err))throw err;
+      releaseFainanceAuthStorageQuota(true);
+      return await action();
+    }
+  }
+
   async function doLogin(){
     setError("");setLoading(true);
     try{
-      var cred:any=await signInWithEmailAndPassword(fbAuth,email,password);
+      var cred:any=await signInWithStorageRecovery(function(){return signInWithEmailAndPassword(fbAuth,email,password);});
       onLogin({id:cred.user.uid,email:cred.user.email,name:cred.user.displayName||name||"Utente"},cred.user);
     }catch(err:any){
       setError(err.code==="auth/user-not-found"||err.code==="auth/wrong-password"||err.code==="auth/invalid-credential"?L("Email o password non corretti."):L("Errore: ")+(err&&err.message?err.message:String(err)));
@@ -693,6 +708,7 @@ function LoginScreen({onLogin}){
     if(password!==confirmPwd){setError(L("Le password non coincidono."));return;}
     setLoading(true);
     try{
+      releaseFainanceAuthStorageQuota(true);
       var cred:any=await createUserWithEmailAndPassword(fbAuth,email,password);
       try{await fainancePromiseTimeout(setDoc(doc(fbDb,"users",cred.user.uid),{name:name.trim(),email:String(email||"").toLowerCase(),createdAt:new Date().toISOString()},{merge:true}),7000,"Timeout salvataggio profilo.");}catch(saveErr){}
       onLogin({id:cred.user.uid,email:cred.user.email,name:name.trim()},cred.user);
@@ -730,13 +746,13 @@ function LoginScreen({onLogin}){
         const accessToken=credData.accessToken||credData.access_token||"";
         if(!idToken&&!accessToken) throw new Error("Google login non ha restituito token utilizzabili.");
         const credential = GoogleAuthProvider.credential(idToken||null, accessToken||null);
-        const cred:any = await signInWithCredential(fbAuth, credential);
+        const cred:any = await signInWithStorageRecovery(function(){return signInWithCredential(fbAuth, credential);});
         onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
         return;
       }
       const webProvider = new GoogleAuthProvider();
       webProvider.setCustomParameters({prompt:"select_account",hl:loginLang()});
-      const cred:any = await signInWithPopup(fbAuth, webProvider);
+      const cred:any = await signInWithStorageRecovery(function(){return signInWithPopup(fbAuth, webProvider);});
       onLogin({id:cred.user.uid, email:cred.user.email, name:cred.user.displayName||"Utente"},cred.user);
     } catch(err:any){
       console.error("Google login error",(err&&err.code)||"unknown");
@@ -777,7 +793,7 @@ function LoginScreen({onLogin}){
         }
         const provider = new OAuthProvider("apple.com");
         const credential = provider.credential(rawNonce?{idToken:idToken,rawNonce:rawNonce,accessToken:accessToken||undefined}:{idToken:idToken,accessToken:accessToken||undefined});
-        const cred:any = await signInWithCredential(fbAuth, credential);
+        const cred:any = await signInWithStorageRecovery(function(){return signInWithCredential(fbAuth, credential);});
         try{
           var appleName=(cred.user.displayName||"").trim();
           if(cred.user.uid){
@@ -795,7 +811,7 @@ function LoginScreen({onLogin}){
       provider.addScope("email");
       provider.addScope("name");
       provider.setCustomParameters({locale:loginLang()});
-      const cred:any = await signInWithPopup(fbAuth, provider);
+      const cred:any = await signInWithStorageRecovery(function(){return signInWithPopup(fbAuth, provider);});
       try{
         if(cred.user&&cred.user.uid){
           var refWeb=doc(fbDb,"users",cred.user.uid);
@@ -1782,15 +1798,27 @@ function App({currentUser,onLogout,fbUser,onProfileUpdate}){
   function beginRemoteApply(){if(Number((pendingAccountSyncRef.current&&pendingAccountSyncRef.current.revision)||0)>0)scheduleCompleteAccountRecoverySnapshot("before-cloud-merge");remoteApplyDepthRef.current=Number(remoteApplyDepthRef.current||0)+1;applyingFirestoreRef.current=true;}
   function endRemoteApply(){remoteApplyDepthRef.current=Math.max(0,Number(remoteApplyDepthRef.current||0)-1);applyingFirestoreRef.current=remoteApplyDepthRef.current>0;}
   var accountRecoveryTimerRef=useRef<any>(null);
-  var ACCOUNT_RECOVERY_KEYS=["exp_v10","inc_v10","rec_v10","goals_v1","alerts_v1","budget_plan_v1","cats_v10","historical_expense_cats_v1","meth_v10","expense_groups_v1","income_groups_v1","method_groups_v1","custom_income_types_v1","income_type_overrides_v1","cat_order_v1","method_order_v1","cat_sort_mode","method_sort_mode","income_type_order_v1","default_expense_cat_v1","default_expense_method_v1","default_income_type_v1","default_expense_area_v1","default_income_area_v1","default_method_area_v1","patrimonio_values_v1","patrimonio_areas_v1","patrimonio_entries_v1","patrimonio_history_v1","patrimonio_notes_v1","appunti_documents_v1","appunti_notes_v1","bank_coords_v1","credit_cards_v1","share_projects_v1","debt_credits_v1","share_receipt_uploads_v1","shopping_cards_v1","shopping_items_v1","shopping_lists","shopping_deleted_records_v1","shopping_areas_v1","shopping_area_icons_v1","shopping_bought_color_v1","shopping_default_area_v1","shopping_product_sort_v1","shopping_active_list_id_v2","share_show_history_v1","custom_notifs_v1","notif_prefs_v1"];
+  var ACCOUNT_RECOVERY_KEYS=["cats_v10","historical_expense_cats_v1","meth_v10","expense_groups_v1","income_groups_v1","method_groups_v1","custom_income_types_v1","income_type_overrides_v1","cat_order_v1","method_order_v1","cat_sort_mode","method_sort_mode","income_type_order_v1","default_expense_cat_v1","default_expense_method_v1","default_income_type_v1","default_expense_area_v1","default_income_area_v1","default_method_area_v1"];
+
   function persistCompleteAccountRecoverySnapshot(reason?:string){
     if(!userId)return;
     try{
       var values:any={};ACCOUNT_RECOVERY_KEYS.forEach(function(key){var storageKey=userKey(key),raw=localStorage.getItem(storageKey);if(raw!==null)values[key]=raw;});
-      var snapshot=JSON.stringify({schema:1,userId:String(userId),savedAt:new Date().toISOString(),reason:String(reason||"change"),values:values});
+      var snapshot=JSON.stringify({schema:2,userId:String(userId),savedAt:new Date().toISOString(),reason:String(reason||"change"),values:values});
       var currentKey=userKey("account_recovery_complete_v1"),previousKey=userKey("account_recovery_complete_previous_v1");
-      var previous=localStorage.getItem(currentKey);if(previous)localStorage.setItem(previousKey,previous);localStorage.setItem(currentKey,snapshot);
-    }catch(e){console.warn("Account recovery snapshot skipped",(e&&e.message)||e);}
+      try{localStorage.removeItem(previousKey);}catch(e){}
+      localStorage.setItem(currentKey,snapshot);
+    }catch(e:any){
+      if(fainanceIsAuthStorageQuotaError(e)){
+        releaseFainanceAuthStorageQuota(true);
+        try{
+          var retryValues:any={};ACCOUNT_RECOVERY_KEYS.forEach(function(key){var storageKey=userKey(key),raw=localStorage.getItem(storageKey);if(raw!==null)retryValues[key]=raw;});
+          localStorage.setItem(userKey("account_recovery_complete_v1"),JSON.stringify({schema:2,userId:String(userId),savedAt:new Date().toISOString(),reason:String(reason||"change"),values:retryValues}));
+          return;
+        }catch(_retry){}
+      }
+      console.warn("Account recovery snapshot skipped",(e&&e.message)||e);
+    }
   }
   function scheduleCompleteAccountRecoverySnapshot(reason?:string){try{if(accountRecoveryTimerRef.current)clearTimeout(accountRecoveryTimerRef.current);}catch(e){}accountRecoveryTimerRef.current=setTimeout(function(){accountRecoveryTimerRef.current=null;var run=function(){persistCompleteAccountRecoverySnapshot(reason||"change");};try{var idle=(window as any).requestIdleCallback;if(idle){idle(run,{timeout:1800});return;}}catch(e){}setTimeout(run,0);},3200);}
   function markPendingAccountSync(){

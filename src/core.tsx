@@ -24,6 +24,33 @@ export const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "739607555867",
   appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:739607555867:web:fainanceweb"
 };
+export function releaseFainanceAuthStorageQuota(aggressive?:boolean){
+  try{
+    if(typeof localStorage==="undefined")return 0;
+    var removed=0;
+    var keys:string[]=[];
+    for(var i=0;i<localStorage.length;i++){
+      var key=String(localStorage.key(i)||"");
+      if(key.endsWith("account_recovery_complete_previous_v1")){keys.push(key);continue;}
+      if(key.endsWith("account_recovery_complete_v1")){
+        var removeCurrent=!!aggressive;
+        if(!removeCurrent){
+          try{
+            var raw=String(localStorage.getItem(key)||"");
+            var parsed=raw?JSON.parse(raw):null;
+            removeCurrent=!parsed||Number(parsed.schema||0)<2||raw.length>250000;
+          }catch(e){removeCurrent=true;}
+        }
+        if(removeCurrent)keys.push(key);
+      }
+    }
+    keys.forEach(function(key){try{localStorage.removeItem(key);removed++;}catch(e){}});
+    return removed;
+  }catch(e){return 0;}
+}
+// Libera subito le vecchie copie complete ridondanti prima che Firebase provi
+// a salvare la sessione di autenticazione nel WebView.
+releaseFainanceAuthStorageQuota(false);
 export const firebaseApp = initializeApp(firebaseConfig);
 function fainanceCoreIsNativePlatform(){
   try{

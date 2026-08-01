@@ -374,7 +374,7 @@ workflows:
           set -euo pipefail
 
           BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
-          EXPECTED_VERSION="1.6.74"
+          EXPECTED_VERSION="1.6.75"
           if [ "$EXPECTED_VERSION" != "1.6.74" ]; then
             echo "ERRORE: versione iOS inattesa: $EXPECTED_VERSION. Attesa: 1.6.74"
             exit 1
