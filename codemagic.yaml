@@ -24,7 +24,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        FAINANCE_IOS_VERSION: "1.6.74"
+        FAINANCE_IOS_VERSION: "1.6.75"
         APP_STORE_APPLE_ID: "6777812477"
         VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
@@ -135,10 +135,14 @@ workflows:
         script: |
           set -euo pipefail
 
-          MINIMUM_BUILD=226
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID")
-          NEXT_BUILD=$((LATEST_BUILD + 1))
+          MINIMUM_BUILD=225
+          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
 
+          case "$LATEST_BUILD" in
+            ''|*[!0-9]*) LATEST_BUILD=0 ;;
+          esac
+
+          NEXT_BUILD=$((LATEST_BUILD + 1))
           if [ "$NEXT_BUILD" -lt "$MINIMUM_BUILD" ]; then
             NEXT_BUILD="$MINIMUM_BUILD"
           fi
@@ -377,11 +381,14 @@ workflows:
           set -euo pipefail
 
           BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
-          EXPECTED_VERSION="1.6.75"
-          if [ "$EXPECTED_VERSION" != "1.6.74" ]; then
-            echo "ERRORE: versione iOS inattesa: $EXPECTED_VERSION. Attesa: 1.6.74"
+          EXPECTED_VERSION="$FAINANCE_IOS_VERSION"
+          MINIMUM_BUILD=225
+
+          if [ "$BUILD_NUMBER" -lt "$MINIMUM_BUILD" ]; then
+            echo "ERRORE: build iOS $BUILD_NUMBER non valida. Deve essere almeno $MINIMUM_BUILD."
             exit 1
           fi
+
           ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
           EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
 
@@ -401,18 +408,30 @@ workflows:
             INFOPLIST_KEY_CFBundleVersion="$BUILD_NUMBER" \
             archive
 
-          ARCHIVE_APP_PLIST="$ARCHIVE_PATH/Products/Applications/App.app/Info.plist"
-          if [ ! -f "$ARCHIVE_APP_PLIST" ]; then
-            echo "Info.plist dell'app archiviata non trovato: $ARCHIVE_APP_PLIST"
+          ARCHIVE_ROOT="$ARCHIVE_PATH/Products/Applications"
+          if [ ! -d "$ARCHIVE_ROOT" ]; then
+            echo "Cartella applicazioni dell'archivio non trovata: $ARCHIVE_ROOT"
             exit 1
           fi
 
-          ARCHIVE_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ARCHIVE_APP_PLIST")
-          ARCHIVE_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$ARCHIVE_APP_PLIST")
-          echo "Archive verificato: ${ARCHIVE_VERSION} (${ARCHIVE_BUILD})"
+          FOUND_BUNDLES=0
+          while IFS= read -r -d '' BUNDLE_DIR; do
+            PLIST="$BUNDLE_DIR/Info.plist"
+            [ -f "$PLIST" ] || continue
+            FOUND_BUNDLES=$((FOUND_BUNDLES + 1))
+            BUNDLE_ID_VALUE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
+            VERSION_VALUE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
+            BUILD_VALUE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")
+            echo "Archive bundle: ${BUNDLE_ID_VALUE} ${VERSION_VALUE} (${BUILD_VALUE})"
 
-          if [ "$ARCHIVE_VERSION" != "$EXPECTED_VERSION" ] || [ "$ARCHIVE_BUILD" != "$BUILD_NUMBER" ]; then
-            echo "Versione archivio errata. Attesa ${EXPECTED_VERSION} (${BUILD_NUMBER}), trovata ${ARCHIVE_VERSION} (${ARCHIVE_BUILD})."
+            if [ "$VERSION_VALUE" != "$EXPECTED_VERSION" ] || [ "$BUILD_VALUE" != "$BUILD_NUMBER" ]; then
+              echo "Versione errata nell'archivio per ${BUNDLE_ID_VALUE}. Attesa ${EXPECTED_VERSION} (${BUILD_NUMBER}), trovata ${VERSION_VALUE} (${BUILD_VALUE})."
+              exit 1
+            fi
+          done < <(find "$ARCHIVE_ROOT" -type d \( -name "*.app" -o -name "*.appex" \) -print0)
+
+          if [ "$FOUND_BUNDLES" -eq 0 ]; then
+            echo "Nessun bundle .app o .appex trovato nell'archivio."
             exit 1
           fi
 
@@ -429,23 +448,31 @@ workflows:
           fi
 
           VERIFY_DIR=$(mktemp -d)
+          trap 'rm -rf "$VERIFY_DIR"' EXIT
           unzip -q "$IPA_PATH" -d "$VERIFY_DIR"
-          IPA_APP_PLIST=$(find "$VERIFY_DIR/Payload" -maxdepth 2 -name Info.plist | head -n 1)
-          if [ -z "$IPA_APP_PLIST" ]; then
-            echo "Info.plist non trovato dentro l'IPA."
-            rm -rf "$VERIFY_DIR"
+
+          FOUND_IPA_BUNDLES=0
+          while IFS= read -r -d '' BUNDLE_DIR; do
+            PLIST="$BUNDLE_DIR/Info.plist"
+            [ -f "$PLIST" ] || continue
+            FOUND_IPA_BUNDLES=$((FOUND_IPA_BUNDLES + 1))
+            BUNDLE_ID_VALUE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST")
+            VERSION_VALUE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
+            BUILD_VALUE=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")
+            echo "IPA bundle: ${BUNDLE_ID_VALUE} ${VERSION_VALUE} (${BUILD_VALUE})"
+
+            if [ "$VERSION_VALUE" != "$EXPECTED_VERSION" ] || [ "$BUILD_VALUE" != "$BUILD_NUMBER" ]; then
+              echo "Upload bloccato: versione errata nell'IPA per ${BUNDLE_ID_VALUE}. Attesa ${EXPECTED_VERSION} (${BUILD_NUMBER}), trovata ${VERSION_VALUE} (${BUILD_VALUE})."
+              exit 1
+            fi
+          done < <(find "$VERIFY_DIR/Payload" -type d \( -name "*.app" -o -name "*.appex" \) -print0)
+
+          if [ "$FOUND_IPA_BUNDLES" -eq 0 ]; then
+            echo "Nessun bundle .app o .appex trovato nell'IPA."
             exit 1
           fi
 
-          IPA_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$IPA_APP_PLIST")
-          IPA_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$IPA_APP_PLIST")
-          echo "IPA verificato: ${IPA_VERSION} (${IPA_BUILD})"
-          rm -rf "$VERIFY_DIR"
-
-          if [ "$IPA_VERSION" != "$EXPECTED_VERSION" ] || [ "$IPA_BUILD" != "$BUILD_NUMBER" ]; then
-            echo "Versione IPA errata. Upload bloccato. Attesa ${EXPECTED_VERSION} (${BUILD_NUMBER}), trovata ${IPA_VERSION} (${IPA_BUILD})."
-            exit 1
-          fi
+          echo "IPA verificato integralmente: ${EXPECTED_VERSION} (${BUILD_NUMBER})"
 
     artifacts:
       - build/ios/ipa/*.ipa
