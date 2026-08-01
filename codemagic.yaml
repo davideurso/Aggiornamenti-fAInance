@@ -35,8 +35,7 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm ci
-
+          npm install
       - name: Validate Capacitor iOS dependency
         script: |
           node -e "require.resolve('@capacitor/ios/package.json'); console.log('@capacitor/ios disponibile')"
