@@ -1649,7 +1649,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Metodi di pagamento",
     "Inserisci l'importo": "Inserisci l'importo",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Entrate vs Uscite —",
+    "Entrate vs Uscite": "Entrate vs Uscite",
     "Entrate / Categorie": "Entrate / Categorie",
     "Documento eliminato": "Documento eliminato",
     "Dettaglio mensile —": "Dettaglio mensile —",
@@ -2271,7 +2271,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Payment methods",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Income vs Expenses —",
+    "Entrate vs Uscite": "Income vs Expenses",
     "Entrate / Categorie": "Income / Categories",
     "Documento eliminato": "Document deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -2893,7 +2893,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Métodos de pago",
     "Inserisci l'importo": "Inserisci l'importe",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Ingresos vs Gastos —",
+    "Entrate vs Uscite": "Ingresos vs Gastos",
     "Entrate / Categorie": "Ingresos / Categorías",
     "Documento eliminato": "Documento eliminado",
     "Dettaglio mensile —": "Dettaglio mensual —",
@@ -3515,7 +3515,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Méthodes de paiement",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Revenus vs Dépenses —",
+    "Entrate vs Uscite": "Revenus vs Dépenses",
     "Entrate / Categorie": "Revenus / Catégories",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -4137,7 +4137,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Zahlungsmethoden",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Einnahmen vs Ausgaben —",
+    "Entrate vs Uscite": "Einnahmen vs Ausgaben",
     "Entrate / Categorie": "Einnahmen / Kategorien",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -4759,7 +4759,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Métodos de pagamento",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Receitas vs Despesas —",
+    "Entrate vs Uscite": "Receitas vs Despesas",
     "Entrate / Categorie": "Receitas / Categorias",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -5381,7 +5381,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Metody płatności",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Przychody vs Wydatki —",
+    "Entrate vs Uscite": "Przychody vs Wydatki",
     "Entrate / Categorie": "Przychody / Kategorie",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -6003,7 +6003,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Betaalmethoden",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Inkomsten vs Uitgaven —",
+    "Entrate vs Uscite": "Inkomsten vs Uitgaven",
     "Entrate / Categorie": "Inkomsten / Categorieën",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -6625,7 +6625,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Metode de plată",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Venituri vs Cheltuieli —",
+    "Entrate vs Uscite": "Venituri vs Cheltuieli",
     "Entrate / Categorie": "Venituri / Categorii",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -7247,7 +7247,7 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Μέθοδοι πληρωμής",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite —": "Έσοδα vs Έξοδα —",
+    "Entrate vs Uscite": "Έσοδα vs Έξοδα",
     "Entrate / Categorie": "Έσοδα / Κατηγορίες",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -8712,7 +8712,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Entrate per tipo — ",
     "Entrate vs Uscite ": "Entrate vs Uscite ",
     "Entrate vs uscite mensili": "Entrate vs uscite mensili",
-    "Entrate vs Uscite — ": "Entrate vs Uscite — ",
+    "Entrate vs Uscite ": "Entrate vs Uscite ",
     "Entrate, uscite, patrimonio e storico": "Entrate, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -9223,7 +9223,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’utente",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -9988,7 +9988,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Income per tipo — ",
     "Entrate vs Uscite ": "Income vs Expenses ",
     "Entrate vs uscite mensili": "Income vs uscite mensili",
-    "Entrate vs Uscite — ": "Income vs Expenses — ",
+    "Entrate vs Uscite ": "Income vs Expenses ",
     "Entrate, uscite, patrimonio e storico": "Income, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -10499,7 +10499,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "User responsibility",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -11264,7 +11264,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Ingresos per tipo — ",
     "Entrate vs Uscite ": "Ingresos vs Gastos ",
     "Entrate vs uscite mensili": "Ingresos vs uscite mensili",
-    "Entrate vs Uscite — ": "Ingresos vs Gastos — ",
+    "Entrate vs Uscite ": "Ingresos vs Gastos ",
     "Entrate, uscite, patrimonio e storico": "Ingresos, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -11775,7 +11775,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’usuario",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -12540,7 +12540,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Revenus per tipo — ",
     "Entrate vs Uscite ": "Revenus vs Dépenses ",
     "Entrate vs uscite mensili": "Revenus vs uscite mensili",
-    "Entrate vs Uscite — ": "Revenus vs Dépenses — ",
+    "Entrate vs Uscite ": "Revenus vs Dépenses ",
     "Entrate, uscite, patrimonio e storico": "Revenus, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -13051,7 +13051,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’utilisateur",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -13816,7 +13816,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Einnahmen per tipo — ",
     "Entrate vs Uscite ": "Einnahmen vs Ausgaben ",
     "Entrate vs uscite mensili": "Einnahmen vs uscite mensili",
-    "Entrate vs Uscite — ": "Einnahmen vs Ausgaben — ",
+    "Entrate vs Uscite ": "Einnahmen vs Ausgaben ",
     "Entrate, uscite, patrimonio e storico": "Einnahmen, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -14327,7 +14327,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’Benutzer",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -15092,7 +15092,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Receitas per tipo — ",
     "Entrate vs Uscite ": "Receitas vs Despesas ",
     "Entrate vs uscite mensili": "Receitas vs uscite mensili",
-    "Entrate vs Uscite — ": "Receitas vs Despesas — ",
+    "Entrate vs Uscite ": "Receitas vs Despesas ",
     "Entrate, uscite, patrimonio e storico": "Receitas, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -15603,7 +15603,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’utilizador",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -16368,7 +16368,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Przychody per tipo — ",
     "Entrate vs Uscite ": "Przychody vs Wydatki ",
     "Entrate vs uscite mensili": "Przychody vs uscite mensili",
-    "Entrate vs Uscite — ": "Przychody vs Wydatki — ",
+    "Entrate vs Uscite ": "Przychody vs Wydatki ",
     "Entrate, uscite, patrimonio e storico": "Przychody, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -16879,7 +16879,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’użytkownik",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -17644,7 +17644,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Inkomsten per tipo — ",
     "Entrate vs Uscite ": "Inkomsten vs Uitgaven ",
     "Entrate vs uscite mensili": "Inkomsten vs uscite mensili",
-    "Entrate vs Uscite — ": "Inkomsten vs Uitgaven — ",
+    "Entrate vs Uscite ": "Inkomsten vs Uitgaven ",
     "Entrate, uscite, patrimonio e storico": "Inkomsten, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -18155,7 +18155,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’gebruiker",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -18920,7 +18920,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Venituri per tipo — ",
     "Entrate vs Uscite ": "Venituri vs Cheltuieli ",
     "Entrate vs uscite mensili": "Venituri vs uscite mensili",
-    "Entrate vs Uscite — ": "Venituri vs Cheltuieli — ",
+    "Entrate vs Uscite ": "Venituri vs Cheltuieli ",
     "Entrate, uscite, patrimonio e storico": "Venituri, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -19431,7 +19431,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’utilizator",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -20196,7 +20196,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate per tipo — ": "Έσοδα per tipo — ",
     "Entrate vs Uscite ": "Έσοδα vs Έξοδα ",
     "Entrate vs uscite mensili": "Έσοδα vs uscite mensili",
-    "Entrate vs Uscite — ": "Έσοδα vs Έξοδα — ",
+    "Entrate vs Uscite ": "Έσοδα vs Έξοδα ",
     "Entrate, uscite, patrimonio e storico": "Έσοδα, uscite, patrimonio e storico",
     "Errore agente AI: ": "Errore agente AI: ",
     "Errore durante il rifiuto dell'invito": "Errore durante il rifiuto dell'invito",
@@ -20707,7 +20707,7 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Responsabilità dell’utente": "Responsabilità dell’χρήστης",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
-    "Revenus vs Dépenses — ": "Revenus vs Dépenses — ",
+    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
     "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.": "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di piu.",
@@ -30969,7 +30969,7 @@ function fainancePostProcessTranslation(value, lang){
   add(['Distribuzione —','Distribution —'],'Distribuzione —','Distribution —','Distribución —','Répartition —','Verteilung —','Distribuição —','Podział —','Verdeling —','Distribuție —','Κατανομή —');
   add(['Per area'],'Per area','By area','Por área','Par zone','Nach Bereich','Por área','Według obszaru','Per gebied','Pe zonă','Ανά περιοχή');
   add(['Per categoria','By category'],'Per categoria','By category','Por categoría','Par catégorie','Nach Kategorie','Por categoria','Według kategorii','Per categorie','Pe categorie','Ανά κατηγορία');
-  add(['Entrate vs Uscite —','Income vs Expenses —'],'Entrate vs Uscite —','Income vs Expenses —','Ingresos vs Gastos —','Revenus vs Dépenses —','Einnahmen vs Ausgaben —','Receitas vs Despesas —','Przychody vs Wydatki —','Inkomsten vs Uitgaven —','Venituri vs Cheltuieli —','Έσοδα vs Έξοδα —');
+  add(['Entrate vs Uscite','Income vs Expenses'],'Entrate vs Uscite','Income vs Expenses','Ingresos vs Gastos','Revenus vs Dépenses','Einnahmen vs Ausgaben','Receitas vs Despesas','Przychody vs Wydatki','Inkomsten vs Uitgaven','Venituri vs Cheltuieli','Έσοδα vs Έξοδα');
   add(['Attendibilità del risparmio','Saving affordability'],'Attendibilità del risparmio','Savings reliability','Fiabilidad del ahorro','Fiabilité de l’épargne','Verlässlichkeit des Sparens','Fiabilidade da poupança','Wiarygodność oszczędzania','Betrouwbaarheid van besparing','Fiabilitatea economisirii','Αξιοπιστία αποταμίευσης');
   add(['Attendibilità del risparmio —','Saving affordability —'],'Attendibilità del risparmio —','Savings reliability —','Fiabilidad del ahorro —','Fiabilité de l’épargne —','Verlässlichkeit des Sparens —','Fiabilidade da poupança —','Wiarygodność oszczędzania —','Betrouwbaarheid van besparing —','Fiabilitatea economisirii —','Αξιοπιστία αποταμίευσης —');
   add(['Risparmio pianificato','Planned savings'],'Risparmio pianificato','Planned savings','Ahorro planificado','Épargne planifiée','Geplantes Sparen','Poupança planeada','Planowane oszczędności','Geplande besparing','Economii planificate','Προγραμματισμένη αποταμίευση');
@@ -30983,7 +30983,8 @@ function fainancePostProcessTranslation(value, lang){
   add(['Disponibile'],'Disponibile','Available','Disponible','Disponible','Verfügbar','Disponível','Dostępne','Beschikbaar','Disponibil','Διαθέσιμο');
 
   // Aree, categorie, metodi e patrimonio predefiniti.
-  add(['Casa','Home'],'Casa','Home','Casa','Maison','Zuhause','Casa','Dom','Woning','Casă','Σπίτι');
+  add('Casa','Casa','Home','Casa','Maison','Zuhause','Casa','Dom','Woning','Casă','Σπίτι');
+  add('Home','Home','Home','Inicio','Accueil','Startseite','Início','Start','Home','Acasă','Αρχική');
   add(['Vita','Life'],'Vita','Life','Vida','Vie','Leben','Vida','Życie','Leven','Viață','Ζωή');
   add(['Svago','Leisure'],'Svago','Leisure','Ocio','Loisirs','Freizeit','Lazer','Rozrywka','Vrije tijd','Timp liber','Αναψυχή');
   add(['Trasporti','Transport'],'Trasporti','Transport','Transporte','Transports','Transport','Transportes','Transport','Vervoer','Transport','Μεταφορές');
@@ -31341,7 +31342,7 @@ function fainancePostProcessTranslation(value, lang){
   add("Scostamento medio","Scostamento medio","Average deviation","Desviación media","Écart moyen","Durchschnittliche Abweichung","Desvio médio","Średnie odchylenie","Gemiddelde afwijking","Abatere medie","Μέση απόκλιση");
   add("risparmio reale vs pianificato","risparmio reale vs pianificato","actual vs planned savings","ahorro real vs planificado","épargne réelle vs planifiée","tatsächliche vs. geplante Ersparnis","poupança real vs planeada","oszczędności rzeczywiste vs planowane","werkelijke vs geplande besparing","economii reale vs planificate","πραγματική έναντι προγραμματισμένης αποταμίευσης");
   add("confronto prima/seconda metà anno","confronto prima/seconda metà anno","comparison of first/second half of the year","comparación primera/segunda mitad del año","comparaison première/deuxième moitié de l’année","Vergleich erste/zweite Jahreshälfte","comparação primeira/segunda metade do ano","porównanie pierwszej/drugiej połowy roku","vergelijking eerste/tweede helft van het jaar","comparație prima/a doua jumătate a anului","σύγκριση πρώτου/δεύτερου μισού του έτους");
-  add("Entrate vs Uscite —","Entrate vs Uscite —","Income vs Expenses —","Ingresos vs Gastos —","Revenus vs Dépenses —","Einnahmen vs. Ausgaben —","Receitas vs Despesas —","Przychody vs Wydatki —","Inkomsten vs Uitgaven —","Venituri vs Cheltuieli —","Έσοδα έναντι εξόδων —");
+  add("Entrate vs Uscite","Entrate vs Uscite","Income vs Expenses","Ingresos vs Gastos","Revenus vs Dépenses","Einnahmen vs Ausgaben","Receitas vs Despesas","Przychody vs Wydatki","Inkomsten vs Uitgaven","Venituri vs Cheltuieli","Έσοδα έναντι εξόδων");
   add("Saldo mensile","Saldo mensile","Monthly balance","Saldo mensual","Solde mensuel","Monatlicher Saldo","Saldo mensal","Saldo miesięczne","Maandelijks saldo","Sold lunar","Μηνιαίο υπόλοιπο");
   add("Entrate per tipo —","Entrate per tipo —","Income by type —","Ingresos por tipo —","Revenus par type —","Einnahmen nach Typ —","Receitas por tipo —","Przychody według typu —","Inkomsten per type —","Venituri după tip —","Έσοδα ανά τύπο —");
   add("Nessun budget configurato. Vai nella sezione Budget per impostarlo.","Nessun budget configurato. Vai nella sezione Budget per impostarlo.","No budget configured. Go to the Budget section to set it up.","No hay ningún presupuesto configurado. Ve a la sección Presupuesto para configurarlo.","Aucun budget configuré. Va dans la section Budget pour le configurer.","Kein Budget konfiguriert. Gehe zum Bereich Budget, um es einzurichten.","Nenhum orçamento configurado. Vai à secção Orçamento para o configurar.","Nie skonfigurowano budżetu. Przejdź do sekcji Budżet, aby go ustawić.","Geen budget ingesteld. Ga naar de sectie Budget om het in te stellen.","Nu există niciun buget configurat. Mergi la secțiunea Buget pentru a-l seta.","Δεν έχει οριστεί προϋπολογισμός. Μεταβείτε στην ενότητα Προϋπολογισμός για να τον ρυθμίσετε.");
@@ -31606,7 +31607,7 @@ function fainancePostProcessTranslation(value, lang){
   add('Score attendibilità','Score attendibilità','Reliability score','Puntuación de fiabilidad','Score de fiabilité','Zuverlässigkeitswert','Pontuação de fiabilidade','Wynik wiarygodności','Betrouwbaarheidsscore','Scor de fiabilitate','Βαθμός αξιοπιστίας');
   add('Scostamento medio','Scostamento medio','Average variance','Desviación media','Écart moyen','Durchschnittliche Abweichung','Desvio médio','Średnie odchylenie','Gemiddelde afwijking','Abatere medie','Μέση απόκλιση');
   add('Saldo mensile','Saldo mensile','Monthly balance','Saldo mensual','Solde mensuel','Monatssaldo','Saldo mensal','Saldo miesięczne','Maandelijks saldo','Sold lunar','Μηνιαίο υπόλοιπο');
-  add('Entrate vs Uscite —','Entrate vs Uscite —','Income vs Expenses —','Ingresos vs Gastos —','Revenus vs Dépenses —','Einnahmen vs Ausgaben —','Receitas vs Despesas —','Przychody vs Wydatki —','Inkomsten vs Uitgaven —','Venituri vs Cheltuieli —','Έσοδα vs Έξοδα —');
+  add('Entrate vs Uscite','Entrate vs Uscite','Income vs Expenses','Ingresos vs Gastos','Revenus vs Dépenses','Einnahmen vs Ausgaben','Receitas vs Despesas','Przychody vs Wydatki','Inkomsten vs Uitgaven','Venituri vs Cheltuieli','Έσοδα vs Έξοδα');
   add('Entrate per tipo —','Entrate per tipo —','Income by type —','Ingresos por tipo —','Revenus par type —','Einnahmen nach Typ —','Receitas por tipo —','Przychody według typu —','Inkomsten per type —','Venituri pe tip —','Έσοδα ανά τύπο —');
   add('confronto prima/seconda metà anno','confronto prima/seconda metà anno','comparison between first and second half of the year','comparación entre la primera y la segunda mitad del año','comparaison entre la première et la deuxième moitié de l’année','Vergleich zwischen erster und zweiter Jahreshälfte','comparação entre a primeira e a segunda metade do ano','porównanie pierwszej i drugiej połowy roku','vergelijking tussen de eerste en tweede helft van het jaar','comparație între prima și a doua jumătate a anului','σύγκριση πρώτου και δεύτερου εξαμήνου');
   add('risparmio reale vs pianificato','risparmio reale vs pianificato','actual vs planned savings','ahorro real vs planificado','épargne réelle vs planifiée','tatsächliche vs geplante Ersparnisse','poupança real vs planeada','oszczędności rzeczywiste vs planowane','werkelijke vs geplande besparingen','economii reale vs planificate','πραγματική vs προγραμματισμένη αποταμίευση');
