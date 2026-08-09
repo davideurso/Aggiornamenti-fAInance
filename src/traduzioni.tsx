@@ -1649,7 +1649,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Metodi di pagamento",
     "Inserisci l'importo": "Inserisci l'importo",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Entrate vs Uscite",
     "Entrate / Categorie": "Entrate / Categorie",
     "Documento eliminato": "Documento eliminato",
     "Dettaglio mensile —": "Dettaglio mensile —",
@@ -2271,7 +2270,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Payment methods",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Income vs Expenses",
     "Entrate / Categorie": "Income / Categories",
     "Documento eliminato": "Document deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -2893,7 +2891,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Métodos de pago",
     "Inserisci l'importo": "Inserisci l'importe",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Ingresos vs Gastos",
     "Entrate / Categorie": "Ingresos / Categorías",
     "Documento eliminato": "Documento eliminado",
     "Dettaglio mensile —": "Dettaglio mensual —",
@@ -3515,7 +3512,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Méthodes de paiement",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Revenus vs Dépenses",
     "Entrate / Categorie": "Revenus / Catégories",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -4137,7 +4133,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Zahlungsmethoden",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Einnahmen vs Ausgaben",
     "Entrate / Categorie": "Einnahmen / Kategorien",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -4759,7 +4754,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Métodos de pagamento",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Receitas vs Despesas",
     "Entrate / Categorie": "Receitas / Categorias",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -5381,7 +5375,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Metody płatności",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Przychody vs Wydatki",
     "Entrate / Categorie": "Przychody / Kategorie",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -6003,7 +5996,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Betaalmethoden",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Inkomsten vs Uitgaven",
     "Entrate / Categorie": "Inkomsten / Categorieën",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -6625,7 +6617,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Metode de plată",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Venituri vs Cheltuieli",
     "Entrate / Categorie": "Venituri / Categorii",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -7247,7 +7238,6 @@ export const FAINANCE_1624_STRUCTURAL_TRANSLATIONS = {
     "Metodi di pagamento": "Μέθοδοι πληρωμής",
     "Inserisci l'importo": "Inserisci l'amount",
     "Info / Cambia piano": "Info / Cambia piano",
-    "Entrate vs Uscite": "Έσοδα vs Έξοδα",
     "Entrate / Categorie": "Έσοδα / Κατηγορίες",
     "Documento eliminato": "Documento deleted",
     "Dettaglio mensile —": "Dettaglio monthly —",
@@ -8710,7 +8700,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Entrate",
     "Entrate / Categorie": "Entrate / Categorie",
     "Entrate per tipo — ": "Entrate per tipo — ",
-    "Entrate vs Uscite ": "Entrate vs Uscite ",
     "Entrate vs uscite mensili": "Entrate vs uscite mensili",
     "Entrate vs Uscite ": "Entrate vs Uscite ",
     "Entrate, uscite, patrimonio e storico": "Entrate, uscite, patrimonio e storico",
@@ -9222,7 +9211,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’utente",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -9986,7 +9974,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Income",
     "Entrate / Categorie": "Income / Categorie",
     "Entrate per tipo — ": "Income per tipo — ",
-    "Entrate vs Uscite ": "Income vs Expenses ",
     "Entrate vs uscite mensili": "Income vs uscite mensili",
     "Entrate vs Uscite ": "Income vs Expenses ",
     "Entrate, uscite, patrimonio e storico": "Income, uscite, patrimonio e storico",
@@ -10498,7 +10485,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Register",
     "Responsabilità dell’utente": "User responsibility",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -11262,7 +11248,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Ingresos",
     "Entrate / Categorie": "Ingresos / Categorie",
     "Entrate per tipo — ": "Ingresos per tipo — ",
-    "Entrate vs Uscite ": "Ingresos vs Gastos ",
     "Entrate vs uscite mensili": "Ingresos vs uscite mensili",
     "Entrate vs Uscite ": "Ingresos vs Gastos ",
     "Entrate, uscite, patrimonio e storico": "Ingresos, uscite, patrimonio e storico",
@@ -11774,7 +11759,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’usuario",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -12538,7 +12522,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Revenus",
     "Entrate / Categorie": "Revenus / Categorie",
     "Entrate per tipo — ": "Revenus per tipo — ",
-    "Entrate vs Uscite ": "Revenus vs Dépenses ",
     "Entrate vs uscite mensili": "Revenus vs uscite mensili",
     "Entrate vs Uscite ": "Revenus vs Dépenses ",
     "Entrate, uscite, patrimonio e storico": "Revenus, uscite, patrimonio e storico",
@@ -13050,7 +13033,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’utilisateur",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -13814,7 +13796,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Einnahmen",
     "Entrate / Categorie": "Einnahmen / Categorie",
     "Entrate per tipo — ": "Einnahmen per tipo — ",
-    "Entrate vs Uscite ": "Einnahmen vs Ausgaben ",
     "Entrate vs uscite mensili": "Einnahmen vs uscite mensili",
     "Entrate vs Uscite ": "Einnahmen vs Ausgaben ",
     "Entrate, uscite, patrimonio e storico": "Einnahmen, uscite, patrimonio e storico",
@@ -14326,7 +14307,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’Benutzer",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -15090,7 +15070,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Receitas",
     "Entrate / Categorie": "Receitas / Categorie",
     "Entrate per tipo — ": "Receitas per tipo — ",
-    "Entrate vs Uscite ": "Receitas vs Despesas ",
     "Entrate vs uscite mensili": "Receitas vs uscite mensili",
     "Entrate vs Uscite ": "Receitas vs Despesas ",
     "Entrate, uscite, patrimonio e storico": "Receitas, uscite, patrimonio e storico",
@@ -15602,7 +15581,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’utilizador",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -16366,7 +16344,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Przychody",
     "Entrate / Categorie": "Przychody / Categorie",
     "Entrate per tipo — ": "Przychody per tipo — ",
-    "Entrate vs Uscite ": "Przychody vs Wydatki ",
     "Entrate vs uscite mensili": "Przychody vs uscite mensili",
     "Entrate vs Uscite ": "Przychody vs Wydatki ",
     "Entrate, uscite, patrimonio e storico": "Przychody, uscite, patrimonio e storico",
@@ -16878,7 +16855,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’użytkownik",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -17642,7 +17618,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Inkomsten",
     "Entrate / Categorie": "Inkomsten / Categorie",
     "Entrate per tipo — ": "Inkomsten per tipo — ",
-    "Entrate vs Uscite ": "Inkomsten vs Uitgaven ",
     "Entrate vs uscite mensili": "Inkomsten vs uscite mensili",
     "Entrate vs Uscite ": "Inkomsten vs Uitgaven ",
     "Entrate, uscite, patrimonio e storico": "Inkomsten, uscite, patrimonio e storico",
@@ -18154,7 +18129,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’gebruiker",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -18918,7 +18892,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Venituri",
     "Entrate / Categorie": "Venituri / Categorie",
     "Entrate per tipo — ": "Venituri per tipo — ",
-    "Entrate vs Uscite ": "Venituri vs Cheltuieli ",
     "Entrate vs uscite mensili": "Venituri vs uscite mensili",
     "Entrate vs Uscite ": "Venituri vs Cheltuieli ",
     "Entrate, uscite, patrimonio e storico": "Venituri, uscite, patrimonio e storico",
@@ -19430,7 +19403,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’utilizator",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -20194,7 +20166,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Entrate": "Έσοδα",
     "Entrate / Categorie": "Έσοδα / Categorie",
     "Entrate per tipo — ": "Έσοδα per tipo — ",
-    "Entrate vs Uscite ": "Έσοδα vs Έξοδα ",
     "Entrate vs uscite mensili": "Έσοδα vs uscite mensili",
     "Entrate vs Uscite ": "Έσοδα vs Έξοδα ",
     "Entrate, uscite, patrimonio e storico": "Έσοδα, uscite, patrimonio e storico",
@@ -20706,7 +20677,6 @@ export const FAINANCE_1629_ALL_SCOPE_MISSING_TRANSLATIONS = {
     "Registrati": "Registrati",
     "Responsabilità dell’utente": "Responsabilità dell’χρήστης",
     "Revenus vs Dépenses": "Revenus vs Dépenses",
-    "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus vs Dépenses ": "Revenus vs Dépenses ",
     "Revenus, dépenses, patrimoine et historique": "Revenus, dépenses, patrimoine et historique",
     "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.": "Reçu lu automatiquement. Vérifiez l'aperçu et enregistrez.",
@@ -34511,7 +34481,6 @@ function fainancePostProcessTranslation(value, lang){
     'vs mese precedente':{en:'vs previous month',es:'frente al mes anterior',fr:'par rapport au mois précédent',de:'gegenüber dem Vormonat',pt:'face ao mês anterior',pl:'względem poprzedniego miesiąca',nl:'ten opzichte van vorige maand',ro:'față de luna precedentă',el:'σε σχέση με τον προηγούμενο μήνα'},
     'Nessun mese precedente nel registro.':{en:'There is no previous month in the history.',es:'No hay ningún mes anterior en el historial.',fr:'Aucun mois précédent dans l’historique.',de:'Im Verlauf gibt es keinen vorherigen Monat.',pt:'Não existe um mês anterior no histórico.',pl:'W historii nie ma wcześniejszego miesiąca.',nl:'Er staat geen vorige maand in de geschiedenis.',ro:'Nu există o lună precedentă în istoric.',el:'Δεν υπάρχει προηγούμενος μήνας στο ιστορικό.'},
     'Icona progetto':{en:'Project icon',es:'Icono del proyecto',fr:'Icône du projet',de:'Projektsymbol',pt:'Ícone do projeto',pl:'Ikona projektu',nl:'Projectpictogram',ro:'Pictograma proiectului',el:'Εικονίδιο έργου'},
-    "Scegli l'icona con lo stesso selettore usato nelle altre sezioni.":{en:'Choose the icon using the same selector as in the other sections.',es:'Elige el icono con el mismo selector utilizado en las demás secciones.',fr:'Choisissez l’icône avec le même sélecteur que dans les autres sections.',de:'Wähle das Symbol mit demselben Auswahlfeld wie in den anderen Bereichen.',pt:'Escolhe o ícone com o mesmo seletor usado nas outras secções.',pl:'Wybierz ikonę tym samym selektorem, którego używa się w innych sekcjach.',nl:'Kies het pictogram met dezelfde kiezer als in de andere secties.',ro:'Alege pictograma cu același selector folosit în celelalte secțiuni.',el:'Επίλεξε το εικονίδιο με τον ίδιο επιλογέα που χρησιμοποιείται στις άλλες ενότητες.'},
     'Colore progetto':{en:'Project color',es:'Color del proyecto',fr:'Couleur du projet',de:'Projektfarbe',pt:'Cor do projeto',pl:'Kolor projektu',nl:'Projectkleur',ro:'Culoarea proiectului',el:'Χρώμα έργου'},
     'Progetto attivo':{en:'Active project',es:'Proyecto activo',fr:'Projet actif',de:'Aktives Projekt',pt:'Projeto ativo',pl:'Aktywny projekt',nl:'Actief project',ro:'Proiect activ',el:'Ενεργό έργο'},
     'Registra saldo/rimborso':{en:'Record balance/refund',es:'Registrar saldo/reembolso',fr:'Enregistrer un solde/remboursement',de:'Saldo/Rückzahlung erfassen',pt:'Registar saldo/reembolso',pl:'Zarejestruj saldo/zwrot',nl:'Saldo/terugbetaling registreren',ro:'Înregistrează soldul/rambursarea',el:'Καταχώριση υπολοίπου/επιστροφής'},
@@ -34616,7 +34585,6 @@ function fainancePostProcessTranslation(value, lang){
     'Dati già salvati':{it:'Dati già salvati',en:'Data already saved',es:'Datos ya guardados',fr:'Données déjà enregistrées',de:'Daten bereits gespeichert',pt:'Dados já guardados',pl:'Dane już zapisane',nl:'Gegevens al opgeslagen',ro:'Date deja salvate',el:'Τα δεδομένα έχουν ήδη αποθηκευτεί'},
     'Progetto attivo':{it:'Progetto attivo',en:'Active project',es:'Proyecto activo',fr:'Projet actif',de:'Aktives Projekt',pt:'Projeto ativo',pl:'Aktywny projekt',nl:'Actief project',ro:'Proiect activ',el:'Ενεργό έργο'},
     'Icona progetto':{it:'Icona progetto',en:'Project icon',es:'Icono del proyecto',fr:'Icône du projet',de:'Projektsymbol',pt:'Ícone do projeto',pl:'Ikona projektu',nl:'Projectpictogram',ro:'Pictograma proiectului',el:'Εικονίδιο έργου'},
-    "Scegli l'icona con lo stesso selettore usato nelle altre sezioni.":{it:"Scegli l'icona con lo stesso selettore usato nelle altre sezioni.",en:'Choose the icon using the same selector as in the other sections.',es:'Elige el icono con el mismo selector utilizado en las demás secciones.',fr:'Choisissez l’icône avec le même sélecteur que dans les autres sections.',de:'Wähle das Symbol mit demselben Auswahlfeld wie in den anderen Bereichen.',pt:'Escolhe o ícone com o mesmo seletor usado nas outras secções.',pl:'Wybierz ikonę za pomocą tego samego selektora co w innych sekcjach.',nl:'Kies het pictogram met dezelfde kiezer als in de andere secties.',ro:'Alege pictograma cu același selector folosit în celelalte secțiuni.',el:'Επίλεξε το εικονίδιο με τον ίδιο επιλογέα που χρησιμοποιείται στις άλλες ενότητες.'},
     'Colore progetto':{it:'Colore progetto',en:'Project color',es:'Color del proyecto',fr:'Couleur du projet',de:'Projektfarbe',pt:'Cor do projeto',pl:'Kolor projektu',nl:'Projectkleur',ro:'Culoarea proiectului',el:'Χρώμα έργου'},
     'Spesa / Aree':{it:'Spesa / Aree',en:'Shopping / Areas',es:'Compra / Áreas',fr:'Courses / Zones',de:'Einkauf / Bereiche',pt:'Compras / Áreas',pl:'Zakupy / Obszary',nl:'Boodschappen / Gebieden',ro:'Cumpărături / Zone',el:'Αγορές / Περιοχές'},
     'Spesa / Categorie':{it:'Spesa / Categorie',en:'Shopping / Categories',es:'Compra / Categorías',fr:'Courses / Catégories',de:'Einkauf / Kategorien',pt:'Compras / Categorias',pl:'Zakupy / Kategorie',nl:'Boodschappen / Categorieën',ro:'Cumpărături / Categorii',el:'Αγορές / Κατηγορίες'},
@@ -34770,3 +34738,327 @@ function fainancePostProcessTranslation(value, lang){
   try{fainanceTranslationCache={};}catch(e){}
 })();
 
+
+// fAInance 1.4.6 — popup uniformi, aggiornamenti e formattazione appunti.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(key,values){
+    LANGS.forEach(function(code){
+      var value=(values&&values[code])||(values&&values.en)||(values&&values.it)||key;
+      try{if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=value;}catch(e){}
+      try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};FAINANCE_UI_TRANSLATIONS[code][key]=value;}}catch(e){}
+      try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=value;}}catch(e){}
+    });
+  }
+  add('Modifica metodo di pagamento',{it:'Modifica metodo di pagamento',en:'Edit payment method',es:'Editar método de pago',fr:'Modifier le moyen de paiement',de:'Zahlungsmethode bearbeiten',pt:'Editar método de pagamento',pl:'Edytuj metodę płatności',nl:'Betaalmethode bewerken',ro:'Editează metoda de plată',el:'Επεξεργασία τρόπου πληρωμής'});
+  add('Modifica categoria',{it:'Modifica categoria',en:'Edit category',es:'Editar categoría',fr:'Modifier la catégorie',de:'Kategorie bearbeiten',pt:'Editar categoria',pl:'Edytuj kategorię',nl:'Categorie bewerken',ro:'Editează categoria',el:'Επεξεργασία κατηγορίας'});
+  add('Inserisci i dati e salva la nuova voce.',{it:'Inserisci i dati e salva la nuova voce.',en:'Enter the details and save the new item.',es:'Introduce los datos y guarda el nuevo elemento.',fr:'Saisissez les informations et enregistrez le nouvel élément.',de:'Gib die Daten ein und speichere den neuen Eintrag.',pt:'Introduz os dados e guarda o novo item.',pl:'Wprowadź dane i zapisz nową pozycję.',nl:'Voer de gegevens in en sla het nieuwe item op.',ro:'Introdu datele și salvează elementul nou.',el:'Καταχώρισε τα στοιχεία και αποθήκευσε τη νέα εγγραφή.'});
+  add('Le modifiche saranno applicate anche alle visualizzazioni collegate.',{it:'Le modifiche saranno applicate anche alle visualizzazioni collegate.',en:'Changes will also be applied to linked views.',es:'Los cambios también se aplicarán a las vistas vinculadas.',fr:'Les modifications seront également appliquées aux vues associées.',de:'Die Änderungen werden auch auf verknüpfte Ansichten angewendet.',pt:'As alterações também serão aplicadas às vistas associadas.',pl:'Zmiany zostaną również zastosowane w powiązanych widokach.',nl:'Wijzigingen worden ook toegepast op gekoppelde weergaven.',ro:'Modificările vor fi aplicate și vizualizărilor asociate.',el:'Οι αλλαγές θα εφαρμοστούν και στις συνδεδεμένες προβολές.'});
+  add('Mostra anteprima popup aggiornamento',{it:'Mostra anteprima popup aggiornamento',en:'Preview update popup',es:'Ver vista previa del aviso de actualización',fr:'Afficher l’aperçu de la fenêtre de mise à jour',de:'Vorschau des Update-Pop-ups anzeigen',pt:'Pré-visualizar popup de atualização',pl:'Pokaż podgląd okna aktualizacji',nl:'Voorbeeld van updatepop-up tonen',ro:'Afișează previzualizarea ferestrei de actualizare',el:'Προεπισκόπηση αναδυόμενου παραθύρου ενημέρωσης'});
+  add('Rinomina documento',{it:'Rinomina documento',en:'Rename document',es:'Cambiar nombre del documento',fr:'Renommer le document',de:'Dokument umbenennen',pt:'Mudar o nome do documento',pl:'Zmień nazwę dokumentu',nl:'Document hernoemen',ro:'Redenumește documentul',el:'Μετονομασία εγγράφου'});
+  add('Rinomina',{it:'Rinomina',en:'Rename',es:'Cambiar nombre',fr:'Renommer',de:'Umbenennen',pt:'Mudar nome',pl:'Zmień nazwę',nl:'Hernoemen',ro:'Redenumește',el:'Μετονομασία'});
+  add('Grassetto',{it:'Grassetto',en:'Bold',es:'Negrita',fr:'Gras',de:'Fett',pt:'Negrito',pl:'Pogrubienie',nl:'Vet',ro:'Aldin',el:'Έντονα'});
+  add('Corsivo',{it:'Corsivo',en:'Italic',es:'Cursiva',fr:'Italique',de:'Kursiv',pt:'Itálico',pl:'Kursywa',nl:'Cursief',ro:'Cursiv',el:'Πλάγια'});
+  add('Sottolineato',{it:'Sottolineato',en:'Underline',es:'Subrayado',fr:'Souligné',de:'Unterstrichen',pt:'Sublinhado',pl:'Podkreślenie',nl:'Onderstrepen',ro:'Subliniat',el:'Υπογράμμιση'});
+  add('Barrato',{it:'Barrato',en:'Strikethrough',es:'Tachado',fr:'Barré',de:'Durchgestrichen',pt:'Riscado',pl:'Przekreślenie',nl:'Doorhalen',ro:'Tăiat',el:'Διακριτή διαγραφή'});
+  add('Elenco puntato',{it:'Elenco puntato',en:'Bulleted list',es:'Lista con viñetas',fr:'Liste à puces',de:'Aufzählung',pt:'Lista com marcadores',pl:'Lista punktowana',nl:'Opsommingstekens',ro:'Listă cu marcatori',el:'Λίστα με κουκκίδες'});
+  add('Elenco numerato',{it:'Elenco numerato',en:'Numbered list',es:'Lista numerada',fr:'Liste numérotée',de:'Nummerierte Liste',pt:'Lista numerada',pl:'Lista numerowana',nl:'Genummerde lijst',ro:'Listă numerotată',el:'Αριθμημένη λίστα'});
+  add('Rimuovi formattazione',{it:'Rimuovi formattazione',en:'Clear formatting',es:'Quitar formato',fr:'Effacer la mise en forme',de:'Formatierung entfernen',pt:'Remover formatação',pl:'Usuń formatowanie',nl:'Opmaak wissen',ro:'Elimină formatarea',el:'Κατάργηση μορφοποίησης'});
+  add('Ricordamelo più tardi',{it:'Ricordamelo più tardi',en:'Remind me later',es:'Recordármelo más tarde',fr:'Me le rappeler plus tard',de:'Später erinnern',pt:'Lembrar mais tarde',pl:'Przypomnij później',nl:'Herinner me later',ro:'Amintește-mi mai târziu',el:'Υπενθύμιση αργότερα'});
+  add('È ora di aggiornare',{it:'È ora di aggiornare',en:'It’s time to update',es:'Es hora de actualizar',fr:'Il est temps de mettre à jour',de:'Zeit für ein Update',pt:'Está na hora de atualizar',pl:'Czas na aktualizację',nl:'Tijd om bij te werken',ro:'Este timpul pentru actualizare',el:'Ώρα για ενημέρωση'});
+  add('Stai usando una versione precedente. Aggiorna per la migliore esperienza.',{it:'Stai usando una versione precedente. Aggiorna per la migliore esperienza.',en:'You are using an older version. Update for the best experience.',es:'Estás usando una versión anterior. Actualiza para disfrutar de la mejor experiencia.',fr:'Vous utilisez une ancienne version. Mettez à jour pour profiter de la meilleure expérience.',de:'Du verwendest eine ältere Version. Aktualisiere für die beste Nutzung.',pt:'Estás a usar uma versão anterior. Atualiza para a melhor experiência.',pl:'Korzystasz ze starszej wersji. Zaktualizuj aplikację, aby uzyskać najlepsze działanie.',nl:'Je gebruikt een oudere versie. Werk bij voor de beste ervaring.',ro:'Folosești o versiune mai veche. Actualizează pentru cea mai bună experiență.',el:'Χρησιμοποιείτε παλαιότερη έκδοση. Ενημερώστε για την καλύτερη εμπειρία.'});
+  add('Aggiorna fAInance',{it:'Aggiorna fAInance',en:'Update fAInance',es:'Actualizar fAInance',fr:'Mettre à jour fAInance',de:'fAInance aktualisieren',pt:'Atualizar fAInance',pl:'Zaktualizuj fAInance',nl:'fAInance bijwerken',ro:'Actualizează fAInance',el:'Ενημέρωση fAInance'});
+  add('Nuova versione',{it:'Nuova versione',en:'New version',es:'Nueva versión',fr:'Nouvelle version',de:'Neue Version',pt:'Nova versão',pl:'Nowa wersja',nl:'Nieuwe versie',ro:'Versiune nouă',el:'Νέα έκδοση'});
+  add('Versione installata',{it:'Versione installata',en:'Installed version',es:'Versión instalada',fr:'Version installée',de:'Installierte Version',pt:'Versão instalada',pl:'Zainstalowana wersja',nl:'Geïnstalleerde versie',ro:'Versiune instalată',el:'Εγκατεστημένη έκδοση'});
+
+  add('Modifica area',{it:'Modifica area',en:'Edit area',es:'Editar área',fr:'Modifier la zone',de:'Bereich bearbeiten',pt:'Editar área',pl:'Edytuj obszar',nl:'Gebied bewerken',ro:'Editează zona',el:'Επεξεργασία περιοχής'});
+  add('Modifica voce patrimonio',{it:'Modifica voce patrimonio',en:'Edit asset item',es:'Editar elemento patrimonial',fr:'Modifier l’élément de patrimoine',de:'Vermögenseintrag bearbeiten',pt:'Editar item de património',pl:'Edytuj pozycję majątku',nl:'Vermogensitem bewerken',ro:'Editează elementul de patrimoniu',el:'Επεξεργασία στοιχείου περιουσίας'});
+  add('Inserisci i dati e salva la nuova area.',{it:'Inserisci i dati e salva la nuova area.',en:'Enter the details and save the new area.',es:'Introduce los datos y guarda la nueva área.',fr:'Saisissez les informations et enregistrez la nouvelle zone.',de:'Gib die Daten ein und speichere den neuen Bereich.',pt:'Introduz os dados e guarda a nova área.',pl:'Wprowadź dane i zapisz nowy obszar.',nl:'Voer de gegevens in en sla het nieuwe gebied op.',ro:'Introdu datele și salvează zona nouă.',el:'Καταχώρισε τα στοιχεία και αποθήκευσε τη νέα περιοχή.'});
+  add('Versione disponibile',{it:'Versione disponibile',en:'Available version',es:'Versión disponible',fr:'Version disponible',de:'Verfügbare Version',pt:'Versão disponível',pl:'Dostępna wersja',nl:'Beschikbare versie',ro:'Versiune disponibilă',el:'Διαθέσιμη έκδοση'});
+  add('Testo normale',{it:'Testo normale',en:'Normal text',es:'Texto normal',fr:'Texte normal',de:'Normaler Text',pt:'Texto normal',pl:'Zwykły tekst',nl:'Normale tekst',ro:'Text normal',el:'Κανονικό κείμενο'});
+  add('Stile del testo',{it:'Stile del testo',en:'Text style',es:'Estilo del texto',fr:'Style du texte',de:'Textstil',pt:'Estilo do texto',pl:'Styl tekstu',nl:'Tekststijl',ro:'Stilul textului',el:'Στυλ κειμένου'});
+  add('Annulla ultima modifica',{it:'Annulla ultima modifica',en:'Undo last change',es:'Deshacer el último cambio',fr:'Annuler la dernière modification',de:'Letzte Änderung rückgängig machen',pt:'Anular a última alteração',pl:'Cofnij ostatnią zmianę',nl:'Laatste wijziging ongedaan maken',ro:'Anulează ultima modificare',el:'Αναίρεση τελευταίας αλλαγής'});
+  add('Ripeti ultima modifica',{it:'Ripeti ultima modifica',en:'Redo last change',es:'Rehacer el último cambio',fr:'Rétablir la dernière modification',de:'Letzte Änderung wiederholen',pt:'Repetir a última alteração',pl:'Ponów ostatnią zmianę',nl:'Laatste wijziging opnieuw uitvoeren',ro:'Refă ultima modificare',el:'Επανάληψη τελευταίας αλλαγής'});
+  add('Citazione',{it:'Citazione',en:'Quote',es:'Cita',fr:'Citation',de:'Zitat',pt:'Citação',pl:'Cytat',nl:'Citaat',ro:'Citat',el:'Παράθεση'});
+  add('Allinea a sinistra',{it:'Allinea a sinistra',en:'Align left',es:'Alinear a la izquierda',fr:'Aligner à gauche',de:'Linksbündig',pt:'Alinhar à esquerda',pl:'Wyrównaj do lewej',nl:'Links uitlijnen',ro:'Aliniază la stânga',el:'Στοίχιση αριστερά'});
+  add('Allinea al centro',{it:'Allinea al centro',en:'Align center',es:'Centrar',fr:'Centrer',de:'Zentrieren',pt:'Alinhar ao centro',pl:'Wyśrodkuj',nl:'Centreren',ro:'Aliniază la centru',el:'Στοίχιση στο κέντρο'});
+  add('Allinea a destra',{it:'Allinea a destra',en:'Align right',es:'Alinear a la derecha',fr:'Aligner à droite',de:'Rechtsbündig',pt:'Alinhar à direita',pl:'Wyrównaj do prawej',nl:'Rechts uitlijnen',ro:'Aliniază la dreapta',el:'Στοίχιση δεξιά'});
+  add('Seleziona il testo e usa gli strumenti per applicare la formattazione.',{it:'Seleziona il testo e usa gli strumenti per applicare la formattazione.',en:'Select text and use the tools to apply formatting.',es:'Selecciona el texto y usa las herramientas para aplicar el formato.',fr:'Sélectionnez le texte et utilisez les outils pour appliquer la mise en forme.',de:'Markiere den Text und verwende die Werkzeuge zur Formatierung.',pt:'Seleciona o texto e usa as ferramentas para aplicar a formatação.',pl:'Zaznacz tekst i użyj narzędzi, aby zastosować formatowanie.',nl:'Selecteer tekst en gebruik de hulpmiddelen om opmaak toe te passen.',ro:'Selectează textul și folosește instrumentele pentru formatare.',el:'Επιλέξτε το κείμενο και χρησιμοποιήστε τα εργαλεία για μορφοποίηση.'});
+  add('Il tipo di file resta invariato',{it:'Il tipo di file resta invariato',en:'The file type remains unchanged',es:'El tipo de archivo no cambia',fr:'Le type de fichier reste inchangé',de:'Der Dateityp bleibt unverändert',pt:'O tipo de ficheiro permanece inalterado',pl:'Typ pliku pozostaje bez zmian',nl:'Het bestandstype blijft ongewijzigd',ro:'Tipul fișierului rămâne neschimbat',el:'Ο τύπος αρχείου παραμένει αμετάβλητος'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance 1.4.8 — unità di misura Spesa e popup Prodotti.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(key,values){
+    LANGS.forEach(function(code){
+      var value=(values&&values[code])||(values&&values.en)||(values&&values.it)||key;
+      try{if(!TRANSLATIONS[code])TRANSLATIONS[code]={};Object.assign(TRANSLATIONS[code],{[key]:value});}catch(e){}
+      try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};Object.assign(FAINANCE_UI_TRANSLATIONS[code],{[key]:value});}}catch(e){}
+      try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};Object.assign(FAINANCE_I18N_PHRASES[code],{[key]:value});}}catch(e){}
+    });
+  }
+  add('Unità di misura',{it:'Unità di misura',en:'Units of measure',es:'Unidades de medida',fr:'Unités de mesure',de:'Maßeinheiten',pt:'Unidades de medida',pl:'Jednostki miary',nl:'Maateenheden',ro:'Unități de măsură',el:'Μονάδες μέτρησης'});
+  add('Spesa / Unità di misura',{it:'Spesa / Unità di misura',en:'Shopping / Units of measure',es:'Compra / Unidades de medida',fr:'Courses / Unités de mesure',de:'Einkauf / Maßeinheiten',pt:'Compras / Unidades de medida',pl:'Zakupy / Jednostki miary',nl:'Boodschappen / Maateenheden',ro:'Cumpărături / Unități de măsură',el:'Αγορές / Μονάδες μέτρησης'});
+  add('Lista, riordino, modifica e unità predefinita',{it:'Lista, riordino, modifica e unità predefinita',en:'List, reorder, edit and default unit',es:'Lista, reordenación, edición y unidad predeterminada',fr:'Liste, réorganisation, modification et unité par défaut',de:'Liste, Sortierung, Bearbeitung und Standardeinheit',pt:'Lista, reordenação, edição e unidade predefinida',pl:'Lista, kolejność, edycja i jednostka domyślna',nl:'Lijst, volgorde, bewerken en standaardeenheid',ro:'Listă, reordonare, editare și unitate implicită',el:'Λίστα, αναδιάταξη, επεξεργασία και προεπιλεγμένη μονάδα'});
+  add('Liste, aree, unità di misura, fidelity card e prepagate',{it:'Liste, aree, unità di misura, fidelity card e prepagate',en:'Lists, areas, units of measure, loyalty cards and prepaid cards',es:'Listas, áreas, unidades de medida, tarjetas de fidelidad y prepago',fr:'Listes, zones, unités de mesure, cartes de fidélité et prépayées',de:'Listen, Bereiche, Maßeinheiten, Kundenkarten und Prepaid-Karten',pt:'Listas, áreas, unidades de medida, cartões de fidelidade e pré-pagos',pl:'Listy, obszary, jednostki miary, karty lojalnościowe i przedpłacone',nl:'Lijsten, gebieden, maateenheden, klantenkaarten en prepaidkaarten',ro:'Liste, zone, unități de măsură, carduri de fidelitate și preplătite',el:'Λίστες, περιοχές, μονάδες μέτρησης, κάρτες επιβράβευσης και προπληρωμένες'});
+  add('Gestisci le unità di misura disponibili per i prodotti: aggiunta, modifica, riordino e unità predefinita.',{it:'Gestisci le unità di misura disponibili per i prodotti: aggiunta, modifica, riordino e unità predefinita.',en:'Manage the units of measure available for products: add, edit, reorder and choose the default unit.',es:'Gestiona las unidades de medida disponibles para los productos: añade, edita, reordena y elige la unidad predeterminada.',fr:'Gérez les unités de mesure disponibles pour les produits : ajout, modification, réorganisation et unité par défaut.',de:'Verwalte die für Produkte verfügbaren Maßeinheiten: hinzufügen, bearbeiten, sortieren und Standardeinheit auswählen.',pt:'Gere as unidades de medida disponíveis para os produtos: adicionar, editar, reordenar e escolher a unidade predefinida.',pl:'Zarządzaj jednostkami miary dostępnymi dla produktów: dodawaj, edytuj, zmieniaj kolejność i wybieraj jednostkę domyślną.',nl:'Beheer de beschikbare maateenheden voor producten: toevoegen, bewerken, herschikken en een standaardeenheid kiezen.',ro:'Gestionează unitățile de măsură disponibile pentru produse: adăugare, editare, reordonare și alegerea unității implicite.',el:'Διαχειριστείτε τις διαθέσιμες μονάδες μέτρησης για τα προϊόντα: προσθήκη, επεξεργασία, αναδιάταξη και επιλογή προεπιλεγμένης μονάδας.'});
+  add('Nuova unità di misura',{it:'Nuova unità di misura',en:'New unit of measure',es:'Nueva unidad de medida',fr:'Nouvelle unité de mesure',de:'Neue Maßeinheit',pt:'Nova unidade de medida',pl:'Nowa jednostka miary',nl:'Nieuwe maateenheid',ro:'Unitate de măsură nouă',el:'Νέα μονάδα μέτρησης'});
+  add('Modifica unità di misura',{it:'Modifica unità di misura',en:'Edit unit of measure',es:'Editar unidad de medida',fr:'Modifier l’unité de mesure',de:'Maßeinheit bearbeiten',pt:'Editar unidade de medida',pl:'Edytuj jednostkę miary',nl:'Maateenheid bewerken',ro:'Editează unitatea de măsură',el:'Επεξεργασία μονάδας μέτρησης'});
+  add('Nome unità di misura',{it:'Nome unità di misura',en:'Unit name',es:'Nombre de la unidad de medida',fr:'Nom de l’unité de mesure',de:'Name der Maßeinheit',pt:'Nome da unidade de medida',pl:'Nazwa jednostki miary',nl:'Naam van maateenheid',ro:'Numele unității de măsură',el:'Όνομα μονάδας μέτρησης'});
+  add('Unità predefinita',{it:'Unità predefinita',en:'Default unit',es:'Unidad predeterminada',fr:'Unité par défaut',de:'Standardeinheit',pt:'Unidade predefinida',pl:'Jednostka domyślna',nl:'Standaardeenheid',ro:'Unitate implicită',el:'Προεπιλεγμένη μονάδα'});
+  add('Eliminare unità di misura?',{it:'Eliminare unità di misura?',en:'Delete unit of measure?',es:'¿Eliminar la unidad de medida?',fr:'Supprimer l’unité de mesure ?',de:'Maßeinheit löschen?',pt:'Eliminar unidade de medida?',pl:'Usunąć jednostkę miary?',nl:'Maateenheid verwijderen?',ro:'Ștergi unitatea de măsură?',el:'Διαγραφή μονάδας μέτρησης;'});
+  add('Questa unità di misura è usata da uno o più prodotti. Se la elimini, ai prodotti interessati verrà assegnata casualmente una delle unità di misura rimanenti. Vuoi continuare?',{
+    it:'Questa unità di misura è usata da uno o più prodotti. Se la elimini, ai prodotti interessati verrà assegnata casualmente una delle unità di misura rimanenti. Vuoi continuare?',
+    en:'This unit of measure is used by one or more products. If you delete it, the affected products will be randomly assigned one of the remaining units of measure. Do you want to continue?',
+    es:'Esta unidad de medida se usa en uno o más productos. Si la eliminas, a los productos afectados se les asignará aleatoriamente una de las unidades de medida restantes. ¿Quieres continuar?',
+    fr:'Cette unité de mesure est utilisée par un ou plusieurs produits. Si vous la supprimez, l’une des unités de mesure restantes sera attribuée aléatoirement aux produits concernés. Voulez-vous continuer ?',
+    de:'Diese Maßeinheit wird von einem oder mehreren Produkten verwendet. Wenn du sie löschst, wird den betroffenen Produkten zufällig eine der verbleibenden Maßeinheiten zugewiesen. Möchtest du fortfahren?',
+    pt:'Esta unidade de medida é utilizada por um ou mais produtos. Se a eliminares, será atribuída aleatoriamente aos produtos afetados uma das unidades de medida restantes. Queres continuar?',
+    pl:'Ta jednostka miary jest używana przez co najmniej jeden produkt. Jeśli ją usuniesz, produktom, których to dotyczy, zostanie losowo przypisana jedna z pozostałych jednostek miary. Czy chcesz kontynuować?',
+    nl:'Deze maateenheid wordt door één of meer producten gebruikt. Als je deze verwijdert, krijgen de betreffende producten willekeurig een van de overgebleven maateenheden toegewezen. Wil je doorgaan?',
+    ro:'Această unitate de măsură este utilizată de unul sau mai multe produse. Dacă o ștergi, produselor afectate li se va atribui aleatoriu una dintre unitățile de măsură rămase. Vrei să continui?',
+    el:'Αυτή η μονάδα μέτρησης χρησιμοποιείται από ένα ή περισσότερα προϊόντα. Αν τη διαγράψετε, στα επηρεαζόμενα προϊόντα θα εκχωρηθεί τυχαία μία από τις υπόλοιπες μονάδες μέτρησης. Θέλετε να συνεχίσετε;'
+  });
+  add('Elimina e riassegna',{it:'Elimina e riassegna',en:'Delete and reassign',es:'Eliminar y reasignar',fr:'Supprimer et réattribuer',de:'Löschen und neu zuweisen',pt:'Eliminar e reatribuir',pl:'Usuń i przypisz ponownie',nl:'Verwijderen en opnieuw toewijzen',ro:'Șterge și realocă',el:'Διαγραφή και επανεκχώρηση'});
+  add('Deve rimanere almeno un’unità di misura.',{it:'Deve rimanere almeno un’unità di misura.',en:'At least one unit of measure must remain.',es:'Debe quedar al menos una unidad de medida.',fr:'Au moins une unité de mesure doit rester.',de:'Mindestens eine Maßeinheit muss erhalten bleiben.',pt:'Tem de permanecer pelo menos uma unidade de medida.',pl:'Musi pozostać co najmniej jedna jednostka miary.',nl:'Er moet minstens één maateenheid overblijven.',ro:'Trebuie să rămână cel puțin o unitate de măsură.',el:'Πρέπει να παραμείνει τουλάχιστον μία μονάδα μέτρησης.'});
+  add('Esiste già un’unità di misura con questo nome.',{it:'Esiste già un’unità di misura con questo nome.',en:'A unit of measure with this name already exists.',es:'Ya existe una unidad de medida con este nombre.',fr:'Une unité de mesure portant ce nom existe déjà.',de:'Eine Maßeinheit mit diesem Namen existiert bereits.',pt:'Já existe uma unidade de medida com este nome.',pl:'Jednostka miary o tej nazwie już istnieje.',nl:'Er bestaat al een maateenheid met deze naam.',ro:'Există deja o unitate de măsură cu acest nume.',el:'Υπάρχει ήδη μονάδα μέτρησης με αυτό το όνομα.'});
+  add('Unità di misura aggiunta',{it:'Unità di misura aggiunta',en:'Unit of measure added',es:'Unidad de medida añadida',fr:'Unité de mesure ajoutée',de:'Maßeinheit hinzugefügt',pt:'Unidade de medida adicionada',pl:'Dodano jednostkę miary',nl:'Maateenheid toegevoegd',ro:'Unitate de măsură adăugată',el:'Η μονάδα μέτρησης προστέθηκε'});
+  add('Unità di misura aggiornata',{it:'Unità di misura aggiornata',en:'Unit of measure updated',es:'Unidad de medida actualizada',fr:'Unité de mesure mise à jour',de:'Maßeinheit aktualisiert',pt:'Unidade de medida atualizada',pl:'Zaktualizowano jednostkę miary',nl:'Maateenheid bijgewerkt',ro:'Unitate de măsură actualizată',el:'Η μονάδα μέτρησης ενημερώθηκε'});
+  add('Unità di misura eliminata',{it:'Unità di misura eliminata',en:'Unit of measure deleted',es:'Unidad de medida eliminada',fr:'Unité de mesure supprimée',de:'Maßeinheit gelöscht',pt:'Unidade de medida eliminada',pl:'Usunięto jednostkę miary',nl:'Maateenheid verwijderd',ro:'Unitate de măsură ștearsă',el:'Η μονάδα μέτρησης διαγράφηκε'});
+  add('Grammi',{it:'Grammi',en:'Grams',es:'Gramos',fr:'Grammes',de:'Gramm',pt:'Gramas',pl:'Gramy',nl:'Gram',ro:'Grame',el:'Γραμμάρια'});
+  add('Litri',{it:'Litri',en:'Liters',es:'Litros',fr:'Litres',de:'Liter',pt:'Litros',pl:'Litry',nl:'Liter',ro:'Litri',el:'Λίτρα'});
+  add('Unità',{it:'Unità',en:'Units',es:'Unidades',fr:'Unités',de:'Einheiten',pt:'Unidades',pl:'Sztuki',nl:'Stuks',ro:'Unități',el:'Τεμάχια'});
+  add('Nuovo prodotto',{it:'Nuovo prodotto',en:'New product',es:'Nuevo producto',fr:'Nouveau produit',de:'Neues Produkt',pt:'Novo produto',pl:'Nowy produkt',nl:'Nieuw product',ro:'Produs nou',el:'Νέο προϊόν'});
+  add('Modifica prodotto',{it:'Modifica prodotto',en:'Edit product',es:'Editar producto',fr:'Modifier le produit',de:'Produkt bearbeiten',pt:'Editar produto',pl:'Edytuj produkt',nl:'Product bewerken',ro:'Editează produsul',el:'Επεξεργασία προϊόντος'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance 1.4.8 — sottotitoli mancanti nella sezione Altro.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(key,values){
+    LANGS.forEach(function(code){
+      var value=(values&&values[code])||(values&&values.en)||(values&&values.it)||key;
+      try{if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=value;}catch(e){}
+      try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};FAINANCE_UI_TRANSLATIONS[code][key]=value;}}catch(e){}
+      try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=value;}}catch(e){}
+    });
+  }
+  add('Analisi, trend e confronti',{
+    it:'Analisi, trend e confronti',en:'Analysis, trends and comparisons',es:'Análisis, tendencias y comparaciones',fr:'Analyses, tendances et comparaisons',de:'Analysen, Trends und Vergleiche',pt:'Análises, tendências e comparações',pl:'Analizy, trendy i porównania',nl:'Analyses, trends en vergelijkingen',ro:'Analize, tendințe și comparații',el:'Αναλύσεις, τάσεις και συγκρίσεις'
+  });
+  add('Prestiti, rimborsi e scadenze',{
+    it:'Prestiti, rimborsi e scadenze',en:'Loans, repayments and due dates',es:'Préstamos, reembolsos y vencimientos',fr:'Prêts, remboursements et échéances',de:'Darlehen, Rückzahlungen und Fälligkeiten',pt:'Empréstimos, reembolsos e vencimentos',pl:'Pożyczki, spłaty i terminy',nl:'Leningen, terugbetalingen en vervaldata',ro:'Împrumuturi, rambursări și scadențe',el:'Δάνεια, αποπληρωμές και προθεσμίες'
+  });
+  add('Liste, prodotti e acquisti',{
+    it:'Liste, prodotti e acquisti',en:'Lists, products and purchases',es:'Listas, productos y compras',fr:'Listes, produits et achats',de:'Listen, Produkte und Einkäufe',pt:'Listas, produtos e compras',pl:'Listy, produkty i zakupy',nl:'Lijsten, producten en aankopen',ro:'Liste, produse și cumpărături',el:'Λίστες, προϊόντα και αγορές'
+  });
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// 2026-08-08 — Home: prossime spese programmate + collegamenti statistiche Budget/Patrimonio.
+// Tutte le nuove stringhe sono definite nelle 10 lingue in scope.
+Object.assign(TRANSLATIONS.it,{
+  "Prossime spese programmate":"Prossime spese programmate",
+  "Mostra le prossime uscite ricorrenti programmate":"Mostra le prossime uscite ricorrenti programmate",
+  "Nessuna spesa programmata in arrivo":"Nessuna spesa programmata in arrivo",
+  "Spesa programmata":"Spesa programmata",
+  "Statistiche Patrimonio":"Statistiche Patrimonio",
+  "Statistiche Budget":"Statistiche Budget",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Gestisci i valori mensili, confronta i mesi e consulta lo storico.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Configura il budget mensile e consulta l'andamento nelle statistiche."
+});
+Object.assign(TRANSLATIONS.en,{
+  "Prossime spese programmate":"Upcoming scheduled expenses",
+  "Mostra le prossime uscite ricorrenti programmate":"Shows the next scheduled recurring expenses",
+  "Nessuna spesa programmata in arrivo":"No scheduled expenses coming up",
+  "Spesa programmata":"Scheduled expense",
+  "Statistiche Patrimonio":"Asset statistics",
+  "Statistiche Budget":"Budget statistics",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Manage monthly values, compare months and view the history.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Set up your monthly budget and review its trend in Statistics."
+});
+Object.assign(TRANSLATIONS.es,{
+  "Prossime spese programmate":"Próximos gastos programados",
+  "Mostra le prossime uscite ricorrenti programmate":"Muestra los próximos gastos recurrentes programados",
+  "Nessuna spesa programmata in arrivo":"No hay gastos programados próximos",
+  "Spesa programmata":"Gasto programado",
+  "Statistiche Patrimonio":"Estadísticas de patrimonio",
+  "Statistiche Budget":"Estadísticas de presupuesto",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Gestiona los valores mensuales, compara los meses y consulta el historial.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Configura el presupuesto mensual y consulta su evolución en Estadísticas."
+});
+Object.assign(TRANSLATIONS.fr,{
+  "Prossime spese programmate":"Prochaines dépenses programmées",
+  "Mostra le prossime uscite ricorrenti programmate":"Affiche les prochaines dépenses récurrentes programmées",
+  "Nessuna spesa programmata in arrivo":"Aucune dépense programmée à venir",
+  "Spesa programmata":"Dépense programmée",
+  "Statistiche Patrimonio":"Statistiques du patrimoine",
+  "Statistiche Budget":"Statistiques du budget",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Gérez les valeurs mensuelles, comparez les mois et consultez l'historique.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Configurez le budget mensuel et consultez son évolution dans les Statistiques."
+});
+Object.assign(TRANSLATIONS.de,{
+  "Prossime spese programmate":"Nächste geplante Ausgaben",
+  "Mostra le prossime uscite ricorrenti programmate":"Zeigt die nächsten geplanten wiederkehrenden Ausgaben",
+  "Nessuna spesa programmata in arrivo":"Keine geplanten Ausgaben in nächster Zeit",
+  "Spesa programmata":"Geplante Ausgabe",
+  "Statistiche Patrimonio":"Vermögensstatistiken",
+  "Statistiche Budget":"Budgetstatistiken",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Monatswerte verwalten, Monate vergleichen und den Verlauf ansehen.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Monatsbudget einrichten und seine Entwicklung in den Statistiken ansehen."
+});
+Object.assign(TRANSLATIONS.pt,{
+  "Prossime spese programmate":"Próximas despesas programadas",
+  "Mostra le prossime uscite ricorrenti programmate":"Mostra as próximas despesas recorrentes programadas",
+  "Nessuna spesa programmata in arrivo":"Não há despesas programadas próximas",
+  "Spesa programmata":"Despesa programada",
+  "Statistiche Patrimonio":"Estatísticas do património",
+  "Statistiche Budget":"Estatísticas do orçamento",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Gere os valores mensais, compara os meses e consulta o histórico.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Configura o orçamento mensal e consulta a sua evolução nas Estatísticas."
+});
+Object.assign(TRANSLATIONS.pl,{
+  "Prossime spese programmate":"Nadchodzące zaplanowane wydatki",
+  "Mostra le prossime uscite ricorrenti programmate":"Pokazuje najbliższe zaplanowane wydatki cykliczne",
+  "Nessuna spesa programmata in arrivo":"Brak nadchodzących zaplanowanych wydatków",
+  "Spesa programmata":"Zaplanowany wydatek",
+  "Statistiche Patrimonio":"Statystyki majątku",
+  "Statistiche Budget":"Statystyki budżetu",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Zarządzaj wartościami miesięcznymi, porównuj miesiące i przeglądaj historię.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Skonfiguruj miesięczny budżet i sprawdzaj jego trend w Statystykach."
+});
+Object.assign(TRANSLATIONS.nl,{
+  "Prossime spese programmate":"Komende geplande uitgaven",
+  "Mostra le prossime uscite ricorrenti programmate":"Toont de volgende geplande terugkerende uitgaven",
+  "Nessuna spesa programmata in arrivo":"Geen geplande uitgaven in aantocht",
+  "Spesa programmata":"Geplande uitgave",
+  "Statistiche Patrimonio":"Vermogensstatistieken",
+  "Statistiche Budget":"Budgetstatistieken",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Beheer maandwaarden, vergelijk maanden en bekijk de geschiedenis.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Stel het maandbudget in en bekijk de ontwikkeling ervan in Statistieken."
+});
+Object.assign(TRANSLATIONS.ro,{
+  "Prossime spese programmate":"Următoarele cheltuieli programate",
+  "Mostra le prossime uscite ricorrenti programmate":"Afișează următoarele cheltuieli recurente programate",
+  "Nessuna spesa programmata in arrivo":"Nu există cheltuieli programate în perioada următoare",
+  "Spesa programmata":"Cheltuială programată",
+  "Statistiche Patrimonio":"Statistici patrimoniu",
+  "Statistiche Budget":"Statistici buget",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Gestionează valorile lunare, compară lunile și consultă istoricul.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Configurează bugetul lunar și urmărește evoluția lui în Statistici."
+});
+Object.assign(TRANSLATIONS.el,{
+  "Prossime spese programmate":"Επόμενα προγραμματισμένα έξοδα",
+  "Mostra le prossime uscite ricorrenti programmate":"Εμφανίζει τα επόμενα προγραμματισμένα επαναλαμβανόμενα έξοδα",
+  "Nessuna spesa programmata in arrivo":"Δεν υπάρχουν προγραμματισμένα έξοδα προσεχώς",
+  "Spesa programmata":"Προγραμματισμένο έξοδο",
+  "Statistiche Patrimonio":"Στατιστικά περιουσίας",
+  "Statistiche Budget":"Στατιστικά προϋπολογισμού",
+  "Gestisci i valori mensili, confronta i mesi e consulta lo storico.":"Διαχειρίσου τις μηνιαίες αξίες, σύγκρινε μήνες και δες το ιστορικό.",
+  "Configura il budget mensile e consulta l'andamento nelle statistiche.":"Ρύθμισε τον μηνιαίο προϋπολογισμό και δες την πορεία του στα Στατιστικά."
+});
+
+(function(){
+  var langs=["it","en","es","fr","de","pt","pl","nl","ro","el"];
+  var keys=[
+    "Prossime spese programmate",
+    "Mostra le prossime uscite ricorrenti programmate",
+    "Nessuna spesa programmata in arrivo",
+    "Spesa programmata",
+    "Statistiche Patrimonio",
+    "Statistiche Budget",
+    "Gestisci i valori mensili, confronta i mesi e consulta lo storico.",
+    "Configura il budget mensile e consulta l'andamento nelle statistiche."
+  ];
+  langs.forEach(function(code){
+    var source=(TRANSLATIONS&&TRANSLATIONS[code])||{};var rows={};
+    keys.forEach(function(key){if(source[key]!=null)rows[key]=source[key];});
+    try{if(typeof FAINANCE_UI_TRANSLATIONS!=="undefined"){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};Object.assign(FAINANCE_UI_TRANSLATIONS[code],rows);}}catch(e){}
+    try{if(typeof FAINANCE_I18N_PHRASES!=="undefined"){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};Object.assign(FAINANCE_I18N_PHRASES[code],rows);}}catch(e){}
+  });
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// 2026-08-08 — Esportazione statistiche (PDF / Excel / CSV).
+// Stringhe nuove disponibili in tutte le 10 lingue in scope.
+(function(){
+  var LANGS=["it","en","es","fr","de","pt","pl","nl","ro","el"];
+  function add(key,values){
+    LANGS.forEach(function(code){
+      var value=values[code]||values.it||key;
+      try{if(typeof TRANSLATIONS!=="undefined"){if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=value;}}catch(e){}
+      try{if(typeof FAINANCE_UI_TRANSLATIONS!=="undefined"){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};FAINANCE_UI_TRANSLATIONS[code][key]=value;}}catch(e){}
+      try{if(typeof FAINANCE_I18N_PHRASES!=="undefined"){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=value;}}catch(e){}
+    });
+  }
+  add('Scarica statistiche',{it:'Scarica statistiche',en:'Download statistics',es:'Descargar estadísticas',fr:'Télécharger les statistiques',de:'Statistiken herunterladen',pt:'Transferir estatísticas',pl:'Pobierz statystyki',nl:'Statistieken downloaden',ro:'Descarcă statisticile',el:'Λήψη στατιστικών'});
+  add('Esporta statistiche',{it:'Esporta statistiche',en:'Export statistics',es:'Exportar estadísticas',fr:'Exporter les statistiques',de:'Statistiken exportieren',pt:'Exportar estatísticas',pl:'Eksportuj statystyki',nl:'Statistieken exporteren',ro:'Exportă statisticile',el:'Εξαγωγή στατιστικών'});
+  add('Periodo e filtri usano le impostazioni correnti delle Statistiche.',{it:'Periodo e filtri usano le impostazioni correnti delle Statistiche.',en:'Period and filters use the current Statistics settings.',es:'El período y los filtros usan la configuración actual de Estadísticas.',fr:'La période et les filtres utilisent les réglages actuels des Statistiques.',de:'Zeitraum und Filter verwenden die aktuellen Statistik-Einstellungen.',pt:'O período e os filtros usam as definições atuais das Estatísticas.',pl:'Okres i filtry używają bieżących ustawień Statystyk.',nl:'Periode en filters gebruiken de huidige instellingen van Statistieken.',ro:'Perioada și filtrele folosesc setările curente din Statistici.',el:'Η περίοδος και τα φίλτρα χρησιμοποιούν τις τρέχουσες ρυθμίσεις των Στατιστικών.'});
+  add('Solo le statistiche disponibili nel tuo piano possono essere selezionate e scaricate.',{it:'Solo le statistiche disponibili nel tuo piano possono essere selezionate e scaricate.',en:'Only statistics available in your plan can be selected and downloaded.',es:'Solo se pueden seleccionar y descargar las estadísticas disponibles en tu plan.',fr:'Seules les statistiques disponibles avec votre formule peuvent être sélectionnées et téléchargées.',de:'Es können nur Statistiken ausgewählt und heruntergeladen werden, die in deinem Tarif verfügbar sind.',pt:'Só podem ser selecionadas e transferidas as estatísticas disponíveis no teu plano.',pl:'Można wybrać i pobrać tylko statystyki dostępne w Twoim planie.',nl:'Alleen statistieken die in je abonnement beschikbaar zijn, kunnen worden geselecteerd en gedownload.',ro:'Pot fi selectate și descărcate doar statisticile disponibile în planul tău.',el:'Μπορούν να επιλεγούν και να ληφθούν μόνο τα στατιστικά που είναι διαθέσιμα στο πλάνο σας.'});
+  add('Metriche reali o rateizzate',{it:'Metriche reali o rateizzate',en:'Actual or installment metrics',es:'Métricas reales o prorrateadas',fr:'Mesures réelles ou mensualisées',de:'Reale oder ratengerechnete Kennzahlen',pt:'Métricas reais ou parceladas',pl:'Metryki rzeczywiste lub ratalne',nl:'Werkelijke of gespreide statistieken',ro:'Metrici reale sau eșalonate',el:'Πραγματικές ή επιμερισμένες μετρήσεις'});
+  add('Seleziona metriche',{it:'Seleziona metriche',en:'Select metrics',es:'Seleccionar métricas',fr:'Sélectionner les mesures',de:'Kennzahlen auswählen',pt:'Selecionar métricas',pl:'Wybierz metryki',nl:'Statistieken selecteren',ro:'Selectează metricile',el:'Επιλογή μετρήσεων'});
+  add('Seleziona tutto',{it:'Seleziona tutto',en:'Select all',es:'Seleccionar todo',fr:'Tout sélectionner',de:'Alle auswählen',pt:'Selecionar tudo',pl:'Zaznacz wszystko',nl:'Alles selecteren',ro:'Selectează tot',el:'Επιλογή όλων'});
+  add('Seleziona tutti i grafici',{it:'Seleziona tutti i grafici',en:'Select all charts',es:'Seleccionar todos los gráficos',fr:'Sélectionner tous les graphiques',de:'Alle Diagramme auswählen',pt:'Selecionar todos os gráficos',pl:'Zaznacz wszystkie wykresy',nl:'Alle grafieken selecteren',ro:'Selectează toate graficele',el:'Επιλογή όλων των γραφημάτων'});
+  add('Tipo di file',{it:'Tipo di file',en:'File type',es:'Tipo de archivo',fr:'Type de fichier',de:'Dateityp',pt:'Tipo de ficheiro',pl:'Typ pliku',nl:'Bestandstype',ro:'Tip de fișier',el:'Τύπος αρχείου'});
+  add('Excel (.xlsx)',{it:'Excel (.xlsx)',en:'Excel (.xlsx)',es:'Excel (.xlsx)',fr:'Excel (.xlsx)',de:'Excel (.xlsx)',pt:'Excel (.xlsx)',pl:'Excel (.xlsx)',nl:'Excel (.xlsx)',ro:'Excel (.xlsx)',el:'Excel (.xlsx)'});
+  add('Genera e scarica',{it:'Genera e scarica',en:'Generate and download',es:'Generar y descargar',fr:'Générer et télécharger',de:'Erstellen und herunterladen',pt:'Gerar e transferir',pl:'Generuj i pobierz',nl:'Genereren en downloaden',ro:'Generează și descarcă',el:'Δημιουργία και λήψη'});
+  add('Generazione in corso…',{it:'Generazione in corso…',en:'Generating…',es:'Generando…',fr:'Génération…',de:'Wird erstellt…',pt:'A gerar…',pl:'Generowanie…',nl:'Genereren…',ro:'Se generează…',el:'Δημιουργία…'});
+  add('Nessuna metrica selezionata',{it:'Nessuna metrica selezionata',en:'No metrics selected',es:'No se ha seleccionado ninguna métrica',fr:'Aucune mesure sélectionnée',de:'Keine Kennzahlen ausgewählt',pt:'Nenhuma métrica selecionada',pl:'Nie wybrano żadnych metryk',nl:'Geen statistieken geselecteerd',ro:'Nicio metrică selectată',el:'Δεν επιλέχθηκαν μετρήσεις'});
+  add('Impossibile generare il file delle statistiche',{it:'Impossibile generare il file delle statistiche',en:'Unable to generate the statistics file',es:'No se puede generar el archivo de estadísticas',fr:'Impossible de générer le fichier de statistiques',de:'Die Statistikdatei konnte nicht erstellt werden',pt:'Não foi possível gerar o ficheiro de estatísticas',pl:'Nie można wygenerować pliku statystyk',nl:'Kan het statistiekenbestand niet genereren',ro:'Fișierul cu statistici nu poate fi generat',el:'Δεν ήταν δυνατή η δημιουργία του αρχείου στατιστικών'});
+  add('File statistiche pronto',{it:'File statistiche pronto',en:'Statistics file ready',es:'Archivo de estadísticas listo',fr:'Fichier de statistiques prêt',de:'Statistikdatei ist bereit',pt:'Ficheiro de estatísticas pronto',pl:'Plik statystyk jest gotowy',nl:'Statistiekenbestand is gereed',ro:'Fișierul cu statistici este gata',el:'Το αρχείο στατιστικών είναι έτοιμο'});
+  add('Riepilogo generale',{it:'Riepilogo generale',en:'General summary',es:'Resumen general',fr:'Résumé général',de:'Allgemeine Übersicht',pt:'Resumo geral',pl:'Podsumowanie ogólne',nl:'Algemeen overzicht',ro:'Rezumat general',el:'Γενική σύνοψη'});
+  add('Distribuzione uscite per area',{it:'Distribuzione uscite per area',en:'Expense distribution by area',es:'Distribución de gastos por área',fr:'Répartition des dépenses par zone',de:'Ausgabenverteilung nach Bereich',pt:'Distribuição das despesas por área',pl:'Rozkład wydatków według obszaru',nl:'Uitgavenverdeling per gebied',ro:'Distribuția cheltuielilor pe zonă',el:'Κατανομή εξόδων ανά περιοχή'});
+  add('Dettaglio uscite per area',{it:'Dettaglio uscite per area',en:'Expense details by area',es:'Detalle de gastos por área',fr:'Détail des dépenses par zone',de:'Ausgabendetails nach Bereich',pt:'Detalhe das despesas por área',pl:'Szczegóły wydatków według obszaru',nl:'Uitgavendetails per gebied',ro:'Detalierea cheltuielilor pe zonă',el:'Ανάλυση εξόδων ανά περιοχή'});
+  add('Uscite per categoria',{it:'Uscite per categoria',en:'Expenses by category',es:'Gastos por categoría',fr:'Dépenses par catégorie',de:'Ausgaben nach Kategorie',pt:'Despesas por categoria',pl:'Wydatki według kategorii',nl:'Uitgaven per categorie',ro:'Cheltuieli pe categorie',el:'Έξοδα ανά κατηγορία'});
+  add('Riepilogo Budget',{it:'Riepilogo Budget',en:'Budget summary',es:'Resumen del presupuesto',fr:'Résumé du budget',de:'Budgetübersicht',pt:'Resumo do orçamento',pl:'Podsumowanie budżetu',nl:'Budgetoverzicht',ro:'Rezumat buget',el:'Σύνοψη προϋπολογισμού'});
+  add('Categorie sforate / a rischio',{it:'Categorie sforate / a rischio',en:'Over-budget / at-risk categories',es:'Categorías excedidas / en riesgo',fr:'Catégories dépassées / à risque',de:'Überschrittene / gefährdete Kategorien',pt:'Categorias excedidas / em risco',pl:'Kategorie przekroczone / zagrożone',nl:'Overschreden / risicocategorieën',ro:'Categorii depășite / în risc',el:'Κατηγορίες με υπέρβαση / σε κίνδυνο'});
+  add('Risparmio pianificato vs reale',{it:'Risparmio pianificato vs reale',en:'Planned vs actual savings',es:'Ahorro planificado vs real',fr:'Épargne prévue vs réelle',de:'Geplantes vs tatsächliches Sparen',pt:'Poupança planeada vs real',pl:'Planowane a rzeczywiste oszczędności',nl:'Gepland vs werkelijk sparen',ro:'Economii planificate vs reale',el:'Προγραμματισμένη έναντι πραγματικής αποταμίευσης'});
+  add('Riepilogo Patrimonio',{it:'Riepilogo Patrimonio',en:'Asset summary',es:'Resumen de patrimonio',fr:'Résumé du patrimoine',de:'Vermögensübersicht',pt:'Resumo do património',pl:'Podsumowanie majątku',nl:'Vermogensoverzicht',ro:'Rezumat patrimoniu',el:'Σύνοψη περιουσίας'});
+  add('Area / Categoria',{it:'Area / Categoria',en:'Area / Category',es:'Área / Categoría',fr:'Zone / Catégorie',de:'Bereich / Kategorie',pt:'Área / Categoria',pl:'Obszar / Kategoria',nl:'Gebied / Categorie',ro:'Zonă / Categorie',el:'Περιοχή / Κατηγορία'});
+  add('Metrica',{it:'Metrica',en:'Metric',es:'Métrica',fr:'Mesure',de:'Kennzahl',pt:'Métrica',pl:'Metryka',nl:'Statistiek',ro:'Metrică',el:'Μέτρηση'});
+  add('Valore',{it:'Valore',en:'Value',es:'Valor',fr:'Valeur',de:'Wert',pt:'Valor',pl:'Wartość',nl:'Waarde',ro:'Valoare',el:'Τιμή'});
+  add('Percentuale',{it:'Percentuale',en:'Percentage',es:'Porcentaje',fr:'Pourcentage',de:'Prozentsatz',pt:'Percentagem',pl:'Procent',nl:'Percentage',ro:'Procent',el:'Ποσοστό'});
+  add('Periodo',{it:'Periodo',en:'Period',es:'Período',fr:'Période',de:'Zeitraum',pt:'Período',pl:'Okres',nl:'Periode',ro:'Perioadă',el:'Περίοδος'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+// 2026-08-08 — Statistiche mensilizzate, Budget mensilizzato ed export rifinito.
+(function(){
+  var LANGS=["it","en","es","fr","de","pt","pl","nl","ro","el"];
+  function add(key,values){LANGS.forEach(function(code){var value=values[code]||values.it||key;try{if(typeof TRANSLATIONS!=="undefined"){if(!TRANSLATIONS[code])TRANSLATIONS[code]={};TRANSLATIONS[code][key]=value;}}catch(e){}try{if(typeof FAINANCE_UI_TRANSLATIONS!=="undefined"){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};FAINANCE_UI_TRANSLATIONS[code][key]=value;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=="undefined"){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=value;}}catch(e){}});}
+  add('Statistiche mensilizzate',{it:'Statistiche mensilizzate',en:'Monthly normalized statistics',es:'Estadísticas mensualizadas',fr:'Statistiques mensualisées',de:'Monatlich normierte Statistiken',pt:'Estatísticas mensalizadas',pl:'Statystyki w ujęciu miesięcznym',nl:'Gemiddelde maandstatistieken',ro:'Statistici lunarizate',el:'Μηνιαία κανονικοποιημένα στατιστικά'});
+  add('Medie mensili calcolate sul periodo selezionato',{it:'Medie mensili calcolate sul periodo selezionato',en:'Monthly averages calculated over the selected period',es:'Promedios mensuales calculados sobre el período seleccionado',fr:'Moyennes mensuelles calculées sur la période sélectionnée',de:'Monatliche Durchschnittswerte für den ausgewählten Zeitraum',pt:'Médias mensais calculadas no período selecionado',pl:'Średnie miesięczne obliczone dla wybranego okresu',nl:'Maandgemiddelden berekend over de geselecteerde periode',ro:'Medii lunare calculate pentru perioada selectată',el:'Μηνιαίοι μέσοι όροι για την επιλεγμένη περίοδο'});
+  add('Medie mensili',{it:'Medie mensili',en:'Monthly averages',es:'Promedios mensuales',fr:'Moyennes mensuelles',de:'Monatliche Durchschnittswerte',pt:'Médias mensais',pl:'Średnie miesięczne',nl:'Maandgemiddelden',ro:'Medii lunare',el:'Μηνιαίοι μέσοι όροι'});
+  add('Media mensile',{it:'Media mensile',en:'Monthly average',es:'Promedio mensual',fr:'Moyenne mensuelle',de:'Monatsdurchschnitt',pt:'Média mensal',pl:'Średnia miesięczna',nl:'Maandgemiddelde',ro:'Medie lunară',el:'Μηνιαίος μέσος όρος'});
+  add('Entrate medie mensili',{it:'Entrate medie mensili',en:'Average monthly income',es:'Ingresos medios mensuales',fr:'Revenus mensuels moyens',de:'Durchschnittliche monatliche Einnahmen',pt:'Receitas médias mensais',pl:'Średnie miesięczne przychody',nl:'Gemiddelde maandinkomsten',ro:'Venituri medii lunare',el:'Μέσο μηνιαίο εισόδημα'});
+  add('Uscite medie mensili',{it:'Uscite medie mensili',en:'Average monthly expenses',es:'Gastos medios mensuales',fr:'Dépenses mensuelles moyennes',de:'Durchschnittliche monatliche Ausgaben',pt:'Despesas médias mensais',pl:'Średnie miesięczne wydatki',nl:'Gemiddelde maanduitgaven',ro:'Cheltuieli medii lunare',el:'Μέσα μηνιαία έξοδα'});
+  add('Saldo medio mensile',{it:'Saldo medio mensile',en:'Average monthly balance',es:'Saldo medio mensual',fr:'Solde mensuel moyen',de:'Durchschnittlicher Monatssaldo',pt:'Saldo médio mensal',pl:'Średnie miesięczne saldo',nl:'Gemiddeld maandsaldo',ro:'Sold mediu lunar',el:'Μέσο μηνιαίο υπόλοιπο'});
+  add('Media mensile uscite per area',{it:'Media mensile uscite per area',en:'Average monthly expenses by area',es:'Gasto medio mensual por área',fr:'Dépenses mensuelles moyennes par zone',de:'Durchschnittliche monatliche Ausgaben nach Bereich',pt:'Despesas médias mensais por área',pl:'Średnie miesięczne wydatki według obszaru',nl:'Gemiddelde maanduitgaven per gebied',ro:'Cheltuieli medii lunare pe zonă',el:'Μέσα μηνιαία έξοδα ανά περιοχή'});
+  add('Media mensile uscite per categoria',{it:'Media mensile uscite per categoria',en:'Average monthly expenses by category',es:'Gasto medio mensual por categoría',fr:'Dépenses mensuelles moyennes par catégorie',de:'Durchschnittliche monatliche Ausgaben nach Kategorie',pt:'Despesas médias mensais por categoria',pl:'Średnie miesięczne wydatki według kategorii',nl:'Gemiddelde maanduitgaven per categorie',ro:'Cheltuieli medii lunare pe categorie',el:'Μέσα μηνιαία έξοδα ανά κατηγορία'});
+  add('Budget mensilizzato',{it:'Budget mensilizzato',en:'Monthly normalized budget',es:'Presupuesto mensualizado',fr:'Budget mensualisé',de:'Monatlich normiertes Budget',pt:'Orçamento mensalizado',pl:'Budżet w ujęciu miesięcznym',nl:'Budget per maand',ro:'Buget lunarizat',el:'Μηνιαία κανονικοποιημένος προϋπολογισμός'});
+  add('Per confrontare correttamente il Budget mensile con periodi di più mesi, la spesa viene mostrata come media mensile del periodo selezionato.',{it:'Per confrontare correttamente il Budget mensile con periodi di più mesi, la spesa viene mostrata come media mensile del periodo selezionato.',en:'To compare the monthly Budget correctly across multi-month periods, spending is shown as the monthly average for the selected period.',es:'Para comparar correctamente el presupuesto mensual en períodos de varios meses, el gasto se muestra como promedio mensual del período seleccionado.',fr:'Pour comparer correctement le budget mensuel sur plusieurs mois, les dépenses sont affichées comme moyenne mensuelle de la période sélectionnée.',de:'Damit das Monatsbudget über mehrere Monate korrekt verglichen wird, werden die Ausgaben als Monatsdurchschnitt des ausgewählten Zeitraums angezeigt.',pt:'Para comparar corretamente o orçamento mensal em períodos de vários meses, a despesa é apresentada como média mensal do período selecionado.',pl:'Aby prawidłowo porównać miesięczny budżet w okresach wielomiesięcznych, wydatki są pokazywane jako średnia miesięczna dla wybranego okresu.',nl:'Om het maandbudget correct over meerdere maanden te vergelijken, worden de uitgaven als maandgemiddelde van de geselecteerde periode weergegeven.',ro:'Pentru a compara corect bugetul lunar pe perioade de mai multe luni, cheltuielile sunt afișate ca medie lunară a perioadei selectate.',el:'Για σωστή σύγκριση του μηνιαίου προϋπολογισμού σε περιόδους πολλών μηνών, τα έξοδα εμφανίζονται ως μηνιαίος μέσος όρος της επιλεγμένης περιόδου.'});
+  add('Budget mensile totale',{it:'Budget mensile totale',en:'Total monthly budget',es:'Presupuesto mensual total',fr:'Budget mensuel total',de:'Gesamtes Monatsbudget',pt:'Orçamento mensal total',pl:'Łączny budżet miesięczny',nl:'Totaal maandbudget',ro:'Buget lunar total',el:'Συνολικός μηνιαίος προϋπολογισμός'});
+  add('Budget mensile',{it:'Budget mensile',en:'Monthly budget',es:'Presupuesto mensual',fr:'Budget mensuel',de:'Monatsbudget',pt:'Orçamento mensal',pl:'Budżet miesięczny',nl:'Maandbudget',ro:'Buget lunar',el:'Μηνιαίος προϋπολογισμός'});
+  add('Spesa media mensile',{it:'Spesa media mensile',en:'Average monthly spending',es:'Gasto medio mensual',fr:'Dépense mensuelle moyenne',de:'Durchschnittliche monatliche Ausgaben',pt:'Despesa média mensal',pl:'Średnie miesięczne wydatki',nl:'Gemiddelde maanduitgaven',ro:'Cheltuială medie lunară',el:'Μέση μηνιαία δαπάνη'});
+  add('Scostamento medio mensile',{it:'Scostamento medio mensile',en:'Average monthly variance',es:'Desviación media mensual',fr:'Écart mensuel moyen',de:'Durchschnittliche monatliche Abweichung',pt:'Desvio médio mensal',pl:'Średnie miesięczne odchylenie',nl:'Gemiddelde maandafwijking',ro:'Abatere medie lunară',el:'Μέση μηνιαία απόκλιση'});
+  add('Pagina',{it:'Pagina',en:'Page',es:'Página',fr:'Page',de:'Seite',pt:'Página',pl:'Strona',nl:'Pagina',ro:'Pagina',el:'Σελίδα'});
+  add('mese',{it:'mese',en:'month',es:'mes',fr:'mois',de:'Monat',pt:'mês',pl:'miesiąc',nl:'maand',ro:'lună',el:'μήνας'});
+  add('mesi',{it:'mesi',en:'months',es:'meses',fr:'mois',de:'Monate',pt:'meses',pl:'miesiące',nl:'maanden',ro:'luni',el:'μήνες'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// 2026-08-08 — Ripristino sezione separata Statistiche mensilizzate.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function add(key,vals){LANGS.forEach(function(lang){if(TRANSLATIONS[lang])TRANSLATIONS[lang][key]=vals[lang]||vals.it||key;});}
+  add('Mensilizzate',{it:'Mensilizzate',en:'Monthly averages',es:'Mensualizadas',fr:'Mensualisées',de:'Monatliche Werte',pt:'Mensalizadas',pl:'Miesięczne',nl:'Maandgemiddelden',ro:'Lunarizate',el:'Μηνιαία'});
+  add("Conversa con l'Assistente",{it:"Conversa con l'Assistente",en:'Talk with the Assistant',es:'Conversa con el Asistente',fr:"Discutez avec l'Assistant",de:'Mit dem Assistenten sprechen',pt:'Conversa com o Assistente',pl:'Porozmawiaj z Asystentem',nl:'Praat met de Assistent',ro:'Conversează cu Asistentul',el:'Συνομιλήστε με τον Βοηθό'});
+  add("Bottone rapido per aprire l'assistente completo",{it:"Bottone rapido per aprire l'assistente completo",en:'Quick button to open the full Assistant',es:'Botón rápido para abrir el Asistente completo',fr:"Bouton rapide pour ouvrir l'Assistant complet",de:'Schnellschaltfläche zum Öffnen des vollständigen Assistenten',pt:'Botão rápido para abrir o Assistente completo',pl:'Szybki przycisk otwierający pełnego Asystenta',nl:'Snelknop om de volledige Assistent te openen',ro:'Buton rapid pentru a deschide Asistentul complet',el:'Γρήγορο κουμπί για άνοιγμα του πλήρους Βοηθού'});
+  add('Scostamento budget mensile',{it:'Scostamento budget mensile',en:'Monthly budget deviation',es:'Desviación mensual del presupuesto',fr:'Écart mensuel du budget',de:'Monatliche Budgetabweichung',pt:'Desvio mensal do orçamento',pl:'Miesięczne odchylenie budżetu',nl:'Maandelijkse budgetafwijking',ro:'Abatere lunară de la buget',el:'Μηνιαία απόκλιση προϋπολογισμού'});
+  add('Confronto tra la spesa media mensile del periodo e il budget mensile impostato.',{it:'Confronto tra la spesa media mensile del periodo e il budget mensile impostato.',en:'Comparison between the period’s average monthly spending and the configured monthly budget.',es:'Comparación entre el gasto mensual medio del periodo y el presupuesto mensual configurado.',fr:'Comparaison entre la dépense mensuelle moyenne de la période et le budget mensuel défini.',de:'Vergleich der durchschnittlichen Monatsausgaben des Zeitraums mit dem festgelegten Monatsbudget.',pt:'Comparação entre a despesa média mensal do período e o orçamento mensal definido.',pl:'Porównanie średnich miesięcznych wydatków w okresie z ustawionym budżetem miesięcznym.',nl:'Vergelijking van de gemiddelde maanduitgaven in de periode met het ingestelde maandbudget.',ro:'Comparație între cheltuiala medie lunară din perioadă și bugetul lunar setat.',el:'Σύγκριση της μέσης μηνιαίας δαπάνης της περιόδου με τον καθορισμένο μηνιαίο προϋπολογισμό.'});
+  try{fainanceTranslationCache={};}catch(e){}
+})();

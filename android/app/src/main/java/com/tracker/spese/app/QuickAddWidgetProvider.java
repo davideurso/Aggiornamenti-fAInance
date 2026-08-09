@@ -31,6 +31,10 @@ public class QuickAddWidgetProvider extends AppWidgetProvider {
     private static final int REQUEST_VOICE = 1004;
     private static final int REQUEST_RECEIPT = 1005;
     private static final String PREFS_KEY = "widget_quick_add_settings";
+    private static final int MODE_FULL = 0;
+    private static final int MODE_COMPACT = 1;
+    private static final int MODE_2X2 = 2;
+    private static final int MODE_1X1 = 3;
 
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
@@ -60,64 +64,106 @@ public class QuickAddWidgetProvider extends AppWidgetProvider {
         Bundle options = appWidgetManager.getAppWidgetOptions(appWidgetId);
         int minHeight = options != null ? options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) : 0;
         int minWidth = options != null ? options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) : 0;
-        boolean compact = (minHeight > 0 && minHeight < 105) || (minWidth > 0 && minWidth < 220);
-        int layoutId = compact ? R.layout.widget_quick_add_compact : R.layout.widget_quick_add;
-
+        int mode = resolveMode(minWidth, minHeight);
+        int layoutId = resolveLayout(mode);
         RemoteViews views = new RemoteViews(context.getPackageName(), layoutId);
 
         int baseBg = parseColor(settings.bgColor, Color.rgb(30, 30, 48));
         int bgAlpha = alphaFromPercent(settings.bgAlpha);
         int rootColor = Color.argb(bgAlpha, Color.red(baseBg), Color.green(baseBg), Color.blue(baseBg));
-        int rootRadius = dp(context, 10);
-        int buttonRadius = dp(context, 10);
+        int rootRadius = dp(context, 16);
+        int buttonRadius = buttonRadius(context, settings.buttonStyle);
+        int rootWidth = mode == MODE_1X1 ? 280 : (mode == MODE_2X2 ? 520 : 840);
+        int rootHeight = mode == MODE_2X2 ? 520 : (mode == MODE_FULL ? 330 : 180);
 
         views.setImageViewBitmap(
                 R.id.widget_root_bg,
-                roundedBitmap(rootColor, rootRadius, dp(context, 1), borderColor(baseBg, compact ? 110 : 130), compact ? 760 : 840, compact ? 150 : 290)
+                roundedBitmap(rootColor, rootRadius, dp(context, 1), borderColor(baseBg, mode == MODE_FULL ? 130 : 105), rootWidth, rootHeight)
         );
 
         int expenseColor = parseColor(settings.expenseColor, Color.rgb(226, 75, 74));
         int incomeColor = parseColor(settings.incomeColor, Color.rgb(29, 158, 117));
-        views.setImageViewBitmap(R.id.widget_add_expense_bg, buttonBitmap(expenseColor, buttonRadius, compact ? 320 : 390, compact ? 104 : 126));
-        views.setImageViewBitmap(R.id.widget_add_income_bg, buttonBitmap(incomeColor, buttonRadius, compact ? 320 : 390, compact ? 104 : 126));
-        if (!compact) {
-            views.setImageViewBitmap(R.id.widget_voice_bg, buttonBitmap(Color.rgb(127, 119, 221), buttonRadius, 390, 112));
-            views.setImageViewBitmap(R.id.widget_receipt_bg, buttonBitmap(Color.rgb(237, 137, 54), buttonRadius, 390, 112));
+        views.setImageViewBitmap(R.id.widget_add_expense_bg, buttonBitmap(expenseColor, buttonRadius, 390, 126));
+
+        if (mode != MODE_1X1) {
+            views.setImageViewBitmap(R.id.widget_add_income_bg, buttonBitmap(incomeColor, buttonRadius, 390, 126));
+        }
+        if (mode == MODE_FULL || mode == MODE_2X2) {
+            views.setImageViewBitmap(R.id.widget_voice_bg, buttonBitmap(Color.rgb(127, 119, 221), buttonRadius, 390, 126));
+            views.setImageViewBitmap(R.id.widget_receipt_bg, buttonBitmap(Color.rgb(237, 137, 54), buttonRadius, 390, 126));
         }
 
         views.setTextViewText(R.id.widget_add_expense_icon, "−");
-        views.setTextViewText(R.id.widget_add_income_icon, "+");
-        views.setTextViewText(R.id.widget_add_expense_label, cleanActionLabel(settings.expenseLabel, "Uscita"));
-        views.setTextViewText(R.id.widget_add_income_label, cleanActionLabel(settings.incomeLabel, "Entrata"));
+        if (mode == MODE_1X1) {
+            views.setTextViewText(R.id.widget_add_expense_label, "Spesa");
+        } else if (mode != MODE_2X2) {
+            views.setTextViewText(R.id.widget_add_expense_label, cleanActionLabel(settings.expenseLabel, "Uscita"));
+            views.setTextViewText(R.id.widget_add_income_icon, "+");
+            views.setTextViewText(R.id.widget_add_income_label, cleanActionLabel(settings.incomeLabel, "Entrata"));
+        } else {
+            views.setTextViewText(R.id.widget_add_income_icon, "+");
+        }
 
-        try {
-            if (compact) {
-                views.setViewVisibility(R.id.widget_voice_button, settings.showVoiceButton ? View.VISIBLE : View.GONE);
-                views.setOnClickPendingIntent(R.id.widget_voice_button, createDeepLinkIntent(context, "fainance://open-voice", REQUEST_VOICE));
-            } else {
-                views.setViewVisibility(R.id.widget_voice_action, settings.showVoiceButton ? View.VISIBLE : View.GONE);
-                views.setTextViewText(R.id.widget_voice_icon, settings.voiceIcon);
-                views.setTextViewText(R.id.widget_voice_label, settings.voiceLabel);
-                views.setOnClickPendingIntent(R.id.widget_voice_action, createDeepLinkIntent(context, "fainance://open-voice", REQUEST_VOICE));
-                views.setTextViewText(R.id.widget_receipt_icon, settings.receiptIcon);
-                views.setTextViewText(R.id.widget_receipt_label, settings.receiptLabel);
-                views.setOnClickPendingIntent(R.id.widget_receipt_action, createDeepLinkIntent(context, "fainance://open-receipt-camera", REQUEST_RECEIPT));
-            }
-        } catch (Exception ignored) {}
+        if (mode == MODE_FULL) {
+            // Logica invertita come richiesto: nei layout FULL il microfono resta presente.
+            views.setViewVisibility(R.id.widget_voice_action, View.VISIBLE);
+            views.setTextViewText(R.id.widget_voice_icon, settings.voiceIcon);
+            views.setTextViewText(R.id.widget_voice_label, settings.voiceLabel);
+            views.setOnClickPendingIntent(R.id.widget_voice_action, createDeepLinkIntent(context, "fainance://open-voice", REQUEST_VOICE));
+            views.setTextViewText(R.id.widget_receipt_icon, settings.receiptIcon);
+            views.setTextViewText(R.id.widget_receipt_label, settings.receiptLabel);
+            views.setOnClickPendingIntent(R.id.widget_receipt_action, createDeepLinkIntent(context, "fainance://open-receipt-camera", REQUEST_RECEIPT));
 
-        if (!compact) {
             views.setTextViewText(R.id.widget_title, safe(settings.title, "fAInance"));
             views.setTextViewText(R.id.widget_subtitle, safe(settings.subtitle, "Aggiunta rapida movimenti"));
             views.setViewVisibility(R.id.widget_header, settings.showHeader ? View.VISIBLE : View.GONE);
             views.setOnClickPendingIntent(R.id.widget_open_settings, createDeepLinkIntent(context, "fainance://widget-settings", REQUEST_SETTINGS));
-        } else {
+        } else if (mode == MODE_COMPACT) {
+            // Logica invertita: nei layout compatti il toggle controlla l'intero bottone.
+            // Anche il suo bordo segue lo stile pulsanti scelto nell'app.
+            views.setViewVisibility(R.id.widget_voice_button, settings.showVoiceButton ? View.VISIBLE : View.GONE);
+            views.setImageViewBitmap(R.id.widget_voice_button_bg, buttonBitmap(Color.rgb(127, 119, 221), buttonRadius, 126, 126));
+            views.setTextViewText(R.id.widget_voice_button_icon, settings.voiceIcon);
+            views.setOnClickPendingIntent(R.id.widget_voice_button, createDeepLinkIntent(context, "fainance://open-voice", REQUEST_VOICE));
             views.setOnClickPendingIntent(R.id.widget_open_settings_compact, createDeepLinkIntent(context, "fainance://widget-settings", REQUEST_SETTINGS));
+        } else if (mode == MODE_2X2) {
+            // Logica invertita: nel formato 2x2 il toggle controlla l'intero bottone.
+            views.setViewVisibility(R.id.widget_voice_action, settings.showVoiceButton ? View.VISIBLE : View.GONE);
+            views.setTextViewText(R.id.widget_voice_icon, settings.voiceIcon);
+            views.setTextViewText(R.id.widget_receipt_icon, settings.receiptIcon);
+            views.setOnClickPendingIntent(R.id.widget_voice_action, createDeepLinkIntent(context, "fainance://open-voice", REQUEST_VOICE));
+            views.setOnClickPendingIntent(R.id.widget_receipt_action, createDeepLinkIntent(context, "fainance://open-receipt-camera", REQUEST_RECEIPT));
         }
 
         views.setOnClickPendingIntent(R.id.widget_add_expense, createDeepLinkIntent(context, "fainance://add-expense", REQUEST_EXPENSE));
-        views.setOnClickPendingIntent(R.id.widget_add_income, createDeepLinkIntent(context, "fainance://add-income", REQUEST_INCOME));
+        if (mode != MODE_1X1) {
+            views.setOnClickPendingIntent(R.id.widget_add_income, createDeepLinkIntent(context, "fainance://add-income", REQUEST_INCOME));
+        }
 
         appWidgetManager.updateAppWidget(appWidgetId, views);
+    }
+
+    private int resolveMode(int minWidth, int minHeight) {
+        if (minWidth <= 0 || minHeight <= 0) return MODE_FULL;
+
+        // Non usare una soglia assoluta di altezza: Samsung/alcuni launcher riportano
+        // dimensioni effettive diverse da quelle nominali della griglia.
+        // Il rapporto d'aspetto serve solo a scegliere il layout corretto; la visibilità
+        // del microfono viene poi applicata nei rami MODE_FULL / MODE_COMPACT / MODE_2X2.
+        float aspect = minWidth / (float) Math.max(1, minHeight);
+        if (minWidth < 100 && minHeight < 150) return MODE_1X1;
+        if (minWidth < 180 && aspect < 1.65f) return MODE_2X2;
+        if (minWidth >= 180 && aspect >= 2.20f) return MODE_COMPACT;
+        return MODE_FULL;
+    }
+
+    private int resolveLayout(int mode) {
+        switch (mode) {
+            case MODE_1X1: return R.layout.widget_quick_add_1x1;
+            case MODE_2X2: return R.layout.widget_quick_add_2x2;
+            case MODE_COMPACT: return R.layout.widget_quick_add_compact;
+            default: return R.layout.widget_quick_add;
+        }
     }
 
     private WidgetSettings readSettings(Context context) {
@@ -125,6 +171,7 @@ public class QuickAddWidgetProvider extends AppWidgetProvider {
         String raw = null;
 
         String[] prefNames = new String[]{
+                "fainance_widget_prefs",
                 "CapacitorStorage",
                 context.getPackageName() + "_preferences",
                 "com.capacitorjs.plugins.preferences"
@@ -152,6 +199,7 @@ public class QuickAddWidgetProvider extends AppWidgetProvider {
             defaults.incomeLabel = json.optString("incomeLabel", defaults.incomeLabel);
             defaults.showHeader = json.optBoolean("showHeader", defaults.showHeader);
             defaults.buttonStyle = json.optString("buttonStyle", defaults.buttonStyle);
+            defaults.showVoiceButton = json.optBoolean("showVoiceButton", defaults.showVoiceButton);
             defaults.voiceLabel = json.optString("voiceLabel", defaults.voiceLabel);
             defaults.voiceIcon = json.optString("voiceIcon", defaults.voiceIcon);
             defaults.receiptLabel = json.optString("receiptLabel", defaults.receiptLabel);
@@ -219,26 +267,18 @@ public class QuickAddWidgetProvider extends AppWidgetProvider {
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         RectF rect = new RectF(2, 2, width - 2, height - 2);
 
-        int light = lighten(color, 32);
-        int dark = darken(color, 18);
+        int light = lighten(color, 20);
+        int dark = darken(color, 10);
         paint.setStyle(Paint.Style.FILL);
         paint.setShader(new LinearGradient(0, 0, width, height, light, dark, Shader.TileMode.CLAMP));
         canvas.drawRoundRect(rect, radius, radius, paint);
         paint.setShader(null);
 
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(2);
-        paint.setColor(Color.argb(115, 255, 255, 255));
-        canvas.drawRoundRect(rect, radius, radius, paint);
-
+        // Solo un bordo leggero: eliminate le vecchie linee/onde bianche decorative.
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1);
-        paint.setColor(Color.argb(80, 255, 255, 255));
-        float base = height * 0.74f;
-        for (int i = 0; i < 5; i++) {
-            RectF wave = new RectF(width * 0.36f, base - i * 7, width * 1.14f, height + i * 11);
-            canvas.drawArc(wave, 198, 72, false, paint);
-        }
+        paint.setColor(Color.argb(55, 255, 255, 255));
+        canvas.drawRoundRect(rect, radius, radius, paint);
         return bitmap;
     }
 
@@ -248,6 +288,14 @@ public class QuickAddWidgetProvider extends AppWidgetProvider {
 
     private int darken(int color, int amount) {
         return Color.rgb(Math.max(0, Color.red(color) - amount), Math.max(0, Color.green(color) - amount), Math.max(0, Color.blue(color) - amount));
+    }
+
+    private int buttonRadius(Context context, String style) {
+        String id = style == null ? "soft" : style.trim().toLowerCase();
+        if ("rounded".equals(id)) return dp(context, 20);
+        if ("square".equals(id)) return dp(context, 6);
+        if ("sharp".equals(id)) return dp(context, 2);
+        return dp(context, 10); // soft
     }
 
     private int dp(Context context, int value) {

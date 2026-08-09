@@ -35,6 +35,12 @@ public class ShareWidgetProvider extends AppWidgetProvider {
     private static final int REQUEST_SHARE_RECEIPT = 4104;
     private static final int REQUEST_SHARE_VOICE = 4105;
     private static final String PREFS_KEY = "widget_share_settings";
+    private static final int MODE_4X2 = 0;
+    private static final int MODE_4X1 = 1;
+    private static final int MODE_3X1 = 2;
+    private static final int MODE_2X2 = 3;
+    private static final int MODE_2X1 = 4;
+    private static final int MODE_1X1 = 5;
 
     @Override
     public void onUpdate(Context context, AppWidgetManager appWidgetManager, int[] appWidgetIds) {
@@ -65,45 +71,76 @@ public class ShareWidgetProvider extends AppWidgetProvider {
             renderLocked(context, appWidgetManager, appWidgetId);
             return;
         }
-        ShareWidgetSettings settings = readSettings(context, appWidgetId);
 
-        RemoteViews views = new RemoteViews(context.getPackageName(), R.layout.widget_share);
+        ShareWidgetSettings settings = readSettings(context, appWidgetId);
+        Bundle options = appWidgetManager.getAppWidgetOptions(appWidgetId);
+        int minHeight = options != null ? options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT) : 0;
+        int minWidth = options != null ? options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) : 0;
+        int mode = resolveMode(minWidth, minHeight);
+        int layoutId = resolveLayout(mode);
+        RemoteViews views = new RemoteViews(context.getPackageName(), layoutId);
 
         int baseBg = parseColor(settings.bgColor, Color.rgb(30, 30, 48));
         int bgAlpha = alphaFromPercent(settings.bgAlpha);
         int rootColor = Color.argb(bgAlpha, Color.red(baseBg), Color.green(baseBg), Color.blue(baseBg));
-        views.setImageViewBitmap(R.id.share_widget_root_bg, roundedBitmap(rootColor, dp(context, 18), dp(context, 1), borderColor(baseBg, 120), 900, 470));
+        int rootWidth = mode == MODE_1X1 ? 280 : (mode == MODE_2X1 || mode == MODE_2X2 ? 520 : 900);
+        int rootHeight = (mode == MODE_4X2 || mode == MODE_2X2) ? 470 : 230;
+        views.setImageViewBitmap(
+                R.id.share_widget_root_bg,
+                roundedBitmap(rootColor, dp(context, 18), dp(context, 1), borderColor(baseBg, 120), rootWidth, rootHeight)
+        );
 
-        int translucentPanel = Color.argb(Math.max(28, Math.round(bgAlpha * 0.22f)), 255, 255, 255);
-        views.setImageViewBitmap(R.id.share_widget_balance_bg, roundedBitmap(translucentPanel, dp(context, 12), 0, Color.TRANSPARENT, 360, 170));
         int actionColor = parseColor(settings.accentColor, Color.rgb(127, 119, 221));
         int activityColor = parseColor(settings.activityColor, Color.rgb(55, 138, 221));
-        views.setImageViewBitmap(R.id.share_widget_action_bg, buttonBitmap(Color.rgb(226, 75, 74), dp(context, 12), 360, 110));
-        views.setImageViewBitmap(R.id.share_widget_receipt_bg, buttonBitmap(Color.rgb(242, 159, 61), dp(context, 12), 360, 110));
-        views.setImageViewBitmap(R.id.share_widget_voice_bg, buttonBitmap(Color.rgb(127, 119, 221), dp(context, 12), 360, 110));
-        views.setImageViewBitmap(R.id.share_widget_activity_bg, buttonBitmap(activityColor, dp(context, 12), 360, 110));
+        int buttonRadius = buttonRadius(context, settings.buttonStyle);
+
+        if (mode == MODE_4X2) {
+            int translucentPanel = Color.argb(Math.max(28, Math.round(bgAlpha * 0.22f)), 255, 255, 255);
+            views.setImageViewBitmap(R.id.share_widget_balance_bg, roundedBitmap(translucentPanel, dp(context, 12), 0, Color.TRANSPARENT, 360, 170));
+        }
+
+        if (mode == MODE_4X2 || mode == MODE_4X1 || mode == MODE_2X2 || mode == MODE_3X1 || mode == MODE_2X1 || mode == MODE_1X1) {
+            views.setImageViewBitmap(R.id.share_widget_action_bg, buttonBitmap(Color.rgb(226, 75, 74), buttonRadius, 360, 130));
+        }
+        if (mode == MODE_4X2 || mode == MODE_4X1 || mode == MODE_2X2) {
+            views.setImageViewBitmap(R.id.share_widget_receipt_bg, buttonBitmap(Color.rgb(242, 159, 61), buttonRadius, 360, 130));
+            views.setImageViewBitmap(R.id.share_widget_voice_bg, buttonBitmap(Color.rgb(127, 119, 221), buttonRadius, 360, 130));
+        }
+        if (mode == MODE_4X2 || mode == MODE_4X1 || mode == MODE_2X2 || mode == MODE_3X1) {
+            views.setImageViewBitmap(R.id.share_widget_activity_bg, buttonBitmap(activityColor, buttonRadius, 360, 130));
+        }
 
         int titleColor = parseColor(settings.titleColor, Color.WHITE);
         int bodyColor = parseColor(settings.bodyColor, Color.rgb(216, 214, 242));
-
         views.setTextViewText(R.id.share_widget_title, safe(settings.title, "Share"));
         views.setTextViewText(R.id.share_widget_project, safe(settings.projectName, "Progetto Share"));
-        views.setTextViewText(R.id.share_widget_balance_label, safe(settings.balanceLabel, "Saldo"));
-        views.setTextViewText(R.id.share_widget_balance_value, money(settings.netAmount, settings.currency));
-        views.setTextViewText(R.id.share_widget_owed_text, "Ti devono: " + money(settings.owedAmount, settings.currency));
-        views.setTextViewText(R.id.share_widget_owe_text, "Devi: " + money(settings.oweAmount, settings.currency));
-        views.setTextViewText(R.id.share_widget_last_activity, safe(settings.lastActivity, "Nessuna attività recente"));
-        views.setTextViewText(R.id.share_widget_action_label, "Spesa");
-        views.setTextViewText(R.id.share_widget_activity_label, "Attività");
-
         views.setTextColor(R.id.share_widget_title, titleColor);
         views.setTextColor(R.id.share_widget_project, bodyColor);
-        views.setTextColor(R.id.share_widget_settings, titleColor);
-        views.setTextColor(R.id.share_widget_balance_label, bodyColor);
-        views.setTextColor(R.id.share_widget_balance_value, titleColor);
-        views.setTextColor(R.id.share_widget_owed_text, bodyColor);
-        views.setTextColor(R.id.share_widget_owe_text, bodyColor);
-        views.setTextColor(R.id.share_widget_last_activity, bodyColor);
+        if (mode != MODE_1X1) {
+            views.setTextColor(R.id.share_widget_settings, titleColor);
+        }
+
+        views.setTextViewText(R.id.share_widget_action_label, safe(settings.expenseLabel, "Spesa"));
+        if (mode == MODE_4X2 || mode == MODE_4X1 || mode == MODE_2X2) {
+            views.setTextViewText(R.id.share_widget_receipt_label, safe(settings.receiptLabel, "Scontrino"));
+            views.setTextViewText(R.id.share_widget_voice_label, safe(settings.voiceLabel, "Voce"));
+        }
+        if (mode == MODE_4X2 || mode == MODE_4X1 || mode == MODE_2X2 || mode == MODE_3X1) {
+            views.setTextViewText(R.id.share_widget_activity_label, safe(settings.activityLabel, "Attività"));
+        }
+
+        if (mode == MODE_4X2) {
+            views.setTextViewText(R.id.share_widget_balance_label, safe(settings.balanceLabel, "Saldo"));
+            views.setTextViewText(R.id.share_widget_balance_value, money(settings.netAmount, settings.currency));
+            views.setTextViewText(R.id.share_widget_owed_text, "Ti devono: " + money(settings.owedAmount, settings.currency));
+            views.setTextViewText(R.id.share_widget_owe_text, "Devi: " + money(settings.oweAmount, settings.currency));
+            views.setTextViewText(R.id.share_widget_last_activity, safe(settings.lastActivity, "Nessuna attività recente"));
+            views.setTextColor(R.id.share_widget_balance_label, bodyColor);
+            views.setTextColor(R.id.share_widget_balance_value, titleColor);
+            views.setTextColor(R.id.share_widget_owed_text, bodyColor);
+            views.setTextColor(R.id.share_widget_owe_text, bodyColor);
+            views.setTextColor(R.id.share_widget_last_activity, bodyColor);
+        }
 
         String projectParam = buildProjectParam(settings.projectId, appWidgetId);
         PendingIntent openShare = createDeepLinkIntent(context, "fainance://open-share" + projectParam, REQUEST_OPEN_SHARE + appWidgetId);
@@ -114,14 +151,47 @@ public class ShareWidgetProvider extends AppWidgetProvider {
 
         views.setOnClickPendingIntent(R.id.share_widget_root, openShare);
         views.setOnClickPendingIntent(R.id.share_widget_header, openShare);
-        views.setOnClickPendingIntent(R.id.share_widget_balance_box, openShare);
+        if (mode != MODE_1X1) {
+            views.setOnClickPendingIntent(R.id.share_widget_settings, configure);
+        }
         views.setOnClickPendingIntent(R.id.share_widget_action, addShare);
-        views.setOnClickPendingIntent(R.id.share_widget_receipt, receiptShare);
-        views.setOnClickPendingIntent(R.id.share_widget_voice, voiceShare);
-        views.setOnClickPendingIntent(R.id.share_widget_activity, openShare);
-        views.setOnClickPendingIntent(R.id.share_widget_settings, configure);
+
+        if (mode == MODE_4X2) {
+            views.setOnClickPendingIntent(R.id.share_widget_balance_box, openShare);
+        }
+        if (mode == MODE_4X2 || mode == MODE_4X1 || mode == MODE_2X2) {
+            views.setOnClickPendingIntent(R.id.share_widget_receipt, receiptShare);
+            views.setOnClickPendingIntent(R.id.share_widget_voice, voiceShare);
+        }
+        if (mode == MODE_4X2 || mode == MODE_4X1 || mode == MODE_2X2 || mode == MODE_3X1) {
+            views.setOnClickPendingIntent(R.id.share_widget_activity, openShare);
+        }
 
         appWidgetManager.updateAppWidget(appWidgetId, views);
+    }
+
+    private int resolveMode(int minWidth, int minHeight) {
+        if (minWidth <= 0 || minHeight <= 0) return MODE_4X2;
+        boolean oneRow = minHeight < 105;
+        if (oneRow) {
+            if (minWidth < 100) return MODE_1X1;
+            if (minWidth < 170) return MODE_2X1;
+            if (minWidth < 235) return MODE_3X1;
+            return MODE_4X1;
+        }
+        if (minWidth < 170) return MODE_2X2;
+        return MODE_4X2;
+    }
+
+    private int resolveLayout(int mode) {
+        switch (mode) {
+            case MODE_1X1: return R.layout.widget_share_1x1;
+            case MODE_2X1: return R.layout.widget_share_2x1;
+            case MODE_3X1: return R.layout.widget_share_3x1;
+            case MODE_4X1: return R.layout.widget_share_4x1;
+            case MODE_2X2: return R.layout.widget_share_2x2;
+            default: return R.layout.widget_share;
+        }
     }
 
     private void renderLocked(Context context, AppWidgetManager appWidgetManager, int appWidgetId) {
@@ -153,8 +223,13 @@ public class ShareWidgetProvider extends AppWidgetProvider {
         defaults.activityColor = json.optString("activityColor", defaults.activityColor);
         defaults.titleColor = json.optString("titleColor", defaults.titleColor);
         defaults.bodyColor = json.optString("bodyColor", defaults.bodyColor);
+        defaults.buttonStyle = json.optString("buttonStyle", defaults.buttonStyle);
         defaults.currency = json.optString("currency", defaults.currency);
         defaults.title = json.optString("title", defaults.title);
+        defaults.expenseLabel = json.optString("expenseLabel", defaults.expenseLabel);
+        defaults.receiptLabel = json.optString("receiptLabel", defaults.receiptLabel);
+        defaults.voiceLabel = json.optString("voiceLabel", defaults.voiceLabel);
+        defaults.activityLabel = json.optString("activityLabel", defaults.activityLabel);
 
         String selectedId = instance.optString("projectId", json.optString("projectId", ""));
         JSONObject project = findProject(json.optJSONArray("projectItems"), selectedId);
@@ -303,6 +378,14 @@ public class ShareWidgetProvider extends AppWidgetProvider {
         return Color.rgb(Math.max(0, Color.red(color) - amount), Math.max(0, Color.green(color) - amount), Math.max(0, Color.blue(color) - amount));
     }
 
+    private int buttonRadius(Context context, String style) {
+        String id = style == null ? "soft" : style.trim().toLowerCase();
+        if ("rounded".equals(id)) return dp(context, 20);
+        if ("square".equals(id)) return dp(context, 6);
+        if ("sharp".equals(id)) return dp(context, 2);
+        return dp(context, 10);
+    }
+
     private int dp(Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
@@ -350,7 +433,12 @@ public class ShareWidgetProvider extends AppWidgetProvider {
         String activityColor = "#378ADD";
         String titleColor = "#FFFFFF";
         String bodyColor = "#D8D6F2";
+        String buttonStyle = "soft";
         String title = "Share";
+        String expenseLabel = "Spesa";
+        String receiptLabel = "Scontrino";
+        String voiceLabel = "Voce";
+        String activityLabel = "Attività";
         String projectId = "";
         String projectName = "Progetto Share";
         double netAmount = 0.0;

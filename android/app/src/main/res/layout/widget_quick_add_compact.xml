@@ -18,16 +18,27 @@
         android:padding="8dp"
         android:gravity="center_vertical">
 
-        <TextView
+        <FrameLayout
             android:id="@+id/widget_voice_button"
             android:layout_width="42dp"
             android:layout_height="match_parent"
-            android:layout_marginRight="8dp"
-            android:gravity="center"
-            android:text="🎙"
-            android:textSize="24sp"
-            android:textColor="#FFFFFF"
-            android:background="@drawable/widget_settings_button" />
+            android:layout_marginRight="8dp">
+
+            <ImageView
+                android:id="@+id/widget_voice_button_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitXY" />
+
+            <TextView
+                android:id="@+id/widget_voice_button_icon"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="🎙"
+                android:textSize="24sp"
+                android:textColor="#FFFFFF" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
