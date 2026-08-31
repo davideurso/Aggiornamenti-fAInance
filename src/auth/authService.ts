@@ -1,5 +1,6 @@
 import type { User } from "firebase/auth";
 import {
+  sendEmailVerification,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -68,44 +69,9 @@ export async function registerEmailAccount(email: string, password: string): Pro
 }
 
 export async function sendAccountEmailVerification(user: User, languageCode?: string): Promise<void> {
-  try {
-    if (languageCode) fbAuth.languageCode = languageCode;
-  } catch {
-    // best effort
-  }
-
-  const token = await user.getIdToken(true);
-  const language = String(languageCode || "it").split("-")[0].toLowerCase();
-  const continueUrl = `https://${firebaseConfig.projectId}.web.app/?emailVerified=1`;
-
-  let response: Response;
-  try {
-    response = await fetch(cloudFunctionUrl("sendCustomVerificationEmail"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ language, continueUrl }),
-    });
-  } catch (cause) {
-    const error: any = new Error("Verification email backend unavailable");
-    error.code = "verification/backend-unavailable";
-    error.cause = cause;
-    throw error;
-  }
-
-  const payload: any = await response.json().catch(() => ({}));
-  if (response.status === 429 || payload?.code === "verification/too-many-requests") {
-    const error: any = new Error("Too many verification requests");
-    error.code = "auth/too-many-requests";
-    throw error;
-  }
-  if (!response.ok || payload?.ok !== true) {
-    const error: any = new Error(String(payload?.error || "Verification email backend unavailable"));
-    error.code = String(payload?.code || "verification/backend-unavailable");
-    throw error;
-  }
+  // FAINANCE_V67_PRODUCTION_DIRECT_FIREBASE_EMAIL_VERIFICATION
+  // Firebase Auth gestisce direttamente generazione e consumo del codice di verifica.
+  await sendEmailVerification(user);
 }
 
 export async function reloadAccountUser(user: User): Promise<User> {
