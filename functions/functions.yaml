@@ -1,0 +1,228 @@
+{
+  "endpoints": {
+    "sendContactEmail": {
+      "availableMemoryMb": null,
+      "timeoutSeconds": null,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "RESEND_API_KEY"
+        }
+      ],
+      "labels": {},
+      "httpsTrigger": {},
+      "entryPoint": "sendContactEmail"
+    },
+    "askFinanceAI": {
+      "availableMemoryMb": 512,
+      "timeoutSeconds": 60,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "OPENAI_API_KEY"
+        }
+      ],
+      "labels": {},
+      "httpsTrigger": {},
+      "entryPoint": "askFinanceAI"
+    },
+    "scanReceiptOCR": {
+      "availableMemoryMb": 1024,
+      "timeoutSeconds": 60,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "httpsTrigger": {},
+      "entryPoint": "scanReceiptOCR"
+    },
+    "sendCustomVerificationEmail": {
+      "availableMemoryMb": 256,
+      "timeoutSeconds": 30,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "secretEnvironmentVariables": [
+        {
+          "key": "RESEND_API_KEY"
+        }
+      ],
+      "labels": {},
+      "httpsTrigger": {},
+      "entryPoint": "sendCustomVerificationEmail"
+    },
+    "notifyShareInviteCreated": {
+      "availableMemoryMb": null,
+      "timeoutSeconds": null,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "eventTrigger": {
+        "eventType": "google.cloud.firestore.document.v1.created",
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)"
+        },
+        "eventFilterPathPatterns": {
+          "document": "shareInvites/{inviteId}"
+        },
+        "retry": false
+      },
+      "entryPoint": "notifyShareInviteCreated"
+    },
+    "fanOutImportantCommunication": {
+      "availableMemoryMb": 512,
+      "timeoutSeconds": 300,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "eventTrigger": {
+        "eventType": "google.cloud.firestore.document.v1.created",
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)"
+        },
+        "eventFilterPathPatterns": {
+          "document": "adminCommunications/{communicationId}"
+        },
+        "retry": false
+      },
+      "entryPoint": "fanOutImportantCommunication"
+    },
+    "cleanupExpiredShareAttachments": {
+      "availableMemoryMb": 256,
+      "timeoutSeconds": 300,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "scheduleTrigger": {
+        "schedule": "15 3 * * *",
+        "retryConfig": {},
+        "timeZone": "Europe/Rome"
+      },
+      "entryPoint": "cleanupExpiredShareAttachments"
+    },
+    "processDueAccountDeletions": {
+      "availableMemoryMb": 512,
+      "timeoutSeconds": 540,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "scheduleTrigger": {
+        "schedule": "30 3 * * *",
+        "retryConfig": {},
+        "timeZone": "Europe/Rome"
+      },
+      "entryPoint": "processDueAccountDeletions"
+    },
+    "syncAccountDeletionAdminMetadata": {
+      "availableMemoryMb": null,
+      "timeoutSeconds": null,
+      "minInstances": null,
+      "maxInstances": null,
+      "ingressSettings": null,
+      "concurrency": null,
+      "serviceAccountEmail": null,
+      "vpc": null,
+      "platform": "gcfv2",
+      "region": [
+        "europe-west1"
+      ],
+      "labels": {},
+      "eventTrigger": {
+        "eventType": "google.cloud.firestore.document.v1.written",
+        "eventFilters": {
+          "database": "(default)",
+          "namespace": "(default)"
+        },
+        "eventFilterPathPatterns": {
+          "document": "users/{userId}"
+        },
+        "retry": false
+      },
+      "entryPoint": "syncAccountDeletionAdminMetadata"
+    }
+  },
+  "specVersion": "v1alpha1",
+  "requiredAPIs": [
+    {
+      "api": "cloudscheduler.googleapis.com",
+      "reason": "Needed for scheduled functions."
+    }
+  ],
+  "extensions": {},
+  "params": [
+    {
+      "type": "secret",
+      "name": "RESEND_API_KEY"
+    },
+    {
+      "type": "secret",
+      "name": "OPENAI_API_KEY"
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f7f7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>fAInance</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body, #root { width: 100%; min-height: 100%; }
+      body { font-family: system-ui, -apple-system, sans-serif; background: #f7f7f7; overscroll-behavior: none; }
+      button, [role="button"], select, input[type="checkbox"], input[type="radio"] { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+      input[type="date"] { min-width: 0; max-width: 100%; }
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+      input[type="number"] { -moz-appearance: textfield; }
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+    </style>
+    <script>
+      (function(){
+        try {
+          var href = String(window.location && window.location.href || '');
+          var protocol = String(window.location && window.location.protocol || '');
+          if (protocol === 'capacitor:' || /^capacitor:\/\//i.test(href)) {
+            window.__FAINANCE_DISABLE_DOM_TRANSLATION__ = true;
+          }
+        } catch (e) {}
+        setTimeout(function(){
+          try {
+            var root=document.getElementById('root');
+            if(root && !root.childNodes.length && !window.__FAINANCE_APP_MOUNT_STARTED__){
+              root.innerHTML='<div style="min-height:100vh;background:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px;color:#222;"><div style="max-width:360px;background:white;border-radius:18px;border:1px solid #eee;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);"><div style="font-size:18px;font-weight:800;color:#b00020;margin-bottom:8px;">Avvio non completato</div><div style="font-size:13px;color:#555;line-height:1.45;">Il bundle JavaScript non ha montato React entro 20 secondi.</div></div></div>';
+            }
+          } catch (e) {}
+        },20000);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

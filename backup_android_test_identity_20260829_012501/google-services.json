@@ -1,0 +1,150 @@
+{
+  "project_info": {
+    "project_number": "739607555867",
+    "project_id": "fainance-a7794",
+    "storage_bucket": "fainance-a7794.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:739607555867:android:9f175b21ae04e0e5cd6dbe",
+        "android_client_info": {
+          "package_name": "com.tracker.spese.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "739607555867-pbjk4vhth18dnu96odol62avr84qd159.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tracker.spese.app",
+            "certificate_hash": "901de57ff8d9c12e182db8ae895a43e6a4281247"
+          }
+        },
+        {
+          "client_id": "739607555867-i5uhrj1g1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "739607555867-i5uhrj1g1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "it.fainanceapp.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:739607555867:android:16aa0add0a289fb3cd6dbe",
+        "android_client_info": {
+          "package_name": "it.fainanceapp.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "739607555867-ondm6vacfnrneim2c15ca9k7t4m174k6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "it.fainanceapp.app",
+            "certificate_hash": "901de57ff8d9c12e182db8ae895a43e6a4281247"
+          }
+        },
+        {
+          "client_id": "739607555867-v4j547t4ue48r4gd9m2j978dflpjdcq8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "it.fainanceapp.app",
+            "certificate_hash": "4112c75513ed06f8ebcce55ba017ffac66f41d08"
+          }
+        },
+        {
+          "client_id": "739607555867-i5uhrj1g1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "739607555867-i5uhrj1g1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "it.fainanceapp.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:739607555867:android:71344953299eec66cd6dbe",
+        "android_client_info": {
+          "package_name": "it.fainanceapp.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "739607555867-6np9in0mlj7b7ro1e6lbhijha7k40bhv.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "it.fainanceapp.app",
+            "certificate_hash": "901de57ff8d9c12e182db8ae895a43e6a4281247"
+          }
+        },
+        {
+          "client_id": "739607555867-i5uhrj1g1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "739607555867-i5uhrj1g1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "739607555867-u36dp1dr98ohjdmm7i59bhvi8dg3vs72.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "it.fainanceapp.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,100 @@
+param([int]$Port = 5174)
+
+$ErrorActionPreference = "Stop"
+
+$App = "C:\Users\Davide\Documents\Progetti\01 - fAInance\App"
+$Url = "http://127.0.0.1:$Port/"
+$OutLog = Join-Path $App "vite-test.out.log"
+$ErrLog = Join-Path $App "vite-test.err.log"
+$PidFile = Join-Path $App ".vite-test.pid"
+
+Write-Host "`n=== VERIFICA ISOLAMENTO FAINANCE TEST ===" -ForegroundColor Cyan
+& (Join-Path $App "tools\VERIFY_FAINANCE_TEST_ISOLATION.ps1")
+if (-not $?) { throw "Verifica isolamento Test fallita" }
+
+Write-Host "`n=== AVVIO FAINANCE TEST ===" -ForegroundColor Cyan
+
+$Existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+if ($Existing) {
+    $Code = & curl.exe -s -o NUL -w "%{http_code}" --max-time 5 $Url
+    if (($LASTEXITCODE -eq 0) -and ($Code -eq "200")) {
+        Write-Host "[OK] fAInance Test gia attiva: $Url" -ForegroundColor Green
+        Start-Process $Url
+        exit 0
+    }
+
+    foreach ($Connection in $Existing) {
+        Stop-Process -Id $Connection.OwningProcess -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 2
+}
+
+Remove-Item $OutLog,$ErrLog,$PidFile -Force -ErrorAction SilentlyContinue
+
+$Arguments = @(
+    "run",
+    "dev",
+    "--",
+    "--mode",
+    "test",
+    "--host",
+    "127.0.0.1",
+    "--port",
+    "$Port",
+    "--strictPort"
+)
+
+$Process = Start-Process `
+    -FilePath "npm.cmd" `
+    -ArgumentList $Arguments `
+    -WorkingDirectory $App `
+    -RedirectStandardOutput $OutLog `
+    -RedirectStandardError $ErrLog `
+    -WindowStyle Hidden `
+    -PassThru
+
+[System.IO.File]::WriteAllText(
+    $PidFile,
+    [string]$Process.Id,
+    (New-Object System.Text.UTF8Encoding($false))
+)
+
+$Ready = $false
+
+for ($Attempt = 1; $Attempt -le 24; $Attempt++) {
+    Start-Sleep -Seconds 5
+
+    if (-not (Get-Process -Id $Process.Id -ErrorAction SilentlyContinue)) {
+        Write-Host "[ERRORE] Il processo Vite Test si e arrestato." -ForegroundColor Red
+        Write-Host "`n=== VITE STDOUT ===" -ForegroundColor Yellow
+        Get-Content $OutLog -Tail 120 -ErrorAction SilentlyContinue
+        Write-Host "`n=== VITE STDERR ===" -ForegroundColor Yellow
+        Get-Content $ErrLog -Tail 120 -ErrorAction SilentlyContinue
+        throw "Avvio fAInance Test fallito: processo terminato"
+    }
+
+    $Code = & curl.exe -s -o NUL -w "%{http_code}" --max-time 5 $Url
+
+    if (($LASTEXITCODE -eq 0) -and ($Code -eq "200")) {
+        $Ready = $true
+        break
+    }
+
+    Write-Host "Attesa fAInance Test... $($Attempt * 5)s" -ForegroundColor Yellow
+}
+
+if (-not $Ready) {
+    Write-Host "[ERRORE] fAInance Test non ha restituito HTTP 200 entro 120 secondi." -ForegroundColor Red
+    Write-Host "`n=== VITE STDOUT ===" -ForegroundColor Yellow
+    Get-Content $OutLog -Tail 120 -ErrorAction SilentlyContinue
+    Write-Host "`n=== VITE STDERR ===" -ForegroundColor Yellow
+    Get-Content $ErrLog -Tail 120 -ErrorAction SilentlyContinue
+    Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    throw "Health-check fAInance Test fallito"
+}
+
+Write-Host "[OK] fAInance Test HTTP 200" -ForegroundColor Green
+Write-Host "[OK] Processo Vite persistente PID $($Process.Id)" -ForegroundColor Green
+Write-Host "[OK] fAInance Test attiva: $Url" -ForegroundColor Green
+
+Start-Process $Url

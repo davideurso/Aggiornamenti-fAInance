@@ -1,4 +1,6 @@
 const { onRequest } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
+const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const { Resend } = require("resend");
@@ -726,3 +728,555 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+// ============================================================================
+// fAInance 2.0 Phase 11 - Test-only account lifecycle, Share and notifications.
+// These functions fail closed when accidentally deployed outside Firebase Test.
+// ============================================================================
+
+const FAINANCE_TEST_PROJECT_ID = "fainance-test-20260823195207";
+const FAINANCE_PRODUCTION_PROJECT_ID = "fainance-a7794";
+const FAINANCE_TEST_WEB_ORIGIN = "https://" + FAINANCE_TEST_PROJECT_ID + ".web.app";
+const FAINANCE_PRODUCTION_WEB_ORIGIN = "https://" + FAINANCE_PRODUCTION_PROJECT_ID + ".web.app";
+const FAINANCE_TEST_EMAIL_LOGO_URL = FAINANCE_TEST_WEB_ORIGIN + "/fainance-email/logo-512.png";
+const FAINANCE_TEST_EMAIL_SPLASH_URL = FAINANCE_TEST_WEB_ORIGIN + "/fainance-email/splash.png";
+const FAINANCE_PRODUCTION_EMAIL_LOGO_URL = FAINANCE_PRODUCTION_WEB_ORIGIN + "/fainance-email/logo-512.png";
+const FAINANCE_PRODUCTION_EMAIL_SPLASH_URL = FAINANCE_PRODUCTION_WEB_ORIGIN + "/fainance-email/splash.png";
+
+function activeProjectId() {
+  try {
+    return String(
+      process.env.GCLOUD_PROJECT ||
+      process.env.GOOGLE_CLOUD_PROJECT ||
+      (process.env.FIREBASE_CONFIG ? JSON.parse(process.env.FIREBASE_CONFIG).projectId : "") ||
+      ""
+    );
+  } catch (_error) {
+    return "";
+  }
+}
+
+function requireTestBackend(response) {
+  const projectId = activeProjectId();
+  if (projectId !== FAINANCE_TEST_PROJECT_ID) {
+    if (response) {
+      response.status(412).json({
+        ok: false,
+        error: "Funzione disponibile esclusivamente nell'ambiente Test.",
+      });
+    }
+    return false;
+  }
+  return true;
+}
+
+function verificationProjectConfig() {
+  const projectId = activeProjectId();
+  if (projectId === FAINANCE_TEST_PROJECT_ID) {
+    return {
+      projectId,
+      webOrigin: FAINANCE_TEST_WEB_ORIGIN,
+      logoUrl: FAINANCE_TEST_EMAIL_LOGO_URL,
+      splashUrl: FAINANCE_TEST_EMAIL_SPLASH_URL,
+      isTest: true,
+    };
+  }
+  if (projectId === FAINANCE_PRODUCTION_PROJECT_ID) {
+    return {
+      projectId,
+      webOrigin: FAINANCE_PRODUCTION_WEB_ORIGIN,
+      logoUrl: FAINANCE_PRODUCTION_EMAIL_LOGO_URL,
+      splashUrl: FAINANCE_PRODUCTION_EMAIL_SPLASH_URL,
+      isTest: false,
+    };
+  }
+  return null;
+}
+
+function requireVerificationBackend(response) {
+  const config = verificationProjectConfig();
+  if (!config) {
+    if (response) {
+      response.status(412).json({
+        ok: false,
+        error: "Ambiente fAInance non autorizzato per la verifica email.",
+      });
+    }
+    return null;
+  }
+  return config;
+}
+
+function verificationCopy(language) {
+  const rows = {
+    it: { subject: "Conferma il tuo indirizzo email - fAInance Test", environment: "Ambiente di prova", eyebrow: "Sicurezza account", title: "Conferma il tuo indirizzo email", body: "Manca solo un passaggio per completare la registrazione. Premi il pulsante per verificare l'indirizzo associato al tuo account.", button: "Verifica il mio indirizzo email", alternate: "Link alternativo", ignore: "Se non hai creato tu questo account, puoi ignorare il messaggio.", footer: "Messaggio automatico inviato da fAInance Test." },
+    en: { subject: "Confirm your email address - fAInance Test", environment: "Test environment", eyebrow: "Account security", title: "Confirm your email address", body: "Only one step remains to complete registration. Use the button to verify the address linked to your account.", button: "Verify my email address", alternate: "Alternative link", ignore: "If you did not create this account, you can ignore this message.", footer: "Automated message sent by fAInance Test." },
+    es: { subject: "Confirma tu correo electrónico - fAInance Test", environment: "Entorno de prueba", eyebrow: "Seguridad de la cuenta", title: "Confirma tu correo electrónico", body: "Solo falta un paso para completar el registro. Pulsa el botón para verificar la dirección asociada a tu cuenta.", button: "Verificar mi correo", alternate: "Enlace alternativo", ignore: "Si no has creado esta cuenta, puedes ignorar este mensaje.", footer: "Mensaje automático enviado por fAInance Test." },
+    fr: { subject: "Confirmez votre adresse e-mail - fAInance Test", environment: "Environnement de test", eyebrow: "Sécurité du compte", title: "Confirmez votre adresse e-mail", body: "Il ne reste qu'une étape pour terminer l'inscription. Utilisez le bouton pour vérifier l'adresse associée à votre compte.", button: "Vérifier mon adresse e-mail", alternate: "Lien alternatif", ignore: "Si vous n'avez pas créé ce compte, ignorez ce message.", footer: "Message automatique envoyé par fAInance Test." },
+    de: { subject: "E-Mail-Adresse bestätigen - fAInance Test", environment: "Testumgebung", eyebrow: "Kontosicherheit", title: "E-Mail-Adresse bestätigen", body: "Nur noch ein Schritt bis zum Abschluss der Registrierung. Bestätige mit der Schaltfläche die Adresse deines Kontos.", button: "E-Mail-Adresse bestätigen", alternate: "Alternativer Link", ignore: "Wenn du dieses Konto nicht erstellt hast, kannst du diese Nachricht ignorieren.", footer: "Automatische Nachricht von fAInance Test." },
+    pt: { subject: "Confirme o seu email - fAInance Test", environment: "Ambiente de teste", eyebrow: "Segurança da conta", title: "Confirme o seu email", body: "Falta apenas um passo para concluir o registo. Use o botão para verificar o endereço associado à sua conta.", button: "Verificar o meu email", alternate: "Ligação alternativa", ignore: "Se não criou esta conta, pode ignorar esta mensagem.", footer: "Mensagem automática enviada por fAInance Test." },
+    pl: { subject: "Potwierdź adres e-mail - fAInance Test", environment: "Środowisko testowe", eyebrow: "Bezpieczeństwo konta", title: "Potwierdź adres e-mail", body: "Do zakończenia rejestracji pozostał jeden krok. Użyj przycisku, aby potwierdzić adres konta.", button: "Potwierdź adres e-mail", alternate: "Link alternatywny", ignore: "Jeśli nie utworzyłeś tego konta, zignoruj tę wiadomość.", footer: "Automatyczna wiadomość od fAInance Test." },
+    nl: { subject: "Bevestig je e-mailadres - fAInance Test", environment: "Testomgeving", eyebrow: "Accountbeveiliging", title: "Bevestig je e-mailadres", body: "Er is nog een stap nodig om de registratie af te ronden. Gebruik de knop om het adres van je account te bevestigen.", button: "Mijn e-mailadres bevestigen", alternate: "Alternatieve link", ignore: "Als je dit account niet hebt gemaakt, kun je dit bericht negeren.", footer: "Automatisch bericht van fAInance Test." },
+    ro: { subject: "Confirmă adresa de email - fAInance Test", environment: "Mediu de test", eyebrow: "Securitatea contului", title: "Confirmă adresa de email", body: "Mai este un singur pas pentru finalizarea înregistrării. Folosește butonul pentru a confirma adresa contului.", button: "Confirmă adresa de email", alternate: "Link alternativ", ignore: "Dacă nu ai creat acest cont, poți ignora mesajul.", footer: "Mesaj automat trimis de fAInance Test." },
+    el: { subject: "Επιβεβαίωσε το email σου - fAInance Test", environment: "Περιβάλλον δοκιμών", eyebrow: "Ασφάλεια λογαριασμού", title: "Επιβεβαίωσε το email σου", body: "Απομένει μόνο ένα βήμα για να ολοκληρωθεί η εγγραφή. Πάτησε το κουμπί για να επιβεβαιώσεις τη διεύθυνση του λογαριασμού σου.", button: "Επιβεβαίωση email", alternate: "Εναλλακτικός σύνδεσμος", ignore: "Αν δεν δημιούργησες εσύ αυτόν τον λογαριασμό, μπορείς να αγνοήσεις το μήνυμα.", footer: "Αυτόματο μήνυμα από το fAInance Test." },
+  };
+  const selected = rows[String(language || "").toLowerCase()] || rows.en;
+  const config = verificationProjectConfig();
+  if (config && !config.isTest) {
+    return {
+      ...selected,
+      subject: String(selected.subject || "").replace(/fAInance Test/g, "fAInance"),
+      environment: "",
+      footer: String(selected.footer || "").replace(/fAInance Test/g, "fAInance"),
+    };
+  }
+  return selected;
+}
+
+function customEmailActionLink(firebaseLink, language, config) {
+  const source = new URL(firebaseLink);
+  // Keep the verification handler on the Hosting root. The Vite build uses
+  // relative bundle assets, so a nested /auth/action URL can resolve JS/CSS
+  // under /auth/assets and produce a blank page on mobile browsers.
+  const target = new URL(config.webOrigin + "/");
+  source.searchParams.forEach((value, key) => target.searchParams.set(key, value));
+  target.searchParams.set("fainanceEmailAction", "1");
+  target.searchParams.set("lang", String(language || "it").split("-")[0].toLowerCase());
+  return target.toString();
+}
+
+function verificationEmailHtml(copy, link, config) {
+  const safeLink = escapeHtml(link);
+  const logoUrl = escapeHtml(config.logoUrl);
+  const splashUrl = escapeHtml(config.splashUrl);
+  const environmentBadge = copy.environment
+    ? '<div style="font-size:12px;line-height:1.2;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:#b17a00;margin-top:8px">' + escapeHtml(copy.environment) + '</div>'
+    : "";
+  return '<!doctype html><html><body style="margin:0;padding:0;background:#f3f7ff;font-family:Arial,Helvetica,sans-serif;color:#102f62">' +
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f3f7ff;padding:28px 12px"><tr><td align="center">' +
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;background:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 18px 48px rgba(24,62,120,.14)">' +
+    '<tr><td style="padding:0;background:#eef5ff"><img src="' + splashUrl + '" alt="fAInance" width="560" style="display:block;width:100%;height:auto;border:0"></td></tr>' +
+    '<tr><td align="center" style="padding:28px 34px 8px"><img src="' + logoUrl + '" alt="fAInance" width="76" height="76" style="display:block;width:76px;height:76px;object-fit:contain;border:0">' + environmentBadge + '</td></tr>' +
+    '<tr><td align="center" style="padding:14px 34px 2px"><div style="width:92px;height:92px;border-radius:50%;background:#f1f6ff;border:1px solid #e1ebfb;line-height:92px;text-align:center;font-size:42px;color:#245bc1">&#9993;</div></td></tr>' +
+    '<tr><td style="padding:18px 34px 0"><div style="font-size:27px;line-height:1.2;font-weight:800;color:#0d2e63;text-align:center">' + escapeHtml(copy.title) + '</div><div style="width:38px;height:3px;border-radius:4px;background:#d9a52c;margin:16px auto 20px"></div><div style="font-size:15px;line-height:1.65;color:#596a82;text-align:left">' + escapeHtml(copy.body) + '</div></td></tr>' +
+    '<tr><td align="center" style="padding:24px 34px 14px"><a href="' + safeLink + '" style="display:inline-block;box-sizing:border-box;min-width:290px;background:#1d59d1;color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;line-height:1;padding:18px 28px;border-radius:15px;box-shadow:0 10px 24px rgba(29,89,209,.22)">' + escapeHtml(copy.button) + ' &nbsp;&#8594;</a></td></tr>' +
+    '<tr><td style="padding:4px 34px 18px"><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="height:1px;background:#e8edf5"></td><td style="width:66px;text-align:center;font-size:11px;color:#9aa4b4">' + escapeHtml(copy.alternate) + '</td><td style="height:1px;background:#e8edf5"></td></tr></table></td></tr>' +
+    '<tr><td style="padding:0 34px 20px"><div style="background:#f6f8fc;border:1px solid #e5eaf2;border-radius:14px;padding:13px 14px;font-size:12px;line-height:1.55;color:#7a8799;word-break:break-all"><a href="' + safeLink + '" style="color:#1d59d1;text-decoration:none">' + safeLink + '</a></div></td></tr>' +
+    '<tr><td style="padding:0 34px 26px"><div style="background:#f8faff;border:1px solid #e7edf7;border-radius:14px;padding:14px 16px;font-size:12px;line-height:1.55;color:#68778c">&#128274;&nbsp; ' + escapeHtml(copy.ignore) + '</div></td></tr>' +
+    '<tr><td style="padding:18px 34px;background:#0d2e63;color:#ffffff;font-size:11px;line-height:1.55;text-align:center">' + escapeHtml(copy.footer) + '</td></tr>' +
+    '</table></td></tr></table></body></html>';
+}
+
+function configuredVerificationSender() {
+  const sender = String(process.env.FAINANCE_EMAIL_FROM || "").trim();
+  if (!sender || /@resend\.dev[>\s]*$/i.test(sender)) return "";
+  return sender;
+}
+
+function extractResendDomainRows(result) {
+  if (!result || result.error) return [];
+  if (Array.isArray(result.data)) return result.data;
+  if (result.data && Array.isArray(result.data.data)) return result.data.data;
+  return [];
+}
+
+async function resolveVerificationSender(resend) {
+  const configured = configuredVerificationSender();
+  if (configured) return configured;
+
+  try {
+    const listed = await resend.domains.list();
+    const rows = extractResendDomainRows(listed);
+    const verified = rows.filter((row) => {
+      const status = String((row && row.status) || "").toLowerCase();
+      const name = String((row && row.name) || "").toLowerCase();
+      const sending = String((row && row.capabilities && row.capabilities.sending) || "enabled").toLowerCase();
+      return status === "verified" && sending !== "disabled" && (name === "fainanceapp.it" || name.endsWith(".fainanceapp.it"));
+    });
+    if (verified.length) {
+      const preferred = verified.find((row) => String(row.name || "").toLowerCase() === "fainanceapp.it") || verified[0];
+      return "fAInance <noreply@" + String(preferred.name).trim() + ">";
+    }
+  } catch (error) {
+    console.warn("Resend domain lookup unavailable:", error && error.message ? error.message : error);
+  }
+
+  return "fAInance <noreply@fainanceapp.it>";
+}
+
+async function probeVerificationSender(resend, sender, config) {
+  const label = config && config.isTest ? "fAInance Test" : "fAInance";
+  const probe = await resend.emails.send({
+    from: sender,
+    to: ["delivered@resend.dev"],
+    subject: label + " - verifica configurazione email",
+    text: "Verifica tecnica del mittente email " + label + ".",
+  });
+  if (probe.error) {
+    return {
+      ok: false,
+      error: String(probe.error.message || "RESEND_SENDER_NOT_READY"),
+    };
+  }
+  return { ok: true, id: String((probe.data && probe.data.id) || "") };
+}
+
+exports.sendCustomVerificationEmail = onRequest(
+  {
+    secrets: [RESEND_API_KEY],
+    region: "europe-west1",
+    cors: true,
+    timeoutSeconds: 30,
+    memory: "256MiB",
+  },
+  async (req, res) => {
+    setCors(res);
+    if (handleOptions(req, res)) return;
+    const verificationConfig = requireVerificationBackend(res);
+    if (!verificationConfig) return;
+
+    try {
+      const resend = new Resend(RESEND_API_KEY.value());
+      const sender = await resolveVerificationSender(resend);
+
+      if (req.method === "GET" && String((req.query && req.query.health) || "") === "1") {
+        const probe = await probeVerificationSender(resend, sender, verificationConfig);
+        return res.status(probe.ok ? 200 : 503).json({
+          ok: probe.ok,
+          senderReady: probe.ok,
+          projectId: activeProjectId(),
+          sender,
+          actionHandler: "root-query",
+          code: probe.ok ? "verification/sender-ready" : "verification/sender-not-ready",
+          error: probe.ok ? "" : probe.error,
+        });
+      }
+
+      if (req.method !== "POST") {
+        return res.status(405).json({ ok: false, error: "Metodo non consentito.", code: "verification/method-not-allowed" });
+      }
+
+      const authUser = await requireFirebaseUser(req, res);
+      if (!authUser) return;
+      const account = await admin.auth().getUser(authUser.uid);
+      const email = String(account.email || "").trim().toLowerCase();
+      if (!email || email !== String(authUser.email || "").trim().toLowerCase()) {
+        return res.status(400).json({ ok: false, error: "Email account non disponibile.", code: "verification/account-email-unavailable" });
+      }
+      if (account.emailVerified) {
+        return res.status(200).json({ ok: true, alreadyVerified: true });
+      }
+
+      const language = String((req.body && req.body.language) || "it").split("-")[0].toLowerCase();
+      const continueUrl = String((req.body && req.body.continueUrl) || verificationConfig.webOrigin);
+      let continueOrigin = "";
+      try { continueOrigin = new URL(continueUrl).origin; } catch (_error) {}
+      if (continueOrigin !== verificationConfig.webOrigin) {
+        return res.status(400).json({ ok: false, error: "Destinazione email non valida.", code: "verification/continue-url-invalid" });
+      }
+
+      const db = admin.firestore();
+      const rateRef = db.collection("verificationEmailRateLimits").doc(authUser.uid);
+      const rateSnapshot = await rateRef.get();
+      const lastSentAtMs = Number(rateSnapshot.exists ? rateSnapshot.data().lastSentAtMs : 0);
+      if (lastSentAtMs && Date.now() - lastSentAtMs < 45000) {
+        return res.status(429).json({ ok: false, error: "Attendi prima di richiedere una nuova email.", code: "verification/too-many-requests" });
+      }
+
+      const firebaseLink = await admin.auth().generateEmailVerificationLink(email, {
+        url: continueUrl,
+        handleCodeInApp: false,
+      });
+      const actionLink = customEmailActionLink(firebaseLink, language, verificationConfig);
+      const copy = verificationCopy(language);
+      const delivery = await resend.emails.send({
+        from: sender,
+        to: [email],
+        subject: copy.subject,
+        text: copy.title + "\n\n" + copy.body + "\n\n" + actionLink + "\n\n" + copy.ignore,
+        html: verificationEmailHtml(copy, actionLink, verificationConfig),
+      });
+      if (delivery.error) {
+        console.error("Resend verification delivery error:", delivery.error);
+        return res.status(502).json({
+          ok: false,
+          error: "Invio email di verifica non completato.",
+          code: "verification/delivery-failed",
+        });
+      }
+
+      await rateRef.set({
+        uid: authUser.uid,
+        lastSentAtMs: Date.now(),
+        lastDeliveryId: String((delivery.data && delivery.data.id) || ""),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return res.status(200).json({ ok: true, delivered: true });
+    } catch (error) {
+      console.error("sendCustomVerificationEmail error:", error);
+      return res.status(500).json({ ok: false, error: "Invio email di verifica non completato.", code: "verification/backend-unavailable" });
+    }
+  }
+);
+
+exports.notifyShareInviteCreated = onDocumentCreated(
+  {
+    document: "shareInvites/{inviteId}",
+    region: "europe-west1",
+  },
+  async (event) => {
+    if (!requireTestBackend()) return;
+    const invite = event.data ? event.data.data() : null;
+    if (!invite || !invite.invitedUid || invite.status !== "pending") return;
+    const inviteId = String(event.params.inviteId);
+    await admin.firestore().collection("appNotifications").doc("share_invite_" + inviteId).set({
+      targetUid: String(invite.invitedUid),
+      type: "share_invite",
+      title: "Invito Share",
+      message: String(invite.invitedByName || "Un utente") + " ti ha invitato nel progetto " + String(invite.projectName || "Share"),
+      projectId: String(invite.projectId || ""),
+      inviteId,
+      actionType: "open_share_invite",
+      actionValue: inviteId,
+      source: "share",
+      sourceUid: String(invite.invitedByUid || ""),
+      read: false,
+      status: "active",
+      createdAt: new Date().toISOString(),
+      createdAtMs: Date.now(),
+      expiresAtMs: Date.now() + 180 * 24 * 60 * 60 * 1000,
+    }, { merge: true });
+  }
+);
+
+exports.fanOutImportantCommunication = onDocumentCreated(
+  {
+    document: "adminCommunications/{communicationId}",
+    region: "europe-west1",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+  },
+  async (event) => {
+    if (!requireTestBackend()) return;
+    const communication = event.data ? event.data.data() : null;
+    if (!communication || communication.status !== "published") return;
+    const title = String(communication.title || "").trim().slice(0, 120);
+    const message = String(communication.message || "").trim().slice(0, 1200);
+    if (!title || !message || communication.environment !== "test") return;
+
+    const db = admin.firestore();
+    const targetPlan = String(communication.targetPlan || "all").toLowerCase();
+    let cursor = null;
+    let delivered = 0;
+    do {
+      let usersQuery = db.collection("users").orderBy(admin.firestore.FieldPath.documentId()).limit(400);
+      if (cursor) usersQuery = usersQuery.startAfter(cursor);
+      const users = await usersQuery.get();
+      if (users.empty) break;
+      const batch = db.batch();
+      users.docs.forEach((userDoc) => {
+        const profile = userDoc.data() || {};
+        const plan = String(profile.plan || "free").toLowerCase();
+        if (targetPlan !== "all" && plan !== targetPlan) return;
+        if (String(profile.deletionStatus || "") === "pending") return;
+        const notificationId = "broadcast_" + String(event.params.communicationId) + "_" + userDoc.id;
+        batch.set(db.collection("appNotifications").doc(notificationId), {
+          targetUid: userDoc.id,
+          type: "important_communication",
+          title,
+          message,
+          severity: String(communication.severity || "info"),
+          actionType: String(communication.actionType || ""),
+          actionValue: String(communication.actionValue || ""),
+          source: "admin",
+          sourceUid: String(communication.createdBy || ""),
+          communicationId: String(event.params.communicationId),
+          read: false,
+          status: "active",
+          createdAt: new Date().toISOString(),
+          createdAtMs: Date.now(),
+          expiresAtMs: Date.now() + 180 * 24 * 60 * 60 * 1000,
+        });
+        delivered += 1;
+      });
+      await batch.commit();
+      cursor = users.docs[users.docs.length - 1];
+      if (users.size < 400) break;
+    } while (cursor);
+
+    await event.data.ref.set({
+      deliveryStatus: "completed",
+      deliveredCount: delivered,
+      deliveredAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+);
+
+exports.cleanupExpiredShareAttachments = onSchedule(
+  {
+    schedule: "15 3 * * *",
+    timeZone: "Europe/Rome",
+    region: "europe-west1",
+    timeoutSeconds: 300,
+    memory: "256MiB",
+  },
+  async () => {
+    if (!requireTestBackend()) return;
+    const db = admin.firestore();
+    const expired = await db.collection("shareAttachments")
+      .where("expiresAtMs", "<=", Date.now())
+      .limit(400)
+      .get();
+    if (expired.empty) return;
+    const batch = db.batch();
+    expired.docs.forEach((row) => batch.delete(row.ref));
+    await batch.commit();
+  }
+);
+
+async function deleteQueryRows(query, recursive) {
+  const snapshot = await query.get();
+  for (const row of snapshot.docs) {
+    if (recursive && typeof admin.firestore().recursiveDelete === "function") {
+      await admin.firestore().recursiveDelete(row.ref);
+    } else {
+      await row.ref.delete();
+    }
+  }
+}
+
+async function deleteAccountAfterGracePeriod(uid) {
+  const db = admin.firestore();
+  const userRef = db.collection("users").doc(uid);
+  const profileSnapshot = await userRef.get();
+  const profile = profileSnapshot.exists ? profileSnapshot.data() : {};
+  const usernameLower = String((profile && profile.usernameLower) || "").trim().toLowerCase();
+  const email = String((profile && profile.email) || "").trim().toLowerCase();
+
+  const ownedProjects = await db.collection("shareProjects").where("ownerUid", "==", uid).get();
+  for (const project of ownedProjects.docs) {
+    await deleteQueryRows(db.collection("shareAttachments").where("projectId", "==", project.id), false);
+    await project.ref.delete();
+  }
+
+  const memberProjects = await db.collection("shareProjects").where("memberUids", "array-contains", uid).get();
+  for (const project of memberProjects.docs) {
+    const data = project.data() || {};
+    if (String(data.ownerUid || "") === uid) continue;
+    const members = Array.isArray(data.memberUids) ? data.memberUids.filter((id) => String(id) !== uid) : [];
+    const participants = Array.isArray(data.participants)
+      ? data.participants.filter((participant) => String(participant.uid || "") !== uid)
+      : [];
+    await project.ref.set({
+      memberUids: members,
+      participants,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  }
+
+  const cleanupQueries = [
+    db.collection("shareInvites").where("invitedUid", "==", uid),
+    db.collection("shareInvites").where("invitedByUid", "==", uid),
+    db.collection("shareNotifications").where("userUid", "==", uid),
+    db.collection("appNotifications").where("targetUid", "==", uid),
+    db.collection("appNotifications").where("sourceUid", "==", uid),
+    db.collection("shareAttachments").where("ownerUid", "==", uid),
+    db.collection("accountBackupMetadata").where("uid", "==", uid),
+    db.collection("technicalLogs").where("uid", "==", uid),
+    db.collection("userLookup").where("uid", "==", uid),
+    db.collection("mail").where("userUid", "==", uid),
+  ];
+  for (const cleanupQuery of cleanupQueries) {
+    await deleteQueryRows(cleanupQuery, false);
+  }
+
+  if (usernameLower) {
+    const usernameRef = db.collection("usernames").doc(usernameLower);
+    const usernameSnapshot = await usernameRef.get();
+    if (usernameSnapshot.exists && String(usernameSnapshot.data().uid || "") === uid) await usernameRef.delete();
+    const loginRef = db.collection("usernameLogin").doc(usernameLower);
+    const loginSnapshot = await loginRef.get();
+    if (loginSnapshot.exists && String(loginSnapshot.data().uid || "") === uid) await loginRef.delete();
+  }
+  if (email) {
+    const emailLookup = db.collection("userLookup").doc("email:" + email.replace(/\//g, "_"));
+    const emailLookupSnapshot = await emailLookup.get();
+    if (emailLookupSnapshot.exists && String(emailLookupSnapshot.data().uid || "") === uid) await emailLookup.delete();
+  }
+
+  const userDataRef = db.collection("userData").doc(uid);
+  if (typeof db.recursiveDelete === "function") {
+    await db.recursiveDelete(userDataRef).catch(() => userDataRef.delete());
+    await db.recursiveDelete(userRef).catch(() => userRef.delete());
+  } else {
+    await userDataRef.delete().catch(() => undefined);
+    await userRef.delete().catch(() => undefined);
+  }
+  await db.collection("adminUserMetadata").doc(uid).delete().catch(() => undefined);
+  await db.collection("verificationEmailRateLimits").doc(uid).delete().catch(() => undefined);
+  await admin.auth().deleteUser(uid).catch((error) => {
+    if (error && error.code !== "auth/user-not-found") throw error;
+  });
+  await db.collection("accountDeletionRequests").doc(uid).delete();
+}
+
+exports.processDueAccountDeletions = onSchedule(
+  {
+    schedule: "30 3 * * *",
+    timeZone: "Europe/Rome",
+    region: "europe-west1",
+    timeoutSeconds: 540,
+    memory: "512MiB",
+  },
+  async () => {
+    if (!requireTestBackend()) return;
+    const db = admin.firestore();
+    const nowIso = new Date().toISOString();
+    const pending = await db.collection("accountDeletionRequests")
+      .where("status", "==", "pending")
+      .limit(200)
+      .get();
+    for (const request of pending.docs) {
+      const data = request.data() || {};
+      if (!data.scheduledAt || String(data.scheduledAt) > nowIso) continue;
+      try {
+        await request.ref.set({
+          processingAt: admin.firestore.FieldValue.serverTimestamp(),
+          lastError: "",
+          attempts: admin.firestore.FieldValue.increment(1),
+        }, { merge: true });
+        await deleteAccountAfterGracePeriod(request.id);
+      } catch (error) {
+        console.error("Account deletion failed for", request.id, error);
+        await request.ref.set({
+          lastError: String((error && error.message) || "ACCOUNT_DELETION_FAILED").slice(0, 500),
+          lastErrorAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      }
+    }
+  }
+);
+
+exports.syncAccountDeletionAdminMetadata = onDocumentWritten(
+  {
+    document: "users/{userId}",
+    region: "europe-west1",
+  },
+  async (event) => {
+    if (!requireTestBackend()) return;
+    const uid = String(event.params.userId);
+    const adminRef = admin.firestore().collection("adminUserMetadata").doc(uid);
+    if (!event.data || !event.data.after.exists) {
+      await adminRef.delete().catch(() => undefined);
+      return;
+    }
+    const profile = event.data.after.data() || {};
+    await adminRef.set({
+      deletionStatus: String(profile.deletionStatus || "active"),
+      deletionRequestedAt: String(profile.deletionRequestedAt || ""),
+      deletionScheduledAt: String(profile.deletionScheduledAt || ""),
+      deletionGraceDays: Number(profile.deletionGraceDays || 15),
+      profileUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+  }
+);

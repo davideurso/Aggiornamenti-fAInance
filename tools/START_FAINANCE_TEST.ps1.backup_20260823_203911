@@ -1,0 +1,38 @@
+param([int]$Port = 5174)
+
+$ErrorActionPreference = "Stop"
+$App = "C:\Users\Davide\Documents\Progetti\01 - fAInance\App"
+$Url = "http://127.0.0.1:$Port/"
+
+& (Join-Path $App "tools\VERIFY_FAINANCE_TEST_ISOLATION.ps1")
+if ($LASTEXITCODE -ne 0) { throw "Verifica isolamento Test fallita" }
+
+$Existing = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+if ($Existing) {
+    try {
+        $Response = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 4
+        if ($Response.StatusCode -eq 200) {
+            Write-Host "[OK] fAInance Test gia attiva: $Url" -ForegroundColor Green
+            Start-Process $Url
+            exit 0
+        }
+    } catch {}
+    throw "Porta $Port gia occupata da un altro processo"
+}
+
+Write-Host "`n=== AVVIO FAINANCE TEST ===" -ForegroundColor Cyan
+$Command = "Set-Location -LiteralPath '$App'; npx vite --mode test --host 127.0.0.1 --port $Port --strictPort"
+Start-Process powershell.exe -ArgumentList @("-NoExit", "-Command", $Command) | Out-Null
+
+$Ready = $false
+for ($i = 0; $i -lt 30; $i++) {
+    Start-Sleep -Seconds 1
+    try {
+        $Response = Invoke-WebRequest $Url -UseBasicParsing -TimeoutSec 2
+        if ($Response.StatusCode -eq 200) { $Ready = $true; break }
+    } catch {}
+}
+if (!$Ready) { throw "fAInance Test non risponde su $Url dopo 30 secondi" }
+
+Write-Host "[OK] fAInance Test attiva: $Url" -ForegroundColor Green
+Start-Process $Url

@@ -1,0 +1,17 @@
+{
+  "hosting": {
+    "site": "fainance-test-20260823195207",
+    "public": "dist-test-hosting",
+    "ignore": [
+      "firebase.test-hosting.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

@@ -1,0 +1,99 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if signedIn() && request.query.limit <= 1;
+      allow create, update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+    }
+
+    match /userData/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    match /shareProjects/{projectId} {
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if signedIn()
+        && (
+          resource.data.ownerUid == request.auth.uid
+          || request.auth.uid in resource.data.memberUids
+        );
+      allow update: if signedIn()
+        && (
+          resource.data.ownerUid == request.auth.uid
+          || request.auth.uid in resource.data.memberUids
+        );
+      allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    match /shareInvites/{inviteId} {
+      allow create: if signedIn() && request.resource.data.invitedByUid == request.auth.uid;
+      allow read: if signedIn()
+        && (
+          resource.data.invitedByUid == request.auth.uid
+          || resource.data.invitedUid == request.auth.uid
+          || resource.data.invitedEmail == request.auth.token.email
+        );
+      allow update: if signedIn()
+        && (
+          resource.data.invitedByUid == request.auth.uid
+          || resource.data.invitedUid == request.auth.uid
+          || resource.data.invitedEmail == request.auth.token.email
+        );
+      allow delete: if signedIn() && resource.data.invitedByUid == request.auth.uid;
+    }
+
+    match /shareNotifications/{notificationId} {
+      allow create: if signedIn();
+      allow read, update, delete: if signedIn() && resource.data.userUid == request.auth.uid;
+    }
+
+    // Used by Firebase Trigger Email extension. Users can enqueue an email, but cannot read the queue.
+    match /mail/{mailId} {
+      allow create: if signedIn();
+      allow read, update, delete: if false;
+    }
+    // === FAINANCE ADMIN SECURITY START ===
+    function isFainanceAdmin() {
+      return request.auth != null && request.auth.token.fainanceAdminRole in ['support', 'analyst', 'admin', 'superadmin'];
+    }
+    function canReadFainanceAudit() {
+      return request.auth != null && request.auth.token.fainanceAdminRole in ['analyst', 'admin', 'superadmin'];
+    }
+    function canWriteFainanceConfig() {
+      return request.auth != null && request.auth.token.fainanceAdminRole in ['admin', 'superadmin'];
+    }
+    function isFainanceSuperadmin() {
+      return request.auth != null && request.auth.token.fainanceAdminRole == 'superadmin';
+    }
+
+    match /adminUserMetadata/{uid} {
+      allow read: if isFainanceAdmin();
+      allow create, update, delete: if isFainanceSuperadmin();
+    }
+
+    match /systemConfig/{document=**} {
+      allow read: if isFainanceAdmin();
+      allow create, update: if canWriteFainanceConfig();
+      allow delete: if isFainanceSuperadmin();
+    }
+
+    match /adminAudit/{auditId} {
+      allow read: if canReadFainanceAudit();
+      allow create: if canWriteFainanceConfig() && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+    // === FAINANCE ADMIN SECURITY END ===
+  }
+}
