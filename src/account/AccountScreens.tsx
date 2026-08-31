@@ -52,6 +52,16 @@ import {
   writeTechnicalLog,
 } from "../observability/technicalLogs";
 
+
+// FAINANCE_V50_PLACEHOLDER_FOCUS
+try {
+  if (typeof document !== "undefined" && !document.getElementById("fainance-v50-placeholder-focus")) {
+    const fainanceV50PlaceholderStyle = document.createElement("style");
+    fainanceV50PlaceholderStyle.id = "fainance-v50-placeholder-focus";
+    fainanceV50PlaceholderStyle.textContent = "input:focus::placeholder,textarea:focus::placeholder{color:transparent!important;opacity:0!important;}";
+    document.head.appendChild(fainanceV50PlaceholderStyle);
+  }
+} catch (_fainanceV50PlaceholderError) {}
 export function fainanceBasicUserPayload(user: any, fallbackName?: string) {
   user = user || {};
   return {
@@ -160,8 +170,14 @@ export function LoginScreen({ onLogin }) {
       );
     } catch (_verificationGateNoticeError) {}
   }, []);
-  function loginLang() {
-    return readFainanceStoredLang();
+  function loginLang(){
+    // FAINANCE_V50_DEVICE_LOGIN_LANGUAGE
+    try{
+      var nav=(typeof navigator!=="undefined")?navigator:null;
+      var raw=(nav&&nav.languages&&nav.languages.length?nav.languages[0]:(nav?nav.language:"it-IT"))||"it-IT";
+      var code=String(raw).toLowerCase().replace("_","-").split("-")[0];
+      return ["it","en","es","fr","de","pt","pl","nl","ro","el"].indexOf(code)>=0?code:"it";
+    }catch(e){return "it";}
   }
   function L(s) {
     return translateFainanceText(s, loginLang());
