@@ -102,11 +102,26 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
     // best effort
   }
 
+  // FAINANCE_V84_DIRECT_EMAIL_FALLBACK
+  // L'email grafica custom resta il canale preferito. Se il backend non e
+  // raggiungibile, scade o risponde con errore, Firebase Auth invia comunque
+  // l'email standard: registrazione e reinvio non possono piu dipendere dalla
+  // disponibilita della Cloud Function custom.
+  async function sendFirebaseFallback(): Promise<void> {
+    await sendEmailVerification(user);
+  }
+
   const token = await user.getIdToken(true);
   const language = String(languageCode || "it").split("-")[0].toLowerCase();
   const continueUrl = `https://${firebaseConfig.projectId}.web.app/?emailVerified=1`;
 
-  let response: Response;
+  const controller =
+    typeof AbortController !== "undefined" ? new AbortController() : null;
+  const timeoutId = controller
+    ? setTimeout(() => controller.abort(), 2500)
+    : null;
+
+  let response: Response | null = null;
   try {
     response = await fetch(cloudFunctionUrl("sendCustomVerificationEmail"), {
       method: "POST",
@@ -115,23 +130,37 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ language, continueUrl }),
+      ...(controller ? { signal: controller.signal } : {}),
     });
-  } catch (cause) {
-    const error: any = new Error("Verification email backend unavailable");
-    error.code = "verification/backend-unavailable";
-    error.cause = cause;
-    throw error;
+  } catch {
+    if (timeoutId) clearTimeout(timeoutId);
+    await sendFirebaseFallback();
+    return;
   }
 
+  if (timeoutId) clearTimeout(timeoutId);
+
   const payload: any = await response.json().catch(() => ({}));
+
   if (response.status === 429 || payload?.code === "verification/too-many-requests") {
     const error: any = new Error("Too many verification requests");
     error.code = "auth/too-many-requests";
     throw error;
   }
-  if (!response.ok || payload?.ok !== true) {
-    const error: any = new Error(String(payload?.error || "Verification email backend unavailable"));
+
+  if (response.ok && payload?.ok === true) {
+    return;
+  }
+
+  try {
+    await sendFirebaseFallback();
+    return;
+  } catch (fallbackCause) {
+    const error: any = new Error(
+      String(payload?.error || "Verification email unavailable"),
+    );
     error.code = String(payload?.code || "verification/backend-unavailable");
+    error.cause = fallbackCause;
     throw error;
   }
 }

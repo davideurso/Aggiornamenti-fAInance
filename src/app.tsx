@@ -18562,26 +18562,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             }
           } catch (e) {}
           try {
-            // FAINANCE_V80_NATIVE_BANNER_TOP_SLOT
-            // iOS/Android possono conservare l'anchor bottom della chiamata precedente:
-            // lo azzeriamo e dichiariamo esplicitamente TOP_CENTER oltre alle coordinate
-            // dello slot gia riservato nel layout.
-            try {
-              if (ads && ads.hideBanner) ads.hideBanner({});
-            } catch (_hideError) {}
+            // FAINANCE_V84_STABLE_TOP_AD_SLOT
+            // Usa esclusivamente le coordinate dello slot reale gia misurato.
+            // Non forziamo anchor/position non supportati dal plugin nativo e
+            // non eseguiamo hideBanner immediatamente prima di showBanner:
+            // entrambe le operazioni causavano banner invisibile/overlay sui tap.
             ads
               .showBanner({
                 adUnitId: currentBannerAdUnitId(),
-                position: "TOP_CENTER",
-                bannerPosition: "TOP_CENTER",
-                anchor: "TOP",
                 topMarginCssPx: top,
                 topMarginPx: top,
                 topMargin: top,
                 marginTop: top,
                 y: top,
                 top: top,
-                placement: "top-slot",
+                placement: "inline-slot",
                 headerVisible: !!showAppSummaryHeader,
               })
               .catch(function (e) {
