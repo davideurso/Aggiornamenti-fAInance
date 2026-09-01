@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { fbAuth, fbDb } from "../firebase/client";
-import { firebaseConfig } from "../config/env";
+import { cloudFunctionUrl, firebaseConfig } from "../config/env";
 import { normalizeUsername, usernameLookupKey } from "../profile/username";
 
 export function normalizeAccountEmail(value: unknown): string {
@@ -101,18 +101,13 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
     // best effort
   }
 
-  // FAINANCE_V86_BRANDED_EMAIL_ONLY_VIA_HOSTING_PROXY
-  // Manteniamo esclusivamente l'email grafica fAInance concordata.
-  // Firebase Hosting inoltra /api/sendCustomVerificationEmail alla funzione
-  // esistente, evitando il vecchio endpoint diretto della Cloud Function.
   const token = await user.getIdToken(true);
   const language = String(languageCode || "it").split("-")[0].toLowerCase();
   const continueUrl = `https://${firebaseConfig.projectId}.web.app/?emailVerified=1`;
-  const endpoint = `https://${firebaseConfig.projectId}.web.app/api/sendCustomVerificationEmail`;
 
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await fetch(cloudFunctionUrl("sendCustomVerificationEmail"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -128,17 +123,13 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
   }
 
   const payload: any = await response.json().catch(() => ({}));
-
   if (response.status === 429 || payload?.code === "verification/too-many-requests") {
     const error: any = new Error("Too many verification requests");
     error.code = "auth/too-many-requests";
     throw error;
   }
-
   if (!response.ok || payload?.ok !== true) {
-    const error: any = new Error(
-      String(payload?.error || "Verification email backend unavailable"),
-    );
+    const error: any = new Error(String(payload?.error || "Verification email backend unavailable"));
     error.code = String(payload?.code || "verification/backend-unavailable");
     throw error;
   }
