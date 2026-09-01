@@ -124,7 +124,11 @@ export function EmailActionScreen() {
         if (mode === "verifyEmail" || mode === "verifyAndChangeEmail") {
           const info = await checkActionCode(fbAuth, code);
           setEmail(String(info && info.data && info.data.email || ""));
-          setState("verify-ready");
+          // FAINANCE_V80_EMAIL_ACTION_AUTO_APPLY
+          // Il click sul pulsante dell'email deve completare la verifica e mostrare
+          // direttamente la schermata fAInance definitiva, senza una seconda conferma.
+          await applyActionCode(fbAuth, code);
+          setState("verify-success");
           return;
         }
         if (mode === "recoverEmail") {

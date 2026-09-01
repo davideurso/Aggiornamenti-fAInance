@@ -25,7 +25,7 @@ try {
 
   createRoot(rootElement).render(
     <StrictMode>
-      {isFainanceTestRuntime && isFainanceEmailActionUrl() ? <EmailActionScreen /> : <AppWithLogin />}
+      {isFainanceEmailActionUrl() ? <EmailActionScreen /> : <AppWithLogin />}
     </StrictMode>,
   )
 

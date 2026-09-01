@@ -984,15 +984,45 @@ exports.sendCustomVerificationEmail = onRequest(
       }
 
       const firebaseLink = await admin.auth().generateEmailVerificationLink(email);
-      const actionLink = firebaseLink;
+  // FAINANCE_V83_CUSTOM_ACTION_AND_CID_IMAGES
+  const fainanceV83FirebaseAction = new URL(firebaseLink);
+  let fainanceV83ActionOrigin = 'https://fainance-a7794.web.app';
+  try {
+    const fainanceV83Continue = new URL(String((req.body && req.body.continueUrl) || ''));
+    if (fainanceV83Continue.protocol === 'https:') fainanceV83ActionOrigin = fainanceV83Continue.origin;
+  } catch (_fainanceV83OriginError) {}
+  const fainanceV83ActionParams = new URLSearchParams();
+  fainanceV83ActionParams.set('fainanceEmailAction','1');
+  fainanceV83ActionParams.set('mode',fainanceV83FirebaseAction.searchParams.get('mode') || 'verifyEmail');
+  fainanceV83ActionParams.set('oobCode',fainanceV83FirebaseAction.searchParams.get('oobCode') || '');
+  const fainanceV83ApiKey = fainanceV83FirebaseAction.searchParams.get('apiKey');
+  if (fainanceV83ApiKey) fainanceV83ActionParams.set('apiKey',fainanceV83ApiKey);
+  fainanceV83ActionParams.set('lang',String((req.body && req.body.language) || 'it').split('-')[0].toLowerCase());
+  const fainanceV83ActionUrl = fainanceV83ActionOrigin + '/?' + fainanceV83ActionParams.toString();
+
+      const actionLink = fainanceV83ActionUrl;
       const copy = verificationCopy(language);
-      const delivery = await resend.emails.send({
+      
+  let fainanceV83ImageIndex = 0;
+  const fainanceV83EmailHtml = String(verificationEmailHtml(copy, actionLink, verificationConfig)).replace(/<img\b[^>]*>/gi,function(tag){
+    const lower=tag.toLowerCase();
+    let cid='';
+    if(/logo/.test(lower) && !/(splash|banner|hero|cover)/.test(lower)) cid='fainance-email-logo-v83';
+    else if(/splash|banner|hero|cover/.test(lower)) cid='fainance-email-hero-v83';
+    else { cid = fainanceV83ImageIndex++ === 0 ? 'fainance-email-hero-v83' : 'fainance-email-logo-v83'; }
+    return tag.replace(/\bsrc=(['"])[^'"]*\1/i,'src="cid:'+cid+'"');
+  });
+  const fainanceV83InlineAttachments = [
+    { content: require('fs').readFileSync(require('path').join(__dirname,'email-assets','verification-hero.png')).toString('base64'), filename:'verification-hero.png', contentId:'fainance-email-hero-v83' },
+    { content: require('fs').readFileSync(require('path').join(__dirname,'email-assets','verification-logo.png')).toString('base64'), filename:'verification-logo.png', contentId:'fainance-email-logo-v83' }
+  ];
+const delivery = await resend.emails.send({
         from: sender,
         to: [email],
         subject: copy.subject,
         text: copy.title + "\n\n" + copy.body + "\n\n" + actionLink + "\n\n" + copy.ignore,
-        html: verificationEmailHtml(copy, actionLink, verificationConfig),
-      });
+        html: fainanceV83EmailHtml,
+       attachments: fainanceV83InlineAttachments});
       if (delivery.error) {
         console.error("Resend verification delivery error:", delivery.error);
         return res.status(502).json({

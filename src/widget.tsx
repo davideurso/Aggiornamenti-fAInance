@@ -10398,6 +10398,7 @@ export function BudgetPlanPanel() {
     isMobile = ctx.isMobile;
   var setTab = ctx.setTab,
     setMobileMenu = ctx.setMobileMenu,
+    setNativeBannerSuppressed = ctx.setNativeBannerSuppressed,
     userKey = ctx.userKey,
     btnRadius = ctx.btnRadius || 14,
     confirmButtonColor = ctx.confirmButtonColor || "#7F77DD";
@@ -10411,9 +10412,52 @@ export function BudgetPlanPanel() {
   var sc = dark ? "#aaa" : "#888";
   var borderC = dark ? "#444" : "#eee";
   var cardBg = dark ? "#252535" : "#fff";
+  // FAINANCE_V80_BUDGET_INTEGER_AMOUNTS
+  function roundBudgetNumber(value) {
+    var n = Number(value);
+    return Number.isFinite(n) ? Math.round(n) : 0;
+  }
+  function fmtBudget(value) {
+    var rounded = roundBudgetNumber(value);
+    var formatted;
+    try {
+      formatted = new Intl.NumberFormat(undefined, {
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0,
+      }).format(rounded);
+    } catch (_error) {
+      formatted = String(rounded);
+    }
+    return sym + "\u00A0" + formatted;
+  }
+  var budgetSummaryValueStyle = {
+    fontSize: isMobile ? 13 : 16,
+    fontWeight: 700,
+    lineHeight: 1.15,
+    minWidth: 0,
+    maxWidth: "100%",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+    fontVariantNumeric: "tabular-nums",
+  };
   var [savingToast, setSavingToast] = useState("");
   var [showInfoTooltip, setShowInfoTooltip] = useState(false);
   var [budgetPopup, setBudgetPopup] = useState(null);
+
+  useEffect(
+    function () {
+      // FAINANCE_V80_BUDGET_MODAL_AD_SUPPRESSION
+      // Il banner nativo non deve sovrapporsi ai popup Budget. Alla chiusura
+      // viene ripristinato automaticamente nello slot superiore dedicato.
+      if (setNativeBannerSuppressed) {
+        setNativeBannerSuppressed(!!budgetPopup);
+      }
+      return function () {
+        if (setNativeBannerSuppressed) setNativeBannerSuppressed(false);
+      };
+    },
+    [budgetPopup, setNativeBannerSuppressed]
+  );
 
   var avgIncome = useMemo(
     function () {
@@ -10439,13 +10483,14 @@ export function BudgetPlanPanel() {
 
   function budgetManualIncomeDraft(plan) {
     var raw = plan && plan.manualIncome != null ? Number(plan.manualIncome) : 0;
-    return raw > 0 ? String(plan.manualIncome) : "";
+    return raw > 0 ? String(roundBudgetNumber(raw)) : "";
   }
   var [manualIncome, setManualIncome] = useState(
     budgetManualIncomeDraft(budgetPlan)
   );
-  var effectiveIncome =
-    manualIncome !== "" ? parseFloat(manualIncome) || 0 : avgIncome;
+  var effectiveIncome = roundBudgetNumber(
+    manualIncome !== "" ? parseFloat(manualIncome) || 0 : avgIncome
+  );
 
   var initItems = useMemo(
     function () {
@@ -10458,8 +10503,8 @@ export function BudgetPlanPanel() {
             : null;
         return {
           catId: c.id,
-          amount: ex ? ex.amount : 0,
-          pct: ex ? ex.pct || 0 : 0,
+          amount: ex ? roundBudgetNumber(ex.amount) : 0,
+          pct: ex ? roundBudgetNumber(ex.pct || 0) : 0,
         };
       });
     },
@@ -10478,8 +10523,8 @@ export function BudgetPlanPanel() {
               : null;
           return {
             catId: c.id,
-            amount: ex ? ex.amount : 0,
-            pct: ex ? ex.pct || 0 : 0,
+            amount: ex ? roundBudgetNumber(ex.amount) : 0,
+            pct: ex ? roundBudgetNumber(ex.pct || 0) : 0,
           };
         })
       );
@@ -10493,8 +10538,7 @@ export function BudgetPlanPanel() {
           if (item.pct > 0 && effectiveIncome > 0) {
             return {
               ...item,
-              amount:
-                Math.round(((effectiveIncome * item.pct) / 100) * 100) / 100,
+              amount: roundBudgetNumber((effectiveIncome * item.pct) / 100),
             };
           }
           return item;
@@ -10504,10 +10548,14 @@ export function BudgetPlanPanel() {
     [effectiveIncome]
   );
 
-  var totalAlloc = items.reduce(function (a, i) {
-    return a + i.amount;
-  }, 0);
-  var savingPlanned = Math.max(0, effectiveIncome - totalAlloc);
+  var totalAlloc = roundBudgetNumber(
+    items.reduce(function (a, i) {
+      return a + roundBudgetNumber(i.amount);
+    }, 0)
+  );
+  var savingPlanned = roundBudgetNumber(
+    Math.max(0, effectiveIncome - totalAlloc)
+  );
   var savingPct =
     effectiveIncome > 0 ? (savingPlanned / effectiveIncome) * 100 : 0;
 
@@ -10536,27 +10584,27 @@ export function BudgetPlanPanel() {
     },
     [incomes, curMonthKey]
   );
-  var realSaving = curMonthInc - curMonthExp;
-  var savingDiff = realSaving - savingPlanned;
+  var realSaving = roundBudgetNumber(curMonthInc - curMonthExp);
+  var savingDiff = roundBudgetNumber(realSaving - savingPlanned);
 
   function updateAmt(catId, val) {
-    var n = parseFloat(val) || 0;
+    var n = roundBudgetNumber(parseFloat(val) || 0);
     setItems(function (prev) {
       return prev.map(function (i) {
         if (i.catId !== catId) return i;
         var newPct =
           effectiveIncome > 0
-            ? Math.round((n / effectiveIncome) * 10000) / 100
+            ? roundBudgetNumber((n / effectiveIncome) * 100)
             : 0;
         return { ...i, amount: n, pct: newPct };
       });
     });
   }
   function updatePct(catId, val) {
-    var pv = parseFloat(val) || 0;
+    var pv = roundBudgetNumber(parseFloat(val) || 0);
     var n =
       effectiveIncome > 0
-        ? Math.round(((effectiveIncome * pv) / 100) * 100) / 100
+        ? roundBudgetNumber((effectiveIncome * pv) / 100)
         : 0;
     setItems(function (prev) {
       return prev.map(function (i) {
@@ -10578,8 +10626,8 @@ export function BudgetPlanPanel() {
             : null;
         return {
           catId: c.id,
-          amount: ex ? ex.amount : 0,
-          pct: ex ? ex.pct || 0 : 0,
+          amount: ex ? roundBudgetNumber(ex.amount) : 0,
+          pct: ex ? roundBudgetNumber(ex.pct || 0) : 0,
         };
       })
     );
@@ -10597,9 +10645,16 @@ export function BudgetPlanPanel() {
   function save() {
     var savedPopup = budgetPopup;
     setBudgetPlan({
-      income: effectiveIncome,
-      manualIncome: manualIncome !== "" ? parseFloat(manualIncome) : null,
-      items: items,
+      income: roundBudgetNumber(effectiveIncome),
+      manualIncome:
+        manualIncome !== "" ? roundBudgetNumber(parseFloat(manualIncome)) : null,
+      items: items.map(function (item) {
+        return {
+          ...item,
+          amount: roundBudgetNumber(item.amount),
+          pct: roundBudgetNumber(item.pct),
+        };
+      }),
     });
     setSavingToast(
       L(
@@ -10772,7 +10827,7 @@ export function BudgetPlanPanel() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3,1fr)",
+            gridTemplateColumns: "repeat(3,minmax(0,1fr))",
             gap: 10,
             marginBottom: 14,
           }}
@@ -10783,13 +10838,14 @@ export function BudgetPlanPanel() {
               borderRadius: 10,
               padding: "12px 14px",
               textAlign: "center",
+              minWidth: 0,
             }}
           >
             <div style={{ fontSize: 11, color: sc, marginBottom: 3 }}>
               {L("Reddito di rif.")}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: tc }}>
-              {fmt(effectiveIncome)}
+            <div style={{ ...budgetSummaryValueStyle, color: tc }}>
+              {fmtBudget(effectiveIncome)}
             </div>
           </div>
           <div
@@ -10798,13 +10854,14 @@ export function BudgetPlanPanel() {
               borderRadius: 10,
               padding: "12px 14px",
               textAlign: "center",
+              minWidth: 0,
             }}
           >
             <div style={{ fontSize: 11, color: sc, marginBottom: 3 }}>
               {L("Totale allocato")}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#E24B4A" }}>
-              {fmt(totalAlloc)}
+            <div style={{ ...budgetSummaryValueStyle, color: "#E24B4A" }}>
+              {fmtBudget(totalAlloc)}
             </div>
           </div>
           <div
@@ -10814,6 +10871,7 @@ export function BudgetPlanPanel() {
               padding: "12px 14px",
               textAlign: "center",
               border: "2px solid #1D9E75",
+              minWidth: 0,
             }}
           >
             <div
@@ -10826,8 +10884,8 @@ export function BudgetPlanPanel() {
             >
               {L("Risparmio pianif.")}
             </div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#1D9E75" }}>
-              {fmt(savingPlanned)}
+            <div style={{ ...budgetSummaryValueStyle, color: "#1D9E75" }}>
+              {fmtBudget(savingPlanned)}
             </div>
             <div style={{ fontSize: 11, color: "#1D9E75" }}>
               {Math.round(savingPct)}% {L("del reddito")}
@@ -10863,7 +10921,7 @@ export function BudgetPlanPanel() {
                   color: realSaving >= 0 ? "#1D9E75" : "#E24B4A",
                 }}
               >
-                {fmt(realSaving)}
+                {fmtBudget(realSaving)}
               </div>
             </div>
             <div
@@ -10886,7 +10944,7 @@ export function BudgetPlanPanel() {
                 }}
               >
                 {savingDiff >= 0 ? "+" : ""}
-                {fmt(savingDiff)}
+                {fmtBudget(savingDiff)}
               </div>
             </div>
           </div>
@@ -10949,7 +11007,7 @@ export function BudgetPlanPanel() {
             <div style={{ fontSize: 12, color: sc }}>
               {L("Reddito di rif.")}:{" "}
               <strong style={{ color: "#1D9E75" }}>
-                {fmt(effectiveIncome)}
+                {fmtBudget(effectiveIncome)}
               </strong>
             </div>
           </div>
@@ -11002,7 +11060,7 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ fontSize: 12, color: sc }}>
               {L("Totale allocato")}:{" "}
-              <strong style={{ color: barColor }}>{fmt(totalAlloc)}</strong> ·{" "}
+              <strong style={{ color: barColor }}>{fmtBudget(totalAlloc)}</strong> ·{" "}
               {Math.round(pctBar)}%
             </div>
           </div>
@@ -11055,13 +11113,13 @@ export function BudgetPlanPanel() {
                       marginTop: 6,
                     }}
                   >
-                    {fmt(avgIncome)}
+                    {fmtBudget(avgIncome)}
                   </div>
                 </div>
               </FainanceInfoPopover>
             </div>
             <div style={{ fontSize: 26, fontWeight: 900, color: "#1D9E75" }}>
-              {fmt(effectiveIncome)}
+              {fmtBudget(effectiveIncome)}
             </div>
           </div>
           <div>
@@ -11079,6 +11137,7 @@ export function BudgetPlanPanel() {
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input
                 type="number"
+                step={1}
                 value={manualIncome}
                 onChange={function (e) {
                   setManualIncome(e.target.value);
@@ -11126,7 +11185,7 @@ export function BudgetPlanPanel() {
                 {L("Totale allocato")}
               </div>
               <div style={{ fontSize: 17, fontWeight: 850, color: barColor }}>
-                {fmt(totalAlloc)}
+                {fmtBudget(totalAlloc)}
               </div>
             </div>
             <div
@@ -11140,7 +11199,7 @@ export function BudgetPlanPanel() {
                 {L("Disponibile")}
               </div>
               <div style={{ fontSize: 17, fontWeight: 850, color: "#1D9E75" }}>
-                {fmt(savingPlanned)}
+                {fmtBudget(savingPlanned)}
               </div>
             </div>
           </div>
@@ -11213,7 +11272,7 @@ export function BudgetPlanPanel() {
                 {L("Reddito di rif.")}
               </div>
               <div style={{ fontSize: 16, fontWeight: 850, color: "#1D9E75" }}>
-                {fmt(effectiveIncome)}
+                {fmtBudget(effectiveIncome)}
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -11221,7 +11280,7 @@ export function BudgetPlanPanel() {
                 {L("Totale allocato")}
               </div>
               <div style={{ fontSize: 16, fontWeight: 850, color: barColor }}>
-                {fmt(totalAlloc)}
+                {fmtBudget(totalAlloc)}
               </div>
             </div>
           </div>
@@ -11291,7 +11350,7 @@ export function BudgetPlanPanel() {
                       borderBottom: "1px solid " + borderC,
                     }}
                   >
-                    {g.name} — {fmt(gt)}
+                    {g.name} — {fmtBudget(gt)}
                   </div>
                   {gc.map(function (c) {
                     var item = items.find(function (i) {
@@ -11338,6 +11397,7 @@ export function BudgetPlanPanel() {
                           <input
                             type="number"
                             min={0}
+                            step={1}
                             value={item.amount || ""}
                             onChange={function (e) {
                               updateAmt(c.id, e.target.value);
@@ -11365,7 +11425,7 @@ export function BudgetPlanPanel() {
                           type="number"
                           min={0}
                           max={100}
-                          step={0.1}
+                          step={1}
                           value={pctVal || ""}
                           onChange={function (e) {
                             updatePct(c.id, e.target.value);
