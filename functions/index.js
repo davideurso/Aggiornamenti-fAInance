@@ -1016,12 +1016,30 @@ exports.sendCustomVerificationEmail = onRequest(
     { content: require('fs').readFileSync(require('path').join(__dirname,'email-assets','verification-hero.png')).toString('base64'), filename:'verification-hero.png', contentId:'fainance-email-hero-v83' },
     { content: require('fs').readFileSync(require('path').join(__dirname,'email-assets','verification-logo.png')).toString('base64'), filename:'verification-logo.png', contentId:'fainance-email-logo-v83' }
   ];
+
+  // FAINANCE_V94_FULL_BRANDED_EMAIL_LAYOUT
+  const fainanceV94Copies = {"it":{"eyebrow":"Sicurezza account","title":"Conferma il tuo indirizzo email","body":"Hai quasi finito. Conferma il tuo indirizzo email per attivare il tuo account fAInance e accedere in sicurezza.","button":"Conferma il mio indirizzo email","note":"Se non hai creato tu questo account, puoi ignorare questa email."},"en":{"eyebrow":"Account security","title":"Confirm your email address","body":"You're almost done. Confirm your email address to activate your fAInance account and sign in securely.","button":"Confirm my email address","note":"If you did not create this account, you can ignore this email."},"es":{"eyebrow":"Seguridad de la cuenta","title":"Confirma tu correo electrónico","body":"Ya casi está. Confirma tu correo para activar tu cuenta fAInance y acceder de forma segura.","button":"Confirmar mi correo","note":"Si no has creado esta cuenta, puedes ignorar este correo."},"fr":{"eyebrow":"Sécurité du compte","title":"Confirmez votre adresse e-mail","body":"Vous y êtes presque. Confirmez votre adresse e-mail pour activer votre compte fAInance et vous connecter en toute sécurité.","button":"Confirmer mon adresse e-mail","note":"Si vous n’avez pas créé ce compte, vous pouvez ignorer cet e-mail."},"de":{"eyebrow":"Kontosicherheit","title":"Bestätige deine E-Mail-Adresse","body":"Fast geschafft. Bestätige deine E-Mail-Adresse, um dein fAInance-Konto zu aktivieren und dich sicher anzumelden.","button":"E-Mail-Adresse bestätigen","note":"Wenn du dieses Konto nicht erstellt hast, kannst du diese E-Mail ignorieren."},"pt":{"eyebrow":"Segurança da conta","title":"Confirma o teu endereço de email","body":"Está quase. Confirma o teu email para ativar a conta fAInance e iniciar sessão em segurança.","button":"Confirmar o meu email","note":"Se não criaste esta conta, podes ignorar este email."},"pl":{"eyebrow":"Bezpieczeństwo konta","title":"Potwierdź swój adres e-mail","body":"Prawie gotowe. Potwierdź adres e-mail, aby aktywować konto fAInance i bezpiecznie się zalogować.","button":"Potwierdź mój adres e-mail","note":"Jeśli nie zakładałeś tego konta, możesz zignorować tę wiadomość."},"nl":{"eyebrow":"Accountbeveiliging","title":"Bevestig je e-mailadres","body":"Bijna klaar. Bevestig je e-mailadres om je fAInance-account te activeren en veilig in te loggen.","button":"Mijn e-mailadres bevestigen","note":"Als je dit account niet hebt aangemaakt, kun je deze e-mail negeren."},"ro":{"eyebrow":"Securitatea contului","title":"Confirmă adresa de email","body":"Aproape gata. Confirmă adresa de email pentru a activa contul fAInance și a te autentifica în siguranță.","button":"Confirmă adresa mea de email","note":"Dacă nu ai creat acest cont, poți ignora acest email."},"el":{"eyebrow":"Ασφάλεια λογαριασμού","title":"Επιβεβαιώστε τη διεύθυνση email","body":"Σχεδόν ολοκληρώθηκε. Επιβεβαιώστε το email σας για να ενεργοποιήσετε τον λογαριασμό fAInance και να συνδεθείτε με ασφάλεια.","button":"Επιβεβαίωση email","note":"Αν δεν δημιουργήσατε εσείς αυτόν τον λογαριασμό, αγνοήστε αυτό το email."}};
+  const fainanceV94Lang = String((req.body && req.body.language) || 'it').split('-')[0].toLowerCase();
+  const fainanceV94Copy = fainanceV94Copies[fainanceV94Lang] || fainanceV94Copies.en;
+  const fainanceV94EmailHtml = `<!doctype html>
+<html><body style="margin:0;padding:0;background:#eef3ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#102a56;">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#eef3ff;padding:28px 12px;"><tr><td align="center">
+<table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:24px;overflow:hidden;border:1px solid #dfe7f6;">
+<tr><td style="padding:0;background:#eaf1ff;"><img src="cid:fainance-email-hero-v83" alt="fAInance" width="600" style="display:block;width:100%;height:auto;border:0;"></td></tr>
+<tr><td align="center" style="padding:30px 36px 8px 36px;"><img src="cid:fainance-email-logo-v83" alt="fAInance" width="150" style="display:block;width:150px;max-width:70%;height:auto;border:0;"></td></tr>
+<tr><td align="center" style="padding:10px 40px 0 40px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#56709b;">${fainanceV94Copy.eyebrow}</td></tr>
+<tr><td align="center" style="padding:12px 40px 0 40px;font-size:30px;line-height:1.18;font-weight:800;color:#102a56;">${fainanceV94Copy.title}</td></tr>
+<tr><td align="center" style="padding:18px 44px 0 44px;font-size:16px;line-height:1.65;color:#52647f;">${fainanceV94Copy.body}</td></tr>
+<tr><td align="center" style="padding:28px 40px 8px 40px;"><a href="${fainanceV83ActionUrl}" style="display:inline-block;background:#156ee8;color:#ffffff;text-decoration:none;font-size:16px;font-weight:800;padding:15px 28px;border-radius:12px;">${fainanceV94Copy.button}</a></td></tr>
+<tr><td align="center" style="padding:18px 44px 30px 44px;font-size:13px;line-height:1.55;color:#8290a6;">${fainanceV94Copy.note}</td></tr>
+<tr><td align="center" style="padding:18px 30px;background:#f8faff;border-top:1px solid #e8edf7;font-size:12px;color:#8c99ad;">© 2026 fAInance · Smart Finance</td></tr>
+</table></td></tr></table></body></html>`;
 const delivery = await resend.emails.send({
         from: sender,
         to: [email],
         subject: copy.subject,
         text: copy.title + "\n\n" + copy.body + "\n\n" + actionLink + "\n\n" + copy.ignore,
-        html: fainanceV83EmailHtml,
+        html: fainanceV94EmailHtml,
        attachments: fainanceV83InlineAttachments});
       if (delivery.error) {
         console.error("Resend verification delivery error:", delivery.error);
