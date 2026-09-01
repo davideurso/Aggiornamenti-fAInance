@@ -295,6 +295,17 @@ export function LoginScreen({ onLogin }) {
   }
 
   async function doRegister() {
+    // FAINANCE_V71_POST_AUTH_RECOVERY
+    var fainanceV71CreatedAuthUser:any=null;
+    var fainanceV71VerificationSent=false;
+    function fainanceV71IsPermissionError(err:any){
+      var code=String((err&&err.code)||"").toLowerCase();
+      var message=String((err&&err.message)||err||"");
+      return code.indexOf("permission-denied")>=0||
+        code.indexOf("insufficient-permission")>=0||
+        /missing or insufficient permissions/i.test(message);
+    }
+
     setError("");
     setInfoText("");
     var cleanFirstName = String(firstName || "").trim();
@@ -316,7 +327,22 @@ export function LoginScreen({ onLogin }) {
       var repairingExisting = false;
       try {
         authUser = await registerEmailAccount(cleanEmail, password);
+      fainanceV71CreatedAuthUser=authUser;
+      try{
+        await sendAccountEmailVerification(authUser,loginLang());
+        fainanceV71VerificationSent=true;
+      }catch(verificationError:any){
+        console.warn("Registration verification email deferred",verificationError);
+      }
       } catch (createErr: any) {
+      if(fainanceV71CreatedAuthUser&&fainanceV71IsPermissionError(createErr)){
+        console.warn("FAINANCE_V71_POST_AUTH_PERMISSION_DEFERRED",createErr);
+        setError("");
+        setInfoText(T("Account creato. Verifica l'email per completare l'accesso."));
+        setMode("login");
+        setLoading(false);
+        return;
+      }
         if (createErr && createErr.code === "auth/email-already-in-use") {
           try {
             authUser = await signInWithEmailAccount(cleanEmail, password);
@@ -358,7 +384,7 @@ export function LoginScreen({ onLogin }) {
       var verificationDeferred = false;
       var verificationRateLimited = false;
       try {
-        await sendAccountEmailVerification(authUser, loginLang());
+        if(!fainanceV71VerificationSent){await sendAccountEmailVerification(authUser,loginLang());fainanceV71VerificationSent=true;}
       } catch (verificationErr: any) {
         verificationDeferred = true;
         verificationRateLimited = !!(verificationErr && verificationErr.code === "auth/too-many-requests");

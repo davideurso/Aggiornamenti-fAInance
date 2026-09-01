@@ -1248,3 +1248,77 @@ export function applyAppTranslationPatches(){
   })();
 
 })();
+
+// fAInance 2.0 V71 - registrazione parziale + verifica i18n
+(function(){
+  var TABLE={
+  "it": {
+    "resend": "Reinvia email di verifica",
+    "sent": "Nuova email di verifica inviata.",
+    "created": "Account creato. Verifica l'email per completare l'accesso."
+  },
+  "en": {
+    "resend": "Resend verification email",
+    "sent": "A new verification email has been sent.",
+    "created": "Account created. Verify your email to complete sign-in."
+  },
+  "es": {
+    "resend": "Reenviar email de verificación",
+    "sent": "Se ha enviado un nuevo email de verificación.",
+    "created": "Cuenta creada. Verifica tu email para completar el acceso."
+  },
+  "fr": {
+    "resend": "Renvoyer l’e-mail de vérification",
+    "sent": "Un nouvel e-mail de vérification a été envoyé.",
+    "created": "Compte créé. Vérifiez votre e-mail pour terminer la connexion."
+  },
+  "de": {
+    "resend": "Bestätigungs-E-Mail erneut senden",
+    "sent": "Eine neue Bestätigungs-E-Mail wurde gesendet.",
+    "created": "Konto erstellt. Bestätige deine E-Mail, um die Anmeldung abzuschließen."
+  },
+  "pt": {
+    "resend": "Reenviar e-mail de verificação",
+    "sent": "Foi enviado um novo e-mail de verificação.",
+    "created": "Conta criada. Verifica o teu e-mail para concluir o acesso."
+  },
+  "pl": {
+    "resend": "Wyślij ponownie e-mail weryfikacyjny",
+    "sent": "Wysłano nową wiadomość e-mail weryfikacyjną.",
+    "created": "Konto zostało utworzone. Zweryfikuj e-mail, aby dokończyć logowanie."
+  },
+  "nl": {
+    "resend": "Verificatie-e-mail opnieuw verzenden",
+    "sent": "Er is een nieuwe verificatie-e-mail verzonden.",
+    "created": "Account aangemaakt. Verifieer je e-mail om het aanmelden te voltooien."
+  },
+  "ro": {
+    "resend": "Retrimite e-mailul de verificare",
+    "sent": "A fost trimis un nou e-mail de verificare.",
+    "created": "Cont creat. Verifică e-mailul pentru a finaliza autentificarea."
+  },
+  "el": {
+    "resend": "Επαναποστολή email επαλήθευσης",
+    "sent": "Στάλθηκε νέο email επαλήθευσης.",
+    "created": "Ο λογαριασμός δημιουργήθηκε. Επαλήθευσε το email σου για να ολοκληρώσεις τη σύνδεση."
+  }
+};
+  var KEYS={resend:"Reinvia email di verifica",sent:"Nuova email di verifica inviata.",created:"Account creato. Verifica l'email per completare l'accesso."};
+  var RESEND_ALIASES=["Reinvia Email de verifica","Reinvia email de verifica","Reinvia Email di verifica","Reinvia Email di Verifica","Reinvia email verifica"];
+  var SENT_ALIASES=["Nuova email di verifica inviata","Nuova Email di verifica inviata.","Nuova email de verifica inviata.","Nuova Email de verifica inviata."];
+  function put(code,key,val){
+    if(!TRANSLATIONS[code])TRANSLATIONS[code]={};
+    TRANSLATIONS[code][key]=val;
+    try{if(typeof FAINANCE_UI_TRANSLATIONS!=="undefined"){if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};FAINANCE_UI_TRANSLATIONS[code][key]=val;}}catch(e){}
+    try{if(typeof FAINANCE_I18N_PHRASES!=="undefined"){if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};FAINANCE_I18N_PHRASES[code][key]=val;}}catch(e){}
+  }
+  Object.keys(TABLE).forEach(function(code){
+    var row=TABLE[code];
+    put(code,KEYS.resend,row.resend);
+    put(code,KEYS.sent,row.sent);
+    put(code,KEYS.created,row.created);
+    RESEND_ALIASES.forEach(function(alias){put(code,alias,row.resend);});
+    SENT_ALIASES.forEach(function(alias){put(code,alias,row.sent);});
+  });
+  try{if(typeof fainanceTranslationCache!=="undefined")fainanceTranslationCache={};}catch(e){}
+})();
