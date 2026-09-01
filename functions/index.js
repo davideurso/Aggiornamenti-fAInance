@@ -983,11 +983,8 @@ exports.sendCustomVerificationEmail = onRequest(
         return res.status(429).json({ ok: false, error: "Attendi prima di richiedere una nuova email.", code: "verification/too-many-requests" });
       }
 
-      const firebaseLink = await admin.auth().generateEmailVerificationLink(email, {
-        url: continueUrl,
-        handleCodeInApp: false,
-      });
-      const actionLink = customEmailActionLink(firebaseLink, language, verificationConfig);
+      const firebaseLink = await admin.auth().generateEmailVerificationLink(email);
+      const actionLink = firebaseLink;
       const copy = verificationCopy(language);
       const delivery = await resend.emails.send({
         from: sender,
@@ -1280,3 +1277,5 @@ exports.syncAccountDeletionAdminMetadata = onDocumentWritten(
     }, { merge: true });
   }
 );
+
+// FAINANCE_V79_EXISTING_FUNCTION_STANDARD_FIREBASE_LINK
