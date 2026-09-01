@@ -18557,16 +18557,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               // che in alcune build vengono ignorate e fanno sparire l'annuncio.
               top = Math.max(
                 0,
-                Math.round(r.top + Math.max(0, (r.height - 50) / 2))
+                Math.round(r.top + Math.max(0, (r.height - 50) / 2) + 38)
               );
             }
           } catch (e) {}
           try {
-            // FAINANCE_V84_STABLE_TOP_AD_SLOT
-            // Usa esclusivamente le coordinate dello slot reale gia misurato.
-            // Non forziamo anchor/position non supportati dal plugin nativo e
-            // non eseguiamo hideBanner immediatamente prima di showBanner:
-            // entrambe le operazioni causavano banner invisibile/overlay sui tap.
             ads
               .showBanner({
                 adUnitId: currentBannerAdUnitId(),

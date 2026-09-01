@@ -1,6 +1,5 @@
 import type { User } from "firebase/auth";
 import {
-  sendEmailVerification,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -8,7 +7,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { fbAuth, fbDb } from "../firebase/client";
-import { cloudFunctionUrl, firebaseConfig } from "../config/env";
+import { firebaseConfig } from "../config/env";
 import { normalizeUsername, usernameLookupKey } from "../profile/username";
 
 export function normalizeAccountEmail(value: unknown): string {
@@ -102,43 +101,31 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
     // best effort
   }
 
-  // FAINANCE_V84_DIRECT_EMAIL_FALLBACK
-  // L'email grafica custom resta il canale preferito. Se il backend non e
-  // raggiungibile, scade o risponde con errore, Firebase Auth invia comunque
-  // l'email standard: registrazione e reinvio non possono piu dipendere dalla
-  // disponibilita della Cloud Function custom.
-  async function sendFirebaseFallback(): Promise<void> {
-    await sendEmailVerification(user);
-  }
-
+  // FAINANCE_V86_BRANDED_EMAIL_ONLY_VIA_HOSTING_PROXY
+  // Manteniamo esclusivamente l'email grafica fAInance concordata.
+  // Firebase Hosting inoltra /api/sendCustomVerificationEmail alla funzione
+  // esistente, evitando il vecchio endpoint diretto della Cloud Function.
   const token = await user.getIdToken(true);
   const language = String(languageCode || "it").split("-")[0].toLowerCase();
   const continueUrl = `https://${firebaseConfig.projectId}.web.app/?emailVerified=1`;
+  const endpoint = `https://${firebaseConfig.projectId}.web.app/api/sendCustomVerificationEmail`;
 
-  const controller =
-    typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timeoutId = controller
-    ? setTimeout(() => controller.abort(), 2500)
-    : null;
-
-  let response: Response | null = null;
+  let response: Response;
   try {
-    response = await fetch(cloudFunctionUrl("sendCustomVerificationEmail"), {
+    response = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({ language, continueUrl }),
-      ...(controller ? { signal: controller.signal } : {}),
     });
-  } catch {
-    if (timeoutId) clearTimeout(timeoutId);
-    await sendFirebaseFallback();
-    return;
+  } catch (cause) {
+    const error: any = new Error("Verification email backend unavailable");
+    error.code = "verification/backend-unavailable";
+    error.cause = cause;
+    throw error;
   }
-
-  if (timeoutId) clearTimeout(timeoutId);
 
   const payload: any = await response.json().catch(() => ({}));
 
@@ -148,19 +135,11 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
     throw error;
   }
 
-  if (response.ok && payload?.ok === true) {
-    return;
-  }
-
-  try {
-    await sendFirebaseFallback();
-    return;
-  } catch (fallbackCause) {
+  if (!response.ok || payload?.ok !== true) {
     const error: any = new Error(
-      String(payload?.error || "Verification email unavailable"),
+      String(payload?.error || "Verification email backend unavailable"),
     );
     error.code = String(payload?.code || "verification/backend-unavailable");
-    error.cause = fallbackCause;
     throw error;
   }
 }
