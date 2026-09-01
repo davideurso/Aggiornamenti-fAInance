@@ -3,11 +3,11 @@ import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
+  sendEmailVerification,
   signOut,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { fbAuth, fbDb } from "../firebase/client";
-import { cloudFunctionUrl, firebaseConfig } from "../config/env";
 import { normalizeUsername, usernameLookupKey } from "../profile/username";
 
 export function normalizeAccountEmail(value: unknown): string {
@@ -101,38 +101,8 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
     // best effort
   }
 
-  const token = await user.getIdToken(true);
-  const language = String(languageCode || "it").split("-")[0].toLowerCase();
-  const continueUrl = `https://${firebaseConfig.projectId}.web.app/?emailVerified=1`;
-
-  let response: Response;
-  try {
-    response = await fetch(cloudFunctionUrl("sendCustomVerificationEmail"), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ language, continueUrl }),
-    });
-  } catch (cause) {
-    const error: any = new Error("Verification email backend unavailable");
-    error.code = "verification/backend-unavailable";
-    error.cause = cause;
-    throw error;
-  }
-
-  const payload: any = await response.json().catch(() => ({}));
-  if (response.status === 429 || payload?.code === "verification/too-many-requests") {
-    const error: any = new Error("Too many verification requests");
-    error.code = "auth/too-many-requests";
-    throw error;
-  }
-  if (!response.ok || payload?.ok !== true) {
-    const error: any = new Error(String(payload?.error || "Verification email backend unavailable"));
-    error.code = String(payload?.code || "verification/backend-unavailable");
-    throw error;
-  }
+  // FAINANCE_V95_FIREBASE_STANDARD_VERIFICATION
+  await sendEmailVerification(user);
 }
 
 export async function reloadAccountUser(user: User): Promise<User> {
