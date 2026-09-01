@@ -63,8 +63,35 @@ export async function signInWithAccountIdentifier(identifier: string, password: 
   return signInWithUsernameAccount(clean, password);
 }
 
+
+// FAINANCE_V68_REGISTRATION_AUTH_READY
+async function fainanceCreateUserWithReadyToken(
+  auth: Parameters<typeof createUserWithEmailAndPassword>[0],
+  email: string,
+  password: string
+) {
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+
+  // createUserWithEmailAndPassword autentica l'utente, ma su alcuni WebView nativi
+  // Firestore puo osservare l'Auth provider qualche istante dopo. Aspettiamo che
+  // currentUser e ID token siano realmente pronti prima di avviare le scritture profilo.
+  for (let attempt = 0; attempt < 10 && auth.currentUser?.uid !== credential.user.uid; attempt += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 50));
+  }
+
+  if (auth.currentUser?.uid !== credential.user.uid) {
+    const error = new Error("Firebase Auth session not ready after registration.") as Error & { code?: string };
+    error.code = "auth/session-not-ready";
+    throw error;
+  }
+
+  await credential.user.getIdToken(true);
+  await new Promise<void>((resolve) => setTimeout(resolve, 120));
+  return credential;
+}
+
 export async function registerEmailAccount(email: string, password: string): Promise<User> {
-  const credential = await createUserWithEmailAndPassword(fbAuth, normalizeAccountEmail(email), password);
+  const credential = await fainanceCreateUserWithReadyToken(fbAuth, normalizeAccountEmail(email), password);
   return credential.user;
 }
 
