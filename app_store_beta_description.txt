@@ -1,0 +1,14 @@
+fAInance è l’app per gestire le tue finanze personali in modo semplice, rapido e personalizzabile. Puoi registrare entrate e uscite, organizzare i movimenti per categoria, controllare il saldo, monitorare budget, obiettivi di risparmio e patrimonio, consultare statistiche e usare funzioni intelligenti per semplificare la gestione quotidiana.
+
+Con fAInance puoi:
+• registrare spese ed entrate rapidamente
+• usare comandi vocali per aggiungere movimenti
+• fotografare scontrini e documenti
+• creare budget e obiettivi di risparmio
+• gestire patrimonio, note e coordinate
+• consultare statistiche avanzate
+• personalizzare colori, sezioni e impostazioni
+• usare widget pratici e configurabili
+• accedere a funzioni AI per analizzare meglio le tue finanze
+
+fAInance è pensata per chi vuole avere controllo sulle proprie finanze senza usare strumenti complicati.

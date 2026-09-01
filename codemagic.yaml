@@ -493,6 +493,10 @@ workflows:
           done < <(find "$IPA_APP/PlugIns" -type f -name Info.plist 2>/dev/null || true)
 
           echo "IPA pronta per Apple: ${EXPECTED_VERSION} (${BUILD_NUMBER})"
+
+      - name: Update TestFlight app description
+        script: |
+          bash tools/update_testflight_description.sh
 
     artifacts:
       - build/ios/ipa/*.ipa
