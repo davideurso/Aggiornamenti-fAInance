@@ -18543,46 +18543,27 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var slotHeight = showAppSummaryHeader ? 68 : 74;
     useEffect(
       function () {
-        if (!visible || !nativeBanner) return;
-
-        var cancelled = false;
-        var timers = [];
-        var lastAttemptAt = 0;
-
-        function getMeasuredTop() {
+        var ads = nativePlugin("FainanceAds");
+        if (!visible || !nativeBanner || !ads || !ads.showBanner) return;
+        requestAdConsentIfNeeded();
+        function showAtMeasuredSlot() {
           var top = 0;
           try {
             var el = adBoxRef.current;
             if (el && el.getBoundingClientRect) {
               var r = el.getBoundingClientRect();
-              // FAINANCE_V96_ADS_ONLY
-              // Mantiene il posizionamento storico del banner nello slot superiore.
+              // Il plugin Android disegna un banner nativo sopra la WebView: qui gli passiamo
+              // la posizione reale dello slot riservato nel layout, senza modalita inline/custom
+              // che in alcune build vengono ignorate e fanno sparire l'annuncio.
               top = Math.max(
                 0,
                 Math.round(r.top + Math.max(0, (r.height - 50) / 2) + 38)
               );
             }
           } catch (e) {}
-          return top;
-        }
-
-        function tryShowBanner(force) {
-          if (cancelled) return;
-          var now = Date.now();
-          if (!force && now - lastAttemptAt < 220) return;
-
-          // Non congelare il riferimento al primo render: il plugin Capacitor
-          // viene risolto nuovamente ad ogni tentativo.
-          var ads = nativePlugin("FainanceAds");
-          if (!ads || !ads.showBanner) return false;
-
-          lastAttemptAt = now;
-          requestAdConsentIfNeeded();
-
-          var top = getMeasuredTop();
           try {
-            Promise.resolve(
-              ads.showBanner({
+            ads
+              .showBanner({
                 adUnitId: currentBannerAdUnitId(),
                 topMarginCssPx: top,
                 topMarginPx: top,
@@ -18593,70 +18574,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 placement: "inline-slot",
                 headerVisible: !!showAppSummaryHeader,
               })
-            ).catch(function (e) {
-              console.warn("Banner AdMob non disponibile", e);
-            });
-          } catch (e) {
-            console.warn("Banner AdMob non disponibile", e);
-          }
-          return true;
+              .catch(function (e) {
+                console.warn("Banner AdMob non disponibile", e);
+              });
+          } catch (e) {}
         }
-
-        function schedule(delay) {
-          timers.push(
-            setTimeout(function () {
-              tryShowBanner(true);
-            }, delay)
-          );
-        }
-
-        // Retry progressivi: se FainanceAds non e ancora pronto al primo frame,
-        // il banner viene recuperato senza dover cambiare schermata.
-        schedule(120);
-        schedule(520);
-        schedule(1200);
-        schedule(2500);
-        schedule(4500);
-
-        function refreshBanner() {
-          tryShowBanner(false);
-        }
-        function onVisibilityChange() {
-          try {
-            if (document.visibilityState === "visible") tryShowBanner(true);
-          } catch (e) {
-            tryShowBanner(true);
-          }
-        }
-
+        var t1 = setTimeout(showAtMeasuredSlot, 120);
+        var t2 = setTimeout(showAtMeasuredSlot, 520);
+        var t3 = setTimeout(showAtMeasuredSlot, 1200);
         try {
-          window.addEventListener("resize", refreshBanner);
+          window.addEventListener("resize", showAtMeasuredSlot);
         } catch (e) {}
         try {
-          window.addEventListener("focus", refreshBanner);
-        } catch (e) {}
-        try {
-          document.addEventListener("visibilitychange", onVisibilityChange);
-        } catch (e) {}
-
-        return function () {
-          cancelled = true;
-          timers.forEach(function (timer) {
-            try {
-              clearTimeout(timer);
-            } catch (e) {}
+          window.addEventListener("scroll", showAtMeasuredSlot, {
+            passive: true,
           });
+        } catch (e) {}
+        return function () {
+          clearTimeout(t1);
+          clearTimeout(t2);
+          clearTimeout(t3);
           try {
-            window.removeEventListener("resize", refreshBanner);
+            window.removeEventListener("resize", showAtMeasuredSlot);
           } catch (e) {}
           try {
-            window.removeEventListener("focus", refreshBanner);
+            window.removeEventListener("scroll", showAtMeasuredSlot);
           } catch (e) {}
           try {
-            document.removeEventListener("visibilitychange", onVisibilityChange);
-          } catch (e) {}
-          try {
-            var ads = nativePlugin("FainanceAds");
             if (ads && ads.hideBanner) ads.hideBanner({});
           } catch (e) {}
         };
