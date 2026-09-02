@@ -18888,315 +18888,55 @@ function QuickVoiceEntryModal() {
     var parsed = parseVoiceCommand(voiceText);
     setVoiceParsed(parsed);
   }
+  // FAINANCE V113 QUICK VOICE: render-first, one native final-result session, bounded recovery.
+  var quickSpeechRef = useRef<any>(null);
+  var quickSpeechRunRef = useRef(0);
+  var quickSpeechTimeoutRef = useRef<any>(null);
+  function clearQuickSpeechTimeout() {
+    if (quickSpeechTimeoutRef.current) {
+      clearTimeout(quickSpeechTimeoutRef.current);
+      quickSpeechTimeoutRef.current = null;
+    }
+  }
+  function quickSpeechDelay(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+  function quickSpeechBounded(task, timeoutMs) {
+    return Promise.race([
+      Promise.resolve(task),
+      new Promise(function (_resolve, reject) {
+        setTimeout(function () { reject(new Error("VOICE_NATIVE_TIMEOUT")); }, timeoutMs);
+      }),
+    ]);
+  }
+  async function stopQuickNativeSpeech(force) {
+    var speech = quickSpeechRef.current;
+    if (!speech) return;
+    try {
+      if (force && speech.forceStop)
+        await quickSpeechBounded(speech.forceStop({ timeout: 350 }), 1200);
+      else if (speech.stop)
+        await quickSpeechBounded(speech.stop(), 1200);
+    } catch (_quickStopError) {}
+  }
   function openVoiceModal(autoStart) {
-    // V112: mount the modal immediately. Native teardown must never sit in the
-    // critical path of React rendering: on iOS a stuck speech bridge could keep
-    // the whole WebView blocked long enough to trigger the 120-second startup guard.
-    quickVoiceAutoStartRef.current = autoStart !== false;
-    quickNativeDoneRef.current = true;
-    quickVoiceStartingRef.current = false;
+    setVoiceModal(true);
     setVoiceText("");
     setVoiceParsed(null);
     setVoiceError("");
     setVoiceListening(false);
-    setVoiceModal(true);
-    void cleanupQuickNativeListening(false);
-  }
-  function quickVoiceBounded(task, timeoutMs) {
-    return new Promise(function (resolve, reject) {
-      var settled = false;
-      var timer = setTimeout(function () {
-        if (settled) return;
-        settled = true;
-        reject(new Error("VOICE_NATIVE_TIMEOUT"));
-      }, Math.max(150, Number(timeoutMs || 800)));
-      Promise.resolve(task).then(
-        function (value) {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve(value);
-        },
-        function (error) {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          reject(error);
-        }
-      );
-    });
-  }
-  async function removeQuickNativeListenerHandles() {
-    var handles = quickNativeListenerHandlesRef.current.splice(0);
-    for (var i = 0; i < handles.length; i++) {
-      try {
-        if (handles[i] && handles[i].remove)
-          await quickVoiceBounded(handles[i].remove(), 350);
-      } catch (_quickListenerRemoveError) {}
-    }
-  }
-  async function finishQuickNativeListening() {
-    if (quickNativeDoneRef.current) return;
-    quickNativeDoneRef.current = true;
-    quickVoiceStartingRef.current = false;
-    if (quickNativeTimeoutRef.current) {
-      clearTimeout(quickNativeTimeoutRef.current);
-      quickNativeTimeoutRef.current = null;
-    }
-    var text = String(quickNativeTextRef.current || "").trim();
-    try {
-      var speech = quickNativeSpeechRef.current;
-      if (speech && speech.getLastPartialResult) {
-        var last: any = await quickVoiceBounded(
-          speech.getLastPartialResult(),
-          350
-        );
-        text = String(
-          (last && last.text) ||
-            (last && last.matches && last.matches[0]) ||
-            text ||
-            ""
-        ).trim();
-      }
-    } catch (_lastPartialError) {}
-    if (text) {
-      setVoiceText(text);
-      setVoiceParsed(parseVoiceCommand(text));
-      setVoiceError("");
-    }
-    setVoiceListening(false);
-    void removeQuickNativeListenerHandles();
-  }
-  async function cleanupQuickNativeListening(submitPartial) {
-    if (quickNativeTimeoutRef.current) {
-      clearTimeout(quickNativeTimeoutRef.current);
-      quickNativeTimeoutRef.current = null;
-    }
-    quickVoiceStartingRef.current = false;
-    setVoiceListening(false);
-    var speech = quickNativeSpeechRef.current;
-    // Never call forceStop here. On iOS that method can block the Capacitor
-    // bridge itself. Stop only after the plugin confirms that it is listening.
-    if (speech && speech.stop) {
-      try {
-        var shouldStop = true;
-        if (speech.isListening) {
-          var listeningInfo: any = await quickVoiceBounded(speech.isListening(), 450);
-          shouldStop = !!(
-            listeningInfo === true ||
-            (listeningInfo && listeningInfo.listening === true) ||
-            (listeningInfo && listeningInfo.value === true)
-          );
-        }
-        if (shouldStop) await quickVoiceBounded(speech.stop(), 650);
-      } catch (_stopVoiceError) {}
-    }
-    if (submitPartial) {
-      quickNativeDoneRef.current = false;
-      await finishQuickNativeListening();
-    } else {
-      quickNativeDoneRef.current = true;
-      await removeQuickNativeListenerHandles();
-    }
   }
   function closeVoiceModal() {
-    quickNativeDoneRef.current = true;
-    quickVoiceStartingRef.current = false;
+    quickSpeechRunRef.current += 1;
+    clearQuickSpeechTimeout();
+    void stopQuickNativeSpeech(true);
     setVoiceModal(false);
     setVoiceListening(false);
     setVoiceText("");
     setVoiceParsed(null);
     setVoiceError("");
-    void cleanupQuickNativeListening(false);
-  }
-  async function startQuickNativeRecognition(language, platform, retry) {
-    var mod: any = await import("@capgo/capacitor-speech-recognition");
-    var nativeSpeech: any = mod.SpeechRecognition || mod.default || mod;
-    if (!nativeSpeech || !nativeSpeech.start)
-      throw new Error("Riconoscimento vocale nativo non disponibile");
-    quickNativeSpeechRef.current = nativeSpeech;
-    quickNativeTextRef.current = "";
-    quickNativeDoneRef.current = false;
-
-    // V112: do not force-stop or remove all native listeners before start.
-    // Both operations were able to stall the iOS bridge. We only detach the
-    // handles owned by this modal and, if the plugin explicitly reports an
-    // active session, request the normal stop method once.
-    await removeQuickNativeListenerHandles();
-    try {
-      if (nativeSpeech.isListening && nativeSpeech.stop) {
-        var listeningInfo: any = await quickVoiceBounded(nativeSpeech.isListening(), 450);
-        var isListening = !!(
-          listeningInfo === true ||
-          (listeningInfo && listeningInfo.listening === true) ||
-          (listeningInfo && listeningInfo.value === true)
-        );
-        if (isListening) {
-          await quickVoiceBounded(nativeSpeech.stop(), 650);
-          await new Promise(function (resolve) { setTimeout(resolve, 180); });
-        }
-      }
-    } catch (_staleVoiceSession) {}
-
-    var av: any = nativeSpeech.available
-      ? await quickVoiceBounded(nativeSpeech.available(), 700)
-      : { available: true };
-    if (av && av.available === false)
-      throw new Error("Riconoscimento vocale non disponibile sul dispositivo");
-    var perm: any = nativeSpeech.checkPermissions
-      ? await quickVoiceBounded(nativeSpeech.checkPermissions(), 900)
-      : {};
-    var state = String((perm && perm.speechRecognition) || "").toLowerCase();
-    if (state !== "granted") {
-      perm = nativeSpeech.requestPermissions
-        ? await quickVoiceBounded(nativeSpeech.requestPermissions(), 12000)
-        : perm;
-      state = String((perm && perm.speechRecognition) || "").toLowerCase();
-    }
-    if (state && state !== "granted")
-      throw new Error(
-        platform === "ios"
-          ? "Permesso microfono o riconoscimento vocale non concesso."
-          : "Permesso microfono non concesso."
-      );
-
-    if (nativeSpeech.addListener) {
-      try {
-        var partialHandle: any = await quickVoiceBounded(
-          nativeSpeech.addListener("partialResults", function (data: any) {
-            var matches = (data && (data.matches || data.partialResults)) || [];
-            var text = String(
-              (data && data.accumulatedText) ||
-                (Array.isArray(matches) && matches[0]) ||
-                (data && data.accumulated) ||
-                (data && data.text) ||
-                ""
-            ).trim();
-            if (text) {
-              quickNativeTextRef.current = text;
-              setVoiceText(text);
-              setVoiceError("");
-            }
-          }),
-          700
-        );
-        if (partialHandle) quickNativeListenerHandlesRef.current.push(partialHandle);
-      } catch (_partialListenerError) {}
-      try {
-        var stateHandle: any = await quickVoiceBounded(
-          nativeSpeech.addListener("listeningState", function (data: any) {
-            var value = String(
-              (data && (data.status || data.state || data.value)) || ""
-            ).toLowerCase();
-            var stopped =
-              value === "stopped" ||
-              value === "false" ||
-              (data && data.listening === false);
-            if (stopped)
-              setTimeout(function () { void finishQuickNativeListening(); }, 60);
-          }),
-          700
-        );
-        if (stateHandle) quickNativeListenerHandlesRef.current.push(stateHandle);
-      } catch (_stateListenerError) {}
-      try {
-        var errorHandle: any = await quickVoiceBounded(
-          nativeSpeech.addListener("error", function (data: any) {
-            var code = String((data && data.code) || "").toLowerCase();
-            var message = String((data && data.message) || code || "");
-            if (
-              code !== "no-match" &&
-              message.toLowerCase().indexOf("no match") < 0
-            )
-              setVoiceError(message || "Errore riconoscimento vocale nativo");
-            setTimeout(function () { void finishQuickNativeListening(); }, 60);
-          }),
-          700
-        );
-        if (errorHandle) quickNativeListenerHandlesRef.current.push(errorHandle);
-      } catch (_errorListenerError) {}
-    }
-
-    // Start the watchdog BEFORE calling start(). Some iOS versions keep the
-    // start Promise pending while recognition is active; awaiting it used to
-    // leave the UI stuck forever and the Retry button unusable.
-    if (quickNativeTimeoutRef.current) clearTimeout(quickNativeTimeoutRef.current);
-    quickNativeTimeoutRef.current = setTimeout(function () {
-      if (quickNativeDoneRef.current) return;
-      var activeSpeech = quickNativeSpeechRef.current;
-      try {
-        if (activeSpeech && activeSpeech.stop) {
-          void quickVoiceBounded(activeSpeech.stop(), 700).catch(function () {});
-        }
-      } catch (_voiceTimeoutStopError) {}
-      // Release the UI regardless of the native plugin result.
-      setTimeout(function () { void finishQuickNativeListening(); }, 180);
-    }, 10500);
-
-    var startPromise: any;
-    try {
-      startPromise = nativeSpeech.start({
-        language: language,
-        maxResults: 3,
-        prompt: "Parla ora",
-        partialResults: true,
-        popup: false,
-        addPunctuation: true,
-        allowForSilence: 1300,
-      });
-    } catch (syncStartError) {
-      startPromise = Promise.reject(syncStartError);
-    }
-    Promise.resolve(startPromise).then(
-      function (res: any) {
-        var matches = (res && res.matches) || [];
-        if (matches[0]) {
-          quickNativeTextRef.current = String(matches[0]);
-          setVoiceText(String(matches[0]));
-        }
-      },
-      function (err: any) {
-        var message = String((err && err.message) || err || "");
-        if (
-          retry < 1 &&
-          message.toLowerCase().indexOf("already running") >= 0
-        ) {
-          var stopTask = nativeSpeech.stop
-            ? nativeSpeech.stop()
-            : Promise.resolve();
-          void quickVoiceBounded(stopTask, 650)
-            .catch(function () {})
-            .then(function () { return removeQuickNativeListenerHandles(); })
-            .then(function () {
-              return new Promise(function (resolve) { setTimeout(resolve, 160); });
-            })
-            .then(function () {
-              return startQuickNativeRecognition(language, platform, retry + 1);
-            })
-            .catch(function (retryError) {
-              setVoiceError(
-                String((retryError && retryError.message) || retryError || message)
-              );
-              void finishQuickNativeListening();
-            });
-          return;
-        }
-        if (message && message !== "VOICE_NATIVE_TIMEOUT") setVoiceError(message);
-        void finishQuickNativeListening();
-      }
-    );
   }
   function startVoiceListening() {
-    // A second tap is a controlled recovery. Release the previous normal
-    // session and restart after React has had time to render the idle state.
-    if (quickVoiceStartingRef.current || voiceListening) {
-      quickVoiceStartingRef.current = false;
-      setVoiceListening(false);
-      void cleanupQuickNativeListening(true).finally(function () {
-        setTimeout(function () { startVoiceListening(); }, 320);
-      });
-      return;
-    }
     setVoiceError("");
     setVoiceParsed(null);
     var win: any = window;
@@ -19205,20 +18945,124 @@ function QuickVoiceEntryModal() {
     var isNative = cap && cap.isNativePlatform && cap.isNativePlatform();
     var platform = cap && cap.getPlatform ? cap.getPlatform() : "";
     if (isNative) {
-      quickVoiceStartingRef.current = true;
+      if (voiceListening) return;
       setVoiceListening(true);
-      startQuickNativeRecognition(language, platform, 0)
-        .catch(function (err) {
-          var msg = err && err.message ? err.message : String(err || "");
-          setVoiceError(msg || "Errore riconoscimento vocale nativo");
+      var runId = ++quickSpeechRunRef.current;
+      (async function () {
+        var mod: any = await import("@capgo/capacitor-speech-recognition");
+        var nativeSpeech: any = mod.SpeechRecognition || mod.default || mod;
+        if (!nativeSpeech || !nativeSpeech.start)
+          throw new Error(L("Riconoscimento vocale nativo non disponibile"));
+        quickSpeechRef.current = nativeSpeech;
+
+        var av: any = nativeSpeech.available
+          ? await quickSpeechBounded(nativeSpeech.available(), 1500)
+          : { available: true };
+        if (av && av.available === false)
+          throw new Error(L("Riconoscimento vocale non disponibile sul dispositivo"));
+
+        var perm: any = nativeSpeech.checkPermissions
+          ? await quickSpeechBounded(nativeSpeech.checkPermissions(), 1800)
+          : {};
+        var state = String((perm && perm.speechRecognition) || "").toLowerCase();
+        if (state !== "granted") {
+          perm = nativeSpeech.requestPermissions
+            ? await quickSpeechBounded(nativeSpeech.requestPermissions(), 15000)
+            : perm;
+          state = String((perm && perm.speechRecognition) || "").toLowerCase();
+        }
+        if (state && state !== "granted")
+          throw new Error(
+            L(
+              platform === "ios"
+                ? "Permesso microfono o riconoscimento vocale non concesso."
+                : "Permesso microfono non concesso."
+            )
+          );
+
+        // Recover only an actually active stale session. The modal is already mounted,
+        // so this can never delay or blank React rendering.
+        try {
+          if (nativeSpeech.isListening) {
+            var listeningInfo: any = await quickSpeechBounded(
+              nativeSpeech.isListening(),
+              1000
+            );
+            var alreadyListening = !!(
+              listeningInfo === true ||
+              (listeningInfo && listeningInfo.listening === true) ||
+              (listeningInfo && listeningInfo.value === true)
+            );
+            if (alreadyListening) {
+              await stopQuickNativeSpeech(true);
+              await quickSpeechDelay(180);
+            }
+          }
+        } catch (_staleRecognitionError) {}
+
+        clearQuickSpeechTimeout();
+        quickSpeechTimeoutRef.current = setTimeout(function () {
+          if (runId !== quickSpeechRunRef.current) return;
+          quickSpeechRunRef.current += 1;
           setVoiceListening(false);
+          setVoiceError(
+            L(
+              "Nessun testo riconosciuto. Riprova e parla dopo il segnale, oppure scrivi il comando nel campo testo."
+            )
+          );
+          void stopQuickNativeSpeech(true);
+        }, 15000);
+
+        var options: any = {
+          language: language,
+          maxResults: 3,
+          prompt: "Parla ora",
+          partialResults: false,
+          popup: false,
+          addPunctuation: true,
+        };
+        var res: any = null;
+        var startError: any = null;
+        for (var attempt = 0; attempt < 2; attempt++) {
+          try {
+            res = await nativeSpeech.start(options);
+            startError = null;
+            break;
+          } catch (err: any) {
+            startError = err;
+            var message = String((err && err.message) || err || "").toLowerCase();
+            if (attempt === 0 && message.indexOf("already running") >= 0) {
+              await stopQuickNativeSpeech(true);
+              await quickSpeechDelay(220);
+              continue;
+            }
+            throw err;
+          }
+        }
+        if (startError) throw startError;
+        if (runId !== quickSpeechRunRef.current) return;
+
+        var matches = res && res.matches ? res.matches : [];
+        var txt2 = matches && matches[0] ? String(matches[0]).trim() : "";
+        if (!txt2) throw new Error(L("Nessun testo riconosciuto"));
+        setVoiceText(txt2);
+        setVoiceParsed(parseVoiceCommand(txt2));
+      })()
+        .catch(function (err) {
+          if (runId !== quickSpeechRunRef.current) return;
+          var msg = err && err.message ? err.message : String(err || "");
+          setVoiceError(msg || L("Errore riconoscimento vocale nativo"));
         })
         .finally(function () {
-          quickVoiceStartingRef.current = false;
+          if (runId !== quickSpeechRunRef.current) return;
+          clearQuickSpeechTimeout();
+          setVoiceListening(false);
+          quickSpeechRef.current = null;
         });
       return;
     }
-    var SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
+    var SpeechRecognition =
+      win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setVoiceError(
         "Riconoscimento vocale non disponibile su questo dispositivo. Puoi scrivere il comando nel campo testo e premere Analizza."
@@ -19228,20 +19072,26 @@ function QuickVoiceEntryModal() {
     try {
       var rec = new SpeechRecognition();
       rec.lang = language;
-      rec.interimResults = true;
+      rec.interimResults = false;
       rec.maxAlternatives = 1;
       rec.continuous = false;
       setVoiceListening(true);
       rec.onresult = function (ev) {
         var txt2 = "";
         for (var ri = 0; ri < ev.results.length; ri++) {
-          if (ev.results[ri] && ev.results[ri][0] && ev.results[ri][0].transcript)
+          if (
+            ev.results[ri] &&
+            ev.results[ri][0] &&
+            ev.results[ri][0].transcript
+          ) {
             txt2 += (txt2 ? " " : "") + ev.results[ri][0].transcript;
+          }
         }
         if (txt2) {
           setVoiceText(txt2);
-          if (ev.results[ev.results.length - 1].isFinal)
+          if (ev.results[ev.results.length - 1].isFinal) {
             setVoiceParsed(parseVoiceCommand(txt2));
+          }
         }
       };
       rec.onerror = function (ev) {
@@ -19253,11 +19103,15 @@ function QuickVoiceEntryModal() {
         setVoiceError(errMsg);
         setVoiceListening(false);
       };
-      rec.onend = function () { setVoiceListening(false); };
+      rec.onend = function () {
+        setVoiceListening(false);
+      };
       rec.start();
     } catch (err) {
       setVoiceListening(false);
-      setVoiceError("Impossibile avviare il microfono. Verifica i permessi audio.");
+      setVoiceError(
+        "Impossibile avviare il microfono. Verifica i permessi audio."
+      );
     }
   }
 
@@ -19311,17 +19165,14 @@ function QuickVoiceEntryModal() {
   useEffect(function () {
     if (voiceAutoStartedRef.current) return;
     voiceAutoStartedRef.current = true;
-    var t1: any = null;
-    if (quickVoiceAutoStartRef.current) {
-      t1 = setTimeout(function () {
-        startVoiceListening();
-      }, 700);
-    }
+    var t1 = setTimeout(function () {
+      startVoiceListening();
+    }, 450);
     return function () {
-      if (t1) clearTimeout(t1);
-      quickNativeDoneRef.current = true;
-      quickVoiceStartingRef.current = false;
-      void cleanupQuickNativeListening(false);
+      clearTimeout(t1);
+      quickSpeechRunRef.current += 1;
+      clearQuickSpeechTimeout();
+      void stopQuickNativeSpeech(true);
     };
   }, []);
   return (
@@ -19386,6 +19237,7 @@ function QuickVoiceEntryModal() {
         >
           <button
             onClick={startVoiceListening}
+            disabled={voiceListening}
             style={{
               background: voiceListening ? "#EF9F27" : "#7F77DD",
               color: "#fff",

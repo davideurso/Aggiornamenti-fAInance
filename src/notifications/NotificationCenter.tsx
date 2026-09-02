@@ -124,8 +124,9 @@ function NotificationRows({
     setDeletingId(item.id);
     try {
       await deleteAppNotification(userId, item.id);
-    } catch (error: any) {
-      setDeleteError(L("Eliminazione notifica non riuscita.") + (error?.message ? " " + String(error.message) : ""));
+    } catch (_deleteError: any) {
+      // FAINANCE V113: never expose raw Firebase/provider text in a different language.
+      setDeleteError(L("Eliminazione notifica non riuscita."));
     } finally {
       setDeletingId("");
     }

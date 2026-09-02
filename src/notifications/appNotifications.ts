@@ -1,17 +1,15 @@
 import {
   collection,
   doc,
+  deleteDoc,
   limit,
   onSnapshot,
   query,
   setDoc,
   where,
 } from "firebase/firestore";
-import { getApp } from "firebase/app";
-import { getFunctions, httpsCallable } from "firebase/functions";
 import { fbDb } from "../firebase/client";
 
-const FUNCTIONS_REGION = "europe-west1";
 
 export interface AppNotificationRecord {
   id: string;
@@ -94,33 +92,9 @@ export async function deleteAppNotification(
   const id = String(notificationId || "").trim();
   if (!targetUid || !id) return;
 
-  // The notification owner can already update read state directly in Firestore.
-  // Use the same owner-scoped write for deletion so a transient/internal callable
-  // failure cannot prevent the user from removing their own notification.
-  const now = new Date().toISOString();
-  try {
-    await setDoc(
-      doc(fbDb, "appNotifications", id),
-      {
-        targetUid,
-        status: "deleted",
-        deletedAt: now,
-        updatedAt: now,
-      },
-      { merge: true },
-    );
-    return;
-  } catch (directError) {
-    const callable = httpsCallable(
-      getFunctions(getApp(), FUNCTIONS_REGION),
-      "fainanceDeleteAppNotification",
-    );
-    try {
-      await callable({ notificationId: id });
-      return;
-    } catch (callableError) {
-      throw directError || callableError;
-    }
-  }
+  // FAINANCE V113 NOTIFICATION DELETE: use the rule-authorized physical delete.
+  // appNotifications rules allow the owner to physically delete the document.
+  // A soft-delete update is intentionally forbidden because owner updates are
+  // limited to read/readAt/updatedAt.
+  await deleteDoc(doc(fbDb, "appNotifications", id));
 }
-
