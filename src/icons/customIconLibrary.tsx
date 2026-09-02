@@ -22,6 +22,40 @@ const loadedOwners = new Set<string>();
 const loadingRefs = new Set<string>();
 const listeners = new Set<Listener>();
 
+function localIconStorageKey(uid: string): string {
+  return "fainance_custom_icons_v1_" + String(uid || "");
+}
+function loadLocalIconRows(uid: string): CustomIconRecord[] {
+  if (!uid || typeof localStorage === "undefined") return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(localIconStorageKey(uid)) || "[]");
+    return (Array.isArray(raw) ? raw : []).filter((row: any) =>
+      row &&
+      String(row.ownerUid || "") === uid &&
+      String(row.id || "") &&
+      String(row.dataUrl || "").startsWith("data:image/")
+    );
+  } catch {
+    return [];
+  }
+}
+function saveLocalIconRows(uid: string, rows: CustomIconRecord[]): void {
+  if (!uid || typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(
+      localIconStorageKey(uid),
+      JSON.stringify((rows || []).slice(0, CUSTOM_ICON_MAX_ITEMS))
+    );
+  } catch {}
+}
+function upsertLocalIconRow(row: CustomIconRecord): void {
+  const rows = loadLocalIconRows(row.ownerUid).filter((item) => item.id !== row.id);
+  saveLocalIconRows(row.ownerUid, [row, ...rows]);
+}
+function removeLocalIconRow(uid: string, id: string): void {
+  saveLocalIconRows(uid, loadLocalIconRows(uid).filter((item) => item.id !== id));
+}
+
 function emit(): void { listeners.forEach((fn) => { try { fn(); } catch {} }); }
 
 export function customIconValue(ownerUid: string, id: string): string {
@@ -83,15 +117,23 @@ export async function loadCustomIconReference(value: unknown): Promise<CustomIco
 export async function loadCurrentUserCustomIcons(force = false): Promise<CustomIconRecord[]> {
   const uid = String(fbAuth.currentUser?.uid || "");
   if (!uid) return [];
+  const localRows = loadLocalIconRows(uid);
+  localRows.forEach((row) => cache.set(cacheKey(uid, row.id), row));
   if (!force && loadedOwners.has(uid)) {
     return Array.from(cache.values()).filter((row) => row.ownerUid === uid).sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
-  const snapshot = await getDocs(collection(fbDb, "users", uid, "customIcons"));
-  Array.from(cache.keys()).filter((key) => key.startsWith(uid + "/")).forEach((key) => cache.delete(key));
-  snapshot.docs.forEach((row) => {
-    const parsed = recordFromSnapshot(uid, row.id, row.data());
-    if (parsed) cache.set(cacheKey(uid, row.id), parsed);
-  });
+  try {
+    const snapshot = await getDocs(collection(fbDb, "users", uid, "customIcons"));
+    snapshot.docs.forEach((row) => {
+      const parsed = recordFromSnapshot(uid, row.id, row.data());
+      if (parsed) cache.set(cacheKey(uid, row.id), parsed);
+    });
+    const merged = Array.from(cache.values()).filter((row) => row.ownerUid === uid).sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    saveLocalIconRows(uid, merged);
+  } catch {
+    // The local library remains fully usable even when the Firestore subcollection
+    // is temporarily unavailable or an older ruleset blocks it.
+  }
   loadedOwners.add(uid);
   emit();
   return Array.from(cache.values()).filter((row) => row.ownerUid === uid).sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
@@ -212,10 +254,15 @@ export async function uploadCustomIcon(file: File): Promise<CustomIconRecord> {
     const id = (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") ? crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2,10));
     const now = new Date().toISOString();
     const row: CustomIconRecord = { id, ownerUid: user.uid, label: cleanLabel(file), dataUrl, createdAt: now, updatedAt: now };
-    await setDoc(doc(fbDb, "users", user.uid, "customIcons", id), row, { merge: false });
+    // Save locally first so the upload works immediately on iOS/Android even if
+    // Firestore rules for the optional customIcons subcollection are unavailable.
     cache.set(cacheKey(user.uid, id), row);
+    upsertLocalIconRow(row);
     loadedOwners.add(user.uid);
     emit();
+    await setDoc(doc(fbDb, "users", user.uid, "customIcons", id), row, { merge: false }).catch((cloudError: any) => {
+      writeTechnicalLog({ category:"UPLOAD_ERROR", operation:"custom_icon_cloud_sync", result:"failure", severity:"warning", errorCode:String(cloudError?.code || cloudError?.message || "CUSTOM_ICON_CLOUD_SYNC") }).catch(() => undefined);
+    });
     return row;
   } catch (error: any) {
     writeTechnicalLog({ category:"UPLOAD_ERROR", operation:"custom_icon_upload", result:"failure", severity:"warning", errorCode:String(error?.message || "CUSTOM_ICON_UPLOAD_ERROR") }).catch(() => undefined);
@@ -226,9 +273,10 @@ export async function uploadCustomIcon(file: File): Promise<CustomIconRecord> {
 export async function deleteCustomIconRecord(id: string): Promise<void> {
   const user = fbAuth.currentUser;
   if (!user?.uid || !id) throw new Error("CUSTOM_ICON_AUTH_REQUIRED");
-  await deleteDoc(doc(fbDb, "users", user.uid, "customIcons", id));
   cache.delete(cacheKey(user.uid, id));
+  removeLocalIconRow(user.uid, id);
   emit();
+  await deleteDoc(doc(fbDb, "users", user.uid, "customIcons", id)).catch(() => undefined);
 }
 
 export function useCustomIconLibrary() {

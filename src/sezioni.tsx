@@ -8881,25 +8881,27 @@ export function HistoryPanel() {
   }, 0);
   var historyActionsStyle: any = {
     position: "sticky",
-    top: 0,
+    top: -10,
     zIndex: 20,
     display: "flex",
     gap: 8,
+    marginTop: historyActionsVisible ? -10 : 0,
     marginBottom: historyActionsVisible ? 8 : 0,
     alignItems: "center",
     background: dark ? "#171724" : "#F7F8FF",
-    padding: historyActionsVisible ? "0 0 8px" : "0",
-    boxShadow:
-      historyActionsVisible && !dark
-        ? "0 8px 14px rgba(247,248,255,.92)"
-        : "none",
+    padding: historyActionsVisible ? "4px 0 8px" : "0",
+    boxShadow: historyActionsVisible
+      ? dark
+        ? "0 -18px 0 #171724, 0 8px 14px rgba(23,23,36,.96)"
+        : "0 -18px 0 #F7F8FF, 0 8px 14px rgba(247,248,255,.98)"
+      : "none",
     maxHeight: historyActionsVisible ? 72 : 0,
     opacity: historyActionsVisible ? 1 : 0,
     transform: historyActionsVisible ? "translateY(0)" : "translateY(-12px)",
     overflow: "hidden",
     pointerEvents: historyActionsVisible ? "auto" : "none",
     transition:
-      "max-height .14s ease, opacity .10s ease, transform .10s ease, margin-bottom .10s ease, padding .10s ease",
+      "max-height .14s ease, opacity .10s ease, transform .10s ease, margin-top .10s ease, margin-bottom .10s ease, padding .10s ease",
   };
   return (
     <div ref={historyRootRef}>
@@ -9405,6 +9407,11 @@ export function ConsulenteAIPanel() {
   }: any = _c;
   // ─────────────────────────────────────────────────────────────────────────
   var now = new Date();
+  var quickNativeSpeechRef = useRef<any>(null);
+  var quickNativeTextRef = useRef("");
+  var quickNativeDoneRef = useRef(false);
+  var quickVoiceStartingRef = useRef(false);
+  var quickNativeTimeoutRef = useRef<any>(null);
   var sinp: any = {
     width: "100%",
     borderRadius: 8,
@@ -17310,14 +17317,19 @@ function VoiceAssistantModal({ onQuick }) {
     <div
       style={{
         position: "fixed",
-        inset: 0,
+        top: isMobile
+          ? "max(84px,calc(env(safe-area-inset-top,0px) + 72px))"
+          : 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
         zIndex: 1000,
         background: "rgba(0,0,0,.62)",
         display: "flex",
         alignItems: isMobile ? "stretch" : "center",
         justifyContent: "center",
         padding: isMobile
-          ? "calc(env(safe-area-inset-top, 0px) + 12px) 0 max(env(safe-area-inset-bottom, 0px), 8px)"
+          ? "0 0 max(env(safe-area-inset-bottom, 0px), 8px)"
           : 18,
         boxSizing: "border-box",
       }}
@@ -18886,14 +18898,181 @@ function QuickVoiceEntryModal() {
       }, 250);
     }
   }
+  async function finishQuickNativeListening() {
+    if (quickNativeDoneRef.current) return;
+    quickNativeDoneRef.current = true;
+    if (quickNativeTimeoutRef.current) {
+      clearTimeout(quickNativeTimeoutRef.current);
+      quickNativeTimeoutRef.current = null;
+    }
+    var text = String(quickNativeTextRef.current || "").trim();
+    try {
+      var speech = quickNativeSpeechRef.current;
+      if (speech && speech.getLastPartialResult) {
+        var last = await speech.getLastPartialResult();
+        text = String(
+          (last && last.text) ||
+            (last && last.matches && last.matches[0]) ||
+            text ||
+            ""
+        ).trim();
+      }
+    } catch (_lastPartialError) {}
+    if (text) {
+      setVoiceText(text);
+      setVoiceParsed(parseVoiceCommand(text));
+      setVoiceError("");
+    }
+    setVoiceListening(false);
+    try {
+      var speech2 = quickNativeSpeechRef.current;
+      if (speech2 && speech2.removeAllListeners)
+        await speech2.removeAllListeners();
+    } catch (_removeVoiceListenersError) {}
+  }
+  async function cleanupQuickNativeListening(submitPartial) {
+    if (quickNativeTimeoutRef.current) {
+      clearTimeout(quickNativeTimeoutRef.current);
+      quickNativeTimeoutRef.current = null;
+    }
+    var speech = quickNativeSpeechRef.current;
+    if (!speech) return;
+    try {
+      if (submitPartial && speech.forceStop)
+        await speech.forceStop({ timeout: 700 });
+      else if (speech.stop) await speech.stop();
+    } catch (_stopVoiceError) {}
+    if (submitPartial) await finishQuickNativeListening();
+    try {
+      if (speech.removeAllListeners) await speech.removeAllListeners();
+    } catch (_removeVoiceListenersError) {}
+  }
   function closeVoiceModal() {
+    quickNativeDoneRef.current = true;
+    void cleanupQuickNativeListening(false);
+    quickVoiceStartingRef.current = false;
     setVoiceModal(false);
     setVoiceListening(false);
     setVoiceText("");
     setVoiceParsed(null);
     setVoiceError("");
   }
+  async function startQuickNativeRecognition(language, platform, retry) {
+    var mod: any = await import("@capgo/capacitor-speech-recognition");
+    var nativeSpeech: any = mod.SpeechRecognition || mod.default || mod;
+    if (!nativeSpeech || !nativeSpeech.start)
+      throw new Error("Riconoscimento vocale nativo non disponibile");
+    quickNativeSpeechRef.current = nativeSpeech;
+    quickNativeTextRef.current = "";
+    quickNativeDoneRef.current = false;
+    // A previous recognition session can survive a modal close on iOS. Stop it
+    // before registering the new listeners to avoid "already running".
+    try {
+      if (nativeSpeech.forceStop)
+        await nativeSpeech.forceStop({ timeout: 250 });
+      else if (nativeSpeech.stop) await nativeSpeech.stop();
+    } catch (_staleVoiceSession) {}
+    try {
+      if (nativeSpeech.removeAllListeners) await nativeSpeech.removeAllListeners();
+    } catch (_staleVoiceListeners) {}
+    var av = nativeSpeech.available
+      ? await nativeSpeech.available()
+      : { available: true };
+    if (av && av.available === false)
+      throw new Error("Riconoscimento vocale non disponibile sul dispositivo");
+    var perm = nativeSpeech.checkPermissions
+      ? await nativeSpeech.checkPermissions()
+      : {};
+    var state = String((perm && perm.speechRecognition) || "").toLowerCase();
+    if (state !== "granted") {
+      perm = nativeSpeech.requestPermissions
+        ? await nativeSpeech.requestPermissions()
+        : perm;
+      state = String((perm && perm.speechRecognition) || "").toLowerCase();
+    }
+    if (state && state !== "granted")
+      throw new Error(
+        platform === "ios"
+          ? "Permesso microfono o riconoscimento vocale non concesso."
+          : "Permesso microfono non concesso."
+      );
+    if (nativeSpeech.addListener) {
+      await nativeSpeech.addListener("partialResults", function (data: any) {
+        var matches = (data && data.matches) || [];
+        var text = String(
+          (data && data.accumulatedText) ||
+            matches[0] ||
+            (data && data.accumulated) ||
+            ""
+        ).trim();
+        if (text) {
+          quickNativeTextRef.current = text;
+          setVoiceText(text);
+          setVoiceError("");
+        }
+      });
+      await nativeSpeech.addListener("listeningState", function (data: any) {
+        var stopped =
+          (data && data.status === "stopped") ||
+          (data && data.state === "stopped");
+        if (stopped) setTimeout(function () { void finishQuickNativeListening(); }, 80);
+      });
+      await nativeSpeech.addListener("error", function (data: any) {
+        var code = String((data && data.code) || "").toLowerCase();
+        var message = String((data && data.message) || code || "");
+        if (code !== "no-match" && message.toLowerCase().indexOf("no match") < 0)
+          setVoiceError(message || "Errore riconoscimento vocale nativo");
+        setTimeout(function () { void finishQuickNativeListening(); }, 80);
+      });
+    }
+    try {
+      var res = await nativeSpeech.start({
+        language: language,
+        maxResults: 3,
+        prompt: "Parla ora",
+        partialResults: true,
+        popup: false,
+        addPunctuation: true,
+        allowForSilence: 1300,
+      });
+      var matches = (res && res.matches) || [];
+      if (matches[0]) {
+        quickNativeTextRef.current = String(matches[0]);
+        setVoiceText(String(matches[0]));
+      }
+      if (quickNativeTimeoutRef.current) clearTimeout(quickNativeTimeoutRef.current);
+      quickNativeTimeoutRef.current = setTimeout(function () {
+        if (quickNativeDoneRef.current) return;
+        try {
+          var activeSpeech = quickNativeSpeechRef.current;
+          if (activeSpeech && activeSpeech.forceStop)
+            Promise.resolve(activeSpeech.forceStop({ timeout: 700 }))
+              .then(function () { void finishQuickNativeListening(); })
+              .catch(function () { void finishQuickNativeListening(); });
+          else void finishQuickNativeListening();
+        } catch (_voiceTimeoutError) {
+          void finishQuickNativeListening();
+        }
+      }, 12000);
+    } catch (err: any) {
+      var message = String((err && err.message) || err || "");
+      if (retry < 1 && message.toLowerCase().indexOf("already running") >= 0) {
+        try {
+          if (nativeSpeech.forceStop)
+            await nativeSpeech.forceStop({ timeout: 500 });
+          else if (nativeSpeech.stop) await nativeSpeech.stop();
+        } catch (_retryStopError) {}
+        try {
+          if (nativeSpeech.removeAllListeners) await nativeSpeech.removeAllListeners();
+        } catch (_retryListenerError) {}
+        await new Promise(function (resolve) { setTimeout(resolve, 180); });
+        return startQuickNativeRecognition(language, platform, retry + 1);
+      }
+      throw err;
+    }
+  }
   function startVoiceListening() {
+    if (quickVoiceStartingRef.current || voiceListening) return;
     setVoiceError("");
     setVoiceParsed(null);
     var win: any = window;
@@ -18902,62 +19081,20 @@ function QuickVoiceEntryModal() {
     var isNative = cap && cap.isNativePlatform && cap.isNativePlatform();
     var platform = cap && cap.getPlatform ? cap.getPlatform() : "";
     if (isNative) {
+      quickVoiceStartingRef.current = true;
       setVoiceListening(true);
-      (async function () {
-        var mod: any = await import("@capgo/capacitor-speech-recognition");
-        var nativeSpeech: any = mod.SpeechRecognition || mod.default || mod;
-        if (!nativeSpeech || !nativeSpeech.start)
-          throw new Error("Riconoscimento vocale nativo non disponibile");
-        var av = nativeSpeech.available
-          ? await nativeSpeech.available()
-          : { available: true };
-        if (av && av.available === false)
-          throw new Error(
-            "Riconoscimento vocale non disponibile sul dispositivo"
-          );
-        var perm = nativeSpeech.checkPermissions
-          ? await nativeSpeech.checkPermissions()
-          : {};
-        var state = String(
-          (perm && perm.speechRecognition) || ""
-        ).toLowerCase();
-        if (state !== "granted") {
-          perm = nativeSpeech.requestPermissions
-            ? await nativeSpeech.requestPermissions()
-            : perm;
-          state = String((perm && perm.speechRecognition) || "").toLowerCase();
-        }
-        if (state && state !== "granted")
-          throw new Error(
-            platform === "ios"
-              ? "Permesso microfono o riconoscimento vocale non concesso."
-              : "Permesso microfono non concesso."
-          );
-        var res = await nativeSpeech.start({
-          language: language,
-          maxResults: 3,
-          prompt: "Parla ora",
-          partialResults: false,
-          popup: false,
-          addPunctuation: true,
-        });
-        var matches = res && res.matches ? res.matches : [];
-        var txt2 = matches && matches[0] ? matches[0] : "";
-        if (!txt2) throw new Error("Nessun testo riconosciuto");
-        setVoiceText(txt2);
-        setVoiceParsed(parseVoiceCommand(txt2));
-      })()
+      startQuickNativeRecognition(language, platform, 0)
         .catch(function (err) {
           var msg = err && err.message ? err.message : String(err || "");
           setVoiceError(msg || "Errore riconoscimento vocale nativo");
+          setVoiceListening(false);
         })
         .finally(function () {
-          setVoiceListening(false);
+          quickVoiceStartingRef.current = false;
         });
       return;
     }
-    var SpeechRecognition =
-      win.SpeechRecognition || win.webkitSpeechRecognition;
+    var SpeechRecognition = win.SpeechRecognition || win.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setVoiceError(
         "Riconoscimento vocale non disponibile su questo dispositivo. Puoi scrivere il comando nel campo testo e premere Analizza."
@@ -18967,26 +19104,20 @@ function QuickVoiceEntryModal() {
     try {
       var rec = new SpeechRecognition();
       rec.lang = language;
-      rec.interimResults = false;
+      rec.interimResults = true;
       rec.maxAlternatives = 1;
       rec.continuous = false;
       setVoiceListening(true);
       rec.onresult = function (ev) {
         var txt2 = "";
         for (var ri = 0; ri < ev.results.length; ri++) {
-          if (
-            ev.results[ri] &&
-            ev.results[ri][0] &&
-            ev.results[ri][0].transcript
-          ) {
+          if (ev.results[ri] && ev.results[ri][0] && ev.results[ri][0].transcript)
             txt2 += (txt2 ? " " : "") + ev.results[ri][0].transcript;
-          }
         }
         if (txt2) {
           setVoiceText(txt2);
-          if (ev.results[ev.results.length - 1].isFinal) {
+          if (ev.results[ev.results.length - 1].isFinal)
             setVoiceParsed(parseVoiceCommand(txt2));
-          }
         }
       };
       rec.onerror = function (ev) {
@@ -18998,15 +19129,11 @@ function QuickVoiceEntryModal() {
         setVoiceError(errMsg);
         setVoiceListening(false);
       };
-      rec.onend = function () {
-        setVoiceListening(false);
-      };
+      rec.onend = function () { setVoiceListening(false); };
       rec.start();
     } catch (err) {
       setVoiceListening(false);
-      setVoiceError(
-        "Impossibile avviare il microfono. Verifica i permessi audio."
-      );
+      setVoiceError("Impossibile avviare il microfono. Verifica i permessi audio.");
     }
   }
 
@@ -19065,6 +19192,8 @@ function QuickVoiceEntryModal() {
     }, 350);
     return function () {
       clearTimeout(t1);
+      quickNativeDoneRef.current = true;
+      void cleanupQuickNativeListening(false);
     };
   }, []);
   return (

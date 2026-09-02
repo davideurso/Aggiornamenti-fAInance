@@ -8564,7 +8564,7 @@ export function GoalsPanel() {
               borderRadius: 24,
               border: "1px solid " + borderC,
               width: "min(620px,100%)",
-              maxHeight: "92vh",
+              maxHeight: "min(92vh,calc(100dvh - 24px))",
               overflowY: "auto",
               boxSizing: "border-box",
               boxShadow: "0 24px 80px rgba(20,20,30,0.34)",
@@ -8670,7 +8670,7 @@ export function GoalsPanel() {
                   background: dark ? "#202033" : "#F8F8FC",
                   border: "1px solid " + borderC,
                   borderRadius: 16,
-                  padding: 14,
+                  padding: "14px 14px 24px",
                 }}
               >
                 <div
@@ -8834,7 +8834,7 @@ export function GoalsPanel() {
                       style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
                     />
                   </div>
-                  <div style={{ gridColumn: "1/-1" }}>
+                  <div style={{ gridColumn: "1/-1", paddingBottom: 4 }}>
                     <label
                       style={{
                         fontSize: 11,

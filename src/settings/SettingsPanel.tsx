@@ -70,7 +70,6 @@ import {
   CUSTOM_ICON_MAX_ITEMS,
   customIconValue,
   deleteCustomIconRecord,
-  pickNativeCustomIconFile,
   uploadCustomIcon,
   useCustomIconLibrary,
 } from "../icons/customIconLibrary";
@@ -6729,7 +6728,7 @@ export function SettingsPanel() {
           <button
             type="button"
             onClick={function () { if (window.confirm(L("Uscire dall'app?"))) onLogout(); }}
-            style={{ minHeight: 46, marginTop: 18, fontSize: 15,
+            style={{ minHeight: 46, marginTop: 18,
               width: "100%", border: "1px solid #E24B4A", borderRadius: 14, padding: 11,
               background: dark ? "#351f24" : "#FFF0F0", color: "#E24B4A",
               fontSize: 13, fontWeight: 900, cursor: "pointer",
@@ -6753,7 +6752,7 @@ export function SettingsPanel() {
           />
           <div style={{ background: dark ? "linear-gradient(145deg,#27253D,#313050)" : "linear-gradient(145deg,#FFFFFF,#F3F0FF)", border: "1px solid " + (dark ? "#4C496A" : "#D9D5FF"), borderRadius: 18, padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-              <div><div style={{ fontSize: 12, color: subC, marginBottom: 4 }}>{L("Piano attuale")}</div><div style={{ fontSize: 18, fontWeight: 900, color: textC }}>💎 {planLabel(currentPlan, lang)}</div></div>
+              <div><div style={{ fontSize: 12, color: subC, marginBottom: 4 }}>{L("Piano Attuale")}</div><div style={{ fontSize: 18, fontWeight: 900, color: textC }}>💎 {planLabel(currentPlan, lang)}</div></div>
               <span style={{ fontSize: 11, fontWeight: 900, borderRadius: 999, padding: "4px 10px", background: dark ? "#393552" : "#EEEBFF", color: dark ? "#D9D5FF" : "#534AB7" }}>{planLabel(currentPlan, lang)}</span>
             </div>
             <div style={{ fontSize: 12, color: subC, lineHeight: 1.45, margin: "10px 0 12px" }}>{L("Consulta il tuo piano, confronta le funzionalità disponibili ed esegui l’upgrade quando vuoi.")}</div>
@@ -10475,20 +10474,9 @@ export function SettingsPanel() {
       if (uploading) return;
       setIconError("");
       try {
-        var cap: any =
-          typeof window !== "undefined" ? (window as any).Capacitor : null;
-        var native = !!(
-          cap &&
-          typeof cap.isNativePlatform === "function" &&
-          cap.isNativePlatform()
-        );
-        if (native) {
-          var file = await pickNativeCustomIconFile();
-          if (file) await uploadIcon(file);
-          return;
-        }
         var input = iconFileInputRef.current;
         if (!input) throw new Error("CUSTOM_ICON_INPUT_UNAVAILABLE");
+        input.value = "";
         input.click();
       } catch (e) {
         var code = String(e && e.message ? e.message : e || "");
@@ -12048,23 +12036,40 @@ export function SettingsPanel() {
     };
   }
   async function prepareBackupImport(raw) {
-    var d = raw && typeof raw === "object" ? { ...raw } : {};
+    var d: any = raw && typeof raw === "object" ? { ...raw } : {};
     var encrypted = d.sensitiveDataEncryptedV1;
     if (encrypted && typeof encrypted === "object") {
       var owner = String(encrypted.accountUid || "");
-      if (owner && owner !== String(userId || ""))
-        throw new Error("BACKUP_DIFFERENT_ACCOUNT");
-      d.bankCoords = await fainanceDecryptSensitiveData(
-        encrypted.bankCoords,
-        userId
-      );
-      d.creditCards = await fainanceDecryptSensitiveData(
-        encrypted.creditCards,
-        userId
-      );
+      var compatibleOwner = !owner || owner === String(userId || "");
+      var skippedSensitive = false;
+      if (compatibleOwner) {
+        try {
+          d.bankCoords = await fainanceDecryptSensitiveData(
+            encrypted.bankCoords,
+            userId
+          );
+        } catch (_bankDecryptError) {
+          delete d.bankCoords;
+          skippedSensitive = true;
+        }
+        try {
+          d.creditCards = await fainanceDecryptSensitiveData(
+            encrypted.creditCards,
+            userId
+          );
+        } catch (_cardDecryptError) {
+          delete d.creditCards;
+          skippedSensitive = true;
+        }
+      } else {
+        delete d.bankCoords;
+        delete d.creditCards;
+        skippedSensitive = true;
+      }
+      if (skippedSensitive) d.__fainanceSensitiveRestoreSkipped = true;
     } else {
-      d.bankCoords = Array.isArray(d.bankCoords) ? d.bankCoords : [];
-      d.creditCards = Array.isArray(d.creditCards) ? d.creditCards : [];
+      if (!Array.isArray(d.bankCoords)) delete d.bankCoords;
+      if (!Array.isArray(d.creditCards)) delete d.creditCards;
     }
     return d;
   }
@@ -12226,7 +12231,16 @@ export function SettingsPanel() {
       operation: "manual-backup-restore",
       metadata: { backupSchemaVersion: Number(d.backupSchemaVersion || 0) },
     }).catch(function () {});
-    setToast("Backup ripristinato");
+    if (d.__fainanceSensitiveRestoreSkipped)
+      setToast({
+        text: L(
+          "Backup ripristinato. I dati sensibili non compatibili sono stati mantenuti invariati."
+        ),
+        type: "warning",
+        icon: "⚠️",
+        color: "#EF9F27",
+      });
+    else setToast("Backup ripristinato");
   }
   function readBackupJsonFileWithReader(file) {
     return new Promise(function (resolve, reject) {
@@ -13475,7 +13489,7 @@ export function SettingsPanel() {
                     marginBottom: 5,
                   }}
                 >
-                  {L("Piano attuale")}
+                  {L("Piano Attuale")}
                 </div>
                 <div style={{ fontSize: 12, color: subC, lineHeight: 1.45 }}>
                   {L(

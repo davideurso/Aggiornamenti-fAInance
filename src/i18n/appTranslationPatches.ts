@@ -11,6 +11,27 @@ let fainanceTranslationCache: Record<string, unknown> = {};
 // Legacy translation mutation blocks extracted from app.tsx in Architecture Phase 11.
 // Called at the same app-module evaluation point to preserve behavior.
 export function applyAppTranslationPatches(){
+  // fAInance 2.0 V109 - current plan label + tolerant backup restore.
+  (function(){
+    var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+    function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+    var currentPlan={it:'Piano Attuale',en:'Current Plan',es:'Plan actual',fr:'Forfait actuel',de:'Aktueller Tarif',pt:'Plano atual',pl:'Aktualny plan',nl:'Huidig abonnement',ro:'Plan actual',el:'Τρέχον πλάνο'};
+    add('Piano Attuale',currentPlan);
+    add('Piano attuale',currentPlan);
+    add('Backup ripristinato. I dati sensibili non compatibili sono stati mantenuti invariati.',{
+      it:'Backup ripristinato. I dati sensibili non compatibili sono stati mantenuti invariati.',
+      en:'Backup restored. Incompatible sensitive data was left unchanged.',
+      es:'Copia de seguridad restaurada. Los datos sensibles incompatibles se han mantenido sin cambios.',
+      fr:'Sauvegarde restaurée. Les données sensibles incompatibles ont été conservées sans modification.',
+      de:'Backup wiederhergestellt. Nicht kompatible sensible Daten wurden unverändert beibehalten.',
+      pt:'Cópia de segurança restaurada. Os dados sensíveis incompatíveis foram mantidos sem alterações.',
+      pl:'Kopia zapasowa została przywrócona. Niezgodne dane wrażliwe pozostały bez zmian.',
+      nl:'Back-up hersteld. Niet-compatibele gevoelige gegevens zijn ongewijzigd gebleven.',
+      ro:'Copia de siguranță a fost restaurată. Datele sensibile incompatibile au rămas neschimbate.',
+      el:'Το αντίγραφο ασφαλείας αποκαταστάθηκε. Τα μη συμβατά ευαίσθητα δεδομένα διατηρήθηκαν αμετάβλητα.'
+    });
+    try{fainanceTranslationCache={};}catch(e){}
+  })();
   // fAInance - fix urgenti dati/home/modifica entrate.
   (function(){
     var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];

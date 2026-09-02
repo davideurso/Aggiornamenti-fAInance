@@ -3438,7 +3438,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [supportContactFormOpen, setSupportContactFormOpen] = useState(false);
   useEffect(
     function () {
-      if (settingsPage !== "support" && supportContactFormOpen)
+      if (
+        settingsPage !== "support" &&
+        settingsPage !== "support_info" &&
+        supportContactFormOpen
+      )
         setSupportContactFormOpen(false);
     },
     [settingsPage, supportContactFormOpen]
@@ -8161,21 +8165,40 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       .replace(/^@+/, "")
       .toLocaleLowerCase("en-US");
     if (un) {
+      var usernameData: any = null;
       try {
         var usernameSnap = await getDoc(doc(fbDb, "usernames", un));
-        if (usernameSnap.exists()) {
-          var usernameData = usernameSnap.data() || {};
-          if (usernameData.uid && usernameData.active !== false) {
-            return {
-              uid: usernameData.uid,
-              username: usernameData.username || username,
-              usernameLower: un,
-              name: "@" + (usernameData.username || username),
-              matchType: "username",
-            };
-          }
-        }
+        if (usernameSnap.exists()) usernameData = usernameSnap.data() || {};
       } catch (e) {}
+      if (!usernameData || !usernameData.uid) {
+        try {
+          var loginAliasSnap = await getDoc(doc(fbDb, "usernameLogin", un));
+          if (loginAliasSnap.exists()) usernameData = loginAliasSnap.data() || {};
+        } catch (e) {}
+      }
+      if (usernameData && usernameData.uid && usernameData.active !== false) {
+        var resolvedUser: any = null;
+        try {
+          var resolvedUserSnap = await getDoc(
+            doc(fbDb, "users", String(usernameData.uid))
+          );
+          if (resolvedUserSnap.exists()) resolvedUser = resolvedUserSnap.data() || {};
+        } catch (e) {}
+        var resolvedUsername =
+          (resolvedUser && resolvedUser.username) ||
+          usernameData.username ||
+          username;
+        return {
+          uid: usernameData.uid,
+          username: resolvedUsername,
+          usernameLower: un,
+          email:
+            (resolvedUser && resolvedUser.email) || usernameData.email || "",
+          name:
+            (resolvedUser && resolvedUser.name) || "@" + resolvedUsername,
+          matchType: "username",
+        };
+      }
       return null;
     }
     try {
@@ -8199,6 +8222,32 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         if (lookupPhone && lookupPhone.exists && lookupPhone.exists()) {
           var lp = lookupPhone.data();
           if (lp && lp.uid) return { uid: lp.uid, ...lp, matchType: "phone" };
+        }
+      }
+    } catch (e) {}
+    try {
+      if (em) {
+        var aliasByEmail = await getDocs(
+          query(
+            collection(fbDb, "usernameLogin"),
+            where("email", "==", em),
+            limit(1)
+          )
+        ).catch(function () {
+          return null;
+        });
+        if (aliasByEmail && aliasByEmail.docs && aliasByEmail.docs.length) {
+          var aliasEmailDoc = aliasByEmail.docs[0];
+          var aliasEmailData = aliasEmailDoc.data() || {};
+          if (aliasEmailData.uid)
+            return {
+              uid: aliasEmailData.uid,
+              email: em,
+              username: aliasEmailDoc.id,
+              usernameLower: aliasEmailDoc.id,
+              name: "@" + aliasEmailDoc.id,
+              matchType: "email",
+            };
         }
       }
     } catch (e) {}
@@ -8462,33 +8511,83 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     return ids;
   }
+  function sanitizeShareCloudValue(value) {
+    if (value === undefined || typeof value === "function") return undefined;
+    if (value === null) return null;
+    if (Array.isArray(value))
+      return value
+        .map(function (item) {
+          return sanitizeShareCloudValue(item);
+        })
+        .filter(function (item) {
+          return item !== undefined;
+        });
+    if (typeof value === "object") {
+      var out: any = {};
+      Object.keys(value).forEach(function (key) {
+        var clean = sanitizeShareCloudValue(value[key]);
+        if (clean !== undefined) out[key] = clean;
+      });
+      return out;
+    }
+    return value;
+  }
   function syncShareProjectToCloud(project) {
     if (!project || !userId) return;
     var pid = String(project.id);
     var nowIso = new Date().toISOString();
     var memberUids = shareMemberUidsForProject(project);
-    var cloudProject = {
+    var nowMs = Date.now();
+    var cloudProject: any = sanitizeShareCloudValue({
       ...project,
       memberUids: memberUids,
       ownerUid: project.ownerUid || userId,
       updatedAt: project.updatedAt || nowIso,
-      updatedAtMs: Date.now(),
-      shareRevision: Date.now(),
-    };
-    setDoc(doc(fbDb, "shareProjects", pid), cloudProject, {
-      merge: true,
-    }).catch(function (e) {
-      console.error("Share project sync error", (e && e.code) || "unknown");
-      if (setToast)
-        setToast({
-          text: L(
-            "Errore sincronizzazione Share: verifica la connessione e riapri il progetto."
-          ),
-          type: "error",
-          color: "#E24B4A",
-          icon: "⚠️",
-        });
+      updatedAtMs: nowMs,
+      shareRevision: nowMs,
     });
+    function attemptShareSync(attempt) {
+      setDoc(doc(fbDb, "shareProjects", pid), cloudProject, {
+        merge: true,
+      }).catch(async function (e) {
+        var code = String((e && e.code) || "unknown")
+          .replace(/^firestore\//, "")
+          .toLowerCase();
+        var retryable =
+          code === "permission-denied" ||
+          code === "unauthenticated" ||
+          code === "unavailable" ||
+          code === "aborted" ||
+          code === "deadline-exceeded" ||
+          code === "cancelled" ||
+          code === "canceled";
+        if (attempt < 2 && retryable) {
+          try {
+            if (
+              fbAuth &&
+              fbAuth.currentUser &&
+              fbAuth.currentUser.getIdToken
+            )
+              await fbAuth.currentUser.getIdToken(true);
+          } catch (_tokenError) {}
+          setTimeout(function () {
+            attemptShareSync(attempt + 1);
+          }, attempt === 0 ? 300 : 900);
+          return;
+        }
+        console.error("Share project sync error", code);
+        if (setToast)
+          setToast({
+            text: L(
+              "Errore sincronizzazione Share: verifica la connessione e riapri il progetto."
+            ),
+            type: "error",
+            color: "#E24B4A",
+            icon: "⚠️",
+          });
+      });
+    }
+    attemptShareSync(0);
   }
   function loadShareCollaboration() {
     if (!userId) return;
@@ -21299,7 +21398,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     arr[i] = arr[j];
     arr[j] = tmp;
     setOrder(arr);
-    setToast("Impostazioni aggiornate");
   }
   function getBottomNavIds() {
     var order = normalizeOrder(mobileAllNavOrder, mobileAllNavDefaultOrder);
