@@ -18557,7 +18557,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               // che in alcune build vengono ignorate e fanno sparire l'annuncio.
               top = Math.max(
                 0,
-                Math.round(r.top + Math.max(0, (r.height - 50) / 2) + 12)
+                Math.round(r.top + Math.max(0, (r.height - 50) / 2) - 6)
               );
             }
           } catch (e) {}

@@ -321,7 +321,7 @@ export function NotificationCenter({
 
   return (
     <>
-      <div style={{ position: "fixed", right: 10, top: "max(30px,calc(env(safe-area-inset-top,0px) + 18px))", zIndex: 9996, display: "flex", gap: 5, alignItems: "center" }}>
+      <div style={{ position: "fixed", right: 10, top: "max(40px,calc(env(safe-area-inset-top,0px) + 28px))", zIndex: 9996, display: "flex", gap: 5, alignItems: "center" }}>
         <button type="button" aria-label={L("Apri profilo")} onClick={onProfile} style={actionButton}>
           <EmployeeProfileIcon />
         </button>
