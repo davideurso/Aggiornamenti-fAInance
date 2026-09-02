@@ -93,10 +93,34 @@ export async function deleteAppNotification(
   const targetUid = String(uid || "").trim();
   const id = String(notificationId || "").trim();
   if (!targetUid || !id) return;
-  const callable = httpsCallable(
-    getFunctions(getApp(), FUNCTIONS_REGION),
-    "fainanceDeleteAppNotification",
-  );
-  await callable({ notificationId: id });
+
+  // The notification owner can already update read state directly in Firestore.
+  // Use the same owner-scoped write for deletion so a transient/internal callable
+  // failure cannot prevent the user from removing their own notification.
+  const now = new Date().toISOString();
+  try {
+    await setDoc(
+      doc(fbDb, "appNotifications", id),
+      {
+        targetUid,
+        status: "deleted",
+        deletedAt: now,
+        updatedAt: now,
+      },
+      { merge: true },
+    );
+    return;
+  } catch (directError) {
+    const callable = httpsCallable(
+      getFunctions(getApp(), FUNCTIONS_REGION),
+      "fainanceDeleteAppNotification",
+    );
+    try {
+      await callable({ notificationId: id });
+      return;
+    } catch (callableError) {
+      throw directError || callableError;
+    }
+  }
 }
 

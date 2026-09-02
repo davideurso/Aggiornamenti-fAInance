@@ -18889,21 +18889,18 @@ function QuickVoiceEntryModal() {
     setVoiceParsed(parsed);
   }
   function openVoiceModal(autoStart) {
-    // V111: one single start path. V110 started recognition here AND again
-    // from QuickVoiceModal.useEffect, which could create two overlapping iOS
-    // sessions and leave the plugin stuck on Retry listening. Always tear down
-    // any previous native session first, then mount the modal; the modal effect
-    // is the only place allowed to auto-start.
+    // V112: mount the modal immediately. Native teardown must never sit in the
+    // critical path of React rendering: on iOS a stuck speech bridge could keep
+    // the whole WebView blocked long enough to trigger the 120-second startup guard.
     quickVoiceAutoStartRef.current = autoStart !== false;
     quickNativeDoneRef.current = true;
     quickVoiceStartingRef.current = false;
-    void cleanupQuickNativeListening(false).finally(function () {
-      setVoiceText("");
-      setVoiceParsed(null);
-      setVoiceError("");
-      setVoiceListening(false);
-      setVoiceModal(true);
-    });
+    setVoiceText("");
+    setVoiceParsed(null);
+    setVoiceError("");
+    setVoiceListening(false);
+    setVoiceModal(true);
+    void cleanupQuickNativeListening(false);
   }
   function quickVoiceBounded(task, timeoutMs) {
     return new Promise(function (resolve, reject) {
@@ -18978,12 +18975,20 @@ function QuickVoiceEntryModal() {
     quickVoiceStartingRef.current = false;
     setVoiceListening(false);
     var speech = quickNativeSpeechRef.current;
-    if (speech) {
+    // Never call forceStop here. On iOS that method can block the Capacitor
+    // bridge itself. Stop only after the plugin confirms that it is listening.
+    if (speech && speech.stop) {
       try {
-        if (submitPartial && speech.forceStop)
-          await quickVoiceBounded(speech.forceStop({ timeout: 450 }), 650);
-        else if (speech.stop)
-          await quickVoiceBounded(speech.stop(), 650);
+        var shouldStop = true;
+        if (speech.isListening) {
+          var listeningInfo: any = await quickVoiceBounded(speech.isListening(), 450);
+          shouldStop = !!(
+            listeningInfo === true ||
+            (listeningInfo && listeningInfo.listening === true) ||
+            (listeningInfo && listeningInfo.value === true)
+          );
+        }
+        if (shouldStop) await quickVoiceBounded(speech.stop(), 650);
       } catch (_stopVoiceError) {}
     }
     if (submitPartial) {
@@ -19013,41 +19018,25 @@ function QuickVoiceEntryModal() {
     quickNativeTextRef.current = "";
     quickNativeDoneRef.current = false;
 
-    // V111: on iOS, force-stop is intentionally attempted even when
-    // isListening() says false. A stale SFSpeechRecognizer session can survive
-    // with an outdated listening flag. Every call is bounded so the UI cannot
-    // freeze if the native bridge does not answer.
+    // V112: do not force-stop or remove all native listeners before start.
+    // Both operations were able to stall the iOS bridge. We only detach the
+    // handles owned by this modal and, if the plugin explicitly reports an
+    // active session, request the normal stop method once.
+    await removeQuickNativeListenerHandles();
     try {
-      if (platform === "ios" && nativeSpeech.forceStop) {
-        await quickVoiceBounded(nativeSpeech.forceStop({ timeout: 300 }), 650);
-        await new Promise(function (resolve) { setTimeout(resolve, 180); });
-      } else if (nativeSpeech.isListening) {
-        var listeningInfo: any = await quickVoiceBounded(
-          nativeSpeech.isListening(),
-          450
-        );
+      if (nativeSpeech.isListening && nativeSpeech.stop) {
+        var listeningInfo: any = await quickVoiceBounded(nativeSpeech.isListening(), 450);
         var isListening = !!(
           listeningInfo === true ||
           (listeningInfo && listeningInfo.listening === true) ||
           (listeningInfo && listeningInfo.value === true)
         );
         if (isListening) {
-          if (nativeSpeech.forceStop)
-            await quickVoiceBounded(
-              nativeSpeech.forceStop({ timeout: 350 }),
-              650
-            );
-          else if (nativeSpeech.stop)
-            await quickVoiceBounded(nativeSpeech.stop(), 650);
-          await new Promise(function (resolve) { setTimeout(resolve, 120); });
+          await quickVoiceBounded(nativeSpeech.stop(), 650);
+          await new Promise(function (resolve) { setTimeout(resolve, 180); });
         }
       }
     } catch (_staleVoiceSession) {}
-    await removeQuickNativeListenerHandles();
-    try {
-      if (nativeSpeech.removeAllListeners)
-        await quickVoiceBounded(nativeSpeech.removeAllListeners(), 500);
-    } catch (_removeAllSpeechListenersError) {}
 
     var av: any = nativeSpeech.available
       ? await quickVoiceBounded(nativeSpeech.available(), 700)
@@ -19126,15 +19115,6 @@ function QuickVoiceEntryModal() {
         );
         if (errorHandle) quickNativeListenerHandlesRef.current.push(errorHandle);
       } catch (_errorListenerError) {}
-      try {
-        var readyHandle: any = await quickVoiceBounded(
-          nativeSpeech.addListener("readyForNextSession", function () {
-            setTimeout(function () { void finishQuickNativeListening(); }, 30);
-          }),
-          700
-        );
-        if (readyHandle) quickNativeListenerHandlesRef.current.push(readyHandle);
-      } catch (_readyListenerError) {}
     }
 
     // Start the watchdog BEFORE calling start(). Some iOS versions keep the
@@ -19145,12 +19125,7 @@ function QuickVoiceEntryModal() {
       if (quickNativeDoneRef.current) return;
       var activeSpeech = quickNativeSpeechRef.current;
       try {
-        if (activeSpeech && activeSpeech.forceStop) {
-          void quickVoiceBounded(
-            activeSpeech.forceStop({ timeout: 450 }),
-            700
-          ).catch(function () {});
-        } else if (activeSpeech && activeSpeech.stop) {
+        if (activeSpeech && activeSpeech.stop) {
           void quickVoiceBounded(activeSpeech.stop(), 700).catch(function () {});
         }
       } catch (_voiceTimeoutStopError) {}
@@ -19186,9 +19161,7 @@ function QuickVoiceEntryModal() {
           retry < 1 &&
           message.toLowerCase().indexOf("already running") >= 0
         ) {
-          var stopTask = nativeSpeech.forceStop
-            ? nativeSpeech.forceStop({ timeout: 350 })
-            : nativeSpeech.stop
+          var stopTask = nativeSpeech.stop
             ? nativeSpeech.stop()
             : Promise.resolve();
           void quickVoiceBounded(stopTask, 650)
@@ -19214,10 +19187,14 @@ function QuickVoiceEntryModal() {
     );
   }
   function startVoiceListening() {
-    // A second tap while a stale start/listen is active is a recovery action,
-    // never a no-op. This keeps the Voice section usable without restarting app.
+    // A second tap is a controlled recovery. Release the previous normal
+    // session and restart after React has had time to render the idle state.
     if (quickVoiceStartingRef.current || voiceListening) {
-      void cleanupQuickNativeListening(true);
+      quickVoiceStartingRef.current = false;
+      setVoiceListening(false);
+      void cleanupQuickNativeListening(true).finally(function () {
+        setTimeout(function () { startVoiceListening(); }, 320);
+      });
       return;
     }
     setVoiceError("");
@@ -19338,7 +19315,7 @@ function QuickVoiceEntryModal() {
     if (quickVoiceAutoStartRef.current) {
       t1 = setTimeout(function () {
         startVoiceListening();
-      }, 420);
+      }, 700);
     }
     return function () {
       if (t1) clearTimeout(t1);
