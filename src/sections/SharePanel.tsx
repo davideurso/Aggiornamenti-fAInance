@@ -95,6 +95,54 @@ export function SharePanel() {
     projects.length,
     1
   );
+  function readFocusedShareInviteMarker() {
+    try {
+      return {
+        inviteId: String(localStorage.getItem("fainance_share_focus_invite_id") || ""),
+        projectId: String(localStorage.getItem("fainance_share_focus_project_id") || ""),
+        projectName: String(localStorage.getItem("fainance_share_focus_project_name") || ""),
+        invitedByName: String(localStorage.getItem("fainance_share_focus_inviter_name") || ""),
+      };
+    } catch (_focusInviteReadError) {
+      return { inviteId: "", projectId: "", projectName: "", invitedByName: "" };
+    }
+  }
+  var [focusedShareInviteMarker, setFocusedShareInviteMarker] = useState<any>(
+    readFocusedShareInviteMarker
+  );
+  function clearFocusedShareInviteMarker() {
+    try {
+      localStorage.removeItem("fainance_share_focus_invite_id");
+      localStorage.removeItem("fainance_share_focus_project_id");
+      localStorage.removeItem("fainance_share_focus_project_name");
+      localStorage.removeItem("fainance_share_focus_inviter_name");
+    } catch (_focusInviteClearError) {}
+    setFocusedShareInviteMarker({ inviteId: "", projectId: "", projectName: "", invitedByName: "" });
+  }
+  useEffect(
+    function () {
+      var next = readFocusedShareInviteMarker();
+      if (next.inviteId || next.projectId) setFocusedShareInviteMarker(next);
+    },
+    [shareInviteLoading, (shareReceivedInvites || []).length, shareProjectTab]
+  );
+  var focusedPendingInvite = (shareReceivedInvites || []).find(function (inv) {
+    return (
+      (focusedShareInviteMarker.inviteId &&
+        String(inv && inv.id || "") === String(focusedShareInviteMarker.inviteId)) ||
+      (focusedShareInviteMarker.projectId &&
+        String(inv && inv.projectId || "") === String(focusedShareInviteMarker.projectId))
+    );
+  });
+  var focusedInvite = focusedPendingInvite ||
+    ((focusedShareInviteMarker.inviteId || focusedShareInviteMarker.projectId)
+      ? {
+          id: focusedShareInviteMarker.inviteId,
+          projectId: focusedShareInviteMarker.projectId,
+          projectName: focusedShareInviteMarker.projectName,
+          invitedByName: focusedShareInviteMarker.invitedByName,
+        }
+      : null);
   var latestShareProject =
     projects.slice().sort(function (a, b) {
       return String(b.updatedAt || b.createdAt || "").localeCompare(
@@ -2526,6 +2574,78 @@ export function SharePanel() {
           {L("Progetti")}
         </Btn>
       </div>
+      {focusedInvite && (
+        <div
+          style={{
+            background: dark ? "#28253A" : "#F8F5FF",
+            border: "2px solid " + confirmButtonColor + "88",
+            borderRadius: 16,
+            padding: 14,
+            display: "flex",
+            flexDirection: "column",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: 13,
+                background: confirmButtonColor + "22",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 22,
+                flexShrink: 0,
+              }}
+            >
+              🤝
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: confirmButtonColor }}>
+                {L("Invito Share")}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 950, color: textC, overflowWrap: "anywhere" }}>
+                {focusedInvite.projectName || L("Progetto Share")}
+              </div>
+              {!!focusedInvite.invitedByName && (
+                <div style={{ fontSize: 11, color: subC, marginTop: 2 }}>
+                  {L("Invito da")} {focusedInvite.invitedByName}
+                </div>
+              )}
+            </div>
+            <PopupCloseButton
+              onClick={clearFocusedShareInviteMarker}
+              dark={dark}
+              label={L("Chiudi")}
+            />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <Btn
+              onClick={async function () {
+                var ok = await acceptShareInvite(focusedInvite);
+                if (ok) clearFocusedShareInviteMarker();
+              }}
+              bg={confirmButtonColor}
+              style={{ padding: "9px 10px", fontSize: 12 }}
+            >
+              {L("Accetta")}
+            </Btn>
+            <Btn
+              onClick={async function () {
+                var ok = await declineShareInvite(focusedInvite);
+                if (ok) clearFocusedShareInviteMarker();
+              }}
+              bg={dark ? "#333" : "#f0f0f0"}
+              color={textC}
+              style={{ padding: "9px 10px", fontSize: 12 }}
+            >
+              {L("Rifiuta")}
+            </Btn>
+          </div>
+        </div>
+      )}
       {shareReceiptPreview && (
         <div
           role="dialog"
@@ -3628,15 +3748,6 @@ export function SharePanel() {
                                 minWidth: 0,
                               }}
                             >
-                              <div style={{ flexShrink: 0 }}>
-                                <MultiCurrencyField
-                                  inline
-                                  compact
-                                  value={shareFx}
-                                  amount={shareAmount}
-                                  onChange={setShareFx}
-                                />
-                              </div>
                               <div
                                 style={{
                                   position: "relative",
@@ -3685,6 +3796,15 @@ export function SharePanel() {
                                     outline: "none",
                                     lineHeight: 1,
                                   }}
+                                />
+                              </div>
+                              <div style={{ flexShrink: 0 }}>
+                                <MultiCurrencyField
+                                  inline
+                                  compact
+                                  value={shareFx}
+                                  amount={shareAmount}
+                                  onChange={setShareFx}
                                 />
                               </div>
                             </div>

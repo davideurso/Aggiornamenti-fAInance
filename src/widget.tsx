@@ -8848,7 +8848,7 @@ export function GoalsPanel() {
                       style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
                     />
                   </div>
-                  <div style={{ minWidth: 0, paddingBottom: 4 }}>
+                  <div style={{ minWidth: 0, paddingBottom: 4, overflow: "hidden" }}>
                     <label
                       style={{
                         fontSize: 11,
@@ -8868,7 +8868,21 @@ export function GoalsPanel() {
                           return { ...p, deadline: e.target.value };
                         });
                       }}
-                      style={{ ...inp, borderRadius: 12, padding: "11px 12px", minWidth: 0, maxWidth: "100%", height: 42, display: "block" }}
+                      style={{
+                        ...inp,
+                        borderRadius: 12,
+                        width: "100%",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        height: 40,
+                        minHeight: 40,
+                        maxHeight: 40,
+                        padding: "0 12px",
+                        lineHeight: "40px",
+                        display: "block",
+                        overflow: "hidden",
+                        boxSizing: "border-box",
+                      }}
                     />
                   </div>
                 </div>

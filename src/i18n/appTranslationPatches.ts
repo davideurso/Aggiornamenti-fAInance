@@ -1343,3 +1343,25 @@ export function applyAppTranslationPatches(){
   });
   try{if(typeof fainanceTranslationCache!=="undefined")fainanceTranslationCache={};}catch(e){}
 })();
+
+// fAInance 2.0 V111 - Share invite limit and focused invite preview.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  put('Hai raggiunto il numero massimo di progetti previsto dal piano attuale. Non puoi accettare questo invito. Effettua l’upgrade per partecipare ad altri progetti.',{
+    it:'Hai raggiunto il numero massimo di progetti previsto dal piano attuale. Non puoi accettare questo invito. Effettua l’upgrade per partecipare ad altri progetti.',
+    en:'You have reached the maximum number of projects allowed by your current plan. You cannot accept this invitation. Upgrade to join more projects.',
+    es:'Has alcanzado el número máximo de proyectos permitido por tu plan actual. No puedes aceptar esta invitación. Mejora tu plan para participar en más proyectos.',
+    fr:'Vous avez atteint le nombre maximal de projets autorisé par votre offre actuelle. Vous ne pouvez pas accepter cette invitation. Passez à une offre supérieure pour rejoindre d’autres projets.',
+    de:'Du hast die maximale Anzahl an Projekten deines aktuellen Tarifs erreicht. Du kannst diese Einladung nicht annehmen. Führe ein Upgrade durch, um weiteren Projekten beizutreten.',
+    pt:'Atingiste o número máximo de projetos permitido pelo teu plano atual. Não podes aceitar este convite. Faz upgrade para participar noutros projetos.',
+    pl:'Osiągnięto maksymalną liczbę projektów dozwoloną w obecnym planie. Nie możesz przyjąć tego zaproszenia. Przejdź na wyższy plan, aby dołączać do kolejnych projektów.',
+    nl:'Je hebt het maximale aantal projecten van je huidige abonnement bereikt. Je kunt deze uitnodiging niet accepteren. Upgrade om aan meer projecten deel te nemen.',
+    ro:'Ai atins numărul maxim de proiecte permis de planul actual. Nu poți accepta această invitație. Fă upgrade pentru a participa la mai multe proiecte.',
+    el:'Έχετε φτάσει τον μέγιστο αριθμό έργων που επιτρέπει το τρέχον πλάνο σας. Δεν μπορείτε να αποδεχτείτε αυτή την πρόσκληση. Κάντε αναβάθμιση για να συμμετέχετε σε περισσότερα έργα.'
+  });
+  put('Invito da',{
+    it:'Invito da',en:'Invitation from',es:'Invitación de',fr:'Invitation de',de:'Einladung von',pt:'Convite de',pl:'Zaproszenie od',nl:'Uitnodiging van',ro:'Invitație de la',el:'Πρόσκληση από'
+  });
+  try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
+})();

@@ -8930,13 +8930,46 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
 
   async function acceptShareInvite(invite) {
-    if (!invite || !invite.projectId || !userId) return;
+    if (!invite || !invite.projectId || !userId) return false;
+    var existingInviteProject = (Array.isArray(shareProjectsRef.current)
+      ? shareProjectsRef.current
+      : []
+    ).some(function (project) {
+      return (
+        project &&
+        project.status !== "deleted" &&
+        String(project.id || "") === String(invite.projectId || "")
+      );
+    });
+    var currentShareProjectCount = (Array.isArray(shareProjectsRef.current)
+      ? shareProjectsRef.current
+      : []
+    ).filter(function (project) {
+      return project && project.status !== "deleted";
+    }).length;
+    if (
+      !existingInviteProject &&
+      !canAddPlanItem("shareProjects", currentShareProjectCount, 1)
+    ) {
+      setToast({
+        text:
+          "Hai raggiunto il numero massimo di progetti previsto dal piano attuale. Non puoi accettare questo invito. Effettua l’upgrade per partecipare ad altri progetti.",
+        type: "warning",
+        color: "#FFF8E1",
+        textColor: "#856404",
+        icon: "🔒",
+        actionLabel: "Piani",
+        actionPage: "plans_settings",
+        duration: 7000,
+      });
+      return false;
+    }
     try {
       var projectRef = doc(fbDb, "shareProjects", String(invite.projectId));
       var projectSnap = await getDoc(projectRef);
       if (!projectSnap.exists()) {
         setToast("Progetto Share non trovato");
-        return;
+        return false;
       }
       var project = { ...projectSnap.data(), id: String(invite.projectId) };
       var email = normalizeEmail(currentUser && currentUser.email);
@@ -9044,14 +9077,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
       });
       setToast("Invito Share accettato");
+      try {
+        localStorage.removeItem("fainance_share_focus_invite_id");
+        localStorage.removeItem("fainance_share_focus_project_id");
+        localStorage.removeItem("fainance_share_focus_project_name");
+        localStorage.removeItem("fainance_share_focus_inviter_name");
+      } catch (_acceptedInviteFocusClearError) {}
       loadShareCollaboration();
+      return true;
     } catch (e) {
       console.error(e);
       setToast("Errore durante l'accettazione dell'invito");
+      return false;
     }
   }
   async function declineShareInvite(invite) {
-    if (!invite || !invite.id) return;
+    if (!invite || !invite.id) return false;
     try {
       await setDoc(
         doc(fbDb, "shareInvites", String(invite.id)),
@@ -9068,9 +9109,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
       });
       setToast("Invito Share rifiutato");
+      try {
+        localStorage.removeItem("fainance_share_focus_invite_id");
+        localStorage.removeItem("fainance_share_focus_project_id");
+        localStorage.removeItem("fainance_share_focus_project_name");
+        localStorage.removeItem("fainance_share_focus_inviter_name");
+      } catch (_declinedInviteFocusClearError) {}
+      return true;
     } catch (e) {
       console.error(e);
       setToast("Errore durante il rifiuto dell'invito");
+      return false;
     }
   }
   async function createShareInvite(
@@ -21670,9 +21719,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       updatedAtMs: nowMs,
       shareRevision: nowMs,
     };
-    await setDoc(doc(fbDb, "shareProjects", String(pid)), deletedProject, { merge: true });
+    // V111: make the decision buttons deterministic on mobile. Update local
+    // state (and its deletion tombstone) immediately, then use the resilient
+    // Share synchronizer in background. A Firestore retry can no longer leave
+    // the modal apparently frozen behind an invisible error toast.
+    setShareProjects(function (list) {
+      return (list || []).filter(function (item) {
+        return String(item && item.id || "") !== String(pid);
+      });
+    });
+    if (String(shareSelectedProjectId) === String(pid)) setShareSelectedProjectId(null);
+    syncShareProjectToCloud(deletedProject);
+
     var recipients = shareDeletionRecipientUids(project);
-    await Promise.all(
+    void Promise.all(
       recipients.map(function (targetUid) {
         var notificationId =
           "share_project_deleted_" +
@@ -21704,21 +21764,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             createdAtMs: nowMs,
           },
           { merge: true }
-        );
+        ).catch(function (notificationError) {
+          console.warn("Share delete notification write failed", notificationError);
+        });
       })
-    );
-    setShareProjects(function (list) {
-      return (list || []).filter(function (item) {
-        return String(item && item.id || "") !== String(pid);
-      });
-    });
-    if (String(shareSelectedProjectId) === String(pid)) setShareSelectedProjectId(null);
+    ).catch(function () {});
+
     setToast(keepHistory ? "Progetto eliminato e spese salvate nello storico" : "Progetto Share eliminato");
     return true;
   }
   async function resolveShareDeletionPrompt(keepHistory) {
     var prompt = shareDeletionPromptRef.current;
     if (!prompt || !prompt.project || shareDeletionBusy) return;
+    // Close immediately so touch feedback is visible and errors are never hidden
+    // behind the modal. Keep the captured prompt locally for the async work.
+    shareDeletionPromptRef.current = null;
+    setShareDeletionPrompt(null);
     setShareDeletionBusy(true);
     try {
       if (prompt.source === "owner") {
@@ -21752,7 +21813,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             : "Progetto Share rimosso"
         );
       }
-      setShareDeletionPrompt(null);
     } catch (error) {
       console.error("Share project deletion error", error);
       setToast({
@@ -22892,13 +22952,43 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             setMobileMenu(false);
           }}
           onOpen={function (notification) {
-            if (notification.projectId)
-              setShareSelectedProjectId(String(notification.projectId));
             if (notification.type === "share_invite" || notification.actionType === "open_share_invite") {
+              // A pending invite is not yet a member project. Do not fall back to
+              // another selected project: persist an explicit preview marker so
+              // Share can show the invited project even when the plan is full.
+              try {
+                localStorage.setItem(
+                  "fainance_share_focus_invite_id",
+                  String(notification.inviteId || notification.actionValue || "")
+                );
+                localStorage.setItem(
+                  "fainance_share_focus_project_id",
+                  String(notification.projectId || "")
+                );
+                localStorage.setItem(
+                  "fainance_share_focus_project_name",
+                  String(
+                    (notification.messageArgs && notification.messageArgs.project) ||
+                      notification.projectName ||
+                      "Progetto Share"
+                  )
+                );
+                localStorage.setItem(
+                  "fainance_share_focus_inviter_name",
+                  String(
+                    (notification.messageArgs && notification.messageArgs.name) ||
+                      notification.invitedByName ||
+                      ""
+                  )
+                );
+              } catch (_shareInviteFocusStorageError) {}
+              setShareSelectedProjectId(null);
               setTab("share");
               setShareProjectTab("partecipanti");
               loadShareCollaboration();
             } else if (notification.type === "share_invite_accepted" || notification.actionType === "open_share_project") {
+              if (notification.projectId)
+                setShareSelectedProjectId(String(notification.projectId));
               setTab("share");
               setShareProjectTab("riassunto");
               loadShareCollaboration();
