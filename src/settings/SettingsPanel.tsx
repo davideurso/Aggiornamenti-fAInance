@@ -577,6 +577,7 @@ export function SettingsPanel() {
   var [dataDeleteSelection, setDataDeleteSelection] = useState([]);
   var [backupImportBusy, setBackupImportBusy] = useState(false);
   var [pendingBackupImport, setPendingBackupImport] = useState<any>(null);
+  var backupJsonFileInputRef = useRef<any>(null);
   var [syncDiagnostic, setSyncDiagnostic] = useState<any>(null);
   var [syncDiagnosticLoading, setSyncDiagnosticLoading] = useState(false);
   var [syncDiagnosticError, setSyncDiagnosticError] = useState("");
@@ -10535,13 +10536,19 @@ export function SettingsPanel() {
           <input
             ref={iconFileInputRef}
             type="file"
-            accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.jfif"
+            accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.jfif,.heic,.heif"
             disabled={uploading}
-            onChange={function (e) {
+            onChange={async function (e) {
               var input = e.currentTarget;
               var file = input.files && input.files[0];
-              input.value = "";
-              if (file) uploadIcon(file);
+              try {
+                if (file) await uploadIcon(file);
+              } finally {
+                // Keep the temporary iOS/Android document URI alive until the
+                // image has been decoded. Clearing it earlier can make a valid
+                // screenshot look invalid or make the next selection disappear.
+                try { input.value = ""; } catch (_iconInputResetError) {}
+              }
             }}
             style={{
               position: "fixed",
@@ -12289,7 +12296,14 @@ export function SettingsPanel() {
       "recurring",
       "shareProjects",
       "shoppingItems",
+      "shoppingLists",
+      "goals",
+      "alerts",
+      "budgetPlan",
+      "appuntiDocuments",
+      "debtCredits",
       "patrimonioValues",
+      "patrimonioHistory",
     ].some(function (key) {
       return Object.prototype.hasOwnProperty.call(raw, key);
     });
@@ -12308,11 +12322,31 @@ export function SettingsPanel() {
       color: "#E24B4A",
     });
   }
+  function unwrapBackupJsonObject(raw) {
+    var value: any = raw;
+    if (typeof value === "string") {
+      var nested = String(value || "").trim();
+      if (nested && (nested.charAt(0) === "{" || nested.charAt(0) === "["))
+        value = JSON.parse(nested);
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+    var wrappers = ["backup", "fainanceBackup", "payload", "data", "userData", "content"];
+    for (var i = 0; i < wrappers.length; i++) {
+      var candidate = value[wrappers[i]];
+      if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+        if (isRecognizedBackupJson(candidate)) return candidate;
+      }
+    }
+    return value;
+  }
   async function stageBackupJsonText(text) {
-    var cleanText = String(text || "").replace(/^\uFEFF/, "").trim();
+    var cleanText = String(text || "")
+      .replace(/^\uFEFF/, "")
+      .replace(/\u0000/g, "")
+      .trim();
     if (!cleanText || cleanText.length > 32 * 1024 * 1024)
       throw new Error("BACKUP_FILE_SIZE_INVALID");
-    var raw = JSON.parse(cleanText);
+    var raw = unwrapBackupJsonObject(JSON.parse(cleanText));
     if (!isRecognizedBackupJson(raw)) throw new Error("BACKUP_SCHEMA_INVALID");
     var data = await prepareBackupImport(raw);
     setPendingBackupImport({
@@ -13007,11 +13041,16 @@ export function SettingsPanel() {
               <div style={{ fontSize: 12, color: subC, marginBottom: 10 }}>
                 {L("Ripristina il JSON globale creato da Backup completo.")}
               </div>
-              {Capacitor.isNativePlatform() ? (
+              <div style={{ display: "inline-flex" }}>
                 <button
                   type="button"
                   disabled={backupImportBusy}
-                  onClick={handleNativeBackupJsonFile}
+                  onClick={function () {
+                    var input = backupJsonFileInputRef.current;
+                    if (!input) return;
+                    try { input.value = ""; } catch (_resetBeforePick) {}
+                    input.click();
+                  }}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -13032,35 +13071,22 @@ export function SettingsPanel() {
                     ? L("Caricamento...")
                     : dataTitle("Ripristina JSON")}
                 </button>
-              ) : (
-                <label
+                <input
+                  ref={backupJsonFileInputRef}
+                  type="file"
+                  accept=".json,application/json,text/json,text/plain"
+                  disabled={backupImportBusy}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: confirmButtonColor,
-                    color: "#fff",
-                    borderRadius: btnRadius,
-                    padding: "10px 16px",
-                    fontSize: 13,
-                    fontWeight: 900,
-                    cursor: backupImportBusy ? "wait" : "pointer",
-                    opacity: backupImportBusy ? 0.68 : 1,
-                    minHeight: 42,
+                    position: "fixed",
+                    left: -10000,
+                    top: -10000,
+                    width: 1,
+                    height: 1,
+                    opacity: 0,
                   }}
-                >
-                  {backupImportBusy
-                    ? L("Caricamento...")
-                    : dataTitle("Ripristina JSON")}
-                  <input
-                    type="file"
-                    accept=".json,application/json,text/json"
-                    disabled={backupImportBusy}
-                    style={{ display: "none" }}
-                    onChange={handleBackupJsonFile}
-                  />
-                </label>
-              )}
+                  onChange={handleBackupJsonFile}
+                />
+              </div>
             </div>
             {pendingBackupImport && (
               <div

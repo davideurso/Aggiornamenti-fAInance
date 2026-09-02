@@ -4317,8 +4317,8 @@ export function ExpenseForm({ onSave, type }) {
           style={{
             display: "grid",
             gridTemplateColumns: isMobile
-              ? ".58fr .58fr .92fr 2.28fr"
-              : "1fr 1fr 1.25fr 2.15fr",
+              ? ".58fr .62fr 1.12fr 2.04fr"
+              : "1fr 1fr 1.35fr 2.05fr",
             gap: isMobile ? 5 : 10,
             alignItems: "center",
           }}
@@ -4352,7 +4352,14 @@ export function ExpenseForm({ onSave, type }) {
                 return { ...p, date: dateOffset(2) };
               });
             }}
-            style={dateBtnStyle(f.date === dateOffset(2))}
+            style={{
+              ...dateBtnStyle(f.date === dateOffset(2)),
+              fontSize: isMobile ? 9.5 : 11,
+              lineHeight: 1.05,
+              whiteSpace: "normal",
+              padding: "0 2px",
+              textAlign: "center",
+            }}
           >
             {t.twoDaysAgo}
           </button>
@@ -6741,7 +6748,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: ".58fr .58fr .92fr 2.28fr",
+                    gridTemplateColumns: ".58fr .62fr 1.12fr 2.04fr",
                     gap: 5,
                     alignItems: "center",
                   }}
@@ -6769,7 +6776,14 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                     onClick={function () {
                       upd(r._id, "date", dateOffset(2));
                     }}
-                    style={dateBtnStyle(r.date === dateOffset(2))}
+                    style={{
+                      ...dateBtnStyle(r.date === dateOffset(2)),
+                      fontSize: 9.5,
+                      lineHeight: 1.05,
+                      whiteSpace: "normal",
+                      padding: "0 2px",
+                      textAlign: "center",
+                    }}
                   >
                     {ctx.t.twoDaysAgo}
                   </button>
@@ -8834,7 +8848,7 @@ export function GoalsPanel() {
                       style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
                     />
                   </div>
-                  <div style={{ gridColumn: "1/-1", paddingBottom: 4 }}>
+                  <div style={{ minWidth: 0, paddingBottom: 4 }}>
                     <label
                       style={{
                         fontSize: 11,
@@ -8854,7 +8868,7 @@ export function GoalsPanel() {
                           return { ...p, deadline: e.target.value };
                         });
                       }}
-                      style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
+                      style={{ ...inp, borderRadius: 12, padding: "11px 12px", minWidth: 0, maxWidth: "100%", height: 42, display: "block" }}
                     />
                   </div>
                 </div>

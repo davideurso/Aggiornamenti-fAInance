@@ -8881,19 +8881,19 @@ export function HistoryPanel() {
   }, 0);
   var historyActionsStyle: any = {
     position: "sticky",
-    top: -10,
+    top: -14,
     zIndex: 20,
     display: "flex",
     gap: 8,
-    marginTop: historyActionsVisible ? -10 : 0,
+    marginTop: historyActionsVisible ? -14 : 0,
     marginBottom: historyActionsVisible ? 8 : 0,
     alignItems: "center",
     background: dark ? "#171724" : "#F7F8FF",
-    padding: historyActionsVisible ? "4px 0 8px" : "0",
+    padding: historyActionsVisible ? "0 0 8px" : "0",
     boxShadow: historyActionsVisible
       ? dark
-        ? "0 -18px 0 #171724, 0 8px 14px rgba(23,23,36,.96)"
-        : "0 -18px 0 #F7F8FF, 0 8px 14px rgba(247,248,255,.98)"
+        ? "0 -22px 0 #171724, 0 8px 14px rgba(23,23,36,.96)"
+        : "0 -22px 0 #F7F8FF, 0 8px 14px rgba(247,248,255,.98)"
       : "none",
     maxHeight: historyActionsVisible ? 72 : 0,
     opacity: historyActionsVisible ? 1 : 0,
@@ -9412,6 +9412,7 @@ export function ConsulenteAIPanel() {
   var quickNativeDoneRef = useRef(false);
   var quickVoiceStartingRef = useRef(false);
   var quickNativeTimeoutRef = useRef<any>(null);
+  var quickNativeListenerHandlesRef = useRef<any[]>([]);
   var sinp: any = {
     width: "100%",
     borderRadius: 8,
@@ -18898,9 +18899,43 @@ function QuickVoiceEntryModal() {
       }, 250);
     }
   }
+  function quickVoiceBounded(task, timeoutMs) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error("VOICE_NATIVE_TIMEOUT"));
+      }, Math.max(150, Number(timeoutMs || 800)));
+      Promise.resolve(task).then(
+        function (value) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        },
+        function (error) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        }
+      );
+    });
+  }
+  async function removeQuickNativeListenerHandles() {
+    var handles = quickNativeListenerHandlesRef.current.splice(0);
+    for (var i = 0; i < handles.length; i++) {
+      try {
+        if (handles[i] && handles[i].remove)
+          await quickVoiceBounded(handles[i].remove(), 350);
+      } catch (_quickListenerRemoveError) {}
+    }
+  }
   async function finishQuickNativeListening() {
     if (quickNativeDoneRef.current) return;
     quickNativeDoneRef.current = true;
+    quickVoiceStartingRef.current = false;
     if (quickNativeTimeoutRef.current) {
       clearTimeout(quickNativeTimeoutRef.current);
       quickNativeTimeoutRef.current = null;
@@ -18909,7 +18944,10 @@ function QuickVoiceEntryModal() {
     try {
       var speech = quickNativeSpeechRef.current;
       if (speech && speech.getLastPartialResult) {
-        var last = await speech.getLastPartialResult();
+        var last: any = await quickVoiceBounded(
+          speech.getLastPartialResult(),
+          350
+        );
         text = String(
           (last && last.text) ||
             (last && last.matches && last.matches[0]) ||
@@ -18924,38 +18962,41 @@ function QuickVoiceEntryModal() {
       setVoiceError("");
     }
     setVoiceListening(false);
-    try {
-      var speech2 = quickNativeSpeechRef.current;
-      if (speech2 && speech2.removeAllListeners)
-        await speech2.removeAllListeners();
-    } catch (_removeVoiceListenersError) {}
+    void removeQuickNativeListenerHandles();
   }
   async function cleanupQuickNativeListening(submitPartial) {
     if (quickNativeTimeoutRef.current) {
       clearTimeout(quickNativeTimeoutRef.current);
       quickNativeTimeoutRef.current = null;
     }
+    quickVoiceStartingRef.current = false;
+    setVoiceListening(false);
     var speech = quickNativeSpeechRef.current;
-    if (!speech) return;
-    try {
-      if (submitPartial && speech.forceStop)
-        await speech.forceStop({ timeout: 700 });
-      else if (speech.stop) await speech.stop();
-    } catch (_stopVoiceError) {}
-    if (submitPartial) await finishQuickNativeListening();
-    try {
-      if (speech.removeAllListeners) await speech.removeAllListeners();
-    } catch (_removeVoiceListenersError) {}
+    if (speech) {
+      try {
+        if (submitPartial && speech.forceStop)
+          await quickVoiceBounded(speech.forceStop({ timeout: 450 }), 650);
+        else if (speech.stop)
+          await quickVoiceBounded(speech.stop(), 650);
+      } catch (_stopVoiceError) {}
+    }
+    if (submitPartial) {
+      quickNativeDoneRef.current = false;
+      await finishQuickNativeListening();
+    } else {
+      quickNativeDoneRef.current = true;
+      await removeQuickNativeListenerHandles();
+    }
   }
   function closeVoiceModal() {
     quickNativeDoneRef.current = true;
-    void cleanupQuickNativeListening(false);
     quickVoiceStartingRef.current = false;
     setVoiceModal(false);
     setVoiceListening(false);
     setVoiceText("");
     setVoiceParsed(null);
     setVoiceError("");
+    void cleanupQuickNativeListening(false);
   }
   async function startQuickNativeRecognition(language, platform, retry) {
     var mod: any = await import("@capgo/capacitor-speech-recognition");
@@ -18965,28 +19006,46 @@ function QuickVoiceEntryModal() {
     quickNativeSpeechRef.current = nativeSpeech;
     quickNativeTextRef.current = "";
     quickNativeDoneRef.current = false;
-    // A previous recognition session can survive a modal close on iOS. Stop it
-    // before registering the new listeners to avoid "already running".
+
+    // Never wait indefinitely for a stale native speech session. On iOS a
+    // previous session may survive a modal close and make the next start hang.
     try {
-      if (nativeSpeech.forceStop)
-        await nativeSpeech.forceStop({ timeout: 250 });
-      else if (nativeSpeech.stop) await nativeSpeech.stop();
+      if (nativeSpeech.isListening) {
+        var listeningInfo: any = await quickVoiceBounded(
+          nativeSpeech.isListening(),
+          450
+        );
+        var isListening = !!(
+          listeningInfo === true ||
+          (listeningInfo && listeningInfo.listening === true) ||
+          (listeningInfo && listeningInfo.value === true)
+        );
+        if (isListening) {
+          if (nativeSpeech.forceStop)
+            await quickVoiceBounded(
+              nativeSpeech.forceStop({ timeout: 350 }),
+              650
+            );
+          else if (nativeSpeech.stop)
+            await quickVoiceBounded(nativeSpeech.stop(), 650);
+          await new Promise(function (resolve) { setTimeout(resolve, 120); });
+        }
+      }
     } catch (_staleVoiceSession) {}
-    try {
-      if (nativeSpeech.removeAllListeners) await nativeSpeech.removeAllListeners();
-    } catch (_staleVoiceListeners) {}
-    var av = nativeSpeech.available
-      ? await nativeSpeech.available()
+    await removeQuickNativeListenerHandles();
+
+    var av: any = nativeSpeech.available
+      ? await quickVoiceBounded(nativeSpeech.available(), 700)
       : { available: true };
     if (av && av.available === false)
       throw new Error("Riconoscimento vocale non disponibile sul dispositivo");
-    var perm = nativeSpeech.checkPermissions
-      ? await nativeSpeech.checkPermissions()
+    var perm: any = nativeSpeech.checkPermissions
+      ? await quickVoiceBounded(nativeSpeech.checkPermissions(), 900)
       : {};
     var state = String((perm && perm.speechRecognition) || "").toLowerCase();
     if (state !== "granted") {
       perm = nativeSpeech.requestPermissions
-        ? await nativeSpeech.requestPermissions()
+        ? await quickVoiceBounded(nativeSpeech.requestPermissions(), 12000)
         : perm;
       state = String((perm && perm.speechRecognition) || "").toLowerCase();
     }
@@ -18996,37 +19055,88 @@ function QuickVoiceEntryModal() {
           ? "Permesso microfono o riconoscimento vocale non concesso."
           : "Permesso microfono non concesso."
       );
+
     if (nativeSpeech.addListener) {
-      await nativeSpeech.addListener("partialResults", function (data: any) {
-        var matches = (data && data.matches) || [];
-        var text = String(
-          (data && data.accumulatedText) ||
-            matches[0] ||
-            (data && data.accumulated) ||
-            ""
-        ).trim();
-        if (text) {
-          quickNativeTextRef.current = text;
-          setVoiceText(text);
-          setVoiceError("");
-        }
-      });
-      await nativeSpeech.addListener("listeningState", function (data: any) {
-        var stopped =
-          (data && data.status === "stopped") ||
-          (data && data.state === "stopped");
-        if (stopped) setTimeout(function () { void finishQuickNativeListening(); }, 80);
-      });
-      await nativeSpeech.addListener("error", function (data: any) {
-        var code = String((data && data.code) || "").toLowerCase();
-        var message = String((data && data.message) || code || "");
-        if (code !== "no-match" && message.toLowerCase().indexOf("no match") < 0)
-          setVoiceError(message || "Errore riconoscimento vocale nativo");
-        setTimeout(function () { void finishQuickNativeListening(); }, 80);
-      });
+      try {
+        var partialHandle: any = await quickVoiceBounded(
+          nativeSpeech.addListener("partialResults", function (data: any) {
+            var matches = (data && (data.matches || data.partialResults)) || [];
+            var text = String(
+              (data && data.accumulatedText) ||
+                (Array.isArray(matches) && matches[0]) ||
+                (data && data.accumulated) ||
+                (data && data.text) ||
+                ""
+            ).trim();
+            if (text) {
+              quickNativeTextRef.current = text;
+              setVoiceText(text);
+              setVoiceError("");
+            }
+          }),
+          700
+        );
+        if (partialHandle) quickNativeListenerHandlesRef.current.push(partialHandle);
+      } catch (_partialListenerError) {}
+      try {
+        var stateHandle: any = await quickVoiceBounded(
+          nativeSpeech.addListener("listeningState", function (data: any) {
+            var value = String(
+              (data && (data.status || data.state || data.value)) || ""
+            ).toLowerCase();
+            var stopped =
+              value === "stopped" ||
+              value === "false" ||
+              (data && data.listening === false);
+            if (stopped)
+              setTimeout(function () { void finishQuickNativeListening(); }, 60);
+          }),
+          700
+        );
+        if (stateHandle) quickNativeListenerHandlesRef.current.push(stateHandle);
+      } catch (_stateListenerError) {}
+      try {
+        var errorHandle: any = await quickVoiceBounded(
+          nativeSpeech.addListener("error", function (data: any) {
+            var code = String((data && data.code) || "").toLowerCase();
+            var message = String((data && data.message) || code || "");
+            if (
+              code !== "no-match" &&
+              message.toLowerCase().indexOf("no match") < 0
+            )
+              setVoiceError(message || "Errore riconoscimento vocale nativo");
+            setTimeout(function () { void finishQuickNativeListening(); }, 60);
+          }),
+          700
+        );
+        if (errorHandle) quickNativeListenerHandlesRef.current.push(errorHandle);
+      } catch (_errorListenerError) {}
     }
+
+    // Start the watchdog BEFORE calling start(). Some iOS versions keep the
+    // start Promise pending while recognition is active; awaiting it used to
+    // leave the UI stuck forever and the Retry button unusable.
+    if (quickNativeTimeoutRef.current) clearTimeout(quickNativeTimeoutRef.current);
+    quickNativeTimeoutRef.current = setTimeout(function () {
+      if (quickNativeDoneRef.current) return;
+      var activeSpeech = quickNativeSpeechRef.current;
+      try {
+        if (activeSpeech && activeSpeech.forceStop) {
+          void quickVoiceBounded(
+            activeSpeech.forceStop({ timeout: 450 }),
+            700
+          ).catch(function () {});
+        } else if (activeSpeech && activeSpeech.stop) {
+          void quickVoiceBounded(activeSpeech.stop(), 700).catch(function () {});
+        }
+      } catch (_voiceTimeoutStopError) {}
+      // Release the UI regardless of the native plugin result.
+      setTimeout(function () { void finishQuickNativeListening(); }, 180);
+    }, 10500);
+
+    var startPromise: any;
     try {
-      var res = await nativeSpeech.start({
+      startPromise = nativeSpeech.start({
         language: language,
         maxResults: 3,
         prompt: "Parla ora",
@@ -19035,41 +19145,49 @@ function QuickVoiceEntryModal() {
         addPunctuation: true,
         allowForSilence: 1300,
       });
-      var matches = (res && res.matches) || [];
-      if (matches[0]) {
-        quickNativeTextRef.current = String(matches[0]);
-        setVoiceText(String(matches[0]));
-      }
-      if (quickNativeTimeoutRef.current) clearTimeout(quickNativeTimeoutRef.current);
-      quickNativeTimeoutRef.current = setTimeout(function () {
-        if (quickNativeDoneRef.current) return;
-        try {
-          var activeSpeech = quickNativeSpeechRef.current;
-          if (activeSpeech && activeSpeech.forceStop)
-            Promise.resolve(activeSpeech.forceStop({ timeout: 700 }))
-              .then(function () { void finishQuickNativeListening(); })
-              .catch(function () { void finishQuickNativeListening(); });
-          else void finishQuickNativeListening();
-        } catch (_voiceTimeoutError) {
-          void finishQuickNativeListening();
-        }
-      }, 12000);
-    } catch (err: any) {
-      var message = String((err && err.message) || err || "");
-      if (retry < 1 && message.toLowerCase().indexOf("already running") >= 0) {
-        try {
-          if (nativeSpeech.forceStop)
-            await nativeSpeech.forceStop({ timeout: 500 });
-          else if (nativeSpeech.stop) await nativeSpeech.stop();
-        } catch (_retryStopError) {}
-        try {
-          if (nativeSpeech.removeAllListeners) await nativeSpeech.removeAllListeners();
-        } catch (_retryListenerError) {}
-        await new Promise(function (resolve) { setTimeout(resolve, 180); });
-        return startQuickNativeRecognition(language, platform, retry + 1);
-      }
-      throw err;
+    } catch (syncStartError) {
+      startPromise = Promise.reject(syncStartError);
     }
+    Promise.resolve(startPromise).then(
+      function (res: any) {
+        var matches = (res && res.matches) || [];
+        if (matches[0]) {
+          quickNativeTextRef.current = String(matches[0]);
+          setVoiceText(String(matches[0]));
+        }
+      },
+      function (err: any) {
+        var message = String((err && err.message) || err || "");
+        if (
+          retry < 1 &&
+          message.toLowerCase().indexOf("already running") >= 0
+        ) {
+          var stopTask = nativeSpeech.forceStop
+            ? nativeSpeech.forceStop({ timeout: 350 })
+            : nativeSpeech.stop
+            ? nativeSpeech.stop()
+            : Promise.resolve();
+          void quickVoiceBounded(stopTask, 650)
+            .catch(function () {})
+            .then(function () { return removeQuickNativeListenerHandles(); })
+            .then(function () {
+              return new Promise(function (resolve) { setTimeout(resolve, 160); });
+            })
+            .then(function () {
+              return startQuickNativeRecognition(language, platform, retry + 1);
+            })
+            .catch(function (retryError) {
+              setVoiceError(
+                String((retryError && retryError.message) || retryError || message)
+              );
+              void finishQuickNativeListening();
+            });
+          return;
+        }
+        if (message && message !== "VOICE_NATIVE_TIMEOUT") setVoiceError(message);
+        void finishQuickNativeListening();
+      }
+    );
   }
   function startVoiceListening() {
     if (quickVoiceStartingRef.current || voiceListening) return;

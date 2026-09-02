@@ -231,6 +231,18 @@ export function SharePanel() {
     },
     [settlementPopupOpen]
   );
+  var shareTransactionPopupVisible = !!(shareExpenseFormOpen || shareEditingActivityId);
+  useEffect(
+    function () {
+      var setSuppressed = _c && _c.setNativeBannerSuppressed;
+      if (typeof setSuppressed !== "function") return;
+      setSuppressed(shareTransactionPopupVisible);
+      return function () {
+        setSuppressed(false);
+      };
+    },
+    [shareTransactionPopupVisible]
+  );
   var sinp = {
     width: "100%",
     borderRadius: 10,
@@ -3371,8 +3383,11 @@ export function SharePanel() {
                     display: "flex",
                     alignItems: "flex-start",
                     justifyContent: "center",
-                    padding: "17vh 16px 3vh",
+                    padding:
+                      "calc(env(safe-area-inset-top, 0px) + 72px) 12px calc(env(safe-area-inset-bottom, 0px) + 10px)",
                     boxSizing: "border-box",
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
                     overscrollBehavior: "contain",
                     WebkitTransform: "translateZ(0)",
                     transform: "translateZ(0)",
@@ -3389,11 +3404,14 @@ export function SharePanel() {
                       background: cardBg,
                       border: "1px solid " + borderC,
                       borderRadius: 18,
-                      padding: 14,
+                      padding: "14px 14px 26px",
                       width: "100%",
                       maxWidth: 430,
-                      maxHeight: "88dvh",
+                      maxHeight:
+                        "calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 92px)",
+                      minHeight: 0,
                       overflowY: "auto",
+                      touchAction: "pan-y",
                       WebkitOverflowScrolling: "touch",
                       overscrollBehavior: "contain",
                       boxSizing: "border-box",
@@ -3601,48 +3619,74 @@ export function SharePanel() {
                             >
                               {L("Importo")}
                             </div>
-                            <div style={{ position: "relative" }}>
-                              {!String(shareAmount || "").trim() && (
-                                <div
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: 7,
+                                minWidth: 0,
+                              }}
+                            >
+                              <div style={{ flexShrink: 0 }}>
+                                <MultiCurrencyField
+                                  inline
+                                  compact
+                                  value={shareFx}
+                                  amount={shareAmount}
+                                  onChange={setShareFx}
+                                />
+                              </div>
+                              <div
+                                style={{
+                                  position: "relative",
+                                  minWidth: 0,
+                                  width: "min(150px, 100%)",
+                                }}
+                              >
+                                {!String(shareAmount || "").trim() && (
+                                  <div
+                                    style={{
+                                      position: "absolute",
+                                      inset: 0,
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      fontSize: 32,
+                                      fontWeight: 950,
+                                      color: "#fff",
+                                      lineHeight: 1,
+                                      pointerEvents: "none",
+                                    }}
+                                  >
+                                    _,__
+                                  </div>
+                                )}
+                                <input
+                                  ref={shareAmountInputRef}
+                                  type="text"
+                                  inputMode="decimal"
+                                  placeholder=""
+                                  value={shareAmount}
+                                  onChange={function (e) {
+                                    setShareAmount(e.target.value);
+                                  }}
                                   style={{
-                                    position: "absolute",
-                                    inset: 0,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontSize: 34,
+                                    width: "100%",
+                                    minWidth: 0,
+                                    border: "none",
+                                    background: "transparent",
+                                    padding: 0,
+                                    textAlign: "center",
+                                    fontSize: 32,
                                     fontWeight: 950,
                                     color: "#fff",
+                                    WebkitTextFillColor: "#fff",
+                                    outline: "none",
                                     lineHeight: 1,
-                                    pointerEvents: "none",
                                   }}
-                                >
-                                  _,__
-                                </div>
-                              )}
-                              <input
-                                ref={shareAmountInputRef}
-                                type="text"
-                                inputMode="decimal"
-                                placeholder=""
-                                value={shareAmount}
-                                onChange={function (e) {
-                                  setShareAmount(e.target.value);
-                                }}
-                                style={{
-                                  width: "100%",
-                                  border: "none",
-                                  background: "transparent",
-                                  padding: 0,
-                                  textAlign: "center",
-                                  fontSize: 34,
-                                  fontWeight: 950,
-                                  color: "#fff",
-                                  WebkitTextFillColor: "#fff",
-                                  outline: "none",
-                                  lineHeight: 1,
-                                }}
-                              />
+                                />
+                              </div>
                             </div>
                             {!String(shareAmount || "").trim() && (
                               <div
@@ -3656,15 +3700,6 @@ export function SharePanel() {
                                 {L("Inserisci l'importo")}
                               </div>
                             )}
-                            <div style={{ display: "flex", justifyContent: "center", marginTop: 5 }}>
-                              <MultiCurrencyField
-                                inline
-                                compact
-                                value={shareFx}
-                                amount={shareAmount}
-                                onChange={setShareFx}
-                              />
-                            </div>
                             {String(shareFx.currency || _c.currency) !== String(_c.currency) && Number(shareFx.baseAmount) > 0 && (
                               <div style={{ fontSize: 10, color: "rgba(255,255,255,.70)", marginTop: 3 }}>
                                 ≈ {Number(shareFx.baseAmount).toFixed(2)} {String(_c.currency || "EUR")}
@@ -3744,7 +3779,7 @@ export function SharePanel() {
                           <div
                             style={{
                               display: "grid",
-                              gridTemplateColumns: ".58fr .58fr .92fr 2.28fr",
+                              gridTemplateColumns: ".58fr .62fr 1.12fr 2.04fr",
                               gap: 5,
                               alignItems: "center",
                             }}
@@ -3844,10 +3879,13 @@ export function SharePanel() {
                                   shareDate === dateOffset(2)
                                     ? "#7F77DD"
                                     : textC,
-                                fontSize: 11,
+                                fontSize: 9.5,
                                 fontWeight: 850,
                                 cursor: "pointer",
-                                whiteSpace: "nowrap",
+                                whiteSpace: "normal",
+                                lineHeight: 1.05,
+                                padding: "0 2px",
+                                textAlign: "center",
                               }}
                             >
                               {t.twoDaysAgo}
@@ -4225,6 +4263,7 @@ export function SharePanel() {
                         <div
                           style={{
                             marginTop: 10,
+                            marginBottom: 4,
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
@@ -4255,6 +4294,7 @@ export function SharePanel() {
                                 : "#A8A8A8"
                             }
                             disabled={!shareExpenseFormValid}
+                            style={{ minWidth: 132, padding: "11px 16px" }}
                           >
                             {L(
                               shareEditingActivityId

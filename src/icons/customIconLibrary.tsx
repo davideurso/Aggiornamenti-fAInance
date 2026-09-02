@@ -148,7 +148,7 @@ function fileExtension(file: File): string {
 function looksLikeImage(file: File): boolean {
   const type = String(file?.type || "").toLowerCase();
   if (type.startsWith("image/")) return true;
-  return ["jpg","jpeg","png","webp","gif","bmp","jfif","avif"].includes(fileExtension(file));
+  return ["jpg","jpeg","png","webp","gif","bmp","jfif","avif","heic","heif"].includes(fileExtension(file));
 }
 
 function nativePickCancelled(error: any): boolean {
@@ -190,10 +190,31 @@ export async function pickNativeCustomIconFile(): Promise<File | null> {
   }
 }
 
+async function normalizeImageFileForDecode(file: File): Promise<File> {
+  const existingType = String(file?.type || "").toLowerCase();
+  if (existingType.startsWith("image/")) return file;
+  try {
+    const head = new Uint8Array(await file.slice(0, 32).arrayBuffer());
+    let mime = "";
+    if (head.length >= 8 && head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) mime = "image/png";
+    else if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) mime = "image/jpeg";
+    else if (head.length >= 6 && String.fromCharCode(...Array.from(head.slice(0,6))) === "GIF89a") mime = "image/gif";
+    else if (head.length >= 12 && String.fromCharCode(...Array.from(head.slice(0,4))) === "RIFF" && String.fromCharCode(...Array.from(head.slice(8,12))) === "WEBP") mime = "image/webp";
+    else if (head.length >= 12 && String.fromCharCode(...Array.from(head.slice(4,8))) === "ftyp") {
+      const brand = String.fromCharCode(...Array.from(head.slice(8,12))).toLowerCase();
+      if (brand.indexOf("heic") >= 0 || brand.indexOf("heix") >= 0 || brand.indexOf("hevc") >= 0 || brand.indexOf("mif1") >= 0) mime = "image/heic";
+      else if (brand.indexOf("avif") >= 0 || brand.indexOf("avis") >= 0) mime = "image/avif";
+    }
+    if (mime) return new File([file], file.name || ("fainance-icon." + mimeExtension(mime)), { type: mime, lastModified: file.lastModified || Date.now() });
+  } catch {}
+  return file;
+}
+
 async function decodeImage(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; dispose: () => void }> {
+  const decodeFile = await normalizeImageFileForDecode(file);
   if (typeof createImageBitmap === "function") {
     try {
-      const bitmap = await createImageBitmap(file);
+      const bitmap = await createImageBitmap(decodeFile);
       return { source: bitmap, width: bitmap.width, height: bitmap.height, dispose: () => { try { bitmap.close(); } catch {} } };
     } catch {}
   }
@@ -201,7 +222,7 @@ async function decodeImage(file: File): Promise<{ source: CanvasImageSource; wid
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
     reader.onerror = () => reject(new Error("CUSTOM_ICON_READ_ERROR"));
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(decodeFile);
   });
   const img = await new Promise<HTMLImageElement>((resolve, reject) => {
     const node = new Image();
@@ -213,9 +234,15 @@ async function decodeImage(file: File): Promise<{ source: CanvasImageSource; wid
 }
 
 export async function resizeCustomIcon(file: File, maxSide = 128, quality = 0.78): Promise<string> {
-  if (!file || !looksLikeImage(file)) throw new Error("CUSTOM_ICON_INVALID");
+  if (!file) throw new Error("CUSTOM_ICON_INVALID");
   if (Number(file.size || 0) > 12 * 1024 * 1024) throw new Error("CUSTOM_ICON_TOO_LARGE");
-  const decoded = await decodeImage(file);
+  // Some mobile photo pickers expose screenshots with an empty/octet-stream MIME
+  // type and a temporary filename. The decoder is the reliable format check.
+  // Keep looksLikeImage only as a hint; do not reject a valid image before decode.
+  const decoded = await decodeImage(file).catch((error) => {
+    if (!looksLikeImage(file)) throw new Error("CUSTOM_ICON_INVALID");
+    throw error;
+  });
   try {
     if (!decoded.width || !decoded.height) throw new Error("CUSTOM_ICON_DECODE_ERROR");
     const side = Math.min(decoded.width, decoded.height);
