@@ -923,23 +923,85 @@ function iconTextValue(v) {
 export function PopupCloseButton({ onClick, dark, label }) {
   // Unica implementazione della X standard dei popup fAInance.
   // Valori identici al popup Filtra/Storico: niente varianti locali.
+  // Ogni popup che usa questa X viene automaticamente mantenuto sotto i
+  // pulsanti Profilo/Notifiche, anche dopo resize/orientation change.
+  var buttonRef = useRef<any>(null);
+  useLayoutEffect(function () {
+    if (typeof window === "undefined" || !buttonRef.current) return;
+    var node: any = buttonRef.current.parentElement;
+    var overlay: any = null;
+    while (node && node !== document.body) {
+      try {
+        var css = window.getComputedStyle(node);
+        var rect = node.getBoundingClientRect();
+        if (
+          css.position === "fixed" &&
+          rect.width >= window.innerWidth * 0.7 &&
+          rect.height >= window.innerHeight * 0.55
+        ) {
+          overlay = node;
+          break;
+        }
+      } catch (_popupScanError) {}
+      node = node.parentElement;
+    }
+    if (!overlay) return;
+
+    function keepBelowHeader() {
+      try {
+        var computed = window.getComputedStyle(overlay);
+        var currentTop = Math.max(0, parseFloat(computed.paddingTop || "0") || 0);
+        overlay.setAttribute("data-fainance-popup-overlay", "true");
+        overlay.style.boxSizing = "border-box";
+        overlay.style.paddingTop =
+          "max(" +
+          currentTop +
+          "px, max(82px, calc(env(safe-area-inset-top, 0px) + 72px)))";
+        if (computed.display === "flex" && computed.alignItems !== "flex-end")
+          overlay.style.alignItems = "flex-start";
+        if (computed.overflowY === "visible") overlay.style.overflowY = "auto";
+        overlay.style.setProperty("-webkit-overflow-scrolling", "touch");
+      } catch (_popupSafeTopError) {}
+    }
+
+    keepBelowHeader();
+    var raf = window.requestAnimationFrame(keepBelowHeader);
+    window.addEventListener("resize", keepBelowHeader);
+    window.addEventListener("orientationchange", keepBelowHeader);
+    var vv: any = (window as any).visualViewport;
+    if (vv) {
+      vv.addEventListener("resize", keepBelowHeader);
+      vv.addEventListener("scroll", keepBelowHeader);
+    }
+    return function () {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("resize", keepBelowHeader);
+      window.removeEventListener("orientationchange", keepBelowHeader);
+      if (vv) {
+        vv.removeEventListener("resize", keepBelowHeader);
+        vv.removeEventListener("scroll", keepBelowHeader);
+      }
+    };
+  }, []);
   return (
     <button
+      ref={buttonRef}
+      data-fainance-popup-close="true"
       type="button"
       onClick={onClick}
       aria-label={label || "Chiudi"}
       style={{
-        width: 42,
-        height: 42,
-        borderRadius: 14,
+        width: 28,
+        height: 28,
+        borderRadius: 9,
         border: "1px solid #FCA5A5",
         background: "#FFF0F0",
         color: "#F87171",
-        fontSize: 22,
+        fontSize: 14,
         fontWeight: 950,
         lineHeight: 1,
         cursor: "pointer",
-        boxShadow: "0 4px 14px #F8717133",
+        boxShadow: "0 3px 10px #F871712B",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -1239,10 +1301,12 @@ export function FainancePickerModal({
         background: "rgba(20,20,30,0.66)",
         backdropFilter: "blur(5px)",
         display: "flex",
-        alignItems: "center",
+        alignItems: "flex-start",
         justifyContent: "center",
-        padding: 16,
+        padding: "max(82px,calc(env(safe-area-inset-top,0px) + 72px)) 16px 16px",
         boxSizing: "border-box",
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
       }}
     >
       <div
@@ -1251,7 +1315,7 @@ export function FainancePickerModal({
         }}
         style={{
           width: "min(620px,100%)",
-          maxHeight: "90vh",
+          maxHeight: "calc(100dvh - 98px)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -10519,6 +10583,11 @@ export function BudgetPlanPanel() {
     manualIncome !== "" ? parseFloat(manualIncome) || 0 : avgIncome
   );
 
+  var budgetCatsKey = cats
+    .map(function (c) {
+      return String(c && c.id);
+    })
+    .join("|");
   var initItems = useMemo(
     function () {
       return cats.map(function (c) {
@@ -10535,7 +10604,7 @@ export function BudgetPlanPanel() {
         };
       });
     },
-    [cats]
+    [budgetCatsKey, budgetPlan]
   );
   var [items, setItems] = useState(initItems);
   useEffect(
@@ -10556,7 +10625,14 @@ export function BudgetPlanPanel() {
         })
       );
     },
-    [cats.length]
+    [budgetCatsKey, budgetPlan]
+  );
+  useEffect(
+    function () {
+      if (budgetPopup) return;
+      setManualIncome(budgetManualIncomeDraft(budgetPlan));
+    },
+    [budgetPlan, budgetPopup]
   );
   useEffect(
     function () {
@@ -10770,7 +10846,7 @@ export function BudgetPlanPanel() {
           onDone={function () {
             setSavingToast("");
           }}
-          color="#7F77DD"
+          color="#1D9E75"
         />
       )}
 
@@ -11501,12 +11577,12 @@ export function SettingsList({
   items,
   setItems,
   label,
-  showGroup,
-  showIcon,
-  groupList,
-  isMethod,
-  allowArchive,
-  usageScope,
+  showGroup = false,
+  showIcon = false,
+  groupList = [],
+  isMethod = false,
+  allowArchive = true,
+  usageScope = "",
 }) {
   var ctx = useApp();
   function L(v) {
@@ -11516,9 +11592,16 @@ export function SettingsList({
     dark = ctx.dark;
   var expenses = ctx.expenses || [],
     incomes = ctx.incomes || [],
-    recurring = ctx.recurring || [];
+    recurring = ctx.recurring || [],
+    patrimonioEntriesForUsage = ctx.patrimonioEntries || [],
+    patrimonioValuesForUsage = ctx.patrimonioValues || {},
+    patrimonioHistoryForUsage = ctx.patrimonioHistory || {};
   var gl = groupList || [];
   if (usageScope === "expenseCategory") gl = effectiveExpenseGroups(gl);
+  if (usageScope === "patrimonioEntry")
+    gl = (gl || []).filter(function (g) {
+      return g && !g.deleted && !g.archived;
+    });
   var confirmButtonColor = ctx.confirmButtonColor || "#7F77DD";
   var btnRadius = ctx.btnRadius || 14;
   var [newName, setNewName] = useState("");
@@ -11588,10 +11671,13 @@ export function SettingsList({
     var groupToSave = newGroup;
     if (
       showGroup &&
-      usageScope === "expenseCategory" &&
+      (usageScope === "expenseCategory" || usageScope === "patrimonioEntry") &&
       (!groupToSave || groupIds.indexOf(String(groupToSave)) < 0)
     )
-      groupToSave = "altro";
+      groupToSave =
+        usageScope === "patrimonioEntry"
+          ? (gl.find(function (g) { return String(g.id) === "altro"; }) || gl[0] || {}).id || "altro"
+          : "altro";
     var nowIso = new Date().toISOString();
     setItems([
       ...(items || []),
@@ -11733,6 +11819,36 @@ export function SettingsList({
           );
         })
       );
+    if (scope === "patrimonioArea")
+      return patrimonioEntriesForUsage.some(function (e) {
+        return (
+          e &&
+          !e.deleted &&
+          !e.archived &&
+          (sameId(e.areaId) || sameId(e.group))
+        );
+      });
+    if (scope === "patrimonioEntry") {
+      function snapshotUsesEntry(snap) {
+        if (!snap || typeof snap !== "object") return false;
+        if (Object.prototype.hasOwnProperty.call(snap, sid)) return true;
+        if (names.some(function (n) {
+          return Object.keys(snap).some(function (k) { return norm(k) === n; });
+        })) return true;
+        var nested = [snap.values, snap.entries];
+        return nested.some(function (obj) {
+          if (!obj || typeof obj !== "object") return false;
+          if (Object.prototype.hasOwnProperty.call(obj, sid)) return true;
+          return names.some(function (n) {
+            return Object.keys(obj).some(function (k) { return norm(k) === n; });
+          });
+        });
+      }
+      if (snapshotUsesEntry(patrimonioValuesForUsage)) return true;
+      return Object.keys(patrimonioHistoryForUsage || {}).some(function (mk) {
+        return snapshotUsesEntry(patrimonioHistoryForUsage[mk]);
+      });
+    }
     return false;
   }
   function isDefaultExpenseCategory(id) {
@@ -11823,7 +11939,11 @@ export function SettingsList({
       if (setToast)
         setToast({
           text: L(
-            "Questa voce è usata in movimenti o ricorrenze attive. Prima accorpala o sposta i movimenti, poi potrai eliminarla."
+            usageScope === "patrimonioEntry"
+              ? "Questa voce contiene dati del patrimonio. Archiviala per conservarne lo storico oppure rimuovi prima i dati associati."
+              : usageScope === "patrimonioArea"
+              ? "Questa area contiene voci attive. Sposta o archivia prima le voci associate."
+              : "Questa voce è usata in movimenti o ricorrenze attive. Prima accorpala o sposta i movimenti, poi potrai eliminarla."
           ),
           type: "warning",
           color: "#EF9F27",
@@ -11878,6 +11998,26 @@ export function SettingsList({
       lockedWarn();
       return;
     }
+    var currentItem = (items || []).find(function (i) {
+      return String(i && i.id) === String(id);
+    });
+    if (
+      usageScope === "patrimonioArea" &&
+      currentItem &&
+      !currentItem.archived &&
+      itemIsUsed(id)
+    ) {
+      if (setToast)
+        setToast({
+          text: L(
+            "Questa area contiene voci attive. Sposta o archivia prima le voci associate."
+          ),
+          type: "warning",
+          color: "#EF9F27",
+          icon: "⚠️",
+        });
+      return;
+    }
     setItems(
       (items || []).map(function (i) {
         return String(i.id) === String(id)
@@ -11903,8 +12043,14 @@ export function SettingsList({
                   !c.deleted &&
                   !c.archived &&
                   (cg === String(g.id) ||
-                    (usageScope === "expenseCategory" &&
-                      String(g.id) === "altro" &&
+                    ((usageScope === "expenseCategory" ||
+                      usageScope === "patrimonioEntry") &&
+                      String(g.id) ===
+                        String(
+                          ((gl || []).find(function (gg) {
+                            return String(gg.id) === "altro";
+                          }) || gl[0] || {}).id || "altro"
+                        ) &&
                       (!cg || groupIds.indexOf(cg) < 0)))
                 );
               }),
@@ -12982,7 +13128,7 @@ export function PatrimonioSettingsPanel({
     userKey("patrimonio_settings_entry_view"),
     "list"
   );
-  var showPatrimonioLocalReorder = false;
+  var showPatrimonioLocalReorder = true;
   var tc = dark ? "#eee" : "#333";
   var sc = dark ? "#aaa" : "#888";
   var borderC = dark ? "#444" : "#eee";
@@ -13101,16 +13247,26 @@ export function PatrimonioSettingsPanel({
     return a ? a.name : "Area";
   }
   function normalizedEntries() {
+    var activeAreas = areas.filter(function (a) {
+      return a && !a.deleted && !a.archived;
+    });
+    var fallbackArea =
+      activeAreas.find(function (a) { return String(a.id) === "altro"; }) ||
+      activeAreas[0] ||
+      {};
     return entries.map(function (e) {
       var a =
-        areas.find(function (x) {
-          return x.id === e.areaId;
-        }) ||
-        areas[0] ||
-        {};
+        activeAreas.find(function (x) {
+          return String(x.id) === String(e.areaId);
+        }) || fallbackArea;
       return {
         ...e,
-        group: e.areaId || a.id || "",
+        group:
+          activeAreas.some(function (x) {
+            return String(x.id) === String(e.areaId);
+          })
+            ? e.areaId
+            : a.id || "",
         color: e.color || a.color || COLORS[0],
       };
     });
@@ -13135,26 +13291,31 @@ export function PatrimonioSettingsPanel({
       if (onLocked) onLocked();
       return;
     }
+    var visible = areas.filter(function (a) { return a && !a.deleted; });
+    var hidden = areas.filter(function (a) { return a && a.deleted; });
     var j = i + dir;
-    if (j < 0 || j >= areas.length) return;
-    var arr = areas.slice();
+    if (j < 0 || j >= visible.length) return;
+    var arr = visible.slice();
     var tmp = arr[i];
     arr[i] = arr[j];
     arr[j] = tmp;
-    setPatrimonioAreas(arr);
+    setPatrimonioAreas(arr.concat(hidden));
   }
   function moveEntries(i, dir) {
     if (!allowEditing) {
       if (onLocked) onLocked();
       return;
     }
-    var arr = normalizedEntries();
+    var normalized = normalizedEntries();
+    var visible = normalized.filter(function (e) { return e && !e.deleted; });
+    var hidden = normalized.filter(function (e) { return e && e.deleted; });
     var j = i + dir;
-    if (j < 0 || j >= arr.length) return;
+    if (j < 0 || j >= visible.length) return;
+    var arr = visible.slice();
     var tmp = arr[i];
     arr[i] = arr[j];
     arr[j] = tmp;
-    setEntryItems(arr);
+    setEntryItems(arr.concat(hidden));
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -13189,13 +13350,14 @@ export function PatrimonioSettingsPanel({
                 setItems={guardedSetItems(setPatrimonioAreas)}
                 label="Aggiungi area patrimonio"
                 showIcon
+                usageScope="patrimonioArea"
               />
               {lockedHint()}
             </>
           )}
           {showPatrimonioLocalReorder && areaView === "order" && (
             <SortableRows
-              items={areas}
+              items={areas.filter(function (a) { return a && !a.deleted; })}
               onMove={moveAreas}
               renderItem={function (a) {
                 return (
@@ -13282,13 +13444,14 @@ export function PatrimonioSettingsPanel({
                 showIcon
                 showGroup
                 groupList={areas}
+                usageScope="patrimonioEntry"
               />
               {lockedHint()}
             </>
           )}{" "}
           {showPatrimonioLocalReorder && entryView === "order" && (
             <SortableRows
-              items={normalizedEntries()}
+              items={normalizedEntries().filter(function (e) { return e && !e.deleted; })}
               onMove={moveEntries}
               renderItem={function (e) {
                 return (
@@ -15006,6 +15169,8 @@ export function ImportData(props: any = {}) {
     setMethods = ctx.setMethods,
     addExpenses = ctx.addExpenses,
     addIncomes = ctx.addIncomes,
+    setExpenses = ctx.setExpenses,
+    setIncomes = ctx.setIncomes,
     dark = ctx.dark,
     sym = ctx.sym,
     setToast = ctx.setToast;
@@ -15018,7 +15183,9 @@ export function ImportData(props: any = {}) {
       ctx.incomeTypes ||
       getAllIncomeTypes(ctx.customIncomeTypes, ctx.incomeTypeOverrides),
     setCustomIncomeTypes = ctx.setCustomIncomeTypes;
-  var pEntries = patrimonioEntries || DEFAULT_PATRIMONIO_ENTRIES;
+  var pEntries = (patrimonioEntries || DEFAULT_PATRIMONIO_ENTRIES).filter(function (p: any) {
+    return p && !p.deleted && !p.archived;
+  });
   var [importType, setImportType] = useState("expense");
   var [step, setStep] = useState(0);
   var [rows, setRows] = useState<any[]>([]);
@@ -15040,6 +15207,7 @@ export function ImportData(props: any = {}) {
   var [msg, setMsg] = useState("");
   var [importSuccess, setImportSuccess] = useState<any>(null);
   var [importLoading, setImportLoading] = useState<any>(null);
+  var [pendingDataImportMode, setPendingDataImportMode] = useState<any>(null);
   var [unknowns, setUnknowns] = useState<any>({
     expenseCategory: [],
     paymentMethod: [],
@@ -15162,6 +15330,7 @@ export function ImportData(props: any = {}) {
       patNote: "",
     });
     setImportLoading(null);
+    setPendingDataImportMode(null);
     setMsg("");
   }
   function setImportProgress(file, stage, pct) {
@@ -15869,7 +16038,7 @@ export function ImportData(props: any = {}) {
       setImportProgress(
         fileName || "Google Sheets",
         "Lettura dati",
-        55 + i * 8
+        Math.min(90, 55 + i * 8)
       );
       var range = "'" + title.replace(/'/g, "''") + "'!A1:ZZ10000";
       var data = await googleSheetsFetchJson(
@@ -15880,9 +16049,13 @@ export function ImportData(props: any = {}) {
         token,
         false
       );
-      if (data && data.values && data.values.length > 1) {
+      if (
+        data &&
+        data.values &&
+        data.values.length > 1 &&
+        (!values || data.values.length > values.length)
+      ) {
         values = data.values;
-        break;
       }
     }
     if (!values || values.length < 2) {
@@ -16055,7 +16228,9 @@ export function ImportData(props: any = {}) {
       return (incomeTypes || []).filter(function (it: any) {
         return !it.deleted && !it.archived;
       });
-    return pEntries;
+    return (pEntries || []).filter(function (p: any) {
+      return p && !p.deleted && !p.archived;
+    });
   }
   function replacementKey(kind, name) {
     return kind + "::" + normName(name);
@@ -16188,14 +16363,16 @@ export function ImportData(props: any = {}) {
         var ssKey = Object.keys(entries).find(function (k) {
           return k.indexOf("sharedStrings") >= 0;
         });
-        var shKey =
-          Object.keys(entries).find(function (k) {
-            return /xl\/worksheets\/[Ss]heet1/.test(k);
-          }) ||
-          Object.keys(entries).find(function (k) {
-            return /xl\/worksheets\/sheet/.test(k);
+        var shKeys = Object.keys(entries)
+          .filter(function (k) {
+            return /xl\/worksheets\/[Ss]heet\d+\.xml$/.test(k);
+          })
+          .sort(function (a, b) {
+            var ma = a.match(/[Ss]heet(\d+)\.xml$/),
+              mb = b.match(/[Ss]heet(\d+)\.xml$/);
+            return Number((ma && ma[1]) || 0) - Number((mb && mb[1]) || 0);
           });
-        if (!shKey) {
+        if (!shKeys.length) {
           resolve(null);
           return;
         }
@@ -16214,14 +16391,24 @@ export function ImportData(props: any = {}) {
           });
         }
         withSS(function (ss) {
-          var e2 = entries[shKey];
-          if (e2.cm === 0) {
-            resolve(parseSheet(u8ToStr(e2.data), ss));
-            return;
+          var bestRows: any[] = [];
+          var sheetIndex = 0;
+          function readNextSheet() {
+            if (sheetIndex >= shKeys.length) {
+              resolve(bestRows);
+              return;
+            }
+            var shKey = shKeys[sheetIndex++];
+            var e2 = entries[shKey];
+            function acceptSheet(raw) {
+              var parsedRows = parseSheet(u8ToStr(raw), ss);
+              if (parsedRows.length > bestRows.length) bestRows = parsedRows;
+              readNextSheet();
+            }
+            if (e2.cm === 0) acceptSheet(e2.data);
+            else decomp(e2.data, acceptSheet);
           }
-          decomp(e2.data, function (raw) {
-            resolve(parseSheet(u8ToStr(raw), ss));
-          });
+          readNextSheet();
         });
       } catch (err) {
         resolve(null);
@@ -16596,16 +16783,29 @@ export function ImportData(props: any = {}) {
             custom: true,
           };
         });
+      var activePatrimonioAreas = (ctx.patrimonioAreas || DEFAULT_PATRIMONIO_AREAS).filter(function (a: any) {
+        return a && !a.deleted && !a.archived;
+      });
+      var importPatrimonioArea =
+        activePatrimonioAreas.find(function (a: any) {
+          return String(a.id) === "altro";
+        }) || activePatrimonioAreas[0] || { id: "altro", color: COLORS[0] };
       var newPat = (unknowns.patrimonioEntry || [])
         .filter(function (n) {
           return !findByName(pEntries, n);
         })
         .map(function (n, i) {
+          var nowIso = new Date().toISOString();
           return {
             id: cleanId("pat", n),
             name: n,
             icon: "📦",
-            areaId: "altro",
+            color: importPatrimonioArea.color || COLORS[0],
+            areaId: importPatrimonioArea.id || "altro",
+            custom: true,
+            userCreated: true,
+            createdAt: nowIso,
+            updatedAt: nowIso,
           };
         });
       newCats.forEach(function (x) {
@@ -16683,93 +16883,179 @@ export function ImportData(props: any = {}) {
       return out;
     });
   }
-  function doImport() {
+  function importedMovementRows(finalPreview) {
+    return finalPreview.map(function (p) {
+      if (importType === "expense") {
+        return {
+          id: Date.now() + Math.random(),
+          amount: p.amount,
+          catId: p.catId,
+          methodId: p.methodId,
+          methodName: p.methodName,
+          desc: p.desc,
+          date: p.date,
+          rateizzato: p.rateizzato,
+          rate: p.rate,
+        };
+      }
+      return {
+        id: Date.now() + Math.random(),
+        amount: p.amount,
+        type: p.itype,
+        desc: p.desc,
+        date: p.date,
+        rateizzato: p.rateizzato,
+        rate: p.rate,
+      };
+    });
+  }
+  function executeDataImport(mode) {
     var finalPreview = resolvePreviewRows();
     if (!finalPreview.length) {
+      setPendingDataImportMode(null);
       setMsg(L("Nessuna voce valida da importare."));
       return;
     }
+    var replaceExisting = mode === "replace";
     var importedOk = true;
-    if (importType === "expense")
-      importedOk = addExpenses(
-        finalPreview.map(function (p) {
-          return {
-            id: Date.now() + Math.random(),
-            amount: p.amount,
-            catId: p.catId,
-            methodId: p.methodId,
-            methodName: p.methodName,
-            desc: p.desc,
-            date: p.date,
-            rateizzato: p.rateizzato,
-            rate: p.rate,
-          };
-        }),
-        "import"
-      );
-    else if (importType === "income")
-      importedOk = addIncomes(
-        finalPreview.map(function (p) {
-          return {
-            id: Date.now() + Math.random(),
-            amount: p.amount,
-            type: p.itype,
-            desc: p.desc,
-            date: p.date,
-            rateizzato: p.rateizzato,
-            rate: p.rate,
-          };
-        }),
-        "import"
-      );
-    else if (importType === "patrimonio") {
-      var byMonth = {};
-      var byMonthNotes = {};
+    if (importType === "expense") {
+      var expenseRows = importedMovementRows(finalPreview);
+      if (replaceExisting && setExpenses) setExpenses([]);
+      importedOk = addExpenses(expenseRows, "import");
+    } else if (importType === "income") {
+      var incomeRows = importedMovementRows(finalPreview);
+      if (replaceExisting && setIncomes) setIncomes([]);
+      importedOk = addIncomes(incomeRows, "import");
+    } else if (importType === "patrimonio") {
+      var byMonth: any = {};
+      var byMonthNotes: any = {};
+      var byMonthTransactionCounts: any = {};
+      var byMonthEntryTransactionCounts: any = {};
       finalPreview.forEach(function (row) {
-        if (!row.monthKey) return;
+        if (!row.monthKey || !row.entryId) return;
         if (!byMonth[row.monthKey]) byMonth[row.monthKey] = {};
         if (!byMonthNotes[row.monthKey]) byMonthNotes[row.monthKey] = {};
-        byMonth[row.monthKey][row.entryId] = row.amount;
-        if (row.note) byMonthNotes[row.monthKey][row.entryId] = row.note;
+        if (!byMonthEntryTransactionCounts[row.monthKey])
+          byMonthEntryTransactionCounts[row.monthKey] = {};
+        byMonthTransactionCounts[row.monthKey] =
+          Number(byMonthTransactionCounts[row.monthKey] || 0) + 1;
+        byMonthEntryTransactionCounts[row.monthKey][String(row.entryId)] =
+          Number(
+            byMonthEntryTransactionCounts[row.monthKey][String(row.entryId)] || 0
+          ) + 1;
+        var previousAmount = parseFloat(byMonth[row.monthKey][row.entryId]);
+        byMonth[row.monthKey][row.entryId] =
+          (isNaN(previousAmount) ? 0 : previousAmount) +
+          (parseFloat(row.amount) || 0);
+        if (row.note) {
+          var previousNote = String(
+            byMonthNotes[row.monthKey][row.entryId] || ""
+          ).trim();
+          var nextNote = String(row.note || "").trim();
+          byMonthNotes[row.monthKey][row.entryId] =
+            previousNote && previousNote !== nextNote
+              ? previousNote + " · " + nextNote
+              : nextNote || previousNote;
+        }
       });
-      var newHist = { ...(patrimonioHistory || {}) };
+      function patrimonioSnapshotCount(snap: any) {
+        if (!snap || typeof snap !== "object") return 0;
+        var explicit = Number(snap._transactionCount);
+        if (Number.isFinite(explicit) && explicit >= 0) return explicit;
+        var entryCounts = snap._entryTransactionCounts;
+        if (entryCounts && typeof entryCounts === "object")
+          return Object.keys(entryCounts).reduce(function (sum, key) {
+            return sum + Math.max(0, Number(entryCounts[key] || 0));
+          }, 0);
+        var direct = Object.keys(snap).filter(function (key) {
+          return !String(key).startsWith("_") && key !== "values" && key !== "entries";
+        }).length;
+        if (direct) return direct;
+        var nested = snap.values || snap.entries;
+        return nested && typeof nested === "object" ? Object.keys(nested).length : 0;
+      }
+      function patrimonioSnapshotEntryCounts(snap: any) {
+        if (!snap || typeof snap !== "object") return {};
+        if (snap._entryTransactionCounts && typeof snap._entryTransactionCounts === "object")
+          return { ...snap._entryTransactionCounts };
+        var out: any = {};
+        Object.keys(snap).forEach(function (key) {
+          if (String(key).startsWith("_") || key === "values" || key === "entries") return;
+          out[String(key)] = 1;
+        });
+        var nested = snap.values || snap.entries;
+        if (!Object.keys(out).length && nested && typeof nested === "object")
+          Object.keys(nested).forEach(function (key) { out[String(key)] = 1; });
+        return out;
+      }
+      var newHist: any = replaceExisting ? {} : { ...(patrimonioHistory || {}) };
       Object.keys(byMonth).forEach(function (mk) {
-        var snap = { ...(newHist[mk] || {}), ...byMonth[mk] };
+        var previousSnap: any = replaceExisting ? null : newHist[mk] || null;
+        var snap = replaceExisting
+          ? { ...(byMonth[mk] || {}) }
+          : { ...(previousSnap || {}), ...byMonth[mk] };
         snap._total = Object.keys(snap)
           .filter(function (k) {
-            return !String(k).startsWith("_");
+            return !String(k).startsWith("_") && k !== "values" && k !== "entries";
           })
           .reduce(function (a, k) {
             return a + (parseFloat(snap[k]) || 0);
           }, 0);
+        var entryCounts: any = replaceExisting
+          ? {}
+          : patrimonioSnapshotEntryCounts(previousSnap);
+        Object.keys(byMonthEntryTransactionCounts[mk] || {}).forEach(function (entryId) {
+          entryCounts[entryId] =
+            Number(entryCounts[entryId] || 0) +
+            Number(byMonthEntryTransactionCounts[mk][entryId] || 0);
+        });
+        snap._entryTransactionCounts = entryCounts;
+        snap._transactionCount =
+          (replaceExisting ? 0 : patrimonioSnapshotCount(previousSnap)) +
+          Number(byMonthTransactionCounts[mk] || 0);
         snap._savedAt = new Date().toISOString();
         newHist[mk] = snap;
       });
       setPatrimonioHistory(newHist);
-      if (Object.keys(byMonthNotes).length > 0) {
-        var allNotes = {};
-        Object.keys(byMonthNotes).forEach(function (mk) {
-          Object.assign(allNotes, byMonthNotes[mk]);
-        });
+      var allNotes: any = {};
+      Object.keys(byMonthNotes).forEach(function (mk) {
+        Object.assign(allNotes, byMonthNotes[mk]);
+      });
+      if (replaceExisting) setPatrimonioNotes(allNotes);
+      else if (Object.keys(allNotes).length > 0) {
         setPatrimonioNotes(function (n) {
           return { ...(n || {}), ...allNotes };
         });
       }
     }
+    setPendingDataImportMode(null);
     if (!importedOk) return;
-    var typeLabel =
-      importType === "expense"
-        ? "uscite"
-        : importType === "income"
-        ? "entrate"
-        : "voci patrimonio";
     if (unknownTotal() > 0 && setToast)
       setToast({
         text: L("Importazione completata con gestione dei valori sconosciuti"),
         type: "success",
         icon: "✅",
       });
+    else if (setToast)
+      setToast({
+        text: L(replaceExisting ? "Dati sostituiti correttamente" : "Dati integrati correttamente"),
+        type: "success",
+        icon: "✅",
+      });
     resetAll();
+  }
+  function doImport() {
+    var candidateRows =
+      unknownDecision === "skip"
+        ? preview.filter(function (r) {
+            return !rowHasUnknown(r);
+          })
+        : preview;
+    if (!candidateRows.length) {
+      setMsg(L("Nessuna voce valida da importare."));
+      return;
+    }
+    setPendingDataImportMode({ importType: importType });
   }
   function unknownSection(kind, title, items) {
     if (!items || !items.length) return null;
@@ -17577,6 +17863,62 @@ export function ImportData(props: any = {}) {
           </div>
         </div>
       )}
+      <FainancePickerModal
+        open={!!pendingDataImportMode}
+        title={L("Come vuoi importare i dati?")}
+        onClose={function () {
+          setPendingDataImportMode(null);
+        }}
+        zIndex={12150}
+      >
+        <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 13, lineHeight: 1.5, color: sc }}>
+            {L(
+              importType === "expense"
+                ? "Scegli se le Uscite importate devono sostituire quelle già presenti oppure essere aggiunte ai dati esistenti."
+                : importType === "income"
+                ? "Scegli se le Entrate importate devono sostituire quelle già presenti oppure essere aggiunte ai dati esistenti."
+                : "Scegli se il Patrimonio importato deve sostituire quello già presente oppure essere aggiunto ai dati esistenti."
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={function () {
+              executeDataImport("merge");
+            }}
+            style={{
+              border: "none",
+              borderRadius: 12,
+              padding: "13px 14px",
+              background: ctx.confirmButtonColor || "#1D9E75",
+              color: "#fff",
+              fontSize: 13,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            {L("Integra con i dati esistenti")}
+          </button>
+          <button
+            type="button"
+            onClick={function () {
+              executeDataImport("replace");
+            }}
+            style={{
+              border: "1px solid #E24B4A",
+              borderRadius: 12,
+              padding: "13px 14px",
+              background: dark ? "#3a2020" : "#FFF0F0",
+              color: "#E24B4A",
+              fontSize: 13,
+              fontWeight: 900,
+              cursor: "pointer",
+            }}
+          >
+            {L("Sostituisci i dati esistenti")}
+          </button>
+        </div>
+      </FainancePickerModal>
     </div>
   );
 }

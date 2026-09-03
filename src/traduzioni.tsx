@@ -168,11 +168,37 @@ function getFainanceTranslationLookup(code){
   return fainanceTranslationCache[safe];
 }
 
+function fainanceStripLegacyDistributionDash(value){
+  var out=String(value==null?"":value);
+  var trimmed=out.trim();
+  if(!trimmed)return out;
+  var clean=trimmed.replace(/(?:\s*[\-‐‑‒–—―−﹘﹣－]+\s*)+$/g,"").trim();
+  if(clean===trimmed)return out;
+  var canonical=[
+    "Distribuzione uscite",
+    "Distribuzione spese",
+    "Expense distribution",
+    "Distribution expense",
+    "Distribución de gastos",
+    "Répartition des dépenses",
+    "Ausgabenverteilung",
+    "Distribuição de despesas",
+    "Rozkład wydatków",
+    "Podział wydatków",
+    "Uitgavenverdeling",
+    "Distribuția cheltuielilor",
+    "Κατανομή εξόδων"
+  ];
+  if(canonical.indexOf(clean)<0)return out;
+  return out.replace(trimmed,clean);
+}
+
 export function translateFainanceText(value, lang){
   var raw=repairFainanceEncoding(String(value==null?"":value));
   var code=lang||"it";
-  function finish(candidate){return normalizeFainanceTranslatedIcons(raw,candidate);}
-  if(!raw||code==="it")return raw;
+  function finish(candidate){return fainanceStripLegacyDistributionDash(normalizeFainanceTranslatedIcons(raw,candidate));}
+  if(!raw)return raw;
+  if(code==="it")return fainanceStripLegacyDistributionDash(raw);
   var leading=(raw.match(/^\s*/)||[""])[0];
   var trailing=(raw.match(/\s*$/)||[""])[0];
   var text=raw.trim();
@@ -11461,3 +11487,46 @@ Object.assign(TRANSLATIONS.el,{
   });
   try{fainanceTranslationCache={};}catch(e){}
 })();
+
+// 2026-09-02 — Home: rimozione definitiva del separatore finale dal titolo
+// "Distribuzione uscite" in tutte le lingue. Le vecchie tabelle contenevano
+// alias con "—"; poiché il lookup normalizzato ignora la punteggiatura, tali
+// alias potevano riapparire dopo un cambio lingua o una ricostruzione della UI.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  var VALUE={
+    it:'Distribuzione uscite',
+    en:'Expense distribution',
+    es:'Distribución de gastos',
+    fr:'Répartition des dépenses',
+    de:'Ausgabenverteilung',
+    pt:'Distribuição de despesas',
+    pl:'Rozkład wydatków',
+    nl:'Uitgavenverdeling',
+    ro:'Distribuția cheltuielilor',
+    el:'Κατανομή εξόδων'
+  };
+  var BASE=[
+    'Distribuzione uscite','Distribuzione spese',
+    'Expense distribution','Distribution expense',
+    'Distribución de gastos','Répartition des dépenses','Ausgabenverteilung',
+    'Distribuição de despesas','Rozkład wydatków','Podział wydatków',
+    'Uitgavenverdeling','Distribuția cheltuielilor','Κατανομή εξόδων'
+  ];
+  var DASH=['',' -',' –',' —',' −',' - ',' – ',' — ',' − '];
+  LANGS.forEach(function(code){
+    if(!TRANSLATIONS[code])TRANSLATIONS[code]={};
+    if(!FAINANCE_UI_TRANSLATIONS[code])FAINANCE_UI_TRANSLATIONS[code]={};
+    if(!FAINANCE_I18N_PHRASES[code])FAINANCE_I18N_PHRASES[code]={};
+    BASE.forEach(function(base){
+      DASH.forEach(function(suffix){
+        var key=base+suffix;
+        TRANSLATIONS[code][key]=VALUE[code];
+        FAINANCE_UI_TRANSLATIONS[code][key]=VALUE[code];
+        FAINANCE_I18N_PHRASES[code][key]=VALUE[code];
+      });
+    });
+  });
+  try{fainanceTranslationCache={};}catch(e){}
+})();
+

@@ -1839,9 +1839,9 @@ export function HomePanel() {
           color: w.color || "#FFFFFF",
           params: {
             showTitle: p.showTitle !== false,
-            customTitle: String(p.customTitle || ""),
             ...defaultParams(w.type),
             ...p,
+            customTitle: cleanHomeWorkletTitle(String(p.customTitle || "")),
           },
         };
       });
@@ -1852,7 +1852,7 @@ export function HomePanel() {
   function sanitizeWorkletParams(type, params) {
     var p = { ...(params || {}) };
     p.showTitle = p.showTitle !== false;
-    p.customTitle = String(p.customTitle || "").trim();
+    p.customTitle = cleanHomeWorkletTitle(String(p.customTitle || ""));
     if (p.countInput !== undefined) delete p.countInput;
     if (
       ["latest_expenses", "latest_incomes", "share_recent"].indexOf(type) >= 0
@@ -2679,8 +2679,10 @@ export function HomePanel() {
     return <span style={{ fontSize: sz || 28, lineHeight: 1 }}>{d.icon}</span>;
   }
   function homeTitleText(w) {
-    var custom = w && w.params ? String(w.params.customTitle || "").trim() : "";
-    return custom || lib(w.type).label || w.type;
+    var custom = w && w.params
+      ? cleanHomeWorkletTitle(String(w.params.customTitle || ""))
+      : "";
+    return cleanHomeWorkletTitle(custom || lib(w.type).label || w.type);
   }
   function homeShowTitle(w) {
     return !(w && w.params && w.params.showTitle === false);
@@ -4295,7 +4297,7 @@ export function HomePanel() {
       .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    return value.replace(/(?:\s*[\-‐‑‒–—―:·•]+\s*)+$/g, "").trim();
+    return value.replace(/(?:\s*[\-‐‑‒–—―−﹘﹣－:·•]+\s*)+$/g, "").trim();
   }
   function cardTitle(w) {
     var item = lib(w.type);

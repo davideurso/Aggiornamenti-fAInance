@@ -11,6 +11,28 @@ let fainanceTranslationCache: Record<string, unknown> = {};
 // Legacy translation mutation blocks extracted from app.tsx in Architecture Phase 11.
 // Called at the same app-module evaluation point to preserve behavior.
 export function applyAppTranslationPatches(){
+  // fAInance 2.0 - scelta sostituzione/integrazione durante gli import.
+  (function(){
+    var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+    function add(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+    var D={
+      'Come vuoi importare i dati?':{en:'How do you want to import the data?',es:'¿Cómo quieres importar los datos?',fr:'Comment veux-tu importer les données ?',de:'Wie möchtest du die Daten importieren?',pt:'Como queres importar os dados?',pl:'Jak chcesz zaimportować dane?',nl:'Hoe wil je de gegevens importeren?',ro:'Cum vrei să imporți datele?',el:'Πώς θέλεις να εισαγάγεις τα δεδομένα;'},
+      'Scegli se le Uscite importate devono sostituire quelle già presenti oppure essere aggiunte ai dati esistenti.':{en:'Choose whether the imported Expenses should replace the existing ones or be added to the existing data.',es:'Elige si los Gastos importados deben sustituir los existentes o añadirse a los datos actuales.',fr:'Choisis si les Dépenses importées doivent remplacer celles déjà présentes ou être ajoutées aux données existantes.',de:'Wähle, ob die importierten Ausgaben die vorhandenen ersetzen oder zu den bestehenden Daten hinzugefügt werden sollen.',pt:'Escolhe se as Despesas importadas devem substituir as existentes ou ser adicionadas aos dados atuais.',pl:'Wybierz, czy zaimportowane Wydatki mają zastąpić istniejące dane, czy zostać do nich dodane.',nl:'Kies of de geïmporteerde Uitgaven de bestaande moeten vervangen of aan de bestaande gegevens moeten worden toegevoegd.',ro:'Alege dacă Cheltuielile importate trebuie să le înlocuiască pe cele existente sau să fie adăugate la datele existente.',el:'Επίλεξε αν τα εισαγόμενα Έξοδα θα αντικαταστήσουν τα υπάρχοντα ή θα προστεθούν στα υπάρχοντα δεδομένα.'},
+      'Scegli se le Entrate importate devono sostituire quelle già presenti oppure essere aggiunte ai dati esistenti.':{en:'Choose whether the imported Income should replace the existing entries or be added to the existing data.',es:'Elige si los Ingresos importados deben sustituir los existentes o añadirse a los datos actuales.',fr:'Choisis si les Revenus importés doivent remplacer ceux déjà présents ou être ajoutés aux données existantes.',de:'Wähle, ob die importierten Einnahmen die vorhandenen ersetzen oder zu den bestehenden Daten hinzugefügt werden sollen.',pt:'Escolhe se as Receitas importadas devem substituir as existentes ou ser adicionadas aos dados atuais.',pl:'Wybierz, czy zaimportowane Przychody mają zastąpić istniejące dane, czy zostać do nich dodane.',nl:'Kies of de geïmporteerde Inkomsten de bestaande moeten vervangen of aan de bestaande gegevens moeten worden toegevoegd.',ro:'Alege dacă Veniturile importate trebuie să le înlocuiască pe cele existente sau să fie adăugate la datele existente.',el:'Επίλεξε αν τα εισαγόμενα Έσοδα θα αντικαταστήσουν τα υπάρχοντα ή θα προστεθούν στα υπάρχοντα δεδομένα.'},
+      'Scegli se il Patrimonio importato deve sostituire quello già presente oppure essere aggiunto ai dati esistenti.':{en:'Choose whether the imported Assets should replace the existing data or be added to it.',es:'Elige si el Patrimonio importado debe sustituir el existente o añadirse a los datos actuales.',fr:'Choisis si le Patrimoine importé doit remplacer les données existantes ou s’y ajouter.',de:'Wähle, ob das importierte Vermögen die vorhandenen Daten ersetzen oder zu ihnen hinzugefügt werden soll.',pt:'Escolhe se o Património importado deve substituir os dados existentes ou ser adicionado a eles.',pl:'Wybierz, czy zaimportowany Majątek ma zastąpić istniejące dane, czy zostać do nich dodany.',nl:'Kies of het geïmporteerde Vermogen de bestaande gegevens moet vervangen of eraan moet worden toegevoegd.',ro:'Alege dacă Patrimoniul importat trebuie să înlocuiască datele existente sau să fie adăugat la acestea.',el:'Επίλεξε αν η εισαγόμενη Περιουσία θα αντικαταστήσει τα υπάρχοντα δεδομένα ή θα προστεθεί σε αυτά.'},
+      'Integra con i dati esistenti':{en:'Merge with existing data',es:'Integrar con los datos existentes',fr:'Intégrer aux données existantes',de:'Mit vorhandenen Daten zusammenführen',pt:'Integrar com os dados existentes',pl:'Połącz z istniejącymi danymi',nl:'Samenvoegen met bestaande gegevens',ro:'Integrează cu datele existente',el:'Ενοποίηση με τα υπάρχοντα δεδομένα'},
+      'Sostituisci i dati esistenti':{en:'Replace existing data',es:'Sustituir los datos existentes',fr:'Remplacer les données existantes',de:'Vorhandene Daten ersetzen',pt:'Substituir os dados existentes',pl:'Zastąp istniejące dane',nl:'Bestaande gegevens vervangen',ro:'Înlocuiește datele existente',el:'Αντικατάσταση υπαρχόντων δεδομένων'},
+      'Dati sostituiti correttamente':{en:'Data replaced successfully',es:'Datos sustituidos correctamente',fr:'Données remplacées avec succès',de:'Daten erfolgreich ersetzt',pt:'Dados substituídos com sucesso',pl:'Dane zostały pomyślnie zastąpione',nl:'Gegevens succesvol vervangen',ro:'Date înlocuite cu succes',el:'Τα δεδομένα αντικαταστάθηκαν επιτυχώς'},
+      'Dati integrati correttamente':{en:'Data merged successfully',es:'Datos integrados correctamente',fr:'Données intégrées avec succès',de:'Daten erfolgreich zusammengeführt',pt:'Dados integrados com sucesso',pl:'Dane zostały pomyślnie połączone',nl:'Gegevens succesvol samengevoegd',ro:'Date integrate cu succes',el:'Τα δεδομένα ενοποιήθηκαν επιτυχώς'},
+      'Come vuoi importare il JSON?':{en:'How do you want to import the JSON?',es:'¿Cómo quieres importar el JSON?',fr:'Comment veux-tu importer le JSON ?',de:'Wie möchtest du die JSON-Datei importieren?',pt:'Como queres importar o JSON?',pl:'Jak chcesz zaimportować JSON?',nl:'Hoe wil je de JSON importeren?',ro:'Cum vrei să imporți JSON-ul?',el:'Πώς θέλεις να εισαγάγεις το JSON;'},
+      'Il file contiene:':{en:'The file contains:',es:'El archivo contiene:',fr:'Le fichier contient :',de:'Die Datei enthält:',pt:'O ficheiro contém:',pl:'Plik zawiera:',nl:'Het bestand bevat:',ro:'Fișierul conține:',el:'Το αρχείο περιέχει:'},
+      'Puoi integrare il backup con i dati già presenti oppure sostituire completamente i dati esistenti con quelli del JSON.':{en:'You can merge the backup with the data already present or completely replace the existing data with the JSON data.',es:'Puedes integrar la copia de seguridad con los datos ya existentes o sustituir completamente los datos actuales por los del JSON.',fr:'Tu peux intégrer la sauvegarde aux données déjà présentes ou remplacer complètement les données existantes par celles du JSON.',de:'Du kannst das Backup mit den vorhandenen Daten zusammenführen oder die bestehenden Daten vollständig durch die JSON-Daten ersetzen.',pt:'Podes integrar a cópia de segurança com os dados já existentes ou substituir completamente os dados atuais pelos dados do JSON.',pl:'Możesz połączyć kopię zapasową z istniejącymi danymi albo całkowicie zastąpić istniejące dane danymi z pliku JSON.',nl:'Je kunt de back-up samenvoegen met de bestaande gegevens of de bestaande gegevens volledig vervangen door de JSON-gegevens.',ro:'Poți integra copia de siguranță cu datele existente sau poți înlocui complet datele existente cu cele din JSON.',el:'Μπορείς να ενοποιήσεις το αντίγραφο ασφαλείας με τα υπάρχοντα δεδομένα ή να αντικαταστήσεις πλήρως τα υπάρχοντα δεδομένα με αυτά του JSON.'},
+      'Backup integrato correttamente':{en:'Backup merged successfully',es:'Copia de seguridad integrada correctamente',fr:'Sauvegarde intégrée avec succès',de:'Backup erfolgreich zusammengeführt',pt:'Cópia de segurança integrada com sucesso',pl:'Kopia zapasowa została pomyślnie połączona',nl:'Back-up succesvol samengevoegd',ro:'Copia de siguranță a fost integrată cu succes',el:'Το αντίγραφο ασφαλείας ενοποιήθηκε επιτυχώς'},
+      'Backup integrato. I dati sensibili non compatibili sono stati mantenuti invariati.':{en:'Backup merged. Incompatible sensitive data was left unchanged.',es:'Copia de seguridad integrada. Los datos sensibles incompatibles se han mantenido sin cambios.',fr:'Sauvegarde intégrée. Les données sensibles incompatibles ont été conservées sans modification.',de:'Backup zusammengeführt. Nicht kompatible sensible Daten wurden unverändert beibehalten.',pt:'Cópia de segurança integrada. Os dados sensíveis incompatíveis foram mantidos sem alterações.',pl:'Kopia zapasowa została połączona. Niezgodne dane wrażliwe pozostały bez zmian.',nl:'Back-up samengevoegd. Niet-compatibele gevoelige gegevens zijn ongewijzigd gebleven.',ro:'Copia de siguranță a fost integrată. Datele sensibile incompatibile au rămas neschimbate.',el:'Το αντίγραφο ασφαλείας ενοποιήθηκε. Τα μη συμβατά ευαίσθητα δεδομένα διατηρήθηκαν αμετάβλητα.'}
+    };
+    Object.keys(D).forEach(function(k){add(k,Object.assign({it:k},D[k]));});
+    try{fainanceTranslationCache={};}catch(e){}
+  })();
   // fAInance 2.0 V109 - current plan label + tolerant backup restore.
   (function(){
     var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
@@ -1362,6 +1384,49 @@ export function applyAppTranslationPatches(){
   });
   put('Invito da',{
     it:'Invito da',en:'Invitation from',es:'Invitación de',fr:'Invitation de',de:'Einladung von',pt:'Convite de',pl:'Zaproszenie od',nl:'Uitnodiging van',ro:'Invitație de la',el:'Πρόσκληση από'
+  });
+  try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
+})();
+
+// fAInance 2.0 - Patrimonio: messaggi CRUD coerenti in tutte le lingue supportate.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  put('Questa voce contiene dati del patrimonio. Archiviala per conservarne lo storico oppure rimuovi prima i dati associati.',{
+    it:'Questa voce contiene dati del patrimonio. Archiviala per conservarne lo storico oppure rimuovi prima i dati associati.',
+    en:'This asset item contains saved data. Archive it to preserve its history, or remove the associated data first.',
+    es:'Esta partida de patrimonio contiene datos guardados. Archívala para conservar el historial o elimina primero los datos asociados.',
+    fr:'Cette rubrique de patrimoine contient des données enregistrées. Archivez-la pour conserver son historique ou supprimez d’abord les données associées.',
+    de:'Dieser Vermögenseintrag enthält gespeicherte Daten. Archiviere ihn, um den Verlauf zu behalten, oder entferne zuerst die zugehörigen Daten.',
+    pt:'Esta rubrica de património contém dados guardados. Arquiva-a para preservar o histórico ou remove primeiro os dados associados.',
+    pl:'Ta pozycja majątku zawiera zapisane dane. Zarchiwizuj ją, aby zachować historię, albo najpierw usuń powiązane dane.',
+    nl:'Dit vermogensitem bevat opgeslagen gegevens. Archiveer het om de historie te bewaren of verwijder eerst de gekoppelde gegevens.',
+    ro:'Această poziție de patrimoniu conține date salvate. Arhiveaz-o pentru a păstra istoricul sau elimină mai întâi datele asociate.',
+    el:'Αυτό το στοιχείο περιουσίας περιέχει αποθηκευμένα δεδομένα. Αρχειοθέτησέ το για να διατηρηθεί το ιστορικό ή αφαίρεσε πρώτα τα συσχετισμένα δεδομένα.'
+  });
+  put('Questa area contiene voci attive. Sposta o archivia prima le voci associate.',{
+    it:'Questa area contiene voci attive. Sposta o archivia prima le voci associate.',
+    en:'This area contains active items. Move or archive the associated items first.',
+    es:'Esta área contiene partidas activas. Mueve o archiva primero las partidas asociadas.',
+    fr:'Cette zone contient des rubriques actives. Déplacez ou archivez d’abord les rubriques associées.',
+    de:'Dieser Bereich enthält aktive Einträge. Verschiebe oder archiviere zuerst die zugehörigen Einträge.',
+    pt:'Esta área contém rubricas ativas. Move ou arquiva primeiro as rubricas associadas.',
+    pl:'Ten obszar zawiera aktywne pozycje. Najpierw przenieś lub zarchiwizuj powiązane pozycje.',
+    nl:'Dit gebied bevat actieve items. Verplaats of archiveer eerst de gekoppelde items.',
+    ro:'Această zonă conține poziții active. Mută sau arhivează mai întâi pozițiile asociate.',
+    el:'Αυτή η περιοχή περιέχει ενεργά στοιχεία. Μετακίνησε ή αρχειοθέτησε πρώτα τα συσχετισμένα στοιχεία.'
+  });
+  put('La voce contiene dati storici ed è stata archiviata.',{
+    it:'La voce contiene dati storici ed è stata archiviata.',
+    en:'The item contains historical data and has been archived.',
+    es:'La partida contiene datos históricos y se ha archivado.',
+    fr:'La rubrique contient des données historiques et a été archivée.',
+    de:'Der Eintrag enthält historische Daten und wurde archiviert.',
+    pt:'A rubrica contém dados históricos e foi arquivada.',
+    pl:'Pozycja zawiera dane historyczne i została zarchiwizowana.',
+    nl:'Het item bevat historische gegevens en is gearchiveerd.',
+    ro:'Poziția conține date istorice și a fost arhivată.',
+    el:'Το στοιχείο περιέχει ιστορικά δεδομένα και αρχειοθετήθηκε.'
   });
   try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
 })();

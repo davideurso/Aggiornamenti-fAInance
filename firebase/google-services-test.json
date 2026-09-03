@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "537576395820",
+    "project_id": "fainance-test-20260823195207",
+    "storage_bucket": "fainance-test-20260823195207.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:537576395820:android:f73fc4b0044cdb66366d89",
+        "android_client_info": {
+          "package_name": "it.fainanceapp.app.test"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDeOmt0seR1iyb48iy_jQyDDopNifCvo9A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -923,6 +923,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (String(item.icon || "") !== String(d.icon || "")) return true;
     if (String(item.color || "") !== String(d.color || "")) return true;
     if (String(item.group || "") !== String(d.group || "")) return true;
+    if (String(item.areaId || "") !== String(d.areaId || "")) return true;
     return false;
   }
   function chooseProtectedStoredItem(
@@ -1126,6 +1127,28 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var base = defaultProtectedArray(current, fallback, dict);
     var value = typeof next === "function" ? next(base) : next;
     return defaultProtectedArray(value, fallback, dict);
+  }
+  function patrimonioProtectedArray(value, fallback, dict) {
+    var stored = Array.isArray(value) ? value : [];
+    // Mantiene l'ordine scelto dall'utente e aggiunge in coda soltanto gli
+    // elementi predefiniti realmente mancanti. Le personalizzazioni/tombstone
+    // del catalogo salvato hanno sempre precedenza sui default.
+    return compactProtectedArray(
+      mergeProtectedArrayByStableId(
+        stored,
+        ensureArrayValue(fallback, []),
+        fallback,
+        dict,
+        false
+      ),
+      fallback,
+      dict
+    );
+  }
+  function resolvePatrimonioProtectedNext(next, current, fallback, dict) {
+    var base = patrimonioProtectedArray(current, fallback, dict);
+    var value = typeof next === "function" ? next(base) : next;
+    return patrimonioProtectedArray(value, fallback, dict);
   }
   function chooseCloudLocalArray(cloud, local, fallback, merge) {
     var c = Array.isArray(cloud) ? cloud : null;
@@ -2671,22 +2694,66 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     alertsRef.current = prepared;
     return setAlertsRaw(prepared);
   }
-  var [budgetPlan, setBudgetPlan] = useStorage(
+  var [budgetPlan, setBudgetPlanRaw] = useStorage(
     userKey("budget_plan_v1"),
     DEFAULT_BUDGET_PLAN
   );
-  var [patrimonioAreas, setPatrimonioAreas] = useStorage(
+  function setBudgetPlan(nextValue) {
+    if (!applyingFirestoreRef.current)
+      markUserLocalChanges(["budget_plan_v1"]);
+    return setBudgetPlanRaw(nextValue);
+  }
+  var [patrimonioAreas, setPatrimonioAreasRaw] = useStorage(
     userKey("patrimonio_areas_v1"),
     DEFAULT_PATRIMONIO_AREAS
   );
-  var [patrimonioEntries, setPatrimonioEntries] = useStorage(
+  function setPatrimonioAreas(nextValue) {
+    if (!applyingFirestoreRef.current)
+      markUserLocalChanges(["patrimonio_catalog_v2"]);
+    return setPatrimonioAreasRaw(
+      resolvePatrimonioProtectedNext(
+        nextValue,
+        patrimonioAreas,
+        DEFAULT_PATRIMONIO_AREAS,
+        DEFAULT_PATRIMONIO_AREA_NAMES
+      )
+    );
+  }
+  patrimonioAreas = patrimonioProtectedArray(
+    patrimonioAreas,
+    DEFAULT_PATRIMONIO_AREAS,
+    DEFAULT_PATRIMONIO_AREA_NAMES
+  );
+  var [patrimonioEntries, setPatrimonioEntriesRaw] = useStorage(
     userKey("patrimonio_entries_v1"),
     DEFAULT_PATRIMONIO_ENTRIES
   );
-  var [patrimonioValues, setPatrimonioValues] = useStorage(
+  function setPatrimonioEntries(nextValue) {
+    if (!applyingFirestoreRef.current)
+      markUserLocalChanges(["patrimonio_catalog_v2"]);
+    return setPatrimonioEntriesRaw(
+      resolvePatrimonioProtectedNext(
+        nextValue,
+        patrimonioEntries,
+        DEFAULT_PATRIMONIO_ENTRIES,
+        DEFAULT_PATRIMONIO_ENTRY_NAMES
+      )
+    );
+  }
+  patrimonioEntries = patrimonioProtectedArray(
+    patrimonioEntries,
+    DEFAULT_PATRIMONIO_ENTRIES,
+    DEFAULT_PATRIMONIO_ENTRY_NAMES
+  );
+  var [patrimonioValues, setPatrimonioValuesRaw] = useStorage(
     userKey("patrimonio_values_v1"),
     {}
   );
+  function setPatrimonioValues(nextValue) {
+    if (!applyingFirestoreRef.current)
+      markUserLocalChanges(["patrimonio_data_v2"]);
+    return setPatrimonioValuesRaw(nextValue);
+  }
   var [patrimonioMode, setPatrimonioModeRaw] = useStorage(
     userKey("patrimonio_mode_v1"),
     "manuale"
@@ -3477,14 +3544,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     customNotifsRef.current = prepared;
     return setCustomNotifsRaw(prepared);
   }
-  var [patrimonioHistory, setPatrimonioHistory] = useStorage(
+  var [patrimonioHistory, setPatrimonioHistoryRaw] = useStorage(
     userKey("patrimonio_history_v1"),
     {}
   );
-  var [patrimonioNotes, setPatrimonioNotes] = useStorage(
+  function setPatrimonioHistory(nextValue) {
+    if (!applyingFirestoreRef.current)
+      markUserLocalChanges(["patrimonio_data_v2"]);
+    return setPatrimonioHistoryRaw(nextValue);
+  }
+  var [patrimonioNotes, setPatrimonioNotesRaw] = useStorage(
     userKey("patrimonio_notes_v1"),
     {}
   );
+  function setPatrimonioNotes(nextValue) {
+    if (!applyingFirestoreRef.current)
+      markUserLocalChanges(["patrimonio_data_v2"]);
+    return setPatrimonioNotesRaw(nextValue);
+  }
   var [historyFutureMode, setHistoryFutureMode] = useStorage(
     userKey("history_future_mode_v1"),
     "untilToday"
@@ -4695,6 +4772,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         goals: readUserLocalJson("goals_v1", DEFAULT_GOALS),
         alerts: readUserLocalJson("alerts_v1", []),
         budgetPlan: readUserLocalJson("budget_plan_v1", DEFAULT_BUDGET_PLAN),
+        budgetPlanUpdatedAt: readUserLocalUpdatedAt("budget_plan_v1"),
         cats: readUserLocalJson("cats_v10", DEFAULT_CATS),
         methods: readUserLocalJson("meth_v10", DEFAULT_METHODS),
         expenseGroups: readUserLocalJson(
@@ -4751,6 +4829,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           "patrimonio_entries_v1",
           DEFAULT_PATRIMONIO_ENTRIES
         ),
+        patrimonioCatalogUpdatedAt: readUserLocalUpdatedAt(
+          "patrimonio_catalog_v2"
+        ),
+        patrimonioDataUpdatedAt: readUserLocalUpdatedAt("patrimonio_data_v2"),
         patrimonioHistory: readUserLocalJson("patrimonio_history_v1", {}),
         patrimonioNotes: readUserLocalJson("patrimonio_notes_v1", {}),
         patrimonyPreferencesV2: {
@@ -5848,13 +5930,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               setAlerts(mergedAlerts);
               setCats(mergedCats);
               setMethods(mergedMethods);
-              setBudgetPlan(
-                preserveLatestLocalOnFirst
-                  ? readUserLocalJson("budget_plan_v1", localSnap.budgetPlan)
-                  : d.budgetPlan !== undefined
-                  ? d.budgetPlan
-                  : localSnap.budgetPlan
+              var latestLocalBudgetPlan = readUserLocalJson(
+                "budget_plan_v1",
+                localSnap.budgetPlan
               );
+              var localBudgetTs = readUserLocalUpdatedAt("budget_plan_v1"),
+                cloudBudgetTs = Number(d.budgetPlanUpdatedAt || 0);
+              var preferLocalBudget =
+                preserveLatestLocalOnFirst || localBudgetTs > cloudBudgetTs;
+              var mergedBudgetPlan = preferLocalBudget
+                ? latestLocalBudgetPlan
+                : d.budgetPlan !== undefined
+                ? d.budgetPlan
+                : localSnap.budgetPlan;
+              setBudgetPlan(mergedBudgetPlan);
+              if (
+                preferLocalBudget ||
+                d.budgetPlan === undefined ||
+                !d.budgetPlanUpdatedAt
+              ) {
+                var bt = localBudgetTs || cloudBudgetTs || Date.now();
+                writeUserLocalUpdatedAt("budget_plan_v1", bt);
+                backfill.budgetPlan = mergedBudgetPlan;
+                backfill.budgetPlanUpdatedAt = bt;
+                needsBackfill = true;
+              } else if (cloudBudgetTs) {
+                writeUserLocalUpdatedAt("budget_plan_v1", cloudBudgetTs);
+              }
               setExpenseGroups(mergedExpenseGroups);
               setIncomeGroups(mergedIncomeGroups);
               setMethodGroups(mergedMethodGroups);
@@ -6032,20 +6134,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               }
               if (!cloudCatalogSyncV3) needsBackfill = true;
 
-              setPatrimonioValues(
-                preserveLatestLocalOnFirst
-                  ? {
-                      ...ensureObjectValue(d.patrimonioValues, {}),
-                      ...ensureObjectValue(latestLocalPatrimonioValues, {}),
-                    }
-                  : chooseCloudLocalObject(
-                      d.patrimonioValues,
-                      localSnap.patrimonioValues,
-                      {}
-                    )
-              );
-              setPatrimonioAreas(
-                preserveLatestLocalOnFirst
+              var localPatrimonioCatalogTs = readUserLocalUpdatedAt(
+                  "patrimonio_catalog_v2"
+                ),
+                cloudPatrimonioCatalogTs = Number(
+                  d.patrimonioCatalogUpdatedAt || 0
+                ),
+                preferLocalPatrimonioCatalog =
+                  preserveLatestLocalOnFirst ||
+                  localPatrimonioCatalogTs > cloudPatrimonioCatalogTs;
+              var mergedPatrimonioAreas = patrimonioProtectedArray(
+                preferLocalPatrimonioCatalog
                   ? mergeArrayPreferLocalByStableId(
                       Array.isArray(d.patrimonioAreas) ? d.patrimonioAreas : [],
                       latestLocalPatrimonioAreas
@@ -6055,10 +6154,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       localSnap.patrimonioAreas,
                       DEFAULT_PATRIMONIO_AREAS,
                       false
-                    )
+                    ),
+                DEFAULT_PATRIMONIO_AREAS,
+                DEFAULT_PATRIMONIO_AREA_NAMES
               );
-              setPatrimonioEntries(
-                preserveLatestLocalOnFirst
+              var mergedPatrimonioEntries = patrimonioProtectedArray(
+                preferLocalPatrimonioCatalog
                   ? mergeArrayPreferLocalByStableId(
                       Array.isArray(d.patrimonioEntries)
                         ? d.patrimonioEntries
@@ -6070,32 +6171,94 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       localSnap.patrimonioEntries,
                       DEFAULT_PATRIMONIO_ENTRIES,
                       false
-                    )
+                    ),
+                DEFAULT_PATRIMONIO_ENTRIES,
+                DEFAULT_PATRIMONIO_ENTRY_NAMES
               );
-              setPatrimonioHistory(
-                preserveLatestLocalOnFirst
-                  ? {
-                      ...ensureObjectValue(d.patrimonioHistory, {}),
-                      ...ensureObjectValue(latestLocalPatrimonioHistory, {}),
-                    }
-                  : chooseCloudLocalObject(
-                      d.patrimonioHistory,
-                      localSnap.patrimonioHistory,
-                      {}
-                    )
-              );
-              setPatrimonioNotes(
-                preserveLatestLocalOnFirst
-                  ? {
-                      ...ensureObjectValue(d.patrimonioNotes, {}),
-                      ...ensureObjectValue(latestLocalPatrimonioNotes, {}),
-                    }
-                  : chooseCloudLocalObject(
-                      d.patrimonioNotes,
-                      localSnap.patrimonioNotes,
-                      {}
-                    )
-              );
+              setPatrimonioAreas(mergedPatrimonioAreas);
+              setPatrimonioEntries(mergedPatrimonioEntries);
+              if (
+                preferLocalPatrimonioCatalog ||
+                !d.patrimonioCatalogUpdatedAt ||
+                !syncJsonEqual(d.patrimonioAreas || [], mergedPatrimonioAreas) ||
+                !syncJsonEqual(d.patrimonioEntries || [], mergedPatrimonioEntries)
+              ) {
+                var pct2 =
+                  localPatrimonioCatalogTs ||
+                  cloudPatrimonioCatalogTs ||
+                  Date.now();
+                writeUserLocalUpdatedAt("patrimonio_catalog_v2", pct2);
+                backfill.patrimonioAreas = mergedPatrimonioAreas;
+                backfill.patrimonioEntries = mergedPatrimonioEntries;
+                backfill.patrimonioCatalogUpdatedAt = pct2;
+                needsBackfill = true;
+              } else if (cloudPatrimonioCatalogTs) {
+                writeUserLocalUpdatedAt(
+                  "patrimonio_catalog_v2",
+                  cloudPatrimonioCatalogTs
+                );
+              }
+
+              var localPatrimonioDataTs = readUserLocalUpdatedAt(
+                  "patrimonio_data_v2"
+                ),
+                cloudPatrimonioDataTs = Number(
+                  d.patrimonioDataUpdatedAt || 0
+                ),
+                preferLocalPatrimonioData =
+                  preserveLatestLocalOnFirst ||
+                  localPatrimonioDataTs > cloudPatrimonioDataTs;
+              var mergedPatrimonioValues = preferLocalPatrimonioData
+                ? {
+                    ...ensureObjectValue(d.patrimonioValues, {}),
+                    ...ensureObjectValue(latestLocalPatrimonioValues, {}),
+                  }
+                : chooseCloudLocalObject(
+                    d.patrimonioValues,
+                    localSnap.patrimonioValues,
+                    {}
+                  );
+              var mergedPatrimonioHistory = preferLocalPatrimonioData
+                ? {
+                    ...ensureObjectValue(d.patrimonioHistory, {}),
+                    ...ensureObjectValue(latestLocalPatrimonioHistory, {}),
+                  }
+                : chooseCloudLocalObject(
+                    d.patrimonioHistory,
+                    localSnap.patrimonioHistory,
+                    {}
+                  );
+              var mergedPatrimonioNotes = preferLocalPatrimonioData
+                ? {
+                    ...ensureObjectValue(d.patrimonioNotes, {}),
+                    ...ensureObjectValue(latestLocalPatrimonioNotes, {}),
+                  }
+                : chooseCloudLocalObject(
+                    d.patrimonioNotes,
+                    localSnap.patrimonioNotes,
+                    {}
+                  );
+              setPatrimonioValues(mergedPatrimonioValues);
+              setPatrimonioHistory(mergedPatrimonioHistory);
+              setPatrimonioNotes(mergedPatrimonioNotes);
+              if (
+                preferLocalPatrimonioData ||
+                !d.patrimonioDataUpdatedAt
+              ) {
+                var pdt =
+                  localPatrimonioDataTs || cloudPatrimonioDataTs || Date.now();
+                writeUserLocalUpdatedAt("patrimonio_data_v2", pdt);
+                backfill.patrimonioValues = mergedPatrimonioValues;
+                backfill.patrimonioHistory = mergedPatrimonioHistory;
+                backfill.patrimonioNotes = mergedPatrimonioNotes;
+                backfill.patrimonioDataUpdatedAt = pdt;
+                needsBackfill = true;
+              } else if (cloudPatrimonioDataTs) {
+                writeUserLocalUpdatedAt(
+                  "patrimonio_data_v2",
+                  cloudPatrimonioDataTs
+                );
+              }
               var localPat: any = {
                 patrimonioMode: readUserLocalJson(
                   "patrimonio_mode_v1",
@@ -7123,6 +7286,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   }
                 ),
                 budgetPlan: localSnap.budgetPlan,
+                budgetPlanUpdatedAt: localSnap.budgetPlanUpdatedAt || now,
                 expenseGroups: localSnap.expenseGroups,
                 incomeGroups: localSnap.incomeGroups,
                 methodGroups: localSnap.methodGroups,
@@ -7177,8 +7341,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 patrimonioValues: localSnap.patrimonioValues,
                 patrimonioAreas: localSnap.patrimonioAreas,
                 patrimonioEntries: localSnap.patrimonioEntries,
+                patrimonioCatalogUpdatedAt:
+                  localSnap.patrimonioCatalogUpdatedAt || now,
                 patrimonioHistory: localSnap.patrimonioHistory,
                 patrimonioNotes: localSnap.patrimonioNotes,
+                patrimonioDataUpdatedAt: localSnap.patrimonioDataUpdatedAt || now,
                 patrimonyPreferencesV2: localSnap.patrimonyPreferencesV2,
                 patrimonyPreferencesUpdatedAt:
                   localSnap.patrimonyPreferencesUpdatedAt || now,
@@ -7515,6 +7682,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var displayTs = readUserLocalUpdatedAt("display_preferences_v2");
     var shopPrefsTs = readUserLocalUpdatedAt("shopping_preferences_v2");
     var patTs = readUserLocalUpdatedAt("patrimony_preferences_v2");
+    var budgetPlanTs = readUserLocalUpdatedAt("budget_plan_v1");
+    var patrimonioCatalogTs = readUserLocalUpdatedAt("patrimonio_catalog_v2");
+    var patrimonioDataTs = readUserLocalUpdatedAt("patrimonio_data_v2");
     var consentTs = readUserLocalUpdatedAt("ai_consent_v2");
     var legalTs = readUserLocalUpdatedAt("legal_acceptance_v2");
     var itemsTs = shoppingItemsLocalUpdatedAt();
@@ -7593,11 +7763,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       goals,
       alerts,
       budgetPlan,
+      budgetPlanUpdatedAt: budgetPlanTs,
       patrimonioValues,
       patrimonioAreas,
       patrimonioEntries,
+      patrimonioCatalogUpdatedAt: patrimonioCatalogTs,
       patrimonioHistory,
       patrimonioNotes,
+      patrimonioDataUpdatedAt: patrimonioDataTs,
       patrimonioMode: patValue.patrimonioMode,
       patrimonyPreferencesV2: patValue,
       patrimonyPreferencesUpdatedAt: patTs,
@@ -12135,8 +12308,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.0.0";
-  var FAINANCE_CURRENT_VERSION_CODE = 209;
+  var FAINANCE_CURRENT_VERSION = "2.0.1";
+  var FAINANCE_CURRENT_VERSION_CODE = 212;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
     "market://details?id=" + FAINANCE_ANDROID_PACKAGE_ID;
@@ -23052,16 +23225,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               >
                 <div
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: subC,
-                    marginBottom: 4,
-                  }}
-                >
-                  fAInance
-                </div>
-                <div
-                  style={{
                     display: "flex",
                     justifyContent: "space-between",
                     paddingRight: firestoreReady && !appLocked ? 82 : 0,
@@ -23220,11 +23383,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: cardBg,
                   borderRadius: "20px 20px 0 0",
                   width: "100%",
-                  padding:
-                    "10px 16px calc(104px + env(safe-area-inset-bottom, 0px))",
                   maxHeight: "72vh",
-                  overflowY: "auto",
-                  WebkitOverflowScrolling: "touch",
+                  overflow: "hidden",
+                  display: "flex",
+                  flexDirection: "column",
                   boxShadow: dark ? "none" : "0 -8px 30px rgba(0,0,0,0.18)",
                 }}
                 onClick={function (e) {
@@ -23237,14 +23399,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     alignItems: "center",
                     justifyContent: "space-between",
                     gap: 12,
-                    padding: "0 2px 8px",
-                    position: "sticky",
-                    top: 0,
-                    background: cardBg,
-                    zIndex: 1,
+                    padding: "12px 16px",
+                    flexShrink: 0,
+                    position: "relative",
+                    background: dark ? "#4F482A" : "#FFF3C4",
+                    borderBottom: "1px solid " + (dark ? "#6F6640" : "#E6D48A"),
+                    borderRadius: "20px 20px 0 0",
+                    zIndex: 5,
                   }}
                 >
-                  <div style={{ fontSize: 16, fontWeight: 900, color: textC }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: dark ? "#FFF7D8" : "#6B5900" }}>
                     {translateUiRuntimeText("Altro")}
                   </div>
                   <button
@@ -23253,13 +23417,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     }}
                     aria-label="Chiudi menu"
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 12,
-                      border: "1px solid " + borderC,
-                      background: dark ? "#252535" : "#fff",
+                      width: 28,
+                      height: 28,
+                      borderRadius: 9,
+                      border: "1px solid #FCA5A5",
+                      background: "#FFF0F0",
                       color: "#F87171",
-                      fontSize: 22,
+                      fontSize: 16,
                       fontWeight: 900,
                       cursor: "pointer",
                       lineHeight: 1,
@@ -23268,52 +23432,63 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     ×
                   </button>
                 </div>
-                {buildMobileMenuItems().map(function (item) {
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={function () {
-                        setTab(item.id);
-                        setSettingsPage(null);
-                        setMobileMenu(false);
-                      }}
-                      style={{
-                        width: "100%",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 14,
-                        padding: "12px 8px",
-                        border: "none",
-                        background: "transparent",
-                        borderBottom: "1px solid " + borderC,
-                        fontSize: 15,
-                        cursor: "pointer",
-                        color: textC,
-                      }}
-                    >
-                      <span style={{ fontSize: 22 }}>{item.icon}</span>
-                      {item.label}
-                      {item.badge > 0 && (
-                        <span
-                          style={{
-                            marginLeft: "auto",
-                            background: expenseColor,
-                            color: "#fff",
-                            borderRadius: "50%",
-                            width: 20,
-                            height: 20,
-                            fontSize: 11,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                          }}
-                        >
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                <div
+                  style={{
+                    minHeight: 0,
+                    overflowY: "auto",
+                    WebkitOverflowScrolling: "touch",
+                    overscrollBehavior: "contain",
+                    padding: "0 16px calc(104px + env(safe-area-inset-bottom, 0px))",
+                    background: cardBg,
+                  }}
+                >
+                  {buildMobileMenuItems().map(function (item) {
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={function () {
+                          setTab(item.id);
+                          setSettingsPage(null);
+                          setMobileMenu(false);
+                        }}
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 14,
+                          padding: "12px 8px",
+                          border: "none",
+                          background: "transparent",
+                          borderBottom: "1px solid " + borderC,
+                          fontSize: 15,
+                          cursor: "pointer",
+                          color: textC,
+                        }}
+                      >
+                        <span style={{ fontSize: 22 }}>{item.icon}</span>
+                        {item.label}
+                        {item.badge > 0 && (
+                          <span
+                            style={{
+                              marginLeft: "auto",
+                              background: expenseColor,
+                              color: "#fff",
+                              borderRadius: "50%",
+                              width: 20,
+                              height: 20,
+                              fontSize: 11,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                            }}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -23397,14 +23572,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   borderBottom: "1px solid " + borderC,
                   padding: "10px 24px",
                   display: "flex",
-                  justifyContent: "space-between",
+                  justifyContent: "flex-end",
                   alignItems: "center",
                   flexShrink: 0,
                 }}
               >
-                <div style={{ fontWeight: 600, fontSize: 15, color: textC }}>
-                  fAInance
-                </div>
                 <div style={{ display: "flex", gap: 24 }}>
                   {[
                     [

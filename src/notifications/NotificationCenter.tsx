@@ -322,6 +322,16 @@ export function NotificationCenter({
 
   return (
     <>
+      <style>{`
+        [role="dialog"][aria-modal="true"] {
+          padding-top: max(82px, calc(env(safe-area-inset-top, 0px) + 72px)) !important;
+          box-sizing: border-box !important;
+          scroll-padding-top: max(82px, calc(env(safe-area-inset-top, 0px) + 72px));
+          align-items: flex-start !important;
+          overflow-y: auto !important;
+          -webkit-overflow-scrolling: touch;
+        }
+      `}</style>
       <div style={{ position: "fixed", right: 10, top: "max(40px,calc(env(safe-area-inset-top,0px) + 28px))", zIndex: 9996, display: "flex", gap: 5, alignItems: "center" }}>
         <button type="button" aria-label={L("Apri profilo")} onClick={onProfile} style={actionButton}>
           <EmployeeProfileIcon />

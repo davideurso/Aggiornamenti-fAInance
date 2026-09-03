@@ -9349,28 +9349,7 @@ export function SettingsPanel() {
         )}
         {settingsValuesTab === "areas" && <AreasEditor />}
         {settingsValuesTab === "patrimonio" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <SettingsList
-              items={patrimonioEntries || DEFAULT_PATRIMONIO_ENTRIES}
-              setItems={setPatrimonioEntries}
-              label="Aggiungi voce patrimonio"
-              showGroup
-              showIcon
-              groupList={(patrimonioAreas || DEFAULT_PATRIMONIO_AREAS).map(
-                function (a) {
-                  return {
-                    id: a.id,
-                    name: a.icon + " " + a.name,
-                    color: a.color,
-                  };
-                }
-              )}
-            />
-            <div style={{ fontSize: 12, color: subC, marginTop: 4 }}>
-              🗂 = {L("Archivia")} 📂 = {L("Ripristina")} ·{" "}
-              {L("Le aree si gestiscono in Aree → Patrimonio")}
-            </div>
-          </div>
+          <PatrimonioSettingsPanel />
         )}
         {settingsValuesTab === "order" && (
           <div key="order-panel">
@@ -12106,8 +12085,153 @@ export function SettingsPanel() {
     add(L("liste spesa"), (d.shoppingLists || []).length);
     return parts.length ? parts.join(" · ") : "0 voci";
   }
-  function applyBackupData(d) {
+  function backupMergeKey(item, index) {
+    if (item && typeof item === "object") {
+      if (item.id !== undefined && item.id !== null && String(item.id) !== "")
+        return "id:" + String(item.id);
+      if (item.uid !== undefined && item.uid !== null && String(item.uid) !== "")
+        return "uid:" + String(item.uid);
+      if (item.key !== undefined && item.key !== null && String(item.key) !== "")
+        return "key:" + String(item.key);
+      try {
+        return "json:" + JSON.stringify(item);
+      } catch (_mergeKeyError) {}
+    }
+    return "value:" + String(item);
+  }
+  function mergeBackupArrays(current, incoming) {
+    var out = Array.isArray(current) ? current.slice() : [];
+    var positions: any = {};
+    out.forEach(function (item, index) {
+      positions[backupMergeKey(item, index)] = index;
+    });
+    (Array.isArray(incoming) ? incoming : []).forEach(function (item, index) {
+      var key = backupMergeKey(item, index);
+      var pos = positions[key];
+      if (pos !== undefined) {
+        if (
+          out[pos] &&
+          item &&
+          typeof out[pos] === "object" &&
+          typeof item === "object" &&
+          !Array.isArray(out[pos]) &&
+          !Array.isArray(item)
+        )
+          out[pos] = { ...out[pos], ...item };
+        else out[pos] = item;
+      } else {
+        positions[key] = out.length;
+        out.push(item);
+      }
+    });
+    return out;
+  }
+  function mergeBackupObjects(current, incoming) {
+    var base = current && typeof current === "object" && !Array.isArray(current) ? current : {};
+    var patch = incoming && typeof incoming === "object" && !Array.isArray(incoming) ? incoming : {};
+    var out: any = { ...base };
+    Object.keys(patch).forEach(function (key) {
+      var next = patch[key];
+      var prev = out[key];
+      if (Array.isArray(next)) out[key] = mergeBackupArrays(prev, next);
+      else if (next && typeof next === "object") out[key] = mergeBackupObjects(prev, next);
+      else out[key] = next;
+    });
+    return out;
+  }
+  function applyBackupDataIntegrated(d) {
+    if (Array.isArray(d.expenses))
+      setExpenses(function (current) { return mergeBackupArrays(current, d.expenses); });
+    if (Array.isArray(d.incomes))
+      setIncomes(function (current) { return mergeBackupArrays(current, d.incomes); });
+    if (Array.isArray(d.cats))
+      setCats(function (current) { return mergeBackupArrays(current, d.cats); });
+    if (Array.isArray(d.methods))
+      setMethods(function (current) { return mergeBackupArrays(current, d.methods); });
+    if (Array.isArray(d.expenseGroups))
+      setExpenseGroups(function (current) { return mergeBackupArrays(current, d.expenseGroups); });
+    if (Array.isArray(d.incomeGroups))
+      setIncomeGroups(function (current) { return mergeBackupArrays(current, d.incomeGroups); });
+    if (Array.isArray(d.methodGroups))
+      setMethodGroups(function (current) { return mergeBackupArrays(current, d.methodGroups); });
+    if (Array.isArray(d.customIncomeTypes))
+      setCustomIncomeTypes(function (current) { return mergeBackupArrays(current, d.customIncomeTypes); });
+    if (d.incomeTypeOverrides && typeof d.incomeTypeOverrides === "object")
+      setIncomeTypeOverrides(function (current) { return mergeBackupObjects(current, d.incomeTypeOverrides); });
+    if (Array.isArray(d.catOrder))
+      setCatOrder(function (current) { return Array.from(new Set([...(current || []), ...d.catOrder].map(String))); });
+    if (Array.isArray(d.methodOrder))
+      setMethodOrder(function (current) { return Array.from(new Set([...(current || []), ...d.methodOrder].map(String))); });
+    if (Array.isArray(d.incomeTypeOrder))
+      setIncomeTypeOrder(function (current) { return Array.from(new Set([...(current || []), ...d.incomeTypeOrder].map(String))); });
+    if (Array.isArray(d.recurring))
+      setRecurring(function (current) { return mergeBackupArrays(current, d.recurring); });
+    if (Array.isArray(d.goals))
+      setGoals(function (current) { return mergeBackupArrays(current, d.goals); });
+    if (Array.isArray(d.alerts))
+      setAlerts(function (current) { return mergeBackupArrays(current, d.alerts); });
+    if (d.budgetPlan && typeof d.budgetPlan === "object")
+      setBudgetPlan(function (current) { return mergeBackupObjects(current, d.budgetPlan); });
+    if (d.patrimonioValues && typeof d.patrimonioValues === "object")
+      setPatrimonioValues(function (current) { return mergeBackupObjects(current, d.patrimonioValues); });
+    if (Array.isArray(d.patrimonioAreas))
+      setPatrimonioAreas(function (current) { return mergeBackupArrays(current, d.patrimonioAreas); });
+    if (Array.isArray(d.patrimonioEntries))
+      setPatrimonioEntries(function (current) { return mergeBackupArrays(current, d.patrimonioEntries); });
+    if (d.patrimonioHistory && typeof d.patrimonioHistory === "object")
+      setPatrimonioHistory(function (current) { return mergeBackupObjects(current, d.patrimonioHistory); });
+    if (d.patrimonioNotes && typeof d.patrimonioNotes === "object")
+      setPatrimonioNotes(function (current) { return mergeBackupObjects(current, d.patrimonioNotes); });
+    if (Array.isArray(d.shareProjects))
+      setShareProjects(function (current) { return mergeBackupArrays(current, d.shareProjects); });
+    if (Array.isArray(d.debtCredits))
+      setDebtCredits(function (current) { return mergeBackupArrays(current, d.debtCredits); });
+    if (Array.isArray(d.shoppingCards))
+      setShoppingCards(function (current) { return mergeBackupArrays(current, d.shoppingCards); });
+    if (Array.isArray(d.shoppingItems))
+      setShoppingItems(function (current) { return mergeBackupArrays(current, d.shoppingItems); });
+    if (Array.isArray(d.shoppingLists))
+      setShoppingLists(function (current) { return mergeBackupArrays(current, d.shoppingLists); });
+    if (Array.isArray(d.shoppingAreas))
+      setShoppingAreas(function (current) { return mergeBackupArrays(current, d.shoppingAreas); });
+    if (d.shoppingAreaIcons && typeof d.shoppingAreaIcons === "object")
+      setShoppingAreaIcons(function (current) { return mergeBackupObjects(current, d.shoppingAreaIcons); });
+    if (d.shoppingAreaColors && typeof d.shoppingAreaColors === "object")
+      setShoppingAreaColors(function (current) { return mergeBackupObjects(current, d.shoppingAreaColors); });
+    if (Array.isArray(d.shoppingUnits))
+      setShoppingUnits(function (current) { return mergeBackupArrays(current, d.shoppingUnits); });
+    if (Array.isArray(d.shareReceiptUploads))
+      setShareReceiptUploads(function (current) { return mergeBackupArrays(current, d.shareReceiptUploads); });
+    if (Array.isArray(d.appuntiDocuments))
+      setAppuntiDocuments(function (current) { return mergeBackupArrays(current, d.appuntiDocuments); });
+    if (Array.isArray(d.appuntiNotes))
+      setAppuntiNotes(function (current) { return mergeBackupArrays(current, d.appuntiNotes); });
+    if (Array.isArray(d.bankCoords))
+      setBankCoords(function (current) { return mergeBackupArrays(current, d.bankCoords); });
+    if (Array.isArray(d.creditCards))
+      setCreditCards(function (current) { return mergeBackupArrays(current, d.creditCards); });
+
+    writeTechnicalLog({
+      category: "RESTORE_VERSION",
+      operation: "manual-backup-integrate",
+      metadata: { backupSchemaVersion: Number(d.backupSchemaVersion || 0) },
+    }).catch(function () {});
+    if (d.__fainanceSensitiveRestoreSkipped)
+      setToast({
+        text: L("Backup integrato. I dati sensibili non compatibili sono stati mantenuti invariati."),
+        type: "warning",
+        icon: "⚠️",
+        color: "#EF9F27",
+      });
+    else
+      setToast({ text: L("Backup integrato correttamente"), type: "success", icon: "✅" });
+  }
+  function applyBackupData(d, mode) {
     if (!d || typeof d !== "object") return;
+    if (mode === "merge") {
+      applyBackupDataIntegrated(d);
+      return;
+    }
     if (d.accountDeletedRecords && typeof d.accountDeletedRecords === "object")
       setAccountDeletedRecordsRaw(d.accountDeletedRecords);
     if (Array.isArray(d.expenses)) setExpenses(d.expenses);
@@ -12387,11 +12511,11 @@ export function SettingsPanel() {
       setBackupImportBusy(false);
     }
   }
-  function confirmPendingBackupImport() {
+  function confirmPendingBackupImport(mode) {
     if (!pendingBackupImport || !pendingBackupImport.data) return;
     var data = pendingBackupImport.data;
     setPendingBackupImport(null);
-    applyBackupData(data);
+    applyBackupData(data, mode === "merge" ? "merge" : "replace");
   }
   function dataTitle(label) {
     function stripDataCardIcons(value) {
@@ -12537,6 +12661,34 @@ export function SettingsPanel() {
       return !!item && !item.deleted;
     });
   }
+  function paidCatalogMayStayEmpty() {
+    return String(currentPlan || "free").toLowerCase() !== "free";
+  }
+  function patrimonioSnapshotTransactionCount(snap) {
+    if (!snap || typeof snap !== "object") return 0;
+    var explicit = Number(snap._transactionCount);
+    if (Number.isFinite(explicit) && explicit >= 0) return explicit;
+    var entryCounts = snap._entryTransactionCounts;
+    if (entryCounts && typeof entryCounts === "object")
+      return Object.keys(entryCounts).reduce(function (sum, key) {
+        return sum + Math.max(0, Number(entryCounts[key] || 0));
+      }, 0);
+    var directKeys = Object.keys(snap).filter(function (key) {
+      return !String(key).startsWith("_") && key !== "values" && key !== "entries";
+    });
+    if (directKeys.length) return directKeys.length;
+    var nested = snap.values || snap.entries;
+    return nested && typeof nested === "object" ? Object.keys(nested).length : 0;
+  }
+  function patrimonioStoredTransactionCount() {
+    var history = patrimonioHistory && typeof patrimonioHistory === "object" ? patrimonioHistory : {};
+    var months = Object.keys(history);
+    if (months.length)
+      return months.reduce(function (sum, mk) {
+        return sum + patrimonioSnapshotTransactionCount(history[mk]);
+      }, 0);
+    return patrimonioSnapshotTransactionCount(patrimonioValues || {});
+  }
   function markDataItemsDeleted(list) {
     var stamp = new Date().toISOString();
     return (Array.isArray(list) ? list : []).map(function (item) {
@@ -12602,9 +12754,7 @@ export function SettingsPanel() {
       {
         id: "patrimonio",
         label: L("Patrimonio"),
-        count:
-          Object.keys(patrimonioValues || {}).length +
-          Object.keys(patrimonioHistory || {}).length,
+        count: patrimonioStoredTransactionCount(),
         clear: function () {
           setPatrimonioValues({});
           setPatrimonioHistory({});
@@ -12649,8 +12799,13 @@ export function SettingsPanel() {
         count:
           dataVisibleItems(expenseGroups).length + dataVisibleItems(cats).length,
         clear: function () {
-          setCats(markDataItemsDeleted(cats));
-          setExpenseGroups(markDataItemsDeleted(expenseGroups));
+          if (paidCatalogMayStayEmpty()) {
+            setCats(markDataItemsDeleted(cats));
+            setExpenseGroups(markDataItemsDeleted(expenseGroups));
+          } else {
+            setCats([]);
+            setExpenseGroups([]);
+          }
           setCatOrder([]);
           setFilterCats(function (prev) {
             return (prev || []).filter(function (id) {
@@ -12668,22 +12823,28 @@ export function SettingsPanel() {
           dataVisibleItems(incomeGroups).length +
           dataVisibleItems(incomeTypes).length,
         clear: function () {
-          var stamp = new Date().toISOString();
-          var nextOverrides = { ...(incomeTypeOverrides || {}) };
-          (incomeTypes || []).forEach(function (item) {
-            if (!item || item.custom || item.id == null) return;
-            var id = String(item.id);
-            nextOverrides[id] = {
-              ...(nextOverrides[id] || {}),
-              deleted: true,
-              archived: true,
-              updatedAt: stamp,
-            };
-          });
-          setIncomeGroups(markDataItemsDeleted(incomeGroups));
-          setCustomIncomeTypes &&
-            setCustomIncomeTypes(markDataItemsDeleted(customIncomeTypes));
-          setIncomeTypeOverrides && setIncomeTypeOverrides(nextOverrides);
+          if (paidCatalogMayStayEmpty()) {
+            var stamp = new Date().toISOString();
+            var nextOverrides = { ...(incomeTypeOverrides || {}) };
+            (incomeTypes || []).forEach(function (item) {
+              if (!item || item.custom || item.id == null) return;
+              var id = String(item.id);
+              nextOverrides[id] = {
+                ...(nextOverrides[id] || {}),
+                deleted: true,
+                archived: true,
+                updatedAt: stamp,
+              };
+            });
+            setIncomeGroups(markDataItemsDeleted(incomeGroups));
+            setCustomIncomeTypes &&
+              setCustomIncomeTypes(markDataItemsDeleted(customIncomeTypes));
+            setIncomeTypeOverrides && setIncomeTypeOverrides(nextOverrides);
+          } else {
+            setIncomeGroups([]);
+            setCustomIncomeTypes && setCustomIncomeTypes([]);
+            setIncomeTypeOverrides && setIncomeTypeOverrides({});
+          }
           setIncomeTypeOrder([]);
           setDefaultIncomeType("");
           setDefaultIncomeArea("");
@@ -12694,8 +12855,13 @@ export function SettingsPanel() {
         label: L("Metodi pagamento"),
         count: dataVisibleItems(methods).length,
         clear: function () {
-          setMethods(markDataItemsDeleted(methods));
-          setMethodGroups(markDataItemsDeleted(methodGroups));
+          if (paidCatalogMayStayEmpty()) {
+            setMethods(markDataItemsDeleted(methods));
+            setMethodGroups(markDataItemsDeleted(methodGroups));
+          } else {
+            setMethods([]);
+            setMethodGroups([]);
+          }
           setMethodOrder([]);
           setFilterMethods([]);
           setDefaultExpenseMethod("");
@@ -12709,8 +12875,13 @@ export function SettingsPanel() {
           dataVisibleItems(patrimonioAreas).length +
           dataVisibleItems(patrimonioEntries).length,
         clear: function () {
-          setPatrimonioAreas([]);
-          setPatrimonioEntries([]);
+          if (paidCatalogMayStayEmpty()) {
+            setPatrimonioAreas(markDataItemsDeleted(patrimonioAreas));
+            setPatrimonioEntries(markDataItemsDeleted(patrimonioEntries));
+          } else {
+            setPatrimonioAreas([]);
+            setPatrimonioEntries([]);
+          }
         },
       },
       {
@@ -13018,7 +13189,7 @@ export function SettingsPanel() {
               >
                 {L("Importa movimenti da file")}
               </div>
-              <ImportData />
+              <ImportData onBackupJsonText={stageBackupJsonText} />
             </div>
             <div
               style={{
@@ -13092,16 +13263,18 @@ export function SettingsPanel() {
               <div
                 role="dialog"
                 aria-modal="true"
-                aria-label={L("Ripristina JSON")}
+                aria-label={L("Come vuoi importare il JSON?")}
                 style={{
                   position: "fixed",
                   inset: 0,
                   zIndex: 12000,
                   background: "rgba(16,20,34,.58)",
                   display: "flex",
-                  alignItems: "center",
+                  alignItems: "flex-start",
                   justifyContent: "center",
-                  padding: 20,
+                  padding: "max(82px,calc(env(safe-area-inset-top,0px) + 72px)) 20px 20px",
+                  boxSizing: "border-box",
+                  overflowY: "auto",
                 }}
                 onClick={function () {
                   setPendingBackupImport(null);
@@ -13112,57 +13285,49 @@ export function SettingsPanel() {
                     event.stopPropagation();
                   }}
                   style={{
-                    width: "min(440px, 100%)",
+                    width: "min(460px, 100%)",
                     background: cardBg,
                     color: textC,
                     border: "1px solid " + borderC,
                     borderRadius: 20,
                     padding: 22,
                     boxShadow: "0 22px 70px rgba(0,0,0,.28)",
+                    position: "relative",
                   }}
                 >
-                  <div style={{ fontSize: 20, fontWeight: 950, marginBottom: 12 }}>
-                    {L("Ripristina JSON")}
+                  <div style={{ position: "absolute", right: 12, top: 12 }}>
+                    <PopupCloseButton
+                      onClick={function () { setPendingBackupImport(null); }}
+                      dark={dark}
+                      label={L("Chiudi")}
+                    />
+                  </div>
+                  <div style={{ fontSize: 20, fontWeight: 950, marginBottom: 12, paddingRight: 52 }}>
+                    {L("Come vuoi importare il JSON?")}
                   </div>
                   <div style={{ fontSize: 14, lineHeight: 1.55, color: subC }}>
-                    {L(
-                      "Stai per ripristinare questo backup.\nVoci che verranno importate: "
-                    )}
+                    {L("Il file contiene:") + " "}
                     <strong style={{ color: textC }}>
                       {pendingBackupImport.summary}
                     </strong>
                   </div>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: subC, marginTop: 8 }}>
+                    {L("Puoi integrare il backup con i dati già presenti oppure sostituire completamente i dati esistenti con quelli del JSON.")}
+                  </div>
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
+                      gridTemplateColumns: "1fr",
                       gap: 10,
                       marginTop: 20,
                     }}
                   >
                     <button
                       type="button"
-                      onClick={function () {
-                        setPendingBackupImport(null);
-                      }}
-                      style={{
-                        border: "1px solid " + secondaryButtonColor,
-                        background: "transparent",
-                        color: secondaryButtonColor,
-                        minHeight: 44,
-                        borderRadius: btnRadius,
-                        fontWeight: 900,
-                        cursor: "pointer",
-                      }}
-                    >
-                      {L("Annulla")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={confirmPendingBackupImport}
+                      onClick={function () { confirmPendingBackupImport("merge"); }}
                       style={{
                         border: "none",
-                        minHeight: 44,
+                        minHeight: 46,
                         borderRadius: btnRadius,
                         background: confirmButtonColor,
                         color: "#fff",
@@ -13170,7 +13335,22 @@ export function SettingsPanel() {
                         cursor: "pointer",
                       }}
                     >
-                      {L("Ripristina JSON")}
+                      {L("Integra con i dati esistenti")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={function () { confirmPendingBackupImport("replace"); }}
+                      style={{
+                        border: "1px solid #E24B4A",
+                        minHeight: 46,
+                        borderRadius: btnRadius,
+                        background: dark ? "#3a2020" : "#FFF0F0",
+                        color: "#E24B4A",
+                        fontWeight: 900,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {L("Sostituisci i dati esistenti")}
                     </button>
                   </div>
                 </div>

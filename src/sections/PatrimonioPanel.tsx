@@ -8,10 +8,33 @@ export function PatrimonioPanel(){
   var _c:any=useApp();
   var {borderC,btnRadius,cardBg,confirmButtonColor,consumePlanFeature,curMonthKey,curYear,dark,featureUsageKey,fmt,fmtSec,isMobile,monthFullName,monthShortName,now,patrimonioAreas,patrimonioEntries,patrimonioHistory,patrimonioMode,patrimonioNotes,patrimonioValues,planCount,rewardedFeatureGateState,secRate,setMobileMenu,setPatrimonioEntries,setPatrimonioHistory,setPatrimonioNotes,setPatrimonioValues,setTab,setToast,settingAllowed,showRewardedAdForExtraMovement,showSecInPatrimonio,subC,successToastForFeature,textC,translateUiRuntimeText,unlockRewardedFeature,userKey}:any=_c;
 
-    var pAreas=patrimonioAreas||DEFAULT_PATRIMONIO_AREAS;
-    var pEntries=patrimonioEntries||DEFAULT_PATRIMONIO_ENTRIES;
+    var allPatrimonioAreas=patrimonioAreas||DEFAULT_PATRIMONIO_AREAS;
+    var allPatrimonioEntries=patrimonioEntries||DEFAULT_PATRIMONIO_ENTRIES;
     var pHistory=patrimonioHistory||{};
     var pNotes=patrimonioNotes||{};
+    function snapshotEntryValue(snap,entry){
+      if(!snap||typeof snap!=="object"||!entry)return{found:false,value:undefined};
+      var keys=[entry.id,String(entry.id),entry.name,String(entry.name||"")];
+      for(var i=0;i<keys.length;i++){var k=keys[i];if(k&&Object.prototype.hasOwnProperty.call(snap,k))return{found:true,value:snap[k]};}
+      var nested=[snap.values,snap.entries];
+      for(var n=0;n<nested.length;n++){var obj=nested[n];if(!obj||typeof obj!=="object")continue;for(var j=0;j<keys.length;j++){var nk=keys[j];if(nk&&Object.prototype.hasOwnProperty.call(obj,nk))return{found:true,value:obj[nk]};}}
+      return{found:false,value:undefined};
+    }
+    function snapshotHasEntryData(snap,entry){
+      if(!snap||!entry)return false;
+      var counts=snap._entryTransactionCounts;
+      if(counts&&typeof counts==="object"&&Number(counts[String(entry.id)]||0)>0)return true;
+      var hit=snapshotEntryValue(snap,entry);
+      if(!hit.found||hit.value===undefined||hit.value===null||String(hit.value).trim()==="")return false;
+      var normalized=String(hit.value).trim().replace(/\s/g,"").replace(",",".");
+      var numeric=Number(normalized);
+      return Number.isFinite(numeric)?numeric!==0:true;
+    }
+    var patrimonioLastDataMonthByEntry={};
+    Object.keys(pHistory).sort().forEach(function(mk){var snap=pHistory[mk];allPatrimonioEntries.forEach(function(entry){if(entry&&snapshotHasEntryData(snap,entry))patrimonioLastDataMonthByEntry[String(entry.id)]=mk;});});
+    function patrimonioEntryVisibleInMonth(entry,mk){if(!entry||entry.deleted)return false;if(!entry.archived)return true;var last=patrimonioLastDataMonthByEntry[String(entry.id)]||"";return !!last&&String(mk)<=String(last);}
+    function patrimonioEntriesForMonth(mk){return allPatrimonioEntries.filter(function(entry){return patrimonioEntryVisibleInMonth(entry,mk);});}
+    function patrimonioAreasForEntries(entriesForMonth){return allPatrimonioAreas.filter(function(area){if(!area||area.deleted)return false;return (entriesForMonth||[]).some(function(entry){return String(entry.areaId)===String(area.id);});});}
     var patrimonioEntryAllowed=settingAllowed("base");
     function lockedPatrimonioEntry(){setToast({text:L("Aggiungi voce patrimonio disponibile dal piano Base."),type:"warning",color:"#EF9F27",icon:"⚠️"});}
     var sinp={width:"100%",borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"7px 10px",fontSize:14,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333"};
@@ -26,6 +49,8 @@ export function PatrimonioPanel(){
     var [selYear,setSelYear]=useState(function(){return Number(initialPatMonth.slice(0,4))||curYear;});
     var [selMonth,setSelMonth]=useState(function(){return Number(initialPatMonth.slice(5,7))||now.getMonth()+1;}); // 1-12
     var selMonthKey=selYear+"-"+String(selMonth).padStart(2,"0");
+    var pEntries=patrimonioEntriesForMonth(selMonthKey);
+    var pAreas=patrimonioAreasForEntries(pEntries);
     var isCurrentMonth=selMonthKey===curMonthKey;
     useEffect(function(){rememberPatrimonioSelectedMonth(selYear,selMonth);},[selYear,selMonth]);
 
@@ -106,6 +131,9 @@ export function PatrimonioPanel(){
       var copiedSnap={};
       pEntries.forEach(function(e){var raw=readValue(e);var val=raw!==undefined&&raw!==null?String(raw):"";nd[e.id]=val;copiedSnap[e.id]=parseFloat(String(val).replace(",","."))||0;});
       copiedSnap._total=pEntries.reduce(function(a,e){return a+(parseFloat(String(nd[e.id]||"").replace(",","."))||0);},0);
+      copiedSnap._entryTransactionCounts={};
+      pEntries.forEach(function(e){if(String(nd[e.id]||"").trim()!=="")copiedSnap._entryTransactionCounts[String(e.id)]=1;});
+      copiedSnap._transactionCount=Object.keys(copiedSnap._entryTransactionCounts).reduce(function(a,k){return a+Number(copiedSnap._entryTransactionCounts[k]||0);},0);
       copiedSnap._savedAt=new Date().toISOString();
       setDraft(nd);
       setPatrimonioHistory(function(h){return {...(h||{}),[keepY+"-"+String(keepM).padStart(2,"0")]:copiedSnap};});
@@ -119,8 +147,11 @@ export function PatrimonioPanel(){
     // Salva snapshot per il mese selezionato
     function saveMonthSnap(){
       var snap={};
-      pEntries.forEach(function(e){snap[e.id]=parseFloat(draft[e.id])||0;});
+      var entryCounts={};
+      pEntries.forEach(function(e){var raw=String(draft[e.id]??"").trim();snap[e.id]=parseFloat(raw)||0;if(raw!=="")entryCounts[String(e.id)]=1;});
       snap._total=draftTotal;
+      snap._entryTransactionCounts=entryCounts;
+      snap._transactionCount=Object.keys(entryCounts).reduce(function(a,k){return a+Number(entryCounts[k]||0);},0);
       snap._savedAt=new Date().toISOString();
       // Se è il mese corrente aggiorna anche pValues (valori "live")
       if(isCurrentMonth){
@@ -141,8 +172,9 @@ export function PatrimonioPanel(){
     }
 
     var patrimonioEntryFormValid=patrimonioEntryAllowed&&!!String(newEntryName||"").trim();
-    function addEntry(areaId){if(!patrimonioEntryFormValid)return;var nid="entry_"+Date.now();setPatrimonioEntries(function(p){return [...p,{id:nid,name:newEntryName.trim(),icon:newEntryIcon,areaId:areaId}];});setDraft(function(d){return{...d,[nid]:""}});setNewEntryName("");setNewEntryIcon("📦");setAddingEntry(null);}
-    function delEntry(eid){setPatrimonioEntries(function(p){return p.filter(function(x){return x.id!==eid;});});setDraft(function(d){var q={...d};delete q[eid];return q;});if(isCurrentMonth)setPatrimonioValues(function(p){var q={...p};delete q[eid];return q;});}
+    function addEntry(areaId){if(!patrimonioEntryFormValid)return;var nid="entry_"+Date.now();var area=(pAreas||[]).find(function(a){return String(a.id)===String(areaId);})||pAreas[0]||{};var nowIso=new Date().toISOString();setPatrimonioEntries(function(p){return [...(p||[]),{id:nid,name:newEntryName.trim(),icon:newEntryIcon,color:area.color||"#B4B2A9",areaId:areaId||area.id||"altro",custom:true,userCreated:true,createdAt:nowIso,updatedAt:nowIso}];});setDraft(function(d){return{...d,[nid]:""}});setNewEntryName("");setNewEntryIcon("📦");setAddingEntry(null);}
+    function entryHasSavedData(eid){var sid=String(eid);if(patrimonioValues&&Object.prototype.hasOwnProperty.call(patrimonioValues,sid))return true;return Object.keys(pHistory||{}).some(function(mk){var snap=pHistory[mk]||{};var values=(snap&&typeof snap==="object"&&(snap.values||snap.entries))||snap||{};return values&&Object.prototype.hasOwnProperty.call(values,sid);});}
+    function delEntry(eid){var nowIso=new Date().toISOString();var used=entryHasSavedData(eid);setPatrimonioEntries(function(p){return (p||[]).map(function(x){return String(x.id)===String(eid)?{...x,archived:true,deleted:!used,custom:true,userDeleted:!used,updatedAt:nowIso,...(!used?{deletedAt:nowIso}:{})}:x;});});setDraft(function(d){var q={...d};delete q[eid];return q;});if(used)setToast({text:L("La voce contiene dati storici ed è stata archiviata."),type:"success",color:"#1D9E75",icon:"🗂"});else setToast({text:L("Cancellazione completata"),type:"success",color:"#1D9E75",icon:"🗑️"});}
 
     // ── STORICO ────────────────────────────────────────────────────────────────
     var [histViewYear,setHistViewYear]=useState(String(curYear));
@@ -151,13 +183,19 @@ export function PatrimonioPanel(){
       return keys.map(function(mk,i){
         var snap=pHistory[mk];
         var prev=i>0?pHistory[keys[i-1]]:null;
-        var total=snap._total||pEntries.reduce(function(a,e){return a+(parseFloat(snap[e.id])||0);},0);
-        var prevT=prev?(prev._total||pEntries.reduce(function(a,e){return a+(parseFloat(prev[e.id])||0);},0)):null;
+        var monthEntries=patrimonioEntriesForMonth(mk);
+        var prevEntries=i>0?patrimonioEntriesForMonth(keys[i-1]):[];
+        var total=snap._total||monthEntries.reduce(function(a,e){return a+(parseFloat(snap[e.id])||0);},0);
+        var prevT=prev?(prev._total||prevEntries.reduce(function(a,e){return a+(parseFloat(prev[e.id])||0);},0)):null;
         return{mk:mk,snap:snap,total:total,delta:prevT!==null?total-prevT:null};
       }).reverse();
-    },[pHistory,pEntries]);
+    },[pHistory,allPatrimonioEntries]);
     var histYears=useMemo(function(){var ys=new Set(histMonths.map(function(m){return m.mk.slice(0,4);}));return Array.from(ys).sort(function(a,b){return b-a;});},[histMonths]);
     var filteredHist=histMonths.filter(function(m){return m.mk.startsWith(histViewYear);});
+    var filteredHistoryEntryIds={};
+    filteredHist.forEach(function(m){patrimonioEntriesForMonth(m.mk).forEach(function(entry){filteredHistoryEntryIds[String(entry.id)]=true;});});
+    var historyEntries=allPatrimonioEntries.filter(function(entry){return entry&&!entry.deleted&&filteredHistoryEntryIds[String(entry.id)];});
+    var historyAreas=patrimonioAreasForEntries(historyEntries);
 
     function openPatrimonioStatistics(){
       try{localStorage.setItem(userKey("stats_tab_v1"),JSON.stringify("patrimonio"));}catch(e){}
@@ -296,15 +334,7 @@ export function PatrimonioPanel(){
                 </div>;
               })}
             </div>
-            {addingEntry===area.id
-              ?<div onClick={function(){if(!patrimonioEntryAllowed)lockedPatrimonioEntry();}} style={{marginTop:10,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",background:patrimonioEntryAllowed?"transparent":(dark?"#2B2B36":"#F3F4F6"),border:patrimonioEntryAllowed?"none":"1.5px solid "+(dark?"#4B4B58":"#D1D5DB"),borderRadius:12,padding:patrimonioEntryAllowed?0:10}}>
-                <EmojiPicker value={newEntryIcon} onChange={function(v){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}setNewEntryIcon(v);}}/>
-                <input disabled={!patrimonioEntryAllowed} type="text" placeholder={L("Nome voce")} value={newEntryName} onChange={function(e){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}setNewEntryName(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter"&&patrimonioEntryFormValid)addEntry(area.id);}} style={{...sinp,flex:1,minWidth:120}}/>
-                <button onClick={function(){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}addEntry(area.id);}} disabled={!patrimonioEntryFormValid} style={{background:patrimonioEntryFormValid?"#1D9E75":(patrimonioEntryAllowed?"#A8A8A8":"#EF9F27"),color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:patrimonioEntryFormValid?"pointer":"not-allowed",fontSize:13,fontWeight:500}}>{L("Aggiungi")}</button>
-                <button onClick={function(){setAddingEntry(null);setNewEntryName("");}} style={{background:"#f0f0f0",color:"#666",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:13}}>{L("Annulla")}</button>
-              </div>
-              :<button onClick={function(){if(!patrimonioEntryAllowed){lockedPatrimonioEntry();return;}setAddingEntry(area.id);}} style={{marginTop:10,background:patrimonioEntryAllowed?"none":(dark?"#2B2B36":"#F3F4F6"),border:"1.5px dashed "+(patrimonioEntryAllowed?(dark?"#444":"#ddd"):(dark?"#4B4B58":"#D1D5DB")),borderRadius:8,padding:"7px 14px",cursor:"pointer",color:patrimonioEntryAllowed?subC:(dark?"#A8A8B3":"#6B7280"),fontSize:13,width:"100%"}}>+ {L("Aggiungi voce")}{patrimonioEntryAllowed?"":" 🔒"}</button>
-            }
+            {false&&addingEntry===area.id&&null}
           </div>;
         })}
         {patrimonioMode==="semi"&&<div style={{background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:12,padding:"12px 16px"}}><span style={{fontSize:13,color:"#856404"}}>⚠️ {L("Modalità semi-automatica in beta.")}</span></div>}
@@ -351,7 +381,7 @@ export function PatrimonioPanel(){
                   <th style={{padding:"7px 10px",textAlign:"left",fontWeight:600,color:subC}}>{translateUiRuntimeText("Mese")}</th>
                   <th style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>{L("Totale")}</th>
                   <th style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>Δ</th>
-                  {pAreas.slice(0,isMobile?2:4).map(function(a){return <th key={a.id} style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>{a.icon}</th>;})}
+                  {historyAreas.slice(0,isMobile?2:4).map(function(a){return <th key={a.id} style={{padding:"7px 10px",textAlign:"right",fontWeight:600,color:subC}}>{a.icon}</th>;})}
                   <th style={{padding:"7px 10px",textAlign:"center",fontWeight:600,color:subC}}></th>
                 </tr></thead>
                 <tbody>
@@ -363,8 +393,8 @@ export function PatrimonioPanel(){
                       </td>
                       <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:m.total>=0?"#1D9E75":"#E24B4A"}}>{fmt(m.total)}</td>
                       <td style={{padding:"8px 10px",textAlign:"right",fontWeight:500,color:m.delta===null?subC:m.delta>=0?"#1D9E75":"#E24B4A"}}>{m.delta===null?"—":(m.delta>=0?"+":"")+fmt(m.delta)}</td>
-                      {pAreas.slice(0,isMobile?2:4).map(function(a){
-                        var aEnts=pEntries.filter(function(e){return e.areaId===a.id;});
+                      {historyAreas.slice(0,isMobile?2:4).map(function(a){
+                        var aEnts=patrimonioEntriesForMonth(m.mk).filter(function(e){return e.areaId===a.id;});
                         var aT=aEnts.reduce(function(acc,e){return acc+(parseFloat(m.snap[e.id])||0);},0);
                         return <td key={a.id} style={{padding:"8px 10px",textAlign:"right",color:subC,fontSize:11}}>{fmt(aT)}</td>;
                       })}
@@ -382,7 +412,7 @@ export function PatrimonioPanel(){
             <div style={{fontSize:13,fontWeight:600,color:textC,marginBottom:12}}>{L("Variazioni per voce")} — {monthShortName(parseInt(filteredHist[0].mk.split("-")[1])-1)} {L("vs mese precedente")}</div>
             {filteredHist[0].delta===null?<div style={{fontSize:12,color:subC}}>{translateUiRuntimeText("Nessun mese precedente nel registro.")}</div>:
             <div style={{display:"flex",flexDirection:"column",gap:6}}>
-              {pEntries.map(function(entry){
+              {(filteredHist.length?patrimonioEntriesForMonth(filteredHist[0].mk):[]).map(function(entry){
                 var cur=parseFloat(filteredHist[0].snap[entry.id])||0;
                 var prev2=filteredHist.length>1?(parseFloat(filteredHist[1].snap[entry.id])||0):null;
                 var d2=prev2!==null?cur-prev2:null;

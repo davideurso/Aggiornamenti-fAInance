@@ -24,7 +24,7 @@ workflows:
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        FAINANCE_IOS_VERSION: "2.0.0"
+        FAINANCE_IOS_VERSION: "2.0.1"
         APP_STORE_APPLE_ID: "6777812477"
         VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
