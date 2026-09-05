@@ -1,9 +1,9 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">fAInance</string>
-    <string name="title_activity_main">fAInance</string>
-    <string name="package_name">it.fainanceapp.app</string>
-    <string name="custom_url_scheme">it.fainanceapp.app</string>
-    <string name="facebook_app_id">1036681692404166</string>
-    <string name="facebook_client_token">16c91f4bb1842603d7af928b76e45cbb</string>
+  <string name="app_name">fAInance</string>
+  <string name="title_activity_main">fAInance</string>
+  <string name="package_name">it.fainanceapp.app</string>
+  <string name="custom_url_scheme">it.fainanceapp.app</string>
+  <string name="facebook_app_id">1036681692404166</string>
+  <string name="facebook_client_token">16c91f4bb1842603d7af928b76e45cbb</string>
 </resources>

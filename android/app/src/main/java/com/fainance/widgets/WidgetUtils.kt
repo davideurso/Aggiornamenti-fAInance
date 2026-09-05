@@ -244,7 +244,6 @@ object WidgetUtils {
         val canvas = Canvas(bitmap)
         canvas.drawColor(Color.WHITE)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; style = Paint.Style.FILL }
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK; textSize = 26f; textAlign = Paint.Align.CENTER; typeface = android.graphics.Typeface.MONOSPACE }
         val raw = code.filter { it.isDigit() || it.isLetter() || it == ' ' || it == '-' || it == '.' || it == '_' || it == '$' || it == '%' || it == '/' || it == '+' }.trim()
         val bits = code128Bits(raw.ifBlank { code.trim() })
         if (bits.isBlank()) return bitmap
@@ -253,14 +252,13 @@ object WidgetUtils {
         val sidePad = 16f
         val availableWidth = (safeWidth - sidePad * 2).coerceAtLeast(1f)
         val module = availableWidth / totalModules.toFloat()
-        val barTop = 18f
-        val barBottom = safeHeight - 46f
+        val barTop = 12f
+        val barBottom = safeHeight - 12f
         var x = sidePad + quietModules * module
         bits.forEach { bit ->
             if (bit == '1') canvas.drawRect(x, barTop, x + module.coerceAtLeast(1f), barBottom, paint)
             x += module
         }
-        canvas.drawText(raw.ifBlank { code }.take(32), safeWidth / 2f, safeHeight - 12f, textPaint)
         return bitmap
     }
 

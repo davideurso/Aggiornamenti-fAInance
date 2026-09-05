@@ -8,10 +8,10 @@ android {
     defaultConfig {
         applicationId "it.fainanceapp.app"
         minSdkVersion rootProject.ext.minSdkVersion
-        targetSdkVersion 35
+        targetSdkVersion 36
 
-        versionCode 200
-        versionName "1.4.6"
+        versionCode 214
+        versionName "2.0.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
@@ -33,7 +33,7 @@ android {
         }
 
         debug {
-            // Nessuna modifica aggiuntiva — il nome viene gestito sopra
+            // Nessuna modifica aggiuntiva ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â il nome viene gestito sopra
         }
     }
 }
@@ -72,3 +72,6 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
+
+

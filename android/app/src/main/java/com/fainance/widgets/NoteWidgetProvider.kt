@@ -8,7 +8,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.text.Html
 import android.text.SpannableString
+import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.util.TypedValue
@@ -55,12 +57,18 @@ class NoteWidgetProvider : AppWidgetProvider() {
             val type = resolved.optString("type", "note")
             val title = resolved.optString("title", defaultTitle(type))
             val body = resolved.optString("body", defaultBody(type))
+            val bodyHtml = resolved.optString("html", "")
             val maxChars = global.optInt("maxChars", 500).coerceIn(20, 2000)
             val textSize = global.optInt("textSize", 14).coerceIn(10, 28)
             val titleColor = parseColor(global.optString("titleColor", "#FFFFFF"), "#FFFFFF")
             val bodyColor = parseColor(global.optString("bodyColor", "#CCFFFFFF"), "#CCFFFFFF")
             val iconColor = parseColor(global.optString("accentColor", "#7F77DD"), "#7F77DD")
             val shownBody = if (body.length > maxChars) body.take(maxChars - 1) + "…" else body
+            val shownBodyText: CharSequence = when {
+                type == "note" && bodyHtml.isNotBlank() -> richNoteText(bodyHtml, maxChars, shownBody)
+                type == "bank" || type == "creditCard" -> styledBankText(shownBody)
+                else -> shownBody
+            }
             val bgAlpha = global.optInt("bgAlpha", 65).coerceIn(0, 100)
 
             val bgDrawableAlpha = (100 - bgAlpha).coerceIn(0, 100)
@@ -68,7 +76,7 @@ class NoteWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(context.resources.getIdentifier("noteIcon", "id", context.packageName), iconForType(type))
             views.setTextColor(context.resources.getIdentifier("noteIcon", "id", context.packageName), iconColor)
             views.setTextViewText(context.resources.getIdentifier("noteTitle", "id", context.packageName), title)
-            views.setTextViewText(context.resources.getIdentifier("noteBody", "id", context.packageName), if (type == "bank" || type == "creditCard") styledBankText(shownBody) else shownBody)
+            views.setTextViewText(context.resources.getIdentifier("noteBody", "id", context.packageName), shownBodyText)
             views.setTextColor(context.resources.getIdentifier("noteTitle", "id", context.packageName), titleColor)
             views.setTextColor(context.resources.getIdentifier("noteBody", "id", context.packageName), bodyColor)
             views.setTextViewTextSize(context.resources.getIdentifier("noteTitle", "id", context.packageName), TypedValue.COMPLEX_UNIT_SP, (textSize + 1).toFloat())
@@ -117,6 +125,7 @@ class NoteWidgetProvider : AppWidgetProvider() {
                 put("selectedId", selectedId)
                 put("title", item?.optString("title") ?: local.optString("title", defaultTitle(type)))
                 put("body", item?.optString("body") ?: local.optString("body", defaultBody(type)))
+                put("html", if (type == "note") (item?.optString("html") ?: local.optString("html", "")) else "")
             }
         }
 
@@ -163,6 +172,28 @@ class NoteWidgetProvider : AppWidgetProvider() {
 
         private fun parseColor(value: String, fallback: String): Int {
             return try { Color.parseColor(value) } catch (_: Exception) { Color.parseColor(fallback) }
+        }
+
+        private fun richNoteText(html: String, maxChars: Int, fallback: String): CharSequence {
+            return try {
+                val parsed = Html.fromHtml(
+                    html,
+                    Html.FROM_HTML_MODE_COMPACT or Html.FROM_HTML_OPTION_USE_CSS_COLORS
+                )
+                val builder = SpannableStringBuilder(parsed)
+                while (builder.length > 0 && (builder[builder.length - 1] == '\n' || builder[builder.length - 1] == '\r')) {
+                    builder.delete(builder.length - 1, builder.length)
+                }
+                if (builder.length == 0) return fallback
+                if (builder.length > maxChars) {
+                    val keep = (maxChars - 1).coerceAtLeast(1)
+                    builder.delete(keep, builder.length)
+                    builder.append("…")
+                }
+                builder
+            } catch (_: Exception) {
+                fallback
+            }
         }
 
         private fun styledBankText(text: String): SpannableString {

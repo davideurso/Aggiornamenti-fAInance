@@ -1,2 +1,0 @@
-iOS backup touch test 1.6.72 build 209
-Provisioning profile selected by exact application-identifier.

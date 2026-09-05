@@ -16,7 +16,9 @@ dependencies {
     implementation project(':capacitor-camera')
     implementation project(':capacitor-filesystem')
     implementation project(':capacitor-preferences')
+    implementation project(':capacitor-push-notifications')
     implementation project(':capacitor-share')
+    implementation project(':capawesome-capacitor-file-picker')
     implementation project(':capgo-capacitor-contacts')
     implementation project(':capgo-capacitor-speech-recognition')
 

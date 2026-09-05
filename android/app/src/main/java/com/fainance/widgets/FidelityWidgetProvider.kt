@@ -53,7 +53,8 @@ class FidelityWidgetProvider : AppWidgetProvider() {
             views.setInt(rootId, "setBackgroundColor", bg)
             if (titleId != 0) { views.setTextViewText(titleId, ""); views.setViewVisibility(titleId, View.GONE) }
             views.setTextViewText(nameId, card?.optString("name") ?: "Nessuna carta")
-            views.setViewVisibility(codeId, View.GONE)
+            views.setTextViewText(codeId, code)
+            views.setViewVisibility(codeId, if (code.isNotBlank()) View.VISIBLE else View.GONE)
             views.setViewVisibility(barcodeId, View.GONE)
             if (barcodeImageId != 0 && code.isNotBlank()) {
                 views.setImageViewBitmap(barcodeImageId, WidgetUtils.barcodeBitmap(code, 1100, 460))

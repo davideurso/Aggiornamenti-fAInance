@@ -9,49 +9,23 @@ import appLogo from "../assets/logo.png";
 import appBanner from "../assets/splash.png";
 import aiGrilloMascot from "../assets/ai_grillo_mascot_transparent.png";
 export { appLogo, appBanner, aiGrilloMascot };
-import { initializeApp } from "firebase/app";
 import { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser } from "firebase/auth";
 export { initializeAuth, getAuth, browserLocalPersistence, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signInWithCredential, deleteUser };
 import { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteField, collection, query, where, limit, getDocs, addDoc } from "firebase/firestore";
 export { getFirestore, doc, setDoc, getDoc, onSnapshot, deleteDoc, deleteField, collection, query, where, limit, getDocs, addDoc };
+import { firebaseApp, fbAuth, fbDb, googleProvider } from "./firebase/client";
+import { firebaseConfig, cloudFunctionUrl } from "./config/env";
+export { firebaseApp, fbAuth, fbDb, googleProvider, firebaseConfig };
 
-// ── FIREBASE CONFIG ───────────────────────────────────────────────────────────
-export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "fainance-a7794.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "fainance-a7794",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "fainance-a7794.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "739607555867",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:739607555867:web:fainanceweb"
-};
-export const firebaseApp = initializeApp(firebaseConfig);
-function fainanceCoreIsNativePlatform(){
-  try{
-    var cap=(typeof window!=="undefined")?(window as any).Capacitor:null;
-    if(cap&&typeof cap.isNativePlatform==="function")return !!cap.isNativePlatform();
-    if(cap&&typeof cap.getPlatform==="function"){var p=String(cap.getPlatform()||"").toLowerCase();return p==="ios"||p==="android";}
-  }catch(e){}
-  return false;
-}
-function createFainanceAuth(){
-  try{
-    if(!fainanceCoreIsNativePlatform()){
-      // Sul web usiamo getAuth: registra le dipendenze standard necessarie a signInWithPopup.
-      return getAuth(firebaseApp);
-    }
-    // Su app nativa manteniamo l'inizializzazione già presente.
-    return initializeAuth(firebaseApp,{persistence:browserLocalPersistence});
-  }catch(e){
-    return getAuth(firebaseApp);
-  }
-}
-export const fbAuth = createFainanceAuth();
-export const fbDb = getFirestore(firebaseApp);
-export const googleProvider = new GoogleAuthProvider();
-export const AI_AGENT_ENDPOINT = "https://europe-west1-fainance-a7794.cloudfunctions.net/askFinanceAI";
-export const RECEIPT_OCR_ENDPOINT = "https://europe-west1-fainance-a7794.cloudfunctions.net/scanReceiptOCR";
+// ── FIREBASE / CLOUD ENDPOINTS ────────────────────────────────────────────────
+// L'Agente AI usa esattamente il backend operativo della 1.4.11.
+// Il datastore dell'app resta quello dell'ambiente corrente (Test/Production);
+// viene condiviso solo il servizio AI, che riceve esclusivamente il contesto
+// esplicitamente costruito dal client secondo il livello di analisi scelto.
+export const AI_AGENT_ENDPOINT = cloudFunctionUrl("askFinanceAI");
+export const RECEIPT_OCR_ENDPOINT = cloudFunctionUrl("scanReceiptOCR");
 export const AI_OUT_OF_SCOPE_MESSAGE = "Posso aiutarti con finanza personale, budget, spese, entrate, risparmio, prestiti, mutui, debiti, patrimonio e funzioni dell’app fAInance.";
-export const AI_AGENT_SCOPE_INSTRUCTION = "Sei il Consulente AI integrato nell’app fAInance. Il tuo compito è aiutare l’utente su temi collegati alla finanza personale e alle funzionalità dell’app fAInance. Puoi rispondere a domande relative a: analisi di entrate, uscite, saldo e patrimonio; budget, categorie di spesa, metodi di pagamento e ricorrenze; obiettivi di risparmio; alert, notifiche e promemoria finanziari; importazione, esportazione, backup e qualità dei dati; statistiche mostrate nell’app; consigli pratici per ottimizzare spese, risparmio, abbonamenti, bollette, ricorrenze e gestione finanziaria personale; prestiti, mutui, debiti, rate, sostenibilità di una rata, scenari di indebitamento, anticipo, durata, interessi e capacità di rimborso; spiegazioni su come usare le funzionalità dell’app fAInance. Puoi anche rispondere a brevi frasi interlocutorie come ciao, come stai, mi puoi aiutare, cosa puoi fare, purché riporti gentilmente l’utente verso la gestione finanziaria o l’uso dell’app. Non devi rispondere a domande chiaramente non collegate alla finanza personale o all’app, come argomenti medici, politici, sportivi, di viaggio, intrattenimento o lavoro tecnico non pertinente. Se la domanda è fuori perimetro, rispondi solo con: “"+AI_OUT_OF_SCOPE_MESSAGE+"”. Mantieni le risposte brevi, pratiche e orientate all’azione. Non usare Markdown: niente asterischi, grassetti, titoli Markdown, elenchi complessi o formattazioni speciali. Scrivi in testo semplice, adatto a essere mostrato direttamente dentro l’app. Rispondi sempre nella lingua dell’ultimo messaggio dell’utente. Usa i dati disponibili solo se pertinenti. Se i dati non sono sufficienti, dichiaralo chiaramente e indica quale informazione manca nell’app.";
+export const AI_AGENT_SCOPE_INSTRUCTION = "Sei l’Agente AI integrato nell’app fAInance. Il tuo compito è aiutare l’utente su temi collegati alla finanza personale e alle funzionalità dell’app fAInance. Puoi rispondere a domande relative a: analisi di entrate, uscite, saldo e patrimonio; budget, categorie di spesa, metodi di pagamento e ricorrenze; obiettivi di risparmio; alert, notifiche e promemoria finanziari; importazione, esportazione, backup e qualità dei dati; statistiche mostrate nell’app; consigli pratici per ottimizzare spese, risparmio, abbonamenti, bollette, ricorrenze e gestione finanziaria personale; prestiti, mutui, debiti, rate, sostenibilità di una rata, scenari di indebitamento, anticipo, durata, interessi e capacità di rimborso; spiegazioni su come usare le funzionalità dell’app fAInance. Puoi anche rispondere a brevi frasi interlocutorie come ciao, come stai, mi puoi aiutare, cosa puoi fare, purché riporti gentilmente l’utente verso la gestione finanziaria o l’uso dell’app. Non devi rispondere a domande chiaramente non collegate alla finanza personale o all’app, come argomenti medici, politici, sportivi, di viaggio, intrattenimento o lavoro tecnico non pertinente. Se la domanda è fuori perimetro, rispondi solo con: “"+AI_OUT_OF_SCOPE_MESSAGE+"”. Mantieni le risposte brevi, pratiche e orientate all’azione. Non usare Markdown: niente asterischi, grassetti, titoli Markdown, elenchi complessi o formattazioni speciali. Scrivi in testo semplice, adatto a essere mostrato direttamente dentro l’app. Rispondi sempre nella lingua dell’ultimo messaggio dell’utente. Usa i dati disponibili solo se pertinenti. Se i dati non sono sufficienti, dichiaralo chiaramente e indica quale informazione manca nell’app.";
 
 export const AppCtx=createContext({});
 export function useApp(){return useContext(AppCtx);}
@@ -102,8 +76,8 @@ export const PLAN_LABELS={
 };
 export const PLAN_PRICES={free:{monthly:0,yearly:0},base:{monthly:2.5,yearly:20},premium:{monthly:3.5,yearly:35}};
 export const PLAN_LIMITS={
-  free:{ads:true,dailySingleMovements:2,rewardedExtraMovements:2,dailyMultipleMovements:1,dailyReceiptScans:1,rewardedExtraReceiptScans:1,dailyVoiceEntries:1,rewardedExtraVoiceEntries:1,aiDailyReplies:4,rewardedExtraAiReplies:2,aiMonthlyReplies:4,aiMonthlyTips:2,recurringMovements:1,instalmentEnabled:true,dailyInstalments:2,rewardedExtraInstalments:0,instalmentOptions:[6,12],instalmentMonthsMin:6,instalmentMonthsMax:12,baseCategoriesOnly:true,categoryEdits:2,canEditAreas:false,canReorderCategories:false,basePaymentMethodsOnly:true,canCustomizePaymentMethods:false,historyLevel:"full",statsLevel:"base",budgetLevel:"full",widgets:3,goals:1,notes:1,bankNotes:1,documents:0,patrimonioLevel:"complete",patrimonioCopyMonthly:2,rewardedExtraPatrimonioCopy:2,alerts:1,shareProjects:1,shareDailyExpenses:2,rewardedExtraShareDailyExpenses:2,settingsLevel:"base",debtCredits:1,shoppingLists:1,shoppingCards:2,shoppingListItems:25,shareReceiptScans:1,shareReceiptRetentionMonths:0},
-  base:{ads:false,dailySingleMovements:4,rewardedExtraMovements:2,dailyMultipleMovements:2,dailyReceiptScans:3,rewardedExtraReceiptScans:1,dailyVoiceEntries:3,rewardedExtraVoiceEntries:1,aiDailyReplies:10,rewardedExtraAiReplies:3,aiMonthlyReplies:10,aiMonthlyTips:4,recurringMovements:3,instalmentEnabled:true,dailyInstalments:4,rewardedExtraInstalments:0,instalmentOptions:[3,6,12,24],instalmentMonthsMin:3,instalmentMonthsMax:24,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"advanced",budgetLevel:"full",widgets:7,goals:2,notes:3,bankNotes:3,documents:1,patrimonioLevel:"complete",patrimonioCopyMonthly:5,rewardedExtraPatrimonioCopy:2,alerts:3,shareProjects:2,shareDailyExpenses:4,rewardedExtraShareDailyExpenses:2,settingsLevel:"advanced",debtCredits:3,shoppingLists:2,shoppingCards:10,shoppingListItems:100,shareReceiptScans:2,shareReceiptRetentionMonths:0},
+  free:{ads:true,dailySingleMovements:2,rewardedExtraMovements:2,dailyMultipleMovements:1,dailyReceiptScans:1,rewardedExtraReceiptScans:1,dailyVoiceEntries:1,rewardedExtraVoiceEntries:1,aiDailyReplies:4,rewardedExtraAiReplies:2,aiMonthlyReplies:4,aiMonthlyTips:2,recurringMovements:1,instalmentEnabled:true,dailyInstalments:2,rewardedExtraInstalments:0,instalmentOptions:[6,12],instalmentMonthsMin:6,instalmentMonthsMax:12,baseCategoriesOnly:true,categoryEdits:2,canEditAreas:false,canReorderCategories:false,basePaymentMethodsOnly:true,canCustomizePaymentMethods:false,historyLevel:"full",statsLevel:"base",budgetLevel:"full",widgets:3,goals:1,notes:1,bankNotes:1,documents:0,patrimonioLevel:"complete",patrimonioCopyMonthly:2,rewardedExtraPatrimonioCopy:2,alerts:1,shareProjects:1,shareDailyExpenses:2,rewardedExtraShareDailyExpenses:2,settingsLevel:"base",debtCredits:0,shoppingLists:1,shoppingCards:2,shoppingListItems:25,shareReceiptScans:0,shareReceiptRetentionMonths:0},
+  base:{ads:false,dailySingleMovements:4,rewardedExtraMovements:2,dailyMultipleMovements:2,dailyReceiptScans:3,rewardedExtraReceiptScans:1,dailyVoiceEntries:3,rewardedExtraVoiceEntries:1,aiDailyReplies:10,rewardedExtraAiReplies:3,aiMonthlyReplies:10,aiMonthlyTips:4,recurringMovements:3,instalmentEnabled:true,dailyInstalments:4,rewardedExtraInstalments:0,instalmentOptions:[3,6,12,24],instalmentMonthsMin:3,instalmentMonthsMax:24,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"advanced",budgetLevel:"full",widgets:7,goals:2,notes:3,bankNotes:3,documents:1,patrimonioLevel:"complete",patrimonioCopyMonthly:5,rewardedExtraPatrimonioCopy:2,alerts:3,shareProjects:2,shareDailyExpenses:4,rewardedExtraShareDailyExpenses:2,settingsLevel:"advanced",debtCredits:0,shoppingLists:2,shoppingCards:10,shoppingListItems:100,shareReceiptScans:2,shareReceiptRetentionMonths:6},
   premium:{ads:false,dailySingleMovements:Infinity,rewardedExtraMovements:0,dailyMultipleMovements:Infinity,dailyReceiptScans:Infinity,rewardedExtraReceiptScans:0,dailyVoiceEntries:Infinity,rewardedExtraVoiceEntries:0,aiDailyReplies:Infinity,rewardedExtraAiReplies:0,aiMonthlyReplies:300,aiCommercialLabel:"unlimited",aiMonthlyTips:Infinity,recurringMovements:Infinity,instalmentEnabled:true,dailyInstalments:Infinity,rewardedExtraInstalments:0,instalmentOptions:null,instalmentMonthsMin:1,instalmentMonthsMax:Infinity,baseCategoriesOnly:false,categoryEdits:Infinity,canEditAreas:true,canReorderCategories:true,basePaymentMethodsOnly:false,canCustomizePaymentMethods:true,historyLevel:"full",statsLevel:"complete",budgetLevel:"full",widgets:8,goals:Infinity,notes:Infinity,bankNotes:Infinity,documents:Infinity,patrimonioLevel:"complete",patrimonioCopyMonthly:Infinity,rewardedExtraPatrimonioCopy:0,alerts:Infinity,shareProjects:Infinity,shareDailyExpenses:Infinity,rewardedExtraShareDailyExpenses:0,settingsLevel:"full",debtCredits:Infinity,shoppingLists:Infinity,shoppingCards:Infinity,shoppingListItems:Infinity,shareReceiptScans:Infinity,shareReceiptRetentionMonths:6}
 };
 export function planLabel(plan,lang){var dict=PLAN_LABELS[lang]||PLAN_LABELS.en;return dict[plan]||dict.free;}
@@ -376,12 +350,18 @@ export function excelSerialToISO(serial) {
 
 // Exact replica of parseCellDate from working version
 export function parseDateWithFormat(raw, fmt) {
-  if (raw===null||raw===undefined||raw==="") return todayStr();
-  if (typeof raw==="number") {
-    if (raw>40000&&raw<80000) return excelSerialToISO(raw);
+  if (raw===null||raw===undefined||raw==="") return "";
+  if (raw instanceof Date && !isNaN(raw.getTime())) return raw.toISOString().split("T")[0];
+  if (typeof raw==="number" && isFinite(raw)) {
+    if (raw>1&&raw<100000) return excelSerialToISO(raw);
   }
   var s = String(raw).trim();
-  if (!s) return todayStr();
+  if (!s) return "";
+  // Excel serial numbers can arrive as strings after a spreadsheet import.
+  if (/^\d+(?:\.\d+)?$/.test(s)) {
+    var serial = Number(s);
+    if (isFinite(serial) && serial>1 && serial<100000) return excelSerialToISO(serial);
+  }
   // ISO yyyy-mm-dd
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
   // "12 gennaio 2026" or "12 Jan 2026"
@@ -406,7 +386,7 @@ export function parseDateWithFormat(raw, fmt) {
       return yr+"-"+b.padStart(2,"0")+"-"+a.padStart(2,"0");
     }
   }
-  return todayStr();
+  return "";
 }
 
 // ── ANDROID-SAFE DOWNLOAD ────────────────────────────────────────────────────

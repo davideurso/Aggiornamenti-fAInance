@@ -33,15 +33,84 @@
           try {
             var root=document.getElementById('root');
             if(root && !root.childNodes.length && !window.__FAINANCE_APP_MOUNT_STARTED__){
-              root.innerHTML='<div style="min-height:100vh;background:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px;color:#222;"><div style="max-width:360px;background:white;border-radius:18px;border:1px solid #eee;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);"><div style="font-size:18px;font-weight:800;color:#b00020;margin-bottom:8px;">Avvio non completato</div><div style="font-size:13px;color:#555;line-height:1.45;">Il bundle JavaScript non ha montato React entro 20 secondi.</div></div></div>';
+              root.innerHTML='<div style="min-height:100vh;background:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px;color:#222;"><div style="max-width:360px;background:white;border-radius:18px;border:1px solid #eee;padding:20px;box-shadow:0 8px 28px rgba(0,0,0,.08);"><div style="font-size:18px;font-weight:800;color:#b00020;margin-bottom:8px;">Avvio non completato</div><div style="font-size:13px;color:#555;line-height:1.45;">Il bundle JavaScript non ha montato React entro 120 secondi.</div></div></div>';
             }
           } catch (e) {}
-        },20000);
+        },120000);
       })();
     </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-  </body>
+  <script id="fainance-bootstrap-fatal-guard">
+(function () {
+  if (window.__FAINANCE_FATAL_GUARD_INSTALLED__) return;
+  window.__FAINANCE_FATAL_GUARD_INSTALLED__ = true;
+
+  function alreadyMounted() {
+    if (window.__FAINANCE_REACT_MOUNTED__) return true;
+    var root = document.getElementById('root');
+    return !!(root && root.childElementCount > 0);
+  }
+
+  function errorText(reason) {
+    try {
+      if (!reason) return "Errore JavaScript durante l'avvio.";
+      if (reason.message) return String(reason.message);
+      return String(reason);
+    } catch (_) {
+      return "Errore JavaScript durante l'avvio.";
+    }
+  }
+
+  function renderFatal(reason) {
+    if (alreadyMounted()) return;
+    var root = document.getElementById('root');
+    if (!root) return;
+    root.innerHTML = '';
+    var wrap = document.createElement('div');
+    wrap.style.minHeight = '100vh';
+    wrap.style.display = 'flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.justifyContent = 'center';
+    wrap.style.padding = '24px';
+    wrap.style.boxSizing = 'border-box';
+    var card = document.createElement('div');
+    card.style.maxWidth = '560px';
+    card.style.background = '#fff';
+    card.style.border = '1px solid #fecaca';
+    card.style.borderRadius = '20px';
+    card.style.padding = '24px';
+    card.style.boxShadow = '0 18px 50px rgba(0,0,0,.10)';
+    var title = document.createElement('div');
+    title.textContent = "Errore durante l'avvio";
+    title.style.fontWeight = '800';
+    title.style.fontSize = '22px';
+    title.style.color = '#b91c1c';
+    var detail = document.createElement('div');
+    detail.textContent = errorText(reason);
+    detail.style.marginTop = '10px';
+    detail.style.color = '#7f1d1d';
+    detail.style.whiteSpace = 'pre-wrap';
+    card.appendChild(title);
+    card.appendChild(detail);
+    wrap.appendChild(card);
+    root.appendChild(wrap);
+  }
+
+  window.addEventListener('error', function (event) {
+    if (alreadyMounted()) return;
+    window.__FAINANCE_BOOT_FATAL__ = event.error || event.message || 'BOOT_ERROR';
+    setTimeout(function () { renderFatal(window.__FAINANCE_BOOT_FATAL__); }, 0);
+  });
+
+  window.addEventListener('unhandledrejection', function (event) {
+    if (alreadyMounted()) return;
+    window.__FAINANCE_BOOT_FATAL__ = event.reason || 'UNHANDLED_REJECTION';
+    setTimeout(function () { renderFatal(window.__FAINANCE_BOOT_FATAL__); }, 0);
+  });
+})();
+</script>
+</body>
 </html>

@@ -22,6 +22,50 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
+    // fAInance 2.0 - per-device account sessions.
+    match /users/{userId}/devices/{deviceId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    // Automatic account backups. Backup payload is private to the account owner.
+    match /users/{userId}/backups/{backupId} {
+      allow read, create, delete: if isOwner(userId);
+      allow update: if false;
+    }
+
+    // Personal icon library. Only the owner can enumerate/write the library.
+    // A signed-in user may fetch a single known icon reference so shared items can render it.
+    match /users/{userId}/customIcons/{iconId} {
+      allow get: if signedIn();
+      allow list: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && request.resource.data.ownerUid == userId
+        && request.resource.data.id == iconId
+        && request.resource.data.dataUrl is string
+        && request.resource.data.dataUrl.size() <= 120000
+        && request.resource.data.keys().hasOnly(['id','ownerUid','label','dataUrl','createdAt','updatedAt']);
+      allow delete: if isOwner(userId);
+    }
+
+
+    // Backup metadata is separate from payload: Admin can inspect size/status, never contents.
+    match /accountBackupMetadata/{backupId} {
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow read: if signedIn() && (resource.data.uid == request.auth.uid || request.auth.token.fainanceAdminRole in ['admin', 'superadmin']);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // fAInance 2.0 - 15 day account deletion reconsideration queue.
+    match /accountDeletionRequests/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
+    }
+
+    // Account cleanup can remove lookup records that belong to the current user.
+    match /userLookup/{lookupId} {
+      allow get, delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
     match /shareProjects/{projectId} {
       allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
       allow read: if signedIn()
@@ -35,6 +79,37 @@ service cloud.firestore {
           || request.auth.uid in resource.data.memberUids
         );
       allow delete: if signedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // Allegati Share: leggibili esclusivamente dai partecipanti del progetto.
+    // Il payload immagine resta sotto il limite Firestore e scade dopo 6 mesi.
+    match /shareAttachments/{attachmentId} {
+      allow create: if signedIn()
+        && request.resource.data.id == attachmentId
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.projectId is string
+        && request.resource.data.dataUrl is string
+        && request.resource.data.dataUrl.size() <= 700000
+        && request.resource.data.retentionMonths == 6
+        && request.resource.data.keys().hasOnly([
+          'id','projectId','activityId','ownerUid','name','mimeType','dataUrl',
+          'sizeBytes','uploadedAt','expiresAt','expiresAtMs','retentionMonths','status'
+        ])
+        && (
+          get(/databases/$(database)/documents/shareProjects/$(request.resource.data.projectId)).data.ownerUid == request.auth.uid
+          || request.auth.uid in get(/databases/$(database)/documents/shareProjects/$(request.resource.data.projectId)).data.memberUids
+        );
+      allow read: if signedIn()
+        && (
+          get(/databases/$(database)/documents/shareProjects/$(resource.data.projectId)).data.ownerUid == request.auth.uid
+          || request.auth.uid in get(/databases/$(database)/documents/shareProjects/$(resource.data.projectId)).data.memberUids
+        );
+      allow delete: if signedIn()
+        && (
+          resource.data.ownerUid == request.auth.uid
+          || get(/databases/$(database)/documents/shareProjects/$(resource.data.projectId)).data.ownerUid == request.auth.uid
+        );
+      allow update: if false;
     }
 
     match /shareInvites/{inviteId} {
@@ -51,7 +126,12 @@ service cloud.firestore {
           || resource.data.invitedUid == request.auth.uid
           || resource.data.invitedEmail == request.auth.token.email
         );
-      allow delete: if signedIn() && resource.data.invitedByUid == request.auth.uid;
+      allow delete: if signedIn()
+        && (
+          resource.data.invitedByUid == request.auth.uid
+          || resource.data.invitedUid == request.auth.uid
+          || resource.data.invitedEmail == request.auth.token.email
+        );
     }
 
     match /shareNotifications/{notificationId} {
@@ -59,10 +139,132 @@ service cloud.firestore {
       allow read, update, delete: if signedIn() && resource.data.userUid == request.auth.uid;
     }
 
+    // Centro notifiche unificato. Le comunicazioni Admin sono distribuite dal backend;
+    // il client può creare soltanto la notifica legata a un invito Share valido.
+    match /appNotifications/{notificationId} {
+      allow create: if signedIn()
+        && request.resource.data.type == 'share_invite'
+        && request.resource.data.sourceUid == request.auth.uid
+        && request.resource.data.inviteId is string
+        && get(/databases/$(database)/documents/shareInvites/$(request.resource.data.inviteId)).data.invitedByUid == request.auth.uid
+        && get(/databases/$(database)/documents/shareInvites/$(request.resource.data.inviteId)).data.invitedUid == request.resource.data.targetUid;
+      allow read, delete: if signedIn() && resource.data.targetUid == request.auth.uid;
+      allow update: if signedIn()
+        && resource.data.targetUid == request.auth.uid
+        && request.resource.data.targetUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read','readAt','updatedAt']);
+    }
+
+    // Rate-limit privato gestito esclusivamente dalle Cloud Functions.
+    match /verificationEmailRateLimits/{userId} {
+      allow read, write: if false;
+    }
+
     // Used by Firebase Trigger Email extension. Users can enqueue an email, but cannot read the queue.
     match /mail/{mailId} {
       allow create: if signedIn();
       allow read, update, delete: if false;
     }
+    // Technical logs: users can write/read/delete only their own events; Admin roles can inspect.
+    match /technicalLogs/{logId} {
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid','deviceId','category','operation','result','severity','errorCode','metadata','appVersion','environment','createdAtIso','createdAtMs','createdAt']);
+      allow read: if signedIn()
+        && (resource.data.uid == request.auth.uid
+          || request.auth.token.fainanceAdminRole in ['analyst', 'admin', 'superadmin']);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+      allow update: if false;
+    }
+
+    // === FAINANCE ADMIN SECURITY START ===
+    function isFainanceAdmin() {
+      return request.auth != null && request.auth.token.fainanceAdminRole in ['support', 'analyst', 'admin', 'superadmin'];
+    }
+    function canReadFainanceAudit() {
+      return request.auth != null && request.auth.token.fainanceAdminRole in ['analyst', 'admin', 'superadmin'];
+    }
+    function canWriteFainanceConfig() {
+      return request.auth != null && request.auth.token.fainanceAdminRole in ['admin', 'superadmin'];
+    }
+    function isFainanceSuperadmin() {
+      return request.auth != null && request.auth.token.fainanceAdminRole == 'superadmin';
+    }
+
+    match /adminCommunications/{communicationId} {
+      allow read: if isFainanceAdmin();
+      allow create: if canWriteFainanceConfig()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.environment == 'test'
+        && request.resource.data.status == 'published';
+      allow update: if canWriteFainanceConfig()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['deliveryStatus','deliveredCount','deliveredAt']);
+      allow delete: if isFainanceSuperadmin();
+    }
+
+    match /adminUserMetadata/{uid} {
+      allow read: if isFainanceAdmin();
+      allow create, update, delete: if isFainanceSuperadmin();
+    }
+
+    match /systemConfig/{document=**} {
+      allow read: if isFainanceAdmin();
+      allow create, update: if canWriteFainanceConfig();
+      allow delete: if isFainanceSuperadmin();
+    }
+
+    match /adminAudit/{auditId} {
+      allow read: if canReadFainanceAudit();
+      allow create: if canWriteFainanceConfig() && request.resource.data.actorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+        // === FAINANCE USERNAME SECURITY START ===
+    match /usernames/{usernameLower} {
+      allow get: if signedIn();
+      allow list: if isFainanceAdmin();
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.usernameLower == usernameLower
+        && request.resource.data.keys().hasOnly(['uid', 'username', 'usernameLower', 'active', 'updatedAt']);
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.usernameLower == usernameLower
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['username', 'usernameLower', 'active', 'updatedAt']);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+
+    match /usernameLogin/{usernameLower} {
+      // Spark-compatible username login: direct document lookup is allowed,
+      // collection enumeration is blocked.
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.usernameLower == usernameLower
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'usernameLower', 'updatedAt']);
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.usernameLower == usernameLower
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['email', 'updatedAt']);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow create: if isFainanceSuperadmin()
+        && request.resource.data.keys().hasOnly(['username', 'usernameLower', 'updatedAt']);
+      allow update: if isFainanceSuperadmin()
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['username', 'usernameLower', 'updatedAt']);
+    }
+    // === FAINANCE USERNAME SECURITY END ===
+    // === FAINANCE ADMIN SECURITY END ===
   }
 }

@@ -21,6 +21,8 @@ import com.google.android.gms.ads.AdView;
 import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.interstitial.InterstitialAd;
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import com.google.android.gms.ads.rewarded.RewardItem;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
@@ -35,6 +37,7 @@ import com.google.android.ump.UserMessagingPlatform;
 public class FainanceAdsPlugin extends Plugin {
     private static final String DEFAULT_BANNER_UNIT_ID = "ca-app-pub-4502496181111632/3175905788";
     private static final String DEFAULT_REWARDED_UNIT_ID = "ca-app-pub-4502496181111632/2700092208";
+    private static final String TEST_INTERSTITIAL_UNIT_ID = "ca-app-pub-3940256099942544/1033173712";
     private boolean initialized = false;
     private AdView bannerView = null;
     private ConsentInformation consentInformation;
@@ -77,6 +80,66 @@ public class FainanceAdsPlugin extends Plugin {
                 ret.put("canRequestAds", consentInformation.canRequestAds());
                 ret.put("message", requestConsentError.getMessage());
                 call.resolve(ret);
+            }
+        ));
+    }
+
+    @PluginMethod
+    public void showInterstitial(PluginCall call) {
+        Activity activity = getActivity();
+        if (activity == null) {
+            call.reject("Activity not available");
+            return;
+        }
+        ensureInitialized();
+        String requestedUnitId = call.getString("adUnitId");
+        String adUnitId = requestedUnitId == null ? "" : requestedUnitId.trim();
+        if (adUnitId.isEmpty()) {
+            String applicationId = activity.getApplicationContext().getPackageName();
+            if (applicationId != null && applicationId.endsWith(".test")) {
+                adUnitId = TEST_INTERSTITIAL_UNIT_ID;
+            } else {
+                call.reject("Interstitial AdMob unit ID not configured");
+                return;
+            }
+        }
+        final String resolvedAdUnitId = adUnitId;
+        activity.runOnUiThread(() -> InterstitialAd.load(
+            activity,
+            resolvedAdUnitId,
+            new AdRequest.Builder().build(),
+            new InterstitialAdLoadCallback() {
+                @Override
+                public void onAdFailedToLoad(@NonNull LoadAdError loadAdError) {
+                    JSObject ret = new JSObject();
+                    ret.put("success", false);
+                    ret.put("shown", false);
+                    ret.put("message", loadAdError.getMessage());
+                    call.resolve(ret);
+                }
+
+                @Override
+                public void onAdLoaded(@NonNull InterstitialAd interstitialAd) {
+                    interstitialAd.setFullScreenContentCallback(new FullScreenContentCallback() {
+                        @Override
+                        public void onAdDismissedFullScreenContent() {
+                            JSObject ret = new JSObject();
+                            ret.put("success", true);
+                            ret.put("shown", true);
+                            call.resolve(ret);
+                        }
+
+                        @Override
+                        public void onAdFailedToShowFullScreenContent(@NonNull AdError adError) {
+                            JSObject ret = new JSObject();
+                            ret.put("success", false);
+                            ret.put("shown", false);
+                            ret.put("message", adError.getMessage());
+                            call.resolve(ret);
+                        }
+                    });
+                    interstitialAd.show(activity);
+                }
             }
         ));
     }

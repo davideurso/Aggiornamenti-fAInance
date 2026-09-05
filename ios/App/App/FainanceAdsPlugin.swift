@@ -4,7 +4,7 @@ import Capacitor
 import GoogleMobileAds
 
 @objc(FainanceAdsPlugin)
-public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate {
+public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate, GADBannerViewDelegate {
     private var bannerView: GADBannerView?
     private var rewardedAd: GADRewardedAd?
     private var rewardedCall: CAPPluginCall?
@@ -27,24 +27,45 @@ public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate {
             call.reject("Missing adUnitId")
             return
         }
+
+        // FAINANCE_V99_IOS_BANNER_USES_WEB_SLOT
+        // app.tsx misura gia lo slot superiore e passa la coordinata Y al plugin.
+        // Il vecchio plugin ignorava completamente questi parametri e ancorava
+        // sempre il banner in basso alla safe area.
+        // FAINANCE_V102_IOS_SLOT_ALIGNMENT
+        // app.tsx aggiunge +38 per il posizionamento Android. Su iOS la coordinata
+        // viene applicata direttamente alla root view: rimuoviamo esattamente
+        // quei 38 pt per centrare il banner nello slot bianco gia riservato.
+        let requestedTop = max(0, self.requestedBannerTop(call) - 38)
+
         DispatchQueue.main.async {
             guard let root = self.rootViewController() else {
                 call.reject("Root view controller not available")
                 return
             }
+
             self.hideBannerView()
+
             let banner = GADBannerView(adSize: GADAdSizeBanner)
             banner.adUnitID = adUnitId
             banner.rootViewController = root
+            banner.delegate = self
             banner.translatesAutoresizingMaskIntoConstraints = false
             root.view.addSubview(banner)
+
+            root.view.layoutIfNeeded()
+            let maximumTop = max(0, Int(root.view.bounds.height.rounded(.down)) - 50)
+            let top = CGFloat(min(max(0, requestedTop), maximumTop))
+
             NSLayoutConstraint.activate([
                 banner.centerXAnchor.constraint(equalTo: root.view.centerXAnchor),
-                banner.bottomAnchor.constraint(equalTo: root.view.safeAreaLayoutGuide.bottomAnchor)
+                banner.topAnchor.constraint(equalTo: root.view.topAnchor, constant: top)
             ])
-            banner.load(GADRequest())
+
+            root.view.bringSubviewToFront(banner)
             self.bannerView = banner
-            call.resolve(["success": true])
+            banner.load(GADRequest())
+            call.resolve(["success": true, "top": Int(top)])
         }
     }
 
@@ -88,6 +109,18 @@ public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate {
         }
     }
 
+    public func bannerViewDidReceiveAd(_ bannerView: GADBannerView) {
+        guard self.bannerView === bannerView else { return }
+        rootViewController()?.view.bringSubviewToFront(bannerView)
+    }
+
+    public func bannerView(_ bannerView: GADBannerView, didFailToReceiveAdWithError error: Error) {
+        // Un banner vuoto non deve restare sopra la WebView e intercettare i tocchi.
+        guard self.bannerView === bannerView else { return }
+        hideBannerView()
+        print("fAInance AdMob banner load failed: \(error.localizedDescription)")
+    }
+
     public func adDidDismissFullScreenContent(_ ad: GADFullScreenPresentingAd) {
         rewardedCall?.resolve(["rewarded": rewardedEarned])
         rewardedCall = nil
@@ -102,7 +135,18 @@ public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate {
         rewardedEarned = false
     }
 
+    private func requestedBannerTop(_ call: CAPPluginCall) -> Int {
+        return call.getInt("topMarginCssPx")
+            ?? call.getInt("topMarginPx")
+            ?? call.getInt("topMargin")
+            ?? call.getInt("marginTop")
+            ?? call.getInt("y")
+            ?? call.getInt("top")
+            ?? 0
+    }
+
     private func hideBannerView() {
+        bannerView?.delegate = nil
         bannerView?.removeFromSuperview()
         bannerView = nil
     }
