@@ -1430,3 +1430,15 @@ export function applyAppTranslationPatches(){
   });
   try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
 })();
+
+
+// fAInance - terminology consolidation: Consulente/Assistente vocale -> Agente AI.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  var agent={it:'Agente AI',en:'AI Agent',es:'Agente IA',fr:'Agent IA',de:'KI-Agent',pt:'Agente de IA',pl:'Agent AI',nl:'AI-agent',ro:'Agent AI',el:'Πράκτορας AI'};
+  put('Consulente AI',agent);
+  put('Assistente vocale',agent);
+  put('Icona rapida Consulente AI',{it:'Icona rapida Agente AI',en:'Quick AI Agent icon',es:'Icono rápido del Agente IA',fr:'Icône rapide Agent IA',de:'Schnellzugriff KI-Agent',pt:'Ícone rápido do Agente de IA',pl:'Szybka ikona Agenta AI',nl:'Snelpictogram AI-agent',ro:'Pictogramă rapidă Agent AI',el:'Γρήγορο εικονίδιο Πράκτορα AI'});
+  try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
+})();

@@ -7,7 +7,13 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { fbAuth, fbDb } from "../firebase/client";
+import {
+  authPersistenceReady,
+  fbAuth,
+  fbDb,
+  isFirebaseStorageQuotaError,
+  recoverAuthPersistenceFromStorageQuota,
+} from "../firebase/client";
 import { fainanceIsNativePlatform } from "../native/platform";
 import { fainancePromiseTimeout } from "../utils/appRuntime";
 
@@ -33,7 +39,19 @@ function authActionSettings() {
   return { url: origin, handleCodeInApp: false };
 }
 
+async function signInWithCredentialAndQuotaRecovery(credential: any) {
+  await authPersistenceReady;
+  try {
+    return await signInWithCredential(fbAuth, credential);
+  } catch (error) {
+    if (!isFirebaseStorageQuotaError(error)) throw error;
+    await recoverAuthPersistenceFromStorageQuota();
+    return await signInWithCredential(fbAuth, credential);
+  }
+}
+
 export async function performGoogleAccountLogin(): Promise<User> {
+  await authPersistenceReady;
   if (fainanceIsNativePlatform()) {
     const mod = await import("@capacitor-firebase/authentication");
     const FirebaseAuthentication = mod.FirebaseAuthentication;
@@ -75,7 +93,7 @@ export async function performGoogleAccountLogin(): Promise<User> {
     if (!idToken && !accessToken) throw new Error("Google login non ha restituito token utilizzabili.");
 
     const credential = GoogleAuthProvider.credential(idToken || null, accessToken || null);
-    const signed = await signInWithCredential(fbAuth, credential);
+    const signed = await signInWithCredentialAndQuotaRecovery(credential);
     return signed.user;
   }
 
@@ -109,6 +127,7 @@ async function ensureAppleBaseProfile(user: User): Promise<void> {
 }
 
 export async function performAppleAccountLogin(language: string): Promise<User> {
+  await authPersistenceReady;
   let user: User;
 
   if (fainanceIsNativePlatform()) {
@@ -138,7 +157,7 @@ export async function performAppleAccountLogin(language: string): Promise<User> 
         ? { idToken, rawNonce, accessToken: accessToken || undefined }
         : { idToken, accessToken: accessToken || undefined },
     );
-    const signed = await signInWithCredential(fbAuth, credential);
+    const signed = await signInWithCredentialAndQuotaRecovery(credential);
     user = signed.user;
   } else {
     const provider = new OAuthProvider("apple.com");

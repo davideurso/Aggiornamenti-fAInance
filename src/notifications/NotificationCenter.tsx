@@ -286,6 +286,12 @@ export function NotificationCenter({
   const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
   const primary = ctx.confirmButtonColor || "#378ADD";
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
+  const hideFloatingActions = !!ctx.isMobile && ctx.tab === "consulenteAI" && ctx.aiTab === "chat";
+  const actionTop = ctx.isMobile
+    ? ctx.showAppSummaryHeader && !(ctx.tab === "consulenteAI" && ctx.aiTab === "chat")
+      ? "max(32px,calc(env(safe-area-inset-top,0px) + 8px))"
+      : "max(18px,calc(env(safe-area-inset-top,0px) + 8px))"
+    : 14;
   if (!userId) return null;
 
   async function openItem(item: AppNotificationRecord) {
@@ -332,7 +338,8 @@ export function NotificationCenter({
           -webkit-overflow-scrolling: touch;
         }
       `}</style>
-      <div style={{ position: "fixed", right: 10, top: "max(40px,calc(env(safe-area-inset-top,0px) + 28px))", zIndex: 9996, display: "flex", gap: 5, alignItems: "center" }}>
+      {!hideFloatingActions && (
+      <div style={{ position: "fixed", right: 10, top: actionTop, zIndex: 9996, display: "flex", gap: 5, alignItems: "center" }}>
         <button type="button" aria-label={L("Apri profilo")} onClick={onProfile} style={actionButton}>
           <EmployeeProfileIcon />
         </button>
@@ -345,6 +352,7 @@ export function NotificationCenter({
           )}
         </button>
       </div>
+      )}
 
       {open && (
         <div role="dialog" aria-modal="true" aria-label={L("Centro notifiche")} onClick={(event) => event.target === event.currentTarget && setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(15,23,42,.48)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: "max(82px,calc(env(safe-area-inset-top,0px) + 72px)) 12px 16px", boxSizing: "border-box" }}>

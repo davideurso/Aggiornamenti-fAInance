@@ -7,7 +7,13 @@ import {
   signOut,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
-import { fbAuth, fbDb } from "../firebase/client";
+import {
+  authPersistenceReady,
+  fbAuth,
+  fbDb,
+  isFirebaseStorageQuotaError,
+  recoverAuthPersistenceFromStorageQuota,
+} from "../firebase/client";
 import { normalizeUsername, usernameLookupKey } from "../profile/username";
 
 export function normalizeAccountEmail(value: unknown): string {
@@ -15,8 +21,17 @@ export function normalizeAccountEmail(value: unknown): string {
 }
 
 export async function signInWithEmailAccount(email: string, password: string): Promise<User> {
-  const credential = await signInWithEmailAndPassword(fbAuth, normalizeAccountEmail(email), password);
-  return credential.user;
+  await authPersistenceReady;
+  const normalizedEmail = normalizeAccountEmail(email);
+  try {
+    const credential = await signInWithEmailAndPassword(fbAuth, normalizedEmail, password);
+    return credential.user;
+  } catch (error) {
+    if (!isFirebaseStorageQuotaError(error)) throw error;
+    await recoverAuthPersistenceFromStorageQuota();
+    const credential = await signInWithEmailAndPassword(fbAuth, normalizedEmail, password);
+    return credential.user;
+  }
 }
 
 export const EMAIL_VERIFICATION_POLICY_VERSION = 2;
@@ -90,6 +105,7 @@ async function fainanceCreateUserWithReadyToken(
 }
 
 export async function registerEmailAccount(email: string, password: string): Promise<User> {
+  await authPersistenceReady;
   const credential = await fainanceCreateUserWithReadyToken(fbAuth, normalizeAccountEmail(email), password);
   return credential.user;
 }

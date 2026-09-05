@@ -7588,19 +7588,19 @@ export function SettingsPanel() {
                   id: "summary",
                   icon: "📊",
                   title: "Analisi limitata",
-                  desc: "Solo riassunto delle spese: totali mensili/annuali, saldo, categorie principali, budget e ricorrenti.",
+                  desc: "Solo riepiloghi aggregati delle spese: totali e categorie principali. Nessun dettaglio delle singole operazioni.",
                 },
                 {
                   id: "areas",
                   icon: "📂",
                   title: "Analisi media",
-                  desc: "Riassunto + spese raggruppate per area, utile per capire quali blocchi di spesa pesano di più.",
+                  desc: "Spese e aree: data, importo, categoria e area. Non vengono condivise descrizione, metodo di pagamento o dati del profilo.",
                 },
                 {
                   id: "full",
                   icon: "🔎",
                   title: "Analisi completa",
-                  desc: "Tutte le transazioni essenziali: data, importo, categoria/metodo o tipo entrata e descrizione.",
+                  desc: "Profilo utile all’analisi + dati fAInance dettagliati, incluse transazioni, descrizioni, budget, obiettivi e patrimonio.",
                 },
               ].map(function (opt) {
                 var active = aiDataAccess === opt.id;
@@ -13913,15 +13913,19 @@ export function SettingsPanel() {
                       "/" +
                       day,
                   ],
+                  ...(pid === "free"
+                    ? [
+                        [
+                          "Voce",
+                          limTxt(lim.dailyVoiceEntries) +
+                            plusAd(lim.rewardedExtraVoiceEntries) +
+                            "/" +
+                            day,
+                        ],
+                      ]
+                    : []),
                   [
-                    "Voce",
-                    limTxt(lim.dailyVoiceEntries) +
-                      plusAd(lim.rewardedExtraVoiceEntries) +
-                      "/" +
-                      day,
-                  ],
-                  [
-                    "Assistente vocale",
+                    "Consulente AI",
                     pid === "free" ? L("dal piano Base") : L("incluso"),
                   ],
                   ["Share Progetti", limTxt(lim.shareProjects)],

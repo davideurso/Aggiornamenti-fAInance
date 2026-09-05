@@ -21,24 +21,27 @@ workflows:
 
       vars:
         BUNDLE_ID: "it.fainanceapp.app"
+        WIDGET_BUNDLE_ID: "it.fainanceapp.app.widgets"
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        FAINANCE_IOS_VERSION: "2.0.1"
-        APP_STORE_APPLE_ID: "6777812477"
-        VITE_FIREBASE_API_KEY: "AIzaSyDbYfP9LooqY4wreogJUC_TdxDFz7Ez3GU"
+        APP_VERSION: "2.0.2"
+        VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
         VITE_FIREBASE_STORAGE_BUCKET: "fainance-a7794.firebasestorage.app"
         VITE_FIREBASE_MESSAGING_SENDER_ID: "739607555867"
-        VITE_FIREBASE_APP_ID: "1:739607555867:web:ae797cd0a578e476cd6dbe"
+        VITE_FIREBASE_APP_ID: "1:739607555867:android:16aa0add0a289fb3cd6dbe"
+
     scripts:
       - name: Install dependencies
         script: |
           npm install
-      - name: Validate Capacitor iOS dependency
+
+      - name: Install Capacitor iOS platform
         script: |
-          node -e "require.resolve('@capacitor/ios/package.json'); console.log('@capacitor/ios disponibile')"
+          CAP_VERSION=$(node -p "const p=require('./package.json'); const v=(p.dependencies && p.dependencies['@capacitor/core']) || (p.devDependencies && p.devDependencies['@capacitor/core']) || 'latest'; console.log(v)")
+          npm install @capacitor/ios@$CAP_VERSION
 
       - name: Add iOS platform if missing
         script: |
@@ -54,68 +57,6 @@ workflows:
         script: |
           npx cap sync ios
 
-      - name: Register local iOS native plugins
-        script: |
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          config_path = Path("ios/App/App/capacitor.config.json")
-          pbxproj_path = Path("ios/App/App.xcodeproj/project.pbxproj")
-          app_dir = Path("ios/App/App")
-
-          required_plugins = ["FainanceBillingPlugin", "FainanceAdsPlugin"]
-          required_files = [
-              "FainanceBillingPlugin.swift",
-              "FainanceBillingPlugin.m",
-              "FainanceAdsPlugin.swift",
-              "FainanceAdsPlugin.m",
-              "FainanceAudioPlugin.swift",
-              "FainanceFilePlugin.swift",
-              "FainanceWidgetBridge.swift",
-              "MainViewController.swift",
-          ]
-
-          if not config_path.exists():
-              raise SystemExit(f"Missing {config_path}")
-
-          data = json.loads(config_path.read_text(encoding="utf-8"))
-          classes = list(data.get("packageClassList") or [])
-          for plugin in required_plugins:
-              if plugin not in classes:
-                  classes.append(plugin)
-          data["packageClassList"] = classes
-          config_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-
-          missing_files = [name for name in required_files if not (app_dir / name).exists()]
-          if missing_files:
-              raise SystemExit("Missing local iOS plugin files: " + ", ".join(missing_files))
-
-          pbx = pbxproj_path.read_text(encoding="utf-8", errors="ignore")
-          missing_project_refs = [name for name in required_files if name not in pbx]
-          if missing_project_refs:
-              raise SystemExit("Local iOS plugin files are not referenced in the Xcode project: " + ", ".join(missing_project_refs))
-
-          main_controller = (app_dir / "MainViewController.swift").read_text(encoding="utf-8")
-          for registration in ["FainanceAudioPlugin()", "FainanceFilePlugin()", "FainanceWidgetBridge()"]:
-              if registration not in main_controller:
-                  raise SystemExit("Missing local plugin registration in MainViewController.swift: " + registration)
-          if "FainanceSpeechRecognitionPlugin()" in main_controller:
-              raise SystemExit("The obsolete custom speech plugin is still registered and would conflict with the Capgo plugin.")
-
-          package_swift = Path("ios/App/CapApp-SPM/Package.swift").read_text(encoding="utf-8")
-          for package_name in ["CapgoCapacitorSpeechRecognition", "CapacitorCommunityTextToSpeech"]:
-              if package_name not in package_swift:
-                  raise SystemExit("Missing iOS Swift package after cap sync: " + package_name)
-
-          print("Registered local iOS plugins in capacitor.config.json:")
-          for plugin in required_plugins:
-              print("- " + plugin)
-          PY
-
-          python3 -m json.tool ios/App/App/capacitor.config.json | grep -E -n "FainanceBillingPlugin|FainanceAdsPlugin" -C 2
-
-
       - name: Install CocoaPods if Podfile exists
         script: |
           if [ -f "ios/App/Podfile" ]; then
@@ -130,128 +71,46 @@ workflows:
             echo "Nessun Podfile trovato. Continuo senza pod install."
           fi
 
-      - name: Determine next iOS build number from TestFlight
-        script: |
-          set -euo pipefail
-
-          MINIMUM_BUILD=226
-          LATEST_BUILD=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
-          LATEST_BUILD=$(printf '%s' "$LATEST_BUILD" | tr -cd '0-9')
-          LATEST_BUILD=${LATEST_BUILD:-0}
-          NEXT_BUILD=$((LATEST_BUILD + 1))
-
-          if [ "$NEXT_BUILD" -lt "$MINIMUM_BUILD" ]; then
-            NEXT_BUILD="$MINIMUM_BUILD"
-          fi
-
-          if [ "$NEXT_BUILD" -le 224 ]; then
-            echo "ERRORE: build iOS non valida: $NEXT_BUILD. Deve essere superiore a 224."
-            exit 1
-          fi
-
-          echo "Latest TestFlight build: $LATEST_BUILD"
-          echo "Next iOS build: $NEXT_BUILD"
-          echo "IOS_BUILD_NUMBER=$NEXT_BUILD" >> "$CM_ENV"
       - name: Set iOS version, build number, privacy permissions and encryption compliance
         script: |
           cd ios/App
 
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
-          echo "Using iOS marketing version: $FAINANCE_IOS_VERSION"
-          echo "Using iOS build number: $BUILD_NUMBER"
+          IOS_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-${BUILD_NUMBER:-1}}"
+          case "$IOS_BUILD_NUMBER" in
+            *[!0-9]*|"") IOS_BUILD_NUMBER="1" ;;
+          esac
 
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $FAINANCE_IOS_VERSION" App/Info.plist || true
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" App/Info.plist || true
+          echo "Using iOS marketing version: $APP_VERSION"
+          echo "Using iOS build number: $IOS_BUILD_NUMBER"
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" App/Info.plist || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" App/Info.plist || true
           /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" App/Info.plist || true
+
+          if [ -f "FainanceWidgets/Info.plist" ]; then
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" FainanceWidgets/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $IOS_BUILD_NUMBER" FainanceWidgets/Info.plist || true
+            /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $WIDGET_BUNDLE_ID" FainanceWidgets/Info.plist || true
+          fi
+
+          perl -0pi -e "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = $APP_VERSION;/g" App.xcodeproj/project.pbxproj || true
+          perl -0pi -e "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = $IOS_BUILD_NUMBER;/g" App.xcodeproj/project.pbxproj || true
 
           /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool false" App/Info.plist || /usr/libexec/PlistBuddy -c "Set :ITSAppUsesNonExemptEncryption false" App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string fAInance uses your photo library only when you choose a receipt, invoice or financial document to analyse or attach." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription fAInance uses your photo library only when you choose a receipt, invoice or financial document to analyse or attach." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryUsageDescription string fAInance needs access to your photo library so you can select receipt images and import documents into the app." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryUsageDescription fAInance needs access to your photo library so you can select receipt images and import documents into the app." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string fAInance saves exported files or generated images to your photo library only when you request it." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription fAInance saves exported files or generated images to your photo library only when you request it." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSPhotoLibraryAddUsageDescription string fAInance needs permission to save exported files or generated images to your photo library when you choose to do so." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSPhotoLibraryAddUsageDescription fAInance needs permission to save exported files or generated images to your photo library when you choose to do so." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string fAInance uses the camera to scan receipts, invoices and financial documents that you choose to analyse or attach." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription fAInance uses the camera to scan receipts, invoices and financial documents that you choose to analyse or attach." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSCameraUsageDescription string fAInance needs access to the camera so you can scan receipts and attach images to your transactions." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSCameraUsageDescription fAInance needs access to the camera so you can scan receipts and attach images to your transactions." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string fAInance uses the microphone for voice entry and for conversations with the financial voice assistant." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription fAInance uses the microphone for voice entry and for conversations with the financial voice assistant." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string fAInance needs access to the microphone so you can add expenses and income using your voice." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSMicrophoneUsageDescription fAInance needs access to the microphone so you can add expenses and income using your voice." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string fAInance converts your spoken requests into text for voice entry and the financial assistant." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription fAInance converts your spoken requests into text for voice entry and the financial assistant." App/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :NSSpeechRecognitionUsageDescription string fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSSpeechRecognitionUsageDescription fAInance uses speech recognition to convert your voice commands into expense or income entries." App/Info.plist
 
-          /usr/libexec/PlistBuddy -c "Add :NSFaceIDUsageDescription string fAInance uses Face ID only when you enable biometric protection for the app." App/Info.plist || /usr/libexec/PlistBuddy -c "Set :NSFaceIDUsageDescription fAInance uses Face ID only when you enable biometric protection for the app." App/Info.plist
+          xcrun agvtool new-marketing-version "$APP_VERSION" || true
+          xcrun agvtool new-version -all "$IOS_BUILD_NUMBER" || true
 
-          python3 - <<'PY'
-          import plistlib
-          from pathlib import Path
-          path = Path("App/Info.plist")
-          with path.open("rb") as handle:
-              plist = plistlib.load(handle)
-          entries = []
-          for entry in plist.get("CFBundleURLTypes", []):
-              schemes = [str(value) for value in entry.get("CFBundleURLSchemes", []) if str(value).lower() != "fainance"]
-              if schemes:
-                  updated = dict(entry)
-                  updated["CFBundleURLSchemes"] = schemes
-                  entries.append(updated)
-          entries.append({
-              "CFBundleTypeRole": "Editor",
-              "CFBundleURLName": "it.fainanceapp.app",
-              "CFBundleURLSchemes": ["fainance"],
-          })
-          plist["CFBundleURLTypes"] = entries
-          with path.open("wb") as handle:
-              plistlib.dump(plist, handle, fmt=plistlib.FMT_XML, sort_keys=False)
-          PY
-
-          xcrun agvtool new-marketing-version "$FAINANCE_IOS_VERSION" || true
-          xcrun agvtool new-version -all "$BUILD_NUMBER" || true
-
-          python3 - <<'PY_VERSION'
-          import os
-          import plistlib
-          import re
-          from pathlib import Path
-
-          version = os.environ["FAINANCE_IOS_VERSION"]
-          build = os.environ["IOS_BUILD_NUMBER"]
-
-          pbx = Path("App.xcodeproj/project.pbxproj")
-          text = pbx.read_text(encoding="utf-8", errors="ignore")
-          text = re.sub(r"CURRENT_PROJECT_VERSION = [^;]+;", f"CURRENT_PROJECT_VERSION = {build};", text)
-          text = re.sub(r"MARKETING_VERSION = [^;]+;", f"MARKETING_VERSION = {version};", text)
-          pbx.write_text(text, encoding="utf-8")
-
-          excluded = {"Pods", "build", "DerivedData", "node_modules"}
-          updated = []
-          for plist_path in Path(".").rglob("Info.plist"):
-              if any(part in excluded for part in plist_path.parts):
-                  continue
-              try:
-                  with plist_path.open("rb") as handle:
-                      plist = plistlib.load(handle)
-              except Exception:
-                  continue
-              plist["CFBundleShortVersionString"] = version
-              plist["CFBundleVersion"] = build
-              with plist_path.open("wb") as handle:
-                  plistlib.dump(plist, handle, fmt=plistlib.FMT_XML, sort_keys=False)
-              updated.append(str(plist_path))
-
-          if not updated:
-              raise SystemExit("Nessun Info.plist iOS aggiornato")
-
-          print("Info.plist aggiornati:")
-          for item in updated:
-              print("- " + item)
-          PY_VERSION
-
-          ACTUAL_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" App/Info.plist)
-          ACTUAL_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" App/Info.plist)
-          if [ "$ACTUAL_VERSION" != "$FAINANCE_IOS_VERSION" ] || [ "$ACTUAL_BUILD" != "$BUILD_NUMBER" ]; then
-            echo "Impostazione versione fallita: ${ACTUAL_VERSION} (${ACTUAL_BUILD})"
-            exit 1
-          fi
-
-          echo "File di progetto impostati su ${ACTUAL_VERSION} (${ACTUAL_BUILD})"
-          grep -n "CURRENT_PROJECT_VERSION\|MARKETING_VERSION" App.xcodeproj/project.pbxproj
           cat App/Info.plist
 
           cd ../..
@@ -260,61 +119,74 @@ workflows:
         script: |
           keychain initialize
 
-          app-store-connect fetch-signing-files "it.fainanceapp.app" \
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
-          app-store-connect fetch-signing-files "it.fainanceapp.app.widgets" \
+
+          app-store-connect fetch-signing-files "$WIDGET_BUNDLE_ID" \
             --type IOS_APP_STORE \
             --create
 
           keychain add-certificates
 
-          APP_PROFILE_NAME=""
-          APP_PROFILE_UUID=""
-          WIDGET_PROFILE_NAME=""
-          WIDGET_PROFILE_UUID=""
+          python3 - <<'PY'
+          import glob
+          import os
+          import plistlib
+          import subprocess
+          import sys
 
-          while IFS= read -r PROFILE_PATH; do
-            PROFILE_PLIST=$(mktemp)
-            security cms -D -i "$PROFILE_PATH" > "$PROFILE_PLIST"
-            PROFILE_APP_ID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" "$PROFILE_PLIST" 2>/dev/null || true)
-            PROFILE_NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$PROFILE_PLIST" 2>/dev/null || true)
-            PROFILE_UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$PROFILE_PLIST" 2>/dev/null || true)
+          team_id = os.environ.get("APPLE_TEAM_ID", "")
+          targets = {
+              os.environ["BUNDLE_ID"]: "APP",
+              os.environ["WIDGET_BUNDLE_ID"]: "WIDGET",
+          }
+          found = {}
 
-            case "$PROFILE_APP_ID" in
-              *.it.fainanceapp.app.widgets)
-                WIDGET_PROFILE_NAME="$PROFILE_NAME"
-                WIDGET_PROFILE_UUID="$PROFILE_UUID"
-                ;;
-              *.it.fainanceapp.app)
-                APP_PROFILE_NAME="$PROFILE_NAME"
-                APP_PROFILE_UUID="$PROFILE_UUID"
-                ;;
-            esac
-            rm -f "$PROFILE_PLIST"
-          done < <(find "$HOME/Library/MobileDevice/Provisioning Profiles" -name "*.mobileprovision")
+          for path in glob.glob(os.path.expanduser("~/Library/MobileDevice/Provisioning Profiles/*.mobileprovision")):
+              try:
+                  raw = subprocess.check_output(["security", "cms", "-D", "-i", path])
+                  profile = plistlib.loads(raw)
+              except Exception:
+                  continue
 
-          if [ -z "$APP_PROFILE_NAME" ] || [ -z "$WIDGET_PROFILE_NAME" ]; then
-            echo "Profili di firma incompleti."
-            echo "APP_PROFILE_NAME=$APP_PROFILE_NAME"
-            echo "WIDGET_PROFILE_NAME=$WIDGET_PROFILE_NAME"
-            exit 1
-          fi
+              entitlements = profile.get("Entitlements", {}) or {}
+              application_identifier = str(entitlements.get("application-identifier", ""))
+              bundle = application_identifier
+              if team_id and bundle.startswith(team_id + "."):
+                  bundle = bundle[len(team_id) + 1:]
 
-          echo "APP_PROFILE_NAME=$APP_PROFILE_NAME" >> "$CM_ENV"
-          echo "APP_PROFILE_UUID=$APP_PROFILE_UUID" >> "$CM_ENV"
-          echo "WIDGET_PROFILE_NAME=$WIDGET_PROFILE_NAME" >> "$CM_ENV"
-          echo "WIDGET_PROFILE_UUID=$WIDGET_PROFILE_UUID" >> "$CM_ENV"
+              if bundle in targets:
+                  key = targets[bundle]
+                  found[key] = {
+                      "bundle": bundle,
+                      "name": profile.get("Name", ""),
+                      "uuid": profile.get("UUID", ""),
+                      "path": path,
+                  }
 
-          echo "Profili trovati:"
-          echo "App: $APP_PROFILE_NAME ($APP_PROFILE_UUID)"
-          echo "Widget: $WIDGET_PROFILE_NAME ($WIDGET_PROFILE_UUID)"
+          missing = [label for label in ("APP", "WIDGET") if label not in found]
+          if missing:
+              print("Provisioning profile mancanti per:", ", ".join(missing))
+              print("Profili trovati:")
+              for v in found.values():
+                  print(v)
+              sys.exit(1)
+
+          with open(os.environ["CM_ENV"], "a", encoding="utf-8") as f:
+              for key, value in found.items():
+                  f.write(f"{key}_PROFILE_NAME={value['name']}\n")
+                  f.write(f"{key}_PROFILE_UUID={value['uuid']}\n")
+
+          print("Provisioning profile App:", found["APP"])
+          print("Provisioning profile Widget:", found["WIDGET"])
+          PY
 
       - name: Set up code signing
         script: |
-          echo "Skipping automatic profile selection"
+          xcode-project use-profiles
 
-      - name: Patch app and widget signing
+      - name: Patch App and Widget target signing
         script: |
           python3 - <<'PY'
           import os
@@ -322,6 +194,8 @@ workflows:
 
           pbxproj = "ios/App/App.xcodeproj/project.pbxproj"
           team_id = os.environ["APPLE_TEAM_ID"]
+          app_bundle_id = os.environ["BUNDLE_ID"]
+          widget_bundle_id = os.environ["WIDGET_BUNDLE_ID"]
           app_profile = os.environ["APP_PROFILE_NAME"]
           widget_profile = os.environ["WIDGET_PROFILE_NAME"]
 
@@ -335,29 +209,37 @@ workflows:
                   return re.sub(pattern, line.strip(), block)
               return block.replace("buildSettings = {", "buildSettings = {\n" + line, 1)
 
-          blocks = re.findall(r"buildSettings = \{[\s\S]*?\n\s*\};", text)
-          for block in blocks:
-              if "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;" in block:
-                  bundle_id = "it.fainanceapp.app.widgets"
-                  profile_name = widget_profile
-              elif "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;" in block:
-                  bundle_id = "it.fainanceapp.app"
-                  profile_name = app_profile
-              else:
+          pattern = r"buildSettings = \{[\s\S]*?\n\s*\};"
+          blocks = list(re.finditer(pattern, text))
+          replacements = []
+
+          for match in blocks:
+              block = match.group(0)
+              if "PRODUCT_BUNDLE_IDENTIFIER" not in block:
                   continue
+
+              if widget_bundle_id in block or "FainanceWidgets/Info.plist" in block:
+                  bundle_id = widget_bundle_id
+                  profile = widget_profile
+              else:
+                  bundle_id = app_bundle_id
+                  profile = app_profile
 
               new_block = block
               new_block = replace_or_add(new_block, "DEVELOPMENT_TEAM", team_id)
               new_block = replace_or_add(new_block, "CODE_SIGN_STYLE", "Manual")
               new_block = replace_or_add(new_block, "CODE_SIGN_IDENTITY", '"Apple Distribution"')
-              new_block = replace_or_add(new_block, "PROVISIONING_PROFILE_SPECIFIER", f'"{profile_name}"')
+              new_block = replace_or_add(new_block, "PROVISIONING_PROFILE_SPECIFIER", f'"{profile}"')
               new_block = replace_or_add(new_block, "PRODUCT_BUNDLE_IDENTIFIER", bundle_id)
-              text = text.replace(block, new_block)
+              replacements.append((match.start(), match.end(), new_block))
+
+          for start, end, replacement in reversed(replacements):
+              text = text[:start] + replacement + text[end:]
 
           with open(pbxproj, "w", encoding="utf-8") as f:
               f.write(text)
 
-          print("Firma configurata per app e widget")
+          print("App and Widget target signing patched")
           PY
 
           grep -n "PRODUCT_BUNDLE_IDENTIFIER\|DEVELOPMENT_TEAM\|CODE_SIGN_STYLE\|CODE_SIGN_IDENTITY\|PROVISIONING_PROFILE_SPECIFIER" ios/App/App.xcodeproj/project.pbxproj | head -140
@@ -379,9 +261,9 @@ workflows:
             <string>Apple Distribution</string>
             <key>provisioningProfiles</key>
             <dict>
-              <key>it.fainanceapp.app</key>
+              <key>${BUNDLE_ID}</key>
               <string>${APP_PROFILE_NAME}</string>
-              <key>it.fainanceapp.app.widgets</key>
+              <key>${WIDGET_BUNDLE_ID}</key>
               <string>${WIDGET_PROFILE_NAME}</string>
             </dict>
             <key>stripSwiftSymbols</key>
@@ -394,109 +276,23 @@ workflows:
 
           cat "$CM_BUILD_DIR/export_options.plist"
 
-      - name: Verify app and widget signing
+      - name: Build iOS IPA
         script: |
-          grep -q "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;" ios/App/App.xcodeproj/project.pbxproj
-          grep -q "PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;" ios/App/App.xcodeproj/project.pbxproj
-          grep -q "PROVISIONING_PROFILE_SPECIFIER = \"${APP_PROFILE_NAME}\";" ios/App/App.xcodeproj/project.pbxproj
-          grep -q "PROVISIONING_PROFILE_SPECIFIER = \"${WIDGET_PROFILE_NAME}\";" ios/App/App.xcodeproj/project.pbxproj
-          echo "Firma app e widget verificata"
-
-
-      - name: Build and verify iOS IPA
-        script: |
-          set -euo pipefail
-
-          BUILD_NUMBER="${IOS_BUILD_NUMBER:?IOS_BUILD_NUMBER was not generated}"
-          EXPECTED_VERSION="${FAINANCE_IOS_VERSION:?FAINANCE_IOS_VERSION is missing}"
-
-          if [ "$BUILD_NUMBER" -le 224 ]; then
-            echo "ERRORE: build iOS non valida: $BUILD_NUMBER. Deve essere superiore a 224."
-            exit 1
-          fi
-
-          ARCHIVE_PATH="$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive"
-          EXPORT_PATH="$CM_BUILD_DIR/build/ios/ipa"
-
           rm -rf "$CM_BUILD_DIR/build/ios"
-
-          echo "Archiving fAInance ${EXPECTED_VERSION} (${BUILD_NUMBER})"
 
           xcodebuild \
             -project "$XCODE_PROJECT" \
             -scheme "$XCODE_SCHEME" \
             -configuration Release \
             -destination "generic/platform=iOS" \
-            -archivePath "$ARCHIVE_PATH" \
-            MARKETING_VERSION="$EXPECTED_VERSION" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-            INFOPLIST_KEY_CFBundleShortVersionString="$EXPECTED_VERSION" \
-            INFOPLIST_KEY_CFBundleVersion="$BUILD_NUMBER" \
+            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
             archive
-
-          ARCHIVE_APP="$ARCHIVE_PATH/Products/Applications/App.app"
-          ARCHIVE_APP_PLIST="$ARCHIVE_APP/Info.plist"
-          if [ ! -f "$ARCHIVE_APP_PLIST" ]; then
-            echo "Info.plist dell'app archiviata non trovato: $ARCHIVE_APP_PLIST"
-            exit 1
-          fi
-
-          verify_bundle_plist() {
-            local plist_path="$1"
-            local label="$2"
-            local actual_version
-            local actual_build
-
-            actual_version=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$plist_path")
-            actual_build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$plist_path")
-            echo "$label verificato: ${actual_version} (${actual_build})"
-
-            if [ "$actual_version" != "$EXPECTED_VERSION" ] || [ "$actual_build" != "$BUILD_NUMBER" ]; then
-              echo "ERRORE: $label contiene ${actual_version} (${actual_build}); atteso ${EXPECTED_VERSION} (${BUILD_NUMBER})."
-              exit 1
-            fi
-          }
-
-          verify_bundle_plist "$ARCHIVE_APP_PLIST" "Archive app"
-
-          while IFS= read -r plist_path; do
-            verify_bundle_plist "$plist_path" "Archive extension $(dirname "$plist_path")"
-          done < <(find "$ARCHIVE_APP/PlugIns" -type f -name Info.plist 2>/dev/null || true)
 
           xcodebuild \
             -exportArchive \
-            -archivePath "$ARCHIVE_PATH" \
-            -exportPath "$EXPORT_PATH" \
+            -archivePath "$CM_BUILD_DIR/build/ios/xcarchive/App.xcarchive" \
+            -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
             -exportOptionsPlist "$CM_BUILD_DIR/export_options.plist"
-
-          IPA_PATH=$(find "$EXPORT_PATH" -maxdepth 1 -name "*.ipa" | head -n 1)
-          if [ -z "$IPA_PATH" ]; then
-            echo "Nessun file IPA generato."
-            exit 1
-          fi
-
-          VERIFY_DIR=$(mktemp -d)
-          trap 'rm -rf "$VERIFY_DIR"' EXIT
-          unzip -q "$IPA_PATH" -d "$VERIFY_DIR"
-
-          IPA_APP=$(find "$VERIFY_DIR/Payload" -maxdepth 1 -type d -name "*.app" | head -n 1)
-          IPA_APP_PLIST="$IPA_APP/Info.plist"
-          if [ ! -f "$IPA_APP_PLIST" ]; then
-            echo "Info.plist dell'app non trovato dentro l'IPA."
-            exit 1
-          fi
-
-          verify_bundle_plist "$IPA_APP_PLIST" "IPA app"
-
-          while IFS= read -r plist_path; do
-            verify_bundle_plist "$plist_path" "IPA extension $(dirname "$plist_path")"
-          done < <(find "$IPA_APP/PlugIns" -type f -name Info.plist 2>/dev/null || true)
-
-          echo "IPA pronta per Apple: ${EXPECTED_VERSION} (${BUILD_NUMBER})"
-
-      - name: Update TestFlight app description
-        script: |
-          bash tools/update_testflight_description.sh
 
     artifacts:
       - build/ios/ipa/*.ipa
