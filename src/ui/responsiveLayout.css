@@ -1,0 +1,113 @@
+/* Stable mobile composition.
+   Financial controls keep the same relative position on narrow Android viewports;
+   only spacing and typography become denser. */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+.fainance-mobile-shell {
+  width: 100%;
+  min-width: 0;
+  container-type: inline-size;
+}
+.fainance-summary-values {
+  align-items: center;
+}
+.fainance-summary-values > div {
+  min-width: 0;
+}
+.fainance-summary-values > div > div {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.fainance-mobile-content {
+  min-width: 0;
+  scroll-padding-bottom: 24px;
+}
+.fainance-mobile-nav > button {
+  min-width: 0;
+  text-align: center;
+}
+.fainance-entry-form {
+  min-width: 0;
+  container-type: inline-size;
+}
+.fainance-entry-form input,
+.fainance-entry-form select,
+.fainance-entry-form textarea {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+/* Categoria e metodo restano sempre affiancati. */
+.fainance-entry-fields {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+}
+.fainance-entry-fields > div {
+  min-width: 0;
+}
+/* Calcolatrice, importo e Rateizza restano sempre sulla stessa riga. */
+.fainance-entry-amount {
+  grid-template-columns: clamp(36px, 11vw, 44px) minmax(0, 1fr) clamp(50px, 15vw, 58px) !important;
+}
+.fainance-entry-amount-main,
+.fainance-entry-instalment {
+  min-width: 0;
+}
+.fainance-entry-amount-value {
+  flex-wrap: nowrap !important;
+  min-width: 0;
+}
+.fainance-entry-instalment {
+  text-align: center;
+}
+
+@container (max-width: 360px) {
+  .fainance-mobile-summary {
+    padding: 8px 10px 7px !important;
+  }
+  .fainance-summary-values {
+    padding-right: 82px !important;
+    column-gap: 4px !important;
+  }
+  .fainance-summary-values > div > div:first-child {
+    font-size: 11.7px !important;
+  }
+  .fainance-summary-values > div > div:last-child {
+    font-size: 18.7px !important;
+  }
+  .fainance-entry-form {
+    gap: 8px !important;
+  }
+  .fainance-entry-amount {
+    gap: 4px !important;
+    padding-left: 9px !important;
+    padding-right: 9px !important;
+  }
+  .fainance-entry-fields {
+    gap: 6px !important;
+  }
+  .fainance-entry-fields select {
+    font-size: 13.6px !important;
+  }
+}
+
+@container (max-width: 320px) {
+  .fainance-summary-values {
+    padding-right: 78px !important;
+    column-gap: 2px !important;
+  }
+  .fainance-summary-values > div > div:last-child {
+    font-size: 17.7px !important;
+  }
+  .fainance-entry-amount {
+    grid-template-columns: 34px minmax(0, 1fr) 48px !important;
+    gap: 3px !important;
+  }
+  .fainance-entry-fields {
+    gap: 5px !important;
+  }
+  .fainance-entry-fields select {
+    font-size: 13px !important;
+  }
+}
