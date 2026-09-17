@@ -286,11 +286,10 @@ export function NotificationCenter({
   const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
   const primary = ctx.confirmButtonColor || "#378ADD";
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
-  const hideFloatingActions = !!ctx.isMobile && ctx.tab === "consulenteAI" && ctx.aiTab === "chat";
+  // Le azioni globali restano disponibili anche nella chat dell'Agente AI.
+  const hideFloatingActions = false;
   const actionTop = ctx.isMobile
-    ? ctx.showAppSummaryHeader && !(ctx.tab === "consulenteAI" && ctx.aiTab === "chat")
-      ? "max(32px,calc(env(safe-area-inset-top,0px) + 8px))"
-      : "max(18px,calc(env(safe-area-inset-top,0px) + 8px))"
+    ? "calc(env(safe-area-inset-top,0px) + 9px)"
     : 14;
   if (!userId) return null;
 

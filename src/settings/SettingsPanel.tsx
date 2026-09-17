@@ -1,4 +1,10 @@
+import { AutomaticRulesPanel } from '../sections/AutomaticRulesPanel';
+import { rulesText } from '../i18n/automaticRulesTranslations';
 import { useState, useEffect, useRef } from "react";
+import { migrateFinanceEvolution, mergeFinanceEvolution } from '../data/financeEvolution';
+import { periodForDate, periodLabel } from '../finance/periodEngine';
+import { generalPeriodTranslation } from '../i18n/generalPeriodTranslations';
+import { financeMessage } from '../i18n/financeMessages';
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import {
   useApp,
@@ -44,6 +50,7 @@ import {
   EmojiPicker,
   FAInanceLogo,
   FainanceIcon,
+  FainanceInfoPopover,
   ImportData,
   PatrimonioSettingsPanel,
   PopupCloseButton,
@@ -175,6 +182,9 @@ function StableImportDataAccordionCard(props: any) {
 
 export function SettingsPanel() {
   var _c: any = useApp();
+  // Backups serialize the original fallback plus the separately versioned Budget.
+  var budgetPlan = _c.legacyBudgetPlan;
+  var setBudgetPlan = _c.setLegacyBudgetPlan;
   var {
     mobileNavOrder,
     mobileMenuOrder,
@@ -226,7 +236,8 @@ export function SettingsPanel() {
     borderC,
     btnRadius,
     btnStyle,
-    budgetPlan,
+    financeEvolution,
+    setFinanceEvolution,
     canonicalShoppingUnitName,
     cardBg,
     catOrder,
@@ -240,6 +251,8 @@ export function SettingsPanel() {
     customNotifs,
     dark,
     dateFmt,
+    balancePeriodMode,
+    financialMonthStartDay,
     debtCredits,
     defaultExpenseArea,
     defaultExpenseCat,
@@ -319,7 +332,6 @@ export function SettingsPanel() {
     setBiometricLockMessage,
     setBiometricLockTimeout,
     setBtnStyle,
-    setBudgetPlan,
     setCatOrder,
     setCatSortMode,
     setCats,
@@ -329,6 +341,8 @@ export function SettingsPanel() {
     setCustomIncomeTypes,
     setCustomNotifs,
     setDateFmt,
+    setBalancePeriodMode,
+    setFinancialMonthStartDay,
     setDebtCredits,
     setDefaultExpenseArea,
     setDefaultExpenseCat,
@@ -387,6 +401,8 @@ export function SettingsPanel() {
     setSettingsPage,
     setSettingsValuesTab,
     setShareProjects,
+    setShareCategoryMappings,
+    setShareDefaultCategoryId,
     setShareReceiptUploads,
     setShoppingAreaColors,
     setShoppingAreaIcons,
@@ -406,6 +422,7 @@ export function SettingsPanel() {
     setShowSecInBudget,
     setShowSecInHistory,
     setShowSecInPatrimonio,
+    setShowPatrimonioDecimals,
     setShowSecInStats,
     setShowShareInHistory,
     setStatsView,
@@ -466,6 +483,8 @@ export function SettingsPanel() {
     settingsSections,
     settingsValuesTab,
     shareProjects,
+    shareCategoryMappings,
+    shareDefaultCategoryId,
     shareSelectedProjectId,
     shoppingAreaColors,
     shoppingAreaIcons,
@@ -483,6 +502,7 @@ export function SettingsPanel() {
     showSecInBudget,
     showSecInHistory,
     showSecInPatrimonio,
+    showPatrimonioDecimals,
     showSecInStats,
     showShareInHistory,
     subC,
@@ -2346,7 +2366,7 @@ export function SettingsPanel() {
     return translateUiRuntimeText(raw);
   }
   function L(s) {
-    return translateWidgetSettingsText(s);
+    return generalPeriodTranslation(s,lang) ?? translateWidgetSettingsText(s);
   }
   function safeWidgetAllowed(kind) {
     try {
@@ -2414,9 +2434,11 @@ export function SettingsPanel() {
       shopping_settings_units: "shopping_settings",
       patrimonio_settings: "sections",
       history_settings: "sections",
+      share_settings: "sections",
       patrimonio_areas_settings: "patrimonio_settings",
       patrimonio_entries_settings: "patrimonio_settings",
       patrimonio_mode_settings: "patrimonio_settings",
+      patrimonio_display_settings: "patrimonio_settings",
       sections_income_areas: "sections_income",
       sections_income_categories: "sections_income",
       sections_expense_areas: "sections_expense",
@@ -2443,14 +2465,14 @@ export function SettingsPanel() {
       sections_expense_categories: "🗂️", sections_expense_methods: "💳", shopping_settings: "🛒",
       shopping_settings_lists: "🧺", shopping_settings_areas: "📂", shopping_settings_units: "⚖️",
       debt_credits_settings: "📉", notifications: "🔔", patrimonio_settings: "💎",
-      patrimonio_areas_settings: "📂", patrimonio_entries_settings: "💎", patrimonio_mode_settings: "⚙️",
+      patrimonio_areas_settings: "📂", patrimonio_entries_settings: "💎", patrimonio_mode_settings: "⚙️", patrimonio_display_settings: "👁️",
       appearance: "🎨", appearance_app: "🎨", appearance_nav: "📱", appearance_icons: "🖼️",
       appearance_widget: "🧩", appearance_widget_quick: "⚡", appearance_widget_note: "📝",
       appearance_widget_goal: "🎯", appearance_widget_shopping_list: "🧺", appearance_widget_fidelity: "💳",
       appearance_widget_debt_credits: "📉", appearance_widget_share: "🤝", history_settings: "📚",
       data: "💾", delete: "🗑️", plans_settings: "💎", info_support: "🗂️", support_info: "💬",
       support: "💬", info: "ℹ️", terms_conditions: "📄", privacy_policy: "🔐", values: "🗂️",
-      admin_center: "🛡️"
+      admin_center: "🛡️", automatic_rules: "⚙️", share_settings: "🤝"
     };
     return icons[String(page || "")] || "⚙️";
   }
@@ -2522,6 +2544,20 @@ export function SettingsPanel() {
       >
         {txt}
       </div>
+    );
+  }
+  function SettingInfo({ id, text }) {
+    return (
+      <FainanceInfoPopover
+        label={L("Informazioni")}
+        body={L(text)}
+        size={19}
+        popupWidth={280}
+        popupOffsetY={27}
+        popupAlign="right"
+        buttonStyle={{ fontSize: 10 }}
+        popupStyle={{ fontSize: 11, lineHeight: 1.4 }}
+      />
     );
   }
   function LockedFeatureCard({ icon, title, message }) {
@@ -2667,7 +2703,7 @@ export function SettingsPanel() {
         </div>
       </div>
     );
-  function Segmented({ items, value, onChange, columns }) {
+  function Segmented({ items, value, onChange, columns }: {items:any[];value:any;onChange:any;columns?:number}) {
     var cols =
       Number(columns) ||
       (isMobile && items.length > 2 ? 2 : Math.max(1, items.length));
@@ -6162,7 +6198,7 @@ export function SettingsPanel() {
         : activeMethods;
     return (
       <div>
-        <PageHeader title="Uscite / Metodi di pagamento" />
+        <PageHeader title="Uscite / Pagamenti" />
         <div
           style={{
             background: cardBg,
@@ -6172,7 +6208,7 @@ export function SettingsPanel() {
           }}
         >
           <SettingHint>
-            Gestisci metodi di pagamento: lista, riordino e default.
+            Gestisci pagamenti: lista, riordino e default.
           </SettingHint>
           <Segmented
             items={[
@@ -6193,7 +6229,7 @@ export function SettingsPanel() {
               <SettingsList
                 items={methods}
                 setItems={guardedSetter(setMethods, "base")}
-                label="Aggiungi metodo di pagamento"
+                label="Aggiungi pagamento"
                 showIcon
                 showGroup
                 groupList={methodGroups}
@@ -6690,6 +6726,15 @@ export function SettingsPanel() {
       </div>
     );
   }
+
+  const generalPeriod = _c.financeEvolution.period;
+  const [pendingBalancePeriodMode,setPendingBalancePeriodMode] = useState(generalPeriod.mode);
+  const [pendingFinancialMonthStartDay,setPendingFinancialMonthStartDay] = useState(generalPeriod.mode === 'financial' ? generalPeriod.startDay : 27);
+  useEffect(()=>{setPendingBalancePeriodMode(generalPeriod.mode);setPendingFinancialMonthStartDay(generalPeriod.mode === 'financial' ? generalPeriod.startDay : 27);},[generalPeriod.mode,generalPeriod.startDay]);
+  function balancePeriodPreview() { return periodForDate(new Date(),{mode:pendingBalancePeriodMode,startDay:pendingFinancialMonthStartDay}); }
+  function balancePeriodPreviewLabel(preview) { return periodLabel(preview.key,lang || 'it'); }
+  function localIsoDate(value) { return value; }
+  function saveGeneralPeriod() { _c.setFinanceEvolution(previous=>({...previous,period:{mode:pendingBalancePeriodMode,startDay:pendingBalancePeriodMode==='calendar'?1:pendingFinancialMonthStartDay},periodIntroductionSeen:true})); }
   var [pendingLang, setPendingLang] = useState(lang);
   useEffect(
     function () {
@@ -6698,6 +6743,7 @@ export function SettingsPanel() {
     [lang]
   );
   if (!settingsPage) return <SettingsMenu />;
+  if (settingsPage === "automatic_rules") return <><PageHeader title={rulesText(lang,"title")}/><AutomaticRulesPanel/></>;
   if (settingsPage === "admin_center") {
     if (!canOpenAdminCenter) {
       return (
@@ -6754,7 +6800,7 @@ export function SettingsPanel() {
           <div style={{ background: dark ? "linear-gradient(145deg,#27253D,#313050)" : "linear-gradient(145deg,#FFFFFF,#F3F0FF)", border: "1px solid " + (dark ? "#4C496A" : "#D9D5FF"), borderRadius: 18, padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <div><div style={{ fontSize: 12, color: subC, marginBottom: 4 }}>{L("Piano Attuale")}</div><div style={{ fontSize: 18, fontWeight: 900, color: textC }}>💎 {planLabel(currentPlan, lang)}</div></div>
-              <span style={{ fontSize: 11, fontWeight: 900, borderRadius: 999, padding: "4px 10px", background: dark ? "#393552" : "#EEEBFF", color: dark ? "#D9D5FF" : "#534AB7" }}>{planLabel(currentPlan, lang)}</span>
+              <span style={{ minHeight: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontSize: 11, fontWeight: 900, borderRadius: 999, padding: "0 10px", background: dark ? "#393552" : "#EEEBFF", color: dark ? "#D9D5FF" : "#534AB7" }}>{planLabel(currentPlan, lang)}</span>
             </div>
             <div style={{ fontSize: 12, color: subC, lineHeight: 1.45, margin: "10px 0 12px" }}>{L("Consulta il tuo piano, confronta le funzionalità disponibili ed esegui l’upgrade quando vuoi.")}</div>
             <Btn onClick={function(){ setSettingsPage("plans_settings"); }} style={{ width: "100%", padding: 11 }}>{L("Gestisci piano e upgrade")}</Btn>
@@ -7189,13 +7235,14 @@ export function SettingsPanel() {
               flexDirection: "column",
               gap: 0,
               borderRadius: 14,
-              overflow: "hidden",
+              overflow: "visible",
               border: "1px solid " + borderC,
             }}
           >
             {[
               {
                 label: "🌐 Lingua",
+                info: "La lingua viene applicata salvando e ricaricando l’app.",
                 el: (
                   <div>
                     <select
@@ -7237,11 +7284,7 @@ export function SettingsPanel() {
                     >
                       {L("Salva lingua")}
                     </Btn>
-                    <div style={{ fontSize: 11, color: subC, marginTop: 6 }}>
-                      {L(
-                        "La lingua viene applicata salvando e ricaricando l’app."
-                      )}
-                    </div>
+
                   </div>
                 ),
               },
@@ -7286,19 +7329,29 @@ export function SettingsPanel() {
                   style={{
                     background: cardBg,
                     padding: "16px 20px",
+                    borderRadius:
+                      i === 0
+                        ? "13px 13px 0 0"
+                        : i === arr.length - 1
+                        ? "0 0 13px 13px"
+                        : 0,
                     borderBottom:
                       i < arr.length - 1 ? "1px solid " + borderC : "none",
                   }}
                 >
                   <div
                     style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
                       fontSize: 13,
                       fontWeight: 600,
                       color: textC,
                       marginBottom: 8,
                     }}
                   >
-                    {L(item.label)}
+                    <span>{L(item.label)}</span>
+                    {item.info && <SettingInfo id={"general_" + i} text={item.info} />}
                   </div>
                   {item.el}
                 </div>
@@ -7316,18 +7369,21 @@ export function SettingsPanel() {
           >
             <div
               style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 7,
                 fontSize: 14,
                 fontWeight: 700,
                 color: textC,
-                marginBottom: 4,
+                marginBottom: 12,
               }}
             >
-              💱 {L("Valute")}
+              <span>💱 {L("Valute")}</span>
+              <SettingInfo
+                id="general_currencies"
+                text="Gestisci valuta principale e valuta secondaria con ricerca tra tutte le valute disponibili."
+              />
             </div>
-            <SettingHint>
-              Gestisci valuta principale e valuta secondaria con ricerca tra
-              tutte le valute disponibili.
-            </SettingHint>
             <div
               style={{
                 display: "grid",
@@ -7517,31 +7573,129 @@ export function SettingsPanel() {
             <div
               style={{
                 fontSize: 14,
-                fontWeight: 700,
+                fontWeight: 800,
                 color: textC,
-                marginBottom: 4,
+                marginBottom: 14,
               }}
             >
-              📊 {L("Metriche")}
+              📊 {L("Metriche e periodo di bilancio")}
             </div>
-            <SettingHint>
-              {translateUiRuntimeText("Saldo home e visualizzazione valori.")}
-            </SettingHint>
-            <div style={{ marginTop: 12, marginBottom: 14 }}>
+
+            <div>
               <div
                 style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
                   fontSize: 13,
-                  fontWeight: 600,
+                  fontWeight: 700,
                   color: textC,
                   marginBottom: 6,
                 }}
               >
-                🏠 {L("Saldo Home")}
+                <span>{L("Tipo di periodo")}</span>
+                <SettingInfo
+                  id="general_balance_period_type"
+                  text="Il Mese solare va dal primo all’ultimo giorno del mese. Il Mese finanziario parte dal giorno che scegli qui sotto, utile ad esempio per far coincidere il periodo con l’accredito dello stipendio. Se quel giorno non esiste in un mese, viene usato l’ultimo giorno disponibile."
+                />
+              </div>
+              <select
+                value={pendingBalancePeriodMode}
+                onChange={function (e) {
+                  setPendingBalancePeriodMode(e.target.value === "financial" ? "financial" : "calendar");
+                }}
+                style={{ ...sinp, width: "100%" }}
+              >
+                <option value="calendar">{L("Mese solare")}</option>
+                <option value="financial">{L("Mese finanziario")}</option>
+              </select>
+            </div>
+
+            {pendingBalancePeriodMode === "financial" && (
+              <div style={{ marginTop: 12 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: textC,
+                    marginBottom: 6,
+                  }}
+                >
+                  {L("Giorno di inizio")}
+                </div>
+                <select
+                  value={pendingFinancialMonthStartDay}
+                  onChange={function (e) {
+                    setPendingFinancialMonthStartDay(Math.max(1, Math.min(31, Number(e.target.value) || 1)));
+                  }}
+                  style={{ ...sinp, width: "100%" }}
+                >
+                  {Array.from({ length: 31 }, function (_, i) { return i + 1; }).map(function (day) {
+                    return <option key={day} value={day}>{day}</option>;
+                  })}
+                </select>
+              </div>
+            )}
+
+            {(() => {
+              var preview = balancePeriodPreview();
+              return (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: "9px 11px",
+                    borderRadius: 10,
+                    background: dark ? "#252535" : "#F7F7FA",
+                    border: "1px solid " + borderC,
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 850, color: textC, textTransform: "capitalize" }}>
+                    {balancePeriodPreviewLabel(preview)}
+                  </div>
+                  <div style={{ fontSize: 11, color: subC, marginTop: 2 }}>
+                    {localIsoDate(preview.start)} → {localIsoDate(preview.end)}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <Btn
+              onClick={function () {
+                saveGeneralPeriod();
+                setToast({ text: L("Periodo di bilancio aggiornato"), type: "success", icon: "✅" });
+              }}
+              bg={confirmButtonColor}
+              color="#fff"
+              disabled={false}
+              style={{ width: "100%", padding: 10, marginTop: 10 }}
+            >
+              {L("Salva periodo")}
+            </Btn>
+
+            <div style={{ height: 1, background: borderC, margin: "16px 0 14px" }} />
+
+            <div style={{ marginBottom: 2 }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: textC,
+                  marginBottom: 7,
+                }}
+              >
+                <span>🏠 {L("Saldi")}</span>
+                <SettingInfo
+                  id="general_balances"
+                  text="Reale mostra entrate, uscite e saldo usando gli importi effettivamente registrati nel periodo. Rateizzato distribuisce invece nel tempo le operazioni contrassegnate come rateizzate, mostrando nel periodo solo la quota di competenza prevista dalla rateizzazione."
+                />
               </div>
               <Segmented
                 items={[
-                  { id: "reale", label: "Reale" },
-                  { id: "rateizzato", label: "Rateizzato" },
+                  { id: "reale", label: L("Reale") },
+                  { id: "rateizzato", label: L("Rateizzato") },
                 ]}
                 value={homeBalanceView}
                 onChange={setHomeBalanceView}
@@ -7594,7 +7748,7 @@ export function SettingsPanel() {
                   id: "areas",
                   icon: "📂",
                   title: "Analisi media",
-                  desc: "Spese e aree: data, importo, categoria e area. Non vengono condivise descrizione, metodo di pagamento o dati del profilo.",
+                  desc: "Spese e aree: data, importo, categoria e area. Non vengono condivise descrizione, pagamento o dati del profilo.",
                 },
                 {
                   id: "full",
@@ -7734,6 +7888,70 @@ export function SettingsPanel() {
       </div>
     );
 
+  var settingsShareCategories = (cats || []).filter(function (c) {
+    return c && c.archived !== true && c.deleted !== true && String(c.status || "") !== "deleted";
+  });
+  var settingsShareDefaultCategory =
+    settingsShareCategories.find(function (c) {
+      return String(c.id) === String(shareDefaultCategoryId || "17");
+    }) ||
+    settingsShareCategories.find(function (c) {
+      return String(c.id) === "17";
+    }) ||
+    settingsShareCategories[0] ||
+    { id: "17" };
+
+  if (settingsPage === "share_settings")
+    return (
+      <div>
+        <PageHeader title="Share" />
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div
+            style={{
+              background: cardBg,
+              borderRadius: 14,
+              border: "1px solid " + borderC,
+              padding: 20,
+            }}
+          >
+            <div style={{ fontSize: 14, fontWeight: 700, color: textC, marginBottom: 4 }}>
+              🤝 {L("Categoria predefinita per le spese Share")}
+            </div>
+            <SettingHint>
+              {L(
+                "Viene usata per la tua quota delle spese Share quando non hai configurato una mappatura specifica. Per i nuovi utenti il valore iniziale è Altro."
+              )}
+            </SettingHint>
+            <select
+              value={String(settingsShareDefaultCategory.id || "17")}
+              onChange={function (e) {
+                setShareDefaultCategoryId(String(e.target.value || "17"));
+                setToast(L("Impostazioni aggiornate"));
+              }}
+              style={{
+                width: "100%",
+                minHeight: 42,
+                borderRadius: 10,
+                border: "1px solid " + borderC,
+                background: cardBg,
+                color: textC,
+                padding: "8px 10px",
+                fontSize: 14,
+              }}
+            >
+              {settingsShareCategories.map(function (c) {
+                  return (
+                    <option key={String(c.id)} value={String(c.id)}>
+                      {String(c.icon || "")} {String(translateUiRuntimeText(c.name || ""))}
+                    </option>
+                  );
+                })}
+            </select>
+          </div>
+        </div>
+      </div>
+    );
+
   if (settingsPage === "sections")
     return (
       <div>
@@ -7750,13 +7968,19 @@ export function SettingsPanel() {
               id: "sections_expense",
               icon: "💸",
               label: "Uscite",
-              desc: "Aree, categorie e metodi di pagamento",
+              desc: "Aree, categorie e pagamenti",
             },
             {
               id: "history_settings",
               icon: "📋",
               label: t.history || "Storico",
               desc: "Ordinamento e movimenti futuri",
+            },
+            {
+              id: "share_settings",
+              icon: "🤝",
+              label: "Share",
+              desc: "Categoria personale predefinita per le spese Share",
             },
             {
               id: "patrimonio_settings",
@@ -9135,7 +9359,7 @@ export function SettingsPanel() {
             {
               id: "sections_expense_methods",
               icon: "💳",
-              label: "Metodi di pagamento",
+              label: "Pagamenti",
               desc: "Lista, riordino e default dei metodi",
             },
           ]}
@@ -9207,7 +9431,7 @@ export function SettingsPanel() {
           {[
             { id: "cats", icon: "💸", label: "Uscite" },
             { id: "income_types", icon: "💰", label: "Entrate" },
-            { id: "methods", icon: "💳", label: "Metodi di pagamento" },
+            { id: "methods", icon: "💳", label: "Pagamenti" },
             { id: "areas", icon: "📂", label: "Aree" },
             { id: "patrimonio", icon: "💎", label: "Patrimonio" },
             { id: "merge", icon: "↔", label: "Accorpa" },
@@ -9332,7 +9556,7 @@ export function SettingsPanel() {
             <SettingsList
               items={methods}
               setItems={guardedSetter(setMethods, "base")}
-              label="Aggiungi metodo di pagamento"
+              label="Aggiungi pagamento"
               showIcon
               showGroup
               groupList={methodGroups}
@@ -10730,6 +10954,12 @@ export function SettingsPanel() {
         <SettingsCards
           items={[
             {
+              id: "patrimonio_display_settings",
+              icon: "👁️",
+              label: "Visualizzazione",
+              desc: "Decimali e formato degli importi",
+            },
+            {
               id: "patrimonio_areas_settings",
               icon: "📂",
               label: "Aree",
@@ -10786,6 +11016,13 @@ export function SettingsPanel() {
       <div>
         <PageHeader title="Patrimonio / Modalità" />
         <PatrimonioSettingsPanel forcedSection="mode" />
+      </div>
+    );
+  if (settingsPage === "patrimonio_display_settings")
+    return (
+      <div>
+        <PageHeader title="Patrimonio / Visualizzazione" />
+        <PatrimonioSettingsPanel forcedSection="display" />
       </div>
     );
 
@@ -11932,8 +12169,9 @@ export function SettingsPanel() {
       accountUid: String(userId || ""),
     };
     return {
-      backupSchemaVersion: 3,
-      accountSyncSchemaVersion: 4,
+      backupSchemaVersion: 5,
+      accountSyncSchemaVersion: 5,
+      financeEvolution: migrateFinanceEvolution(financeEvolution),
       accountDeletedRecords,
       expenses,
       incomes,
@@ -11976,6 +12214,7 @@ export function SettingsPanel() {
       showSecInStats,
       showSecInBudget,
       showSecInPatrimonio,
+      showPatrimonioDecimals,
       dateFmt,
       firstDayOfWeek,
       statsView,
@@ -11997,6 +12236,8 @@ export function SettingsPanel() {
       aiExternalConsentAt,
       aiConsentTextVersion: AI_CONSENT_TEXT_VERSION,
       shareProjects,
+      shareCategoryMappings,
+      shareDefaultCategoryId: String(shareDefaultCategoryId || "17"),
       showShareInHistory,
       debtCredits,
       shoppingCards,
@@ -12023,6 +12264,7 @@ export function SettingsPanel() {
   }
   async function prepareBackupImport(raw) {
     var d: any = raw && typeof raw === "object" ? { ...raw } : {};
+    if (d.financeEvolution !== undefined) d.financeEvolution = migrateFinanceEvolution(d.financeEvolution);
     var encrypted = d.sensitiveDataEncryptedV1;
     if (encrypted && typeof encrypted === "object") {
       var owner = String(encrypted.accountUid || "");
@@ -12184,6 +12426,10 @@ export function SettingsPanel() {
       setPatrimonioNotes(function (current) { return mergeBackupObjects(current, d.patrimonioNotes); });
     if (Array.isArray(d.shareProjects))
       setShareProjects(function (current) { return mergeBackupArrays(current, d.shareProjects); });
+    if (d.shareCategoryMappings && typeof d.shareCategoryMappings === "object")
+      setShareCategoryMappings(function (current) { return mergeBackupObjects(current, d.shareCategoryMappings); });
+    if (d.shareDefaultCategoryId !== undefined)
+      setShareDefaultCategoryId(String(d.shareDefaultCategoryId || "17"));
     if (Array.isArray(d.debtCredits))
       setDebtCredits(function (current) { return mergeBackupArrays(current, d.debtCredits); });
     if (Array.isArray(d.shoppingCards))
@@ -12228,6 +12474,11 @@ export function SettingsPanel() {
   }
   function applyBackupData(d, mode) {
     if (!d || typeof d !== "object") return;
+    // Validate the complete finance document before any other backup field changes.
+    const nextFinance = d.financeEvolution === undefined ? undefined : mode === 'merge'
+      ? mergeFinanceEvolution(financeEvolution, d.financeEvolution)
+      : migrateFinanceEvolution(d.financeEvolution);
+    if (nextFinance !== undefined) setFinanceEvolution(nextFinance);
     if (mode === "merge") {
       applyBackupDataIntegrated(d);
       return;
@@ -12296,6 +12547,8 @@ export function SettingsPanel() {
       setShowSecInBudget(!!d.showSecInBudget);
     if (d.showSecInPatrimonio !== undefined)
       setShowSecInPatrimonio(!!d.showSecInPatrimonio);
+    if (d.showPatrimonioDecimals !== undefined)
+      setShowPatrimonioDecimals(!!d.showPatrimonioDecimals);
     if (d.dateFmt) setDateFmt(d.dateFmt);
     if (d.firstDayOfWeek) setFirstDayOfWeek(d.firstDayOfWeek);
     if (d.statsView) setStatsView(d.statsView);
@@ -12313,6 +12566,10 @@ export function SettingsPanel() {
     if (Array.isArray(d.mobileAllNavOrder))
       setMobileAllNavOrder(d.mobileAllNavOrder);
     if (Array.isArray(d.shareProjects)) setShareProjects(d.shareProjects);
+    if (d.shareCategoryMappings && typeof d.shareCategoryMappings === "object")
+      setShareCategoryMappings(d.shareCategoryMappings);
+    if (d.shareDefaultCategoryId !== undefined)
+      setShareDefaultCategoryId(String(d.shareDefaultCategoryId || "17"));
     if (Array.isArray(d.debtCredits)) setDebtCredits(d.debtCredits);
     if (Array.isArray(d.shoppingCards)) setShoppingCards(d.shoppingCards);
     if (Array.isArray(d.shoppingItems)) setShoppingItems(d.shoppingItems);
@@ -12433,6 +12690,10 @@ export function SettingsPanel() {
     });
   }
   function showBackupImportError(err) {
+    if (String((err && err.message) || err).startsWith('FINANCE_BACKUP_')) {
+      setToast({ text: financeMessage(lang, 'conflict'), type: 'error', icon: '🚫', color: '#E24B4A' });
+      return;
+    }
     var different =
       String((err && err.message) || err) === "BACKUP_DIFFERENT_ACCOUNT";
     setToast({
@@ -12514,8 +12775,12 @@ export function SettingsPanel() {
   function confirmPendingBackupImport(mode) {
     if (!pendingBackupImport || !pendingBackupImport.data) return;
     var data = pendingBackupImport.data;
-    setPendingBackupImport(null);
-    applyBackupData(data, mode === "merge" ? "merge" : "replace");
+    try {
+      applyBackupData(data, mode === "merge" ? "merge" : "replace");
+      setPendingBackupImport(null);
+    } catch (error) {
+      showBackupImportError(error);
+    }
   }
   function dataTitle(label) {
     function stripDataCardIcons(value) {
@@ -14425,11 +14690,16 @@ export function SettingsPanel() {
             </span>
             <span
               style={{
+                minHeight: 22,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                lineHeight: 1,
                 fontSize: 11,
                 background: "#f0f0f0",
                 color: "#888",
                 borderRadius: 20,
-                padding: "2px 10px",
+                padding: "0 10px",
               }}
             >
               {planLabel(currentPlan, lang)}

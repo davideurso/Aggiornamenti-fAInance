@@ -338,7 +338,10 @@ export function LoginScreen({ onLogin }) {
       if(fainanceV71CreatedAuthUser&&fainanceV71IsPermissionError(createErr)){
         console.warn("FAINANCE_V71_POST_AUTH_PERMISSION_DEFERRED",createErr);
         setError("");
-        setInfoText(T("Account creato. Verifica l'email per completare l'accesso."));
+        // FIX 2.0.3 — T() e' dichiarata dentro AccountAccessSecurityCard, non qui: la chiamata
+        // lanciava ReferenceError, il catch esterno la inghiottiva e l'utente vedeva un errore
+        // generico pur avendo l'account creato. LoginScreen usa L() in tutti gli altri 68 punti.
+        setInfoText(L("Account creato. Verifica l'email per completare l'accesso."));
         setMode("login");
         setLoading(false);
         return;

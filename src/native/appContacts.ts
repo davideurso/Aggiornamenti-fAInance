@@ -219,6 +219,48 @@ async function chooseFainanceContactFromList(cleaned:any[]){
   });
 }
 
+// FIX 2.4.2 - Nessuna attesa senza fine.
+//
+// Il pulsante "Da Rubrica" mostrava i puntini e l'app restava bloccata fino al
+// riavvio. La causa: SharePanel imposta participantBusy a true, chiama qui, e
+// ripristina il flag nel finally. Ma se un await non ritorna MAI, il finally non
+// viene raggiunto e il flag resta true per sempre.
+//
+// Gli await che possono non ritornare sono due: i metodi nativi del plugin
+// (pickContact, pickContacts, getContacts), se il lato nativo non chiama mai la
+// callback di risposta; e la finestra di scelta costruita a mano, se per qualche
+// motivo non risulta cliccabile.
+//
+// Ogni attesa ha ora un tetto massimo. Allo scadere si prosegue con la strada
+// successiva, e in ultima istanza si restituisce null: chi chiama mostra un
+// messaggio e l'app resta usabile.
+function withFainanceTimeout<T>(promise:any, ms:number, label:string):Promise<T|null>{
+  return new Promise(function(resolve){
+    var done=false;
+    var timer=setTimeout(function(){
+      if(done)return;
+      done=true;
+      console.warn("Contatti: "+label+" non ha risposto entro "+ms+"ms");
+      resolve(null);
+    },ms);
+    Promise.resolve(promise).then(function(value:any){
+      if(done)return;
+      done=true;clearTimeout(timer);resolve(value);
+    },function(error:any){
+      if(done)return;
+      done=true;clearTimeout(timer);
+      console.warn("Contatti: "+label+" ha restituito un errore",error);
+      resolve(null);
+    });
+  });
+}
+
+// Tempi generosi dove serve l'intervento della persona, brevi dove risponde solo
+// il codice.
+const FAINANCE_CONTACTS_READ_MS=15000;    // lettura elenco o permessi
+const FAINANCE_CONTACTS_PICK_MS=90000;    // selettore nativo: serve tempo per scegliere
+const FAINANCE_CONTACTS_CHOOSE_MS=180000; // finestra di scelta interna
+
 export async function pickFainanceContact(){
   var plugin=await getFainanceContactsPlugin();
   if(plugin){
@@ -226,20 +268,20 @@ export async function pickFainanceContact(){
     try{if(plugin.isAvailable){var av=await plugin.isAvailable();if(av&&av.isAvailable===false)throw new Error("CONTACTS_NOT_AVAILABLE");}}catch(e){}
     try{
       if(plugin.getContacts){
-        await requestFainanceContactsPermission(plugin);
+        await withFainanceTimeout(requestFainanceContactsPermission(plugin),FAINANCE_CONTACTS_READ_MS,"richiesta permessi");
         var fields=fainanceContactFields();
-        var res=await plugin.getContacts({fields:fields,limit:500,offset:0});
+        var res=await withFainanceTimeout<any>(plugin.getContacts({fields:fields,limit:500,offset:0}),FAINANCE_CONTACTS_READ_MS,"getContacts");
         var cleaned=normalizeFainanceContactsResult(res);
-        var chosen=await chooseFainanceContactFromList(cleaned);
+        var chosen=await withFainanceTimeout<any>(chooseFainanceContactFromList(cleaned),FAINANCE_CONTACTS_CHOOSE_MS,"finestra di scelta");
         if(chosen)return chosen;
       }
     }catch(e){}
-    var picked=await tryFainanceContactPicker(plugin);
+    var picked=await withFainanceTimeout<any>(tryFainanceContactPicker(plugin),FAINANCE_CONTACTS_PICK_MS,"selettore nativo");
     if(picked)return picked;
   }
   try{
     var nav:any=(typeof navigator!=="undefined"?navigator:null);
-    if(nav&&nav.contacts&&nav.contacts.select){var contacts=await nav.contacts.select(["name","email","tel"],{multiple:false});var c=contacts&&contacts[0];if(c)return normalizeFainanceContact(c);}
+    if(nav&&nav.contacts&&nav.contacts.select){var contacts:any=await withFainanceTimeout<any>(nav.contacts.select(["name","email","tel"],{multiple:false}),FAINANCE_CONTACTS_PICK_MS,"selettore del browser");var c=contacts&&contacts[0];if(c)return normalizeFainanceContact(c);}
   }catch(e){}
   return null;
 }

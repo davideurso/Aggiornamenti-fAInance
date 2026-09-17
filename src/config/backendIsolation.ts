@@ -20,12 +20,12 @@ export function getBackendIsolationDiagnostic(): BackendIsolationDiagnostic {
     };
   }
 
-  const isolated = Boolean(firebaseConfig.projectId) && firebaseConfig.projectId !== PRODUCTION_PROJECT_ID;
+  const isolated = firebaseConfig.projectId === 'fainance-test-20260823195207';
   return {
     environment: appEnvironment,
     projectId: firebaseConfig.projectId,
     isolated,
-    reason: isolated ? null : "TEST_ENVIRONMENT_POINTS_TO_PRODUCTION",
+    reason: isolated ? null : "TEST_ENVIRONMENT_PROJECT_MISMATCH",
   };
 }
 

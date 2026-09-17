@@ -224,7 +224,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
           <div style={{ flex: 1, minWidth: 180 }}>
             <div style={{ fontSize: 16, fontWeight: 950, color: textC }}>{L("Centro Admin")}</div>
             <div style={{ fontSize: 11, color: subC, marginTop: 3 }}>
-              {L("Dashboard, utenti, notifiche, configurazione, diagnostica e audit nello stesso spazio dell'app.")}
+              {L("Dashboard, utenti, notifiche, configurazione, diagnostica e audit nel centro di amministrazione.")}
             </div>
           </div>
           <span style={{ borderRadius: 999, padding: "5px 9px", background: primary + "18", color: primary, fontSize: 10, fontWeight: 900 }}>

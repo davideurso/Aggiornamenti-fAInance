@@ -8,7 +8,8 @@ import {
   initializeAuth,
   setPersistence,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getFirestore, initializeFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 import { firebaseConfig } from "../config/env";
 
 function isNativePlatform(): boolean {
@@ -48,7 +49,25 @@ function createFainanceAuth() {
 }
 
 export const fbAuth = createFainanceAuth();
-export const fbDb = getFirestore(firebaseApp);
+// The TEST browser connection repeatedly stalled on WebChannel streams.
+// Use Firebase's supported buffering-proxy transport in this environment only.
+export const fbDb = firebaseConfig.projectId === 'fainance-test-20260823195207'
+  ? initializeFirestore(firebaseApp, { experimentalForceLongPolling: true })
+  : getFirestore(firebaseApp);
+// FIX 2.0.5 — Cloud Storage non era mai stato inizializzato. Serve per spostare gli
+// allegati fuori dal documento Firestore userData/{uid}, che ha un limite di 1 MiB.
+export const fbStorage = getStorage(firebaseApp);
+
+// FIX 2.0.6 — I valori predefiniti dell'SDK sono 600 secondi per i caricamenti e 120
+// per le altre operazioni. Se il bucket non risponde (servizio Storage non attivo,
+// regole non pubblicate, bucket inesistente) l'SDK riprova in silenzio per DIECI
+// MINUTI prima di restituire un errore: dal punto di vista di chi usa l'app sembra
+// che il caricamento non faccia semplicemente nulla. Con questi valori un problema
+// di configurazione si manifesta come errore leggibile in mezzo minuto.
+try {
+  (fbStorage as any).maxUploadRetryTime = 30000;
+  (fbStorage as any).maxOperationRetryTime = 20000;
+} catch (_error) {}
 export const googleProvider = new GoogleAuthProvider();
 
 function cleanupLegacyFirebaseAuthStorage(): void {

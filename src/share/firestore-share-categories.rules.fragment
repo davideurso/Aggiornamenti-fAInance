@@ -1,0 +1,25 @@
+// fAInance Share categories — fragment to MERGE into the existing Firestore rules.
+//
+// IMPORTANT: the archive supplied for this implementation does not contain the
+// canonical match /shareProjects/{projectId} ruleset. This guard must therefore
+// be AND-ed into the EXISTING update condition for that match. Adding a separate
+// restrictive `allow update` would NOT be sufficient because Firestore combines
+// matching allow statements with OR semantics.
+//
+// Inside match /databases/{database}/documents { ... } add:
+
+function shareProjectCategoriesUnchangedOrOwner() {
+  return request.auth != null && (
+    request.auth.uid == resource.data.ownerUid ||
+    !request.resource.data.diff(resource.data).affectedKeys().hasAny(["categories"])
+  );
+}
+
+// Then, inside the existing:
+// match /shareProjects/{projectId} {
+//   allow update: if <CURRENT_UPDATE_CONDITION>
+//                 && shareProjectCategoriesUnchangedOrOwner();
+// }
+//
+// Keep the project's existing membership / invite / delete rules unchanged.
+// This guard only protects the shared `categories` field from participant writes.

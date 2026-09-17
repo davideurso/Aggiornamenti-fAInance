@@ -1,0 +1,60 @@
+// fAInance Admin — fragment to MERGE inside:
+// match /databases/{database}/documents { ... }
+//
+// Do not deploy this fragment as a complete ruleset by itself: it is intentionally
+// additive so the existing fAInance rules remain unchanged.
+
+function hasFainanceAdminRole() {
+  return request.auth != null &&
+    request.auth.token.fainanceAdminRole in ["support", "analyst", "admin", "superadmin"];
+}
+
+function canWriteFainanceAdmin() {
+  return request.auth != null &&
+    request.auth.token.fainanceAdminRole in ["admin", "superadmin"];
+}
+
+function isFainanceSuperadmin() {
+  return request.auth != null &&
+    request.auth.token.fainanceAdminRole == "superadmin";
+}
+
+match /adminUserMetadata/{uid} {
+  // The Admin Center can list/read only the dedicated non-financial metadata.
+  allow read: if hasFainanceAdminRole();
+
+  // Every normal user can update only their own telemetry document. This does
+  // not grant access to users/{uid}, userData/{uid}, movements or financial data.
+  allow create, update: if request.auth != null &&
+    request.auth.uid == uid &&
+    request.resource.data.uid == uid &&
+    request.resource.data.keys().hasOnly([
+      "uid",
+      "email",
+      "username",
+      "displayName",
+      "plan",
+      "accountStatus",
+      "platform",
+      "appVersion",
+      "language",
+      "country",
+      "lastSeenAt",
+      "updatedAt"
+    ]);
+
+  allow delete: if isFainanceSuperadmin();
+}
+
+match /systemConfig/{documentId} {
+  allow read: if hasFainanceAdminRole();
+  allow create, update: if canWriteFainanceAdmin() && documentId == "public";
+  allow delete: if isFainanceSuperadmin() && documentId == "public";
+}
+
+match /adminAudit/{auditId} {
+  allow read: if hasFainanceAdminRole();
+  allow create: if canWriteFainanceAdmin() &&
+    request.resource.data.actorUid == request.auth.uid;
+  allow update, delete: if false;
+}

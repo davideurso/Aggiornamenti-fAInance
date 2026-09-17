@@ -1,6 +1,7 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, setDoc, where, writeBatch } from "firebase/firestore";
 import { deleteUser, type User } from "firebase/auth";
 import { fbDb } from "../firebase/client";
+import { deleteAllUserDocuments } from "../data/attachmentStorage";
 
 export const ACCOUNT_DELETION_GRACE_DAYS = 15;
 
@@ -135,6 +136,12 @@ export async function finalizeDueAccountDeletion(user: User): Promise<boolean> {
   if (emailLookupRef && emailLookupSnap && emailLookupSnap.exists() && String(emailLookupSnap.data()?.uid || "") === uid) batch.delete(emailLookupRef);
   if (phoneLookupRef && phoneLookupSnap && phoneLookupSnap.exists() && String(phoneLookupSnap.data()?.uid || "") === uid) batch.delete(phoneLookupRef);
   await batch.commit();
+
+  // FIX 2.0.5 — Gli allegati vivono su Cloud Storage e non vengono toccati dal batch
+  // Firestore: senza questa chiamata resterebbero nel bucket dopo l'eliminazione
+  // dell'account. Va eseguita prima di deleteUser, perche' dopo il token non e' piu'
+  // valido e le regole Storage negherebbero la cancellazione.
+  await deleteAllUserDocuments(uid);
 
   // Delete the profile only after its subcollection has been cleared.
   await deleteDoc(doc(fbDb, "users", uid));

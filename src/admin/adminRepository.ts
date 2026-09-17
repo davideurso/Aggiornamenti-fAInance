@@ -16,6 +16,20 @@ export interface AdminUserMetadata {
   lastSeenAt?: string;
 }
 
+
+export interface AdminUserMetadataSyncInput {
+  uid: string;
+  email?: string;
+  username?: string;
+  displayName?: string;
+  plan?: string;
+  accountStatus?: string;
+  platform?: string;
+  appVersion?: string;
+  language?: string;
+  country?: string;
+}
+
 export interface PublicAppConfig {
   minimumVersion?: string;
   recommendedVersion?: string;
@@ -31,6 +45,28 @@ export interface PublicAppConfig {
 const ADMIN_USERS_COLLECTION = "adminUserMetadata";
 const SYSTEM_CONFIG_COLLECTION = "systemConfig";
 const PUBLIC_CONFIG_DOCUMENT = "public";
+
+
+export async function syncAdminUserMetadata(input: AdminUserMetadataSyncInput): Promise<void> {
+  const uid = String(input.uid || "").trim();
+  if (!uid) return;
+  const now = new Date().toISOString();
+  const payload: Record<string, unknown> = {
+    uid,
+    email: String(input.email || "").trim().toLowerCase(),
+    username: String(input.username || "").trim(),
+    displayName: String(input.displayName || "").trim(),
+    plan: String(input.plan || "free").trim() || "free",
+    accountStatus: String(input.accountStatus || "active").trim() || "active",
+    platform: String(input.platform || "web").trim() || "web",
+    appVersion: String(input.appVersion || "").trim(),
+    language: String(input.language || "en").trim() || "en",
+    country: String(input.country || "").trim(),
+    lastSeenAt: now,
+    updatedAt: now,
+  };
+  await setDoc(doc(fbDb, ADMIN_USERS_COLLECTION, uid), payload, { merge: true });
+}
 
 export async function readAdminUserMetadata(uid: string): Promise<AdminUserMetadata | null> {
   const snapshot = await getDoc(doc(fbDb, ADMIN_USERS_COLLECTION, uid));

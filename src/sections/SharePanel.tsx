@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { App as CapacitorApp } from "@capacitor/app";
+import { Capacitor } from "@capacitor/core";
 import {
   useApp,
   fbAuth,
@@ -6,6 +8,7 @@ import {
   RECEIPT_OCR_ENDPOINT,
   dateOffset,
   fmtDate,
+  androidDownload,
   parseMoney,
   todayStr,
   todayUsageKey,
@@ -19,14 +22,98 @@ import {
   MultiCurrencyField,
   FainanceIcon,
   PopupCloseButton,
+  FainanceInfoPopover,
+  FainancePickerModal,
 } from "../widget";
 import { parseFainanceShareVoiceCommand } from "../voiceParser";
 import { pickFainanceContact } from "../native/appContacts";
 import { focusFainanceInput } from "../utils/appRuntime";
+import { fainanceIsNativePlatform } from "../native/platform";
 import {
   saveShareAttachment,
   watchShareAttachments,
 } from "../share/shareAttachments";
+
+const SHARE_ATTACHMENT_CAMERA_PENDING_KEY = "fainance_share_attachment_camera_pending_v1";
+const SHARE_ATTACHMENT_CAMERA_RESTORED_KEY = "fainance_share_attachment_camera_restored_v1";
+const SHARE_ATTACHMENT_CAMERA_EVENT = "fainance-share-attachment-camera-restored-v1";
+let shareAttachmentCameraRestoreBridgeStarted = false;
+
+function readShareAttachmentCameraPending() {
+  try {
+    if (typeof localStorage === "undefined") return null;
+    var raw = localStorage.getItem(SHARE_ATTACHMENT_CAMERA_PENDING_KEY);
+    if (!raw) return null;
+    var parsed = JSON.parse(raw || "{}");
+    var ts = Number(parsed && parsed.ts || 0);
+    if (!ts || Date.now() - ts > 1000 * 60 * 30) {
+      localStorage.removeItem(SHARE_ATTACHMENT_CAMERA_PENDING_KEY);
+      return null;
+    }
+    return parsed;
+  } catch (_e) {
+    return null;
+  }
+}
+
+function persistRestoredShareAttachmentCameraResult(eventData: any) {
+  try {
+    var pending = readShareAttachmentCameraPending();
+    if (!pending || typeof window === "undefined") return;
+    var data = eventData && eventData.data ? eventData.data : {};
+    var packet: any = {
+      pending: pending,
+      receivedAt: Date.now(),
+      data: {
+        webPath: String(data.webPath || ""),
+        path: String(data.path || ""),
+        format: String(data.format || "jpeg"),
+        dataUrl: String(data.dataUrl || ""),
+      },
+    };
+    (window as any).__fainanceShareAttachmentCameraRestored = packet;
+    try {
+      // Con CameraResultType.Uri persistiamo solo URI/path, evitando di mettere
+      // immagini base64 molto grandi nel localStorage durante il ripristino Android.
+      var persistable = {
+        pending: pending,
+        receivedAt: packet.receivedAt,
+        data: {
+          webPath: packet.data.webPath,
+          path: packet.data.path,
+          format: packet.data.format,
+        },
+      };
+      localStorage.setItem(
+        SHARE_ATTACHMENT_CAMERA_RESTORED_KEY,
+        JSON.stringify(persistable)
+      );
+    } catch (_persistError) {}
+    try {
+      window.dispatchEvent(
+        new CustomEvent(SHARE_ATTACHMENT_CAMERA_EVENT, { detail: packet })
+      );
+    } catch (_eventError) {}
+  } catch (_e) {}
+}
+
+function startShareAttachmentCameraRestoreBridge() {
+  if (shareAttachmentCameraRestoreBridgeStarted) return;
+  shareAttachmentCameraRestoreBridgeStarted = true;
+  try {
+    if (!Capacitor.isNativePlatform()) return;
+    CapacitorApp.addListener("appRestoredResult", function (eventData: any) {
+      try {
+        var pluginId = String(eventData && eventData.pluginId || "").toLowerCase();
+        var methodName = String(eventData && eventData.methodName || "").toLowerCase();
+        if (pluginId.indexOf("camera") < 0 || methodName !== "getphoto") return;
+        if (!readShareAttachmentCameraPending()) return;
+        persistRestoredShareAttachmentCameraResult(eventData);
+      } catch (_restoredError) {}
+    }).catch(function () {});
+  } catch (_bridgeError) {}
+}
+startShareAttachmentCameraRestoreBridge();
 
 export function SharePanel() {
   var _c: any = useApp();
@@ -70,6 +157,10 @@ export function SharePanel() {
     shareInviteLoading,
     shareProjectTab,
     shareProjects,
+    cats,
+    shareCategoryMappings,
+    setShareCategoryMappings,
+    shareDefaultCategoryId,
     shareReceiptUploads,
     shareReceivedInvites,
     shareSelectedProjectId,
@@ -160,10 +251,41 @@ export function SharePanel() {
   var activeParticipants = participants.filter(function (p) {
     return p.status !== "archived";
   });
+  var projectShareCategories = selected
+    ? (selected.categories || []).filter(function (category) {
+        return category && String(category.status || "active") !== "deleted";
+      })
+    : [];
+  var selectedCurrentParticipant = participants.find(function (participant) {
+    return (
+      participant &&
+      (String(participant.uid || "") === String(userId || "") ||
+        (!selected.ownerUid && !String(participant.uid || "").trim() && String(participant.id || "") === "me"))
+    );
+  });
+  var canManageShareCategories = !!(
+    selected &&
+    (String(selected.ownerUid || "") === String(userId || "") ||
+      (!selected.ownerUid && selectedCurrentParticipant && String(selectedCurrentParticipant.role || "") === "owner"))
+  );
+  var personalShareCategories = (cats || []).filter(function (category) {
+    return category && !category.archived && !category.deleted;
+  });
+  var shareDefaultPersonalCategory =
+    personalShareCategories.find(function (category) {
+      return String(category.id) === String(shareDefaultCategoryId || "17");
+    }) ||
+    personalShareCategories.find(function (category) {
+      return String(category.id) === "17";
+    }) ||
+    personalShareCategories[0] ||
+    null;
+  var [shareResolvedParticipantNames, setShareResolvedParticipantNames] = useState<any>({});
   var [newPersonName, setNewPersonName] = useState("");
   var [newPersonEmail, setNewPersonEmail] = useState("");
   var [personMode, setPersonMode] = useState("user");
   var [shareAmount, setShareAmount] = useState("");
+  var [shareAmountFocused, setShareAmountFocused] = useState(false);
   var [shareFx, setShareFx] = useState<any>({
     currency: String(_c.currency || "EUR"),
     baseCurrency: String(_c.currency || "EUR"),
@@ -177,6 +299,14 @@ export function SharePanel() {
   var [shareSplitTouched, setShareSplitTouched] = useState(false);
   var [shareParticipantIds, setShareParticipantIds] = useState([]);
   var [shareEditingActivityId, setShareEditingActivityId] = useState(null);
+  var [shareCategoryId, setShareCategoryId] = useState("");
+  var [newShareCategoryName, setNewShareCategoryName] = useState("");
+  var [newShareCategoryIcon, setNewShareCategoryIcon] = useState("🏷️");
+  var [newShareCategoryColor, setNewShareCategoryColor] = useState("#4F8FF7");
+  var [showNewShareCategoryPopup, setShowNewShareCategoryPopup] = useState(false);
+  var [editingShareCategoryId, setEditingShareCategoryId] = useState("");
+  var [editingShareCategoryName, setEditingShareCategoryName] = useState("");
+  var [shareCategoryMappingDraft, setShareCategoryMappingDraft] = useState("");
   var [projectNameDraft, setProjectNameDraft] = useState(
     selected ? selected.name || "" : ""
   );
@@ -202,6 +332,7 @@ export function SharePanel() {
   var [settlementDate, setSettlementDate] = useState(todayStr());
   var [settlementComment, setSettlementComment] = useState("");
   var [settlementPopupOpen, setSettlementPopupOpen] = useState(false);
+  var [editingSettlementActivityId, setEditingSettlementActivityId] = useState<any>(null);
   var [shareFilterOpen, setShareFilterOpen] = useState(false);
   var [shareFilterSearch, setShareFilterSearch] = useState("");
   var [shareFilterDateFrom, setShareFilterDateFrom] = useState("");
@@ -209,16 +340,23 @@ export function SharePanel() {
   var [shareFilterAmountMin, setShareFilterAmountMin] = useState("");
   var [shareFilterAmountMax, setShareFilterAmountMax] = useState("");
   var [shareFilterPaidBy, setShareFilterPaidBy] = useState("");
+  var [shareFilterCategoryId, setShareFilterCategoryId] = useState("");
   var [shareSortDirection, setShareSortDirection] = useState("desc");
   var [shareFilterSectionsOpen, setShareFilterSectionsOpen] = useState({
     period: false,
     amount: false,
     payer: false,
+    category: false,
     order: false,
   });
   var [sharePendingReceipt, setSharePendingReceipt] = useState(null);
   var [remoteShareAttachments, setRemoteShareAttachments] = useState<any[]>([]);
   var [shareReceiptPreview, setShareReceiptPreview] = useState<any>(null);
+  var [shareReceiptConfirmationOpen, setShareReceiptConfirmationOpen] = useState(false);
+  var [shareExpandedActivityIds, setShareExpandedActivityIds] = useState<any>({});
+  var [shareProjectArchiveConfirmOpen, setShareProjectArchiveConfirmOpen] = useState(false);
+  var [shareProjectArchiveMode, setShareProjectArchiveMode] = useState<"archive" | "restore">("archive");
+  var shareAttachmentRestoreBusyRef = useRef(false);
   var shareReceiptFileInputRef = useRef(null);
   var shareDateInputLang =
     (
@@ -328,6 +466,36 @@ export function SharePanel() {
       setProjectColorDraft(selected ? selected.color || "#4F8FF7" : "#4F8FF7");
       setProjectEditingDetails(false);
       setShareEditingActivityId(null);
+      setShareCategoryId(
+        selected && (selected.categories || []).find(function (category) {
+          return category && String(category.status || "active") !== "deleted";
+        })
+          ? String((selected.categories || []).find(function (category) {
+              return category && String(category.status || "active") !== "deleted";
+            }).id)
+          : ""
+      );
+      setEditingShareCategoryId("");
+      setEditingShareCategoryName("");
+    },
+    [selected ? selected.id : null]
+  );
+  useEffect(
+    function () {
+      if (selected) return;
+      setShareExpenseFormOpen(false);
+      setShareEditingActivityId(null);
+      setSettlementPopupOpen(false);
+      setEditingSettlementActivityId(null);
+      setShareProjectArchiveConfirmOpen(false);
+      setProjectEditingDetails(false);
+      setChooseProjectOpen(false);
+      setTimeout(function () {
+        try {
+          var root = document.getElementById("share_panel_root");
+          if (root && root.scrollIntoView) root.scrollIntoView({ block: "start" });
+        } catch (_e) {}
+      }, 0);
     },
     [selected ? selected.id : null]
   );
@@ -362,6 +530,9 @@ export function SharePanel() {
     setShareAmount("");
     setShareFx({ currency: String(_c.currency || "EUR"), baseCurrency: String(_c.currency || "EUR"), exchangeRate: 1 });
     setShareDesc("");
+    setShareCategoryId(
+      projectShareCategories.length ? String(projectShareCategories[0].id) : ""
+    );
     setShareDate(todayStr());
     setSplitDraft({});
     setShareSplitTouched(false);
@@ -410,7 +581,7 @@ export function SharePanel() {
       setSettlementTo(ids.includes(currentId) ? currentId : ids[0] || "");
       setSettlementAmount("");
       setSettlementDate(todayStr());
-      setSettlementPopupOpen(true);
+      openNewSettlementPopup();
       return;
     }
     setShareExpenseMode(mode || "simple");
@@ -421,6 +592,18 @@ export function SharePanel() {
         startShareVoiceCommand();
       }, 250);
   }
+  const consumedToolDraft=useRef<string|null>(null);
+  useEffect(()=>{
+    const draft=_c.toolShareDraft;
+    if(!draft||consumedToolDraft.current===draft.id||!selected||String(selected.id)!==draft.projectId)return;
+    consumedToolDraft.current=draft.id;
+    resetShareExpenseForm();
+    setShareAmount(draft.amount);setShareDate(draft.date);setShareDesc('');
+    setShareFx({currency:draft.currency,baseCurrency:draft.baseCurrency,exchangeRate:draft.exchangeRate,exchangeRateDate:draft.exchangeRateDate,exchangeRateSource:draft.exchangeRateSource,baseAmount:draft.baseAmount});
+    setSharePaidBy(String(currentShareMemberId||'me'));
+    setShareProjectTab('attivita');setShareExpenseMode('simple');setShareExpenseFormOpen(true);
+    _c.setToolShareDraft(null);
+  },[_c.toolShareDraft,selected?.id]);
   function consumePendingShareWidgetAction() {
     var payload: any = null;
     try {
@@ -1055,6 +1238,100 @@ export function SharePanel() {
       }
     });
   }
+  function dataUrlToFile(dataUrl: string, name: string) {
+    var safeDataUrl = String(dataUrl || "");
+    var parts = safeDataUrl.split(",");
+    var meta = parts[0] || "data:image/jpeg;base64";
+    var mimeMatch = meta.match(/data:(.*?);base64/);
+    var mime = mimeMatch && mimeMatch[1] ? mimeMatch[1] : "image/jpeg";
+    var binary = atob(parts[1] || "");
+    var len = binary.length;
+    var bytes = new Uint8Array(len);
+    for (var i = 0; i < len; i += 1) bytes[i] = binary.charCodeAt(i);
+    return new File([bytes], name || "ricevuta.jpg", { type: mime });
+  }
+
+  async function shareCameraResultToFile(photo: any, name: string) {
+    if (photo && photo.dataUrl) return dataUrlToFile(String(photo.dataUrl), name);
+    var src = String((photo && photo.webPath) || "");
+    if (!src && photo && photo.path) {
+      try {
+        src = Capacitor.convertFileSrc(String(photo.path || ""));
+      } catch (_convertError) {
+        src = String(photo.path || "");
+      }
+    }
+    if (!src) throw new Error("camera-result-empty");
+    var response = await fetch(src);
+    if (!response.ok) throw new Error("camera-result-read");
+    var blob = await response.blob();
+    return new File([blob], name || "ricevuta.jpg", {
+      type: blob.type || "image/jpeg",
+    });
+  }
+
+  function clearShareAttachmentCameraRestoreState() {
+    try {
+      localStorage.removeItem(SHARE_ATTACHMENT_CAMERA_PENDING_KEY);
+      localStorage.removeItem(SHARE_ATTACHMENT_CAMERA_RESTORED_KEY);
+    } catch (_e) {}
+    try {
+      (window as any).__fainanceShareAttachmentCameraRestored = null;
+    } catch (_e) {}
+  }
+
+  function restoreShareAttachmentExpenseDraft(pending: any) {
+    if (!pending) return;
+    try {
+      setShareProjectTab("attivita");
+      if (String(pending.context || "expense") === "settlement") {
+        setShareExpenseFormOpen(false);
+        setShareEditingActivityId(null);
+        setSettlementFrom(String(pending.settlementFrom || currentShareMemberId || "me"));
+        setSettlementTo(String(pending.settlementTo || ""));
+        setSettlementAmount(String(pending.settlementAmount || ""));
+        setSettlementDate(String(pending.settlementDate || todayStr()));
+        setSettlementComment(String(pending.settlementComment || ""));
+        setEditingSettlementActivityId(pending.editingSettlementActivityId || null);
+        setSettlementPopupOpen(true);
+        return;
+      }
+      setShareExpenseMode("simple");
+      setShareExpenseFormOpen(true);
+      setShareAmount(String(pending.amount || ""));
+      setShareDesc(String(pending.desc || ""));
+      setShareDate(String(pending.date || todayStr()));
+      setSharePaidBy(String(pending.paidBy || currentShareMemberId || "me"));
+      setShareParticipantIds(
+        Array.isArray(pending.participantIds)
+          ? pending.participantIds
+          : activeParticipants.map(function (p) { return p.id; })
+      );
+      setShareCategoryId(String(pending.categoryId || ""));
+      setSplitMode(String(pending.splitMode || "equal"));
+      setSplitDraft(pending.splitDraft && typeof pending.splitDraft === "object" ? pending.splitDraft : {});
+      setShareSplitTouched(!!pending.shareSplitTouched);
+      if (pending.shareFx && typeof pending.shareFx === "object") setShareFx(pending.shareFx);
+      setShareEditingActivityId(pending.editingActivityId || null);
+    } catch (_e) {}
+  }
+
+  async function applyShareAttachmentCameraResult(photo: any, pending?: any) {
+    var name = "share_receipt_" + Date.now() + ".jpg";
+    var file = await shareCameraResultToFile(photo, name);
+    var compressedCameraReceipt: any = await compressShareReceiptFile(file);
+    restoreShareAttachmentExpenseDraft(pending);
+    setSharePendingReceipt({
+      id: "share_attachment_" + Date.now(),
+      name: name,
+      dataUrl: String(compressedCameraReceipt || ""),
+      createdAt: new Date().toISOString(),
+      expiresAt: addSixMonthsIso(),
+    });
+    clearShareAttachmentCameraRestoreState();
+    setShareReceiptConfirmationOpen(true);
+  }
+
   async function onShareReceiptFileSelected(ev: any) {
     var file = ev && ev.target && ev.target.files && ev.target.files[0];
     try {
@@ -1078,7 +1355,7 @@ export function SharePanel() {
         createdAt: new Date().toISOString(),
         expiresAt: addSixMonthsIso(),
       });
-      setToast({ text: L("Ricevuta caricata"), type: "success", icon: "🧾" });
+      setShareReceiptConfirmationOpen(true);
     } catch (e) {
       setToast({
         text: L("Impossibile caricare la ricevuta"),
@@ -1087,7 +1364,7 @@ export function SharePanel() {
       });
     }
   }
-  function requestShareReceiptUpload() {
+  async function requestShareReceiptUpload(context?: "expense" | "settlement") {
     if (!shareReceiptAllowed()) {
       setToast({
         text: L("Funzione disponibile a partire dal piano Base"),
@@ -1096,11 +1373,119 @@ export function SharePanel() {
       });
       return;
     }
+    var receiptContext = context === "settlement" ? "settlement" : "expense";
+    var pending: any = {
+      ts: Date.now(),
+      context: receiptContext,
+      projectId: selected ? String(selected.id || "") : "",
+      amount: String(shareAmount || ""),
+      desc: String(shareDesc || ""),
+      date: String(shareDate || todayStr()),
+      paidBy: String(sharePaidBy || currentShareMemberId || "me"),
+      participantIds: Array.isArray(shareParticipantIds) ? shareParticipantIds : [],
+      categoryId: String(shareCategoryId || ""),
+      splitMode: String(splitMode || "equal"),
+      splitDraft: splitDraft || {},
+      shareSplitTouched: !!shareSplitTouched,
+      shareFx: shareFx || null,
+      editingActivityId: shareEditingActivityId || null,
+      settlementFrom: String(settlementFrom || ""),
+      settlementTo: String(settlementTo || ""),
+      settlementAmount: String(settlementAmount || ""),
+      settlementDate: String(settlementDate || todayStr()),
+      settlementComment: String(settlementComment || ""),
+      editingSettlementActivityId: editingSettlementActivityId || null,
+    };
     try {
+      localStorage.setItem(SHARE_ATTACHMENT_CAMERA_PENDING_KEY, JSON.stringify(pending));
+      localStorage.removeItem(SHARE_ATTACHMENT_CAMERA_RESTORED_KEY);
+      // Evita che un vecchio flusso OCR Share intercetti lo stesso risultato Camera.
+      localStorage.removeItem("fainance_share_receipt_flow_v2");
+    } catch (_e) {}
+    try {
+      if (fainanceIsNativePlatform()) {
+        var cameraMod: any = await import("@capacitor/camera");
+        var photo = await cameraMod.Camera.getPhoto({
+          quality: 84,
+          allowEditing: false,
+          // URI evita di mantenere una foto completa in base64 mentre l'Activity
+          // fotocamera è aperta e consente di recuperare il risultato dopo una
+          // ricreazione dell'Activity Android tramite appRestoredResult.
+          resultType: cameraMod.CameraResultType.Uri,
+          source: cameraMod.CameraSource.Camera,
+          direction: cameraMod.CameraDirection.Rear,
+          saveToGallery: false,
+          correctOrientation: true,
+          promptLabelHeader: L("Ricevuta"),
+          promptLabelPhoto: L("Scatta foto"),
+          promptLabelPicture: L("Scatta foto"),
+        });
+        if (photo && (photo.webPath || photo.path || photo.dataUrl)) {
+          await applyShareAttachmentCameraResult(photo, pending);
+          return;
+        }
+      }
+      clearShareAttachmentCameraRestoreState();
       if (shareReceiptFileInputRef.current)
         shareReceiptFileInputRef.current.click();
-    } catch (e) {}
+    } catch (e) {
+      var raw = String((e && e.message) || "");
+      clearShareAttachmentCameraRestoreState();
+      if (!/cancel|cancell|user/i.test(raw)) {
+        setToast({ text: L("Non riesco ad aprire la fotocamera"), type: "error", icon: "📷" });
+      }
+      try {
+        if (shareReceiptFileInputRef.current) shareReceiptFileInputRef.current.click();
+      } catch (_fallbackReceiptError) {}
+    }
   }
+
+  useEffect(
+    function () {
+      var active = true;
+      async function consumeRestoredShareAttachment(packet: any) {
+        if (!active || shareAttachmentRestoreBusyRef.current) return;
+        try {
+          if (!packet) {
+            packet = (window as any).__fainanceShareAttachmentCameraRestored || null;
+          }
+          if (!packet) {
+            var raw = localStorage.getItem(SHARE_ATTACHMENT_CAMERA_RESTORED_KEY);
+            if (raw) packet = JSON.parse(raw || "{}");
+          }
+          if (!packet || !packet.pending || !packet.data) return;
+          var projectId = String(packet.pending.projectId || "");
+          if (!selected || String(selected.id || "") !== projectId) return;
+          if (!(packet.data.webPath || packet.data.path || packet.data.dataUrl)) return;
+          shareAttachmentRestoreBusyRef.current = true;
+          await applyShareAttachmentCameraResult(packet.data, packet.pending);
+        } catch (_restoreError) {
+          clearShareAttachmentCameraRestoreState();
+          setToast({ text: L("Impossibile recuperare la foto della ricevuta"), type: "error", icon: "📷" });
+        } finally {
+          shareAttachmentRestoreBusyRef.current = false;
+        }
+      }
+      function handler(ev: any) {
+        consumeRestoredShareAttachment(ev && ev.detail ? ev.detail : null);
+      }
+      try {
+        window.addEventListener(SHARE_ATTACHMENT_CAMERA_EVENT, handler);
+      } catch (_e) {}
+      var timers = [60, 300, 900].map(function (ms) {
+        return setTimeout(function () { consumeRestoredShareAttachment(null); }, ms);
+      });
+      return function () {
+        active = false;
+        timers.forEach(function (t) { clearTimeout(t); });
+        try {
+          window.removeEventListener(SHARE_ATTACHMENT_CAMERA_EVENT, handler);
+        } catch (_e) {}
+      };
+    },
+    [selected ? selected.id : null]
+  );
+
   useEffect(
     function () {
       var now = Date.now();
@@ -1350,11 +1735,148 @@ export function SharePanel() {
     "#AB47BC",
     "#42A5F5",
   ];
-  function personLabel(p) {
-    return p && p.uid === userId
-      ? (currentUser && currentUser.name) || p.name || "Nome"
-      : p.name;
+  function normalizeShareDisplayName(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
   }
+  function participantNameLooksUsable(p, value) {
+    var clean = normalizeShareDisplayName(value);
+    if (!clean) return false;
+    if (p && (p.kind === "fake" || p.type === "fake")) return true;
+    var lower = clean.replace(/^@+/, "").toLocaleLowerCase();
+    if (clean.charAt(0) === "@" || clean.indexOf("@") >= 0) return false;
+    var username = String((p && p.username) || "").replace(/^@+/, "").trim().toLocaleLowerCase();
+    var email = normalizeEmail((p && p.email) || "");
+    var emailLocal = email ? String(email.split("@")[0] || "").toLocaleLowerCase() : "";
+    if (username && lower === username) return false;
+    if (emailLocal && lower === emailLocal) return false;
+    if (["utente", "user", "partecipante", "participant"].indexOf(lower) >= 0) return false;
+    return true;
+  }
+  function currentShareFullName() {
+    var firstName = normalizeShareDisplayName(currentUser && currentUser.firstName);
+    var lastName = normalizeShareDisplayName(currentUser && currentUser.lastName);
+    if (firstName && lastName) return firstName + " " + lastName;
+    var direct = normalizeShareDisplayName(currentUser && currentUser.name);
+    return participantNameLooksUsable({ email: currentUser && currentUser.email, username: currentUser && currentUser.username }, direct)
+      ? direct
+      : "";
+  }
+  function personFullName(p) {
+    if (!p) return L("Partecipante");
+    var key = String(p.id || p.uid || "");
+    var resolved = normalizeShareDisplayName(shareResolvedParticipantNames[key]);
+    if (resolved && participantNameLooksUsable(p, resolved)) return resolved;
+    if (String(p.uid || "") === String(userId || "") || String(p.id || "") === String(currentShareMemberId || "")) {
+      var mine = currentShareFullName();
+      if (mine) return mine;
+    }
+    var firstLast = [p.firstName, p.lastName]
+      .map(normalizeShareDisplayName)
+      .filter(Boolean)
+      .join(" ");
+    if (firstLast && participantNameLooksUsable(p, firstLast)) return firstLast;
+    var stored = normalizeShareDisplayName(p.name || p.displayName || p.fullName || "");
+    if (participantNameLooksUsable(p, stored)) return stored;
+    return L("Partecipante");
+  }
+  function personLabel(p) {
+    var full = personFullName(p);
+    if (full === L("Partecipante")) return full;
+    var parts = full.split(/\s+/).filter(Boolean);
+    if (!parts.length) return full;
+    var first = parts[0];
+    var sameFirst = (participants || []).filter(function (candidate) {
+      var candidateFull = personFullName(candidate);
+      if (candidateFull === L("Partecipante")) return false;
+      var candidateParts = candidateFull.split(/\s+/).filter(Boolean);
+      return candidateParts.length && candidateParts[0].toLocaleLowerCase() === first.toLocaleLowerCase();
+    });
+    if (sameFirst.length > 1 && parts.length > 1) {
+      return first + " " + String(parts[parts.length - 1] || "").slice(0, 1).toUpperCase() + ".";
+    }
+    return first;
+  }
+  function personLabelById(id) {
+    var participant = (participants || []).find(function (candidate) {
+      return String(candidate.id) === String(id);
+    });
+    return participant ? personLabel(participant) : L("Partecipante");
+  }
+  useEffect(
+    function () {
+      var cancelled = false;
+      if (!selected || !(participants || []).length) {
+        setShareResolvedParticipantNames({});
+        return function () { cancelled = true; };
+      }
+      (async function () {
+        var resolvedNames: any = {};
+        var changedNames: any = {};
+        for (var i = 0; i < (participants || []).length; i++) {
+          var participant: any = participants[i];
+          if (!participant) continue;
+          var key = String(participant.id || participant.uid || "");
+          if (!key) continue;
+          if (String(participant.uid || "") === String(userId || "")) {
+            var ownFullName = currentShareFullName();
+            if (ownFullName) {
+              resolvedNames[key] = ownFullName;
+              var ownStored = normalizeShareDisplayName(participant.name || participant.displayName || "");
+              if (ownStored !== ownFullName) changedNames[key] = ownFullName;
+            }
+            continue;
+          }
+          if (!participant.uid && !participant.email && !participant.username) continue;
+          try {
+            var found = await findRegisteredUserForShare(
+              participant.email || "",
+              participant.phone || "",
+              participant.username || "",
+              participant.uid || ""
+            );
+            var foundFirstLast = [found && found.firstName, found && found.lastName]
+              .map(normalizeShareDisplayName)
+              .filter(Boolean)
+              .join(" ");
+            var full = normalizeShareDisplayName(
+              foundFirstLast || (found && (found.name || found.displayName || found.fullName)) || ""
+            );
+            if (!participantNameLooksUsable({ ...participant, ...(found || {}) }, full)) continue;
+            resolvedNames[key] = full;
+            var stored = String(participant.name || participant.displayName || "").replace(/\s+/g, " ").trim();
+            if (stored !== full) changedNames[key] = full;
+          } catch (_shareParticipantNameResolveError) {}
+        }
+        if (cancelled) return;
+        setShareResolvedParticipantNames(resolvedNames);
+        var changeKeys = Object.keys(changedNames);
+        if (changeKeys.length && selected) {
+          updateShareProject(selected.id, function (project) {
+            return {
+              ...project,
+              participants: (project.participants || []).map(function (participant) {
+                var key = String(participant.id || participant.uid || "");
+                return changedNames[key] ? { ...participant, name: changedNames[key], displayName: changedNames[key] } : participant;
+              }),
+              updatedAt: new Date().toISOString(),
+            };
+          });
+        }
+      })();
+      return function () { cancelled = true; };
+    },
+    [
+      selected ? selected.id : "",
+      (participants || []).map(function (p) {
+        return [p.id, p.uid, p.email, p.username, p.name, p.displayName].join("~");
+      }).join("|"),
+      currentUser && currentUser.name,
+      currentUser && currentUser.firstName,
+      currentUser && currentUser.lastName,
+      currentUser && currentUser.username,
+      userId,
+    ]
+  );
   var currentShareMember =
     (participants || []).find(function (p) {
       return p.uid === userId;
@@ -1425,6 +1947,41 @@ export function SharePanel() {
       currentShareMemberId,
     ]
   );
+  useEffect(
+    function () {
+      setNewShareCategoryColor(selected && selected.color ? selected.color : confirmButtonColor || "#4F8FF7");
+    },
+    [selected ? selected.id : null, selected && selected.color, confirmButtonColor]
+  );
+  function resetNewShareCategoryForm() {
+    setEditingShareCategoryId("");
+    setEditingShareCategoryName("");
+    setNewShareCategoryName("");
+    setNewShareCategoryIcon("🏷️");
+    setNewShareCategoryColor(selected && selected.color ? selected.color : confirmButtonColor || "#4F8FF7");
+    setShareCategoryMappingDraft("");
+    setShowNewShareCategoryPopup(false);
+  }
+  function openNewShareCategoryPopup() {
+    if (!canManageShareCategories) return;
+    setEditingShareCategoryId("");
+    setEditingShareCategoryName("");
+    setNewShareCategoryName("");
+    setNewShareCategoryIcon("🏷️");
+    setNewShareCategoryColor(selected && selected.color ? selected.color : confirmButtonColor || "#4F8FF7");
+    setShareCategoryMappingDraft("");
+    setShowNewShareCategoryPopup(true);
+  }
+  function openEditShareCategoryPopup(category) {
+    if (!category) return;
+    setEditingShareCategoryId(String(category.id || ""));
+    setEditingShareCategoryName(String(category.name || ""));
+    setNewShareCategoryName(String(category.name || ""));
+    setNewShareCategoryIcon(String(category.icon || "🏷️"));
+    setNewShareCategoryColor(String(category.color || selected.color || confirmButtonColor || "#4F8FF7"));
+    setShareCategoryMappingDraft(shareCategoryMappingValue(category.id));
+    setShowNewShareCategoryPopup(true);
+  }
   function saveProjectDetails() {
     if (!shareProjectDetailsValid) return;
     var v = String(projectNameDraft || "").trim();
@@ -1441,6 +1998,138 @@ export function SharePanel() {
     });
     setProjectEditingDetails(false);
     setToast("Progetto Share aggiornato");
+  }
+  function shareCategoryMappingValue(categoryId) {
+    var projectMap =
+      shareCategoryMappings && selected && shareCategoryMappings[String(selected.id)];
+    return projectMap && typeof projectMap === "object"
+      ? String(projectMap[String(categoryId)] || "")
+      : "";
+  }
+  function setShareCategoryMappingValue(categoryId, personalCategoryId) {
+    if (!selected || !setShareCategoryMappings) return;
+    var projectId = String(selected.id);
+    var shareId = String(categoryId || "");
+    setShareCategoryMappings(function (current) {
+      var next = { ...(current || {}) };
+      var projectMap = { ...(next[projectId] || {}) };
+      if (personalCategoryId) projectMap[shareId] = String(personalCategoryId);
+      else delete projectMap[shareId];
+      if (Object.keys(projectMap).length) next[projectId] = projectMap;
+      else delete next[projectId];
+      return next;
+    });
+  }
+  function addShareProjectCategory() {
+    if (!selected) return;
+    var name = String(newShareCategoryName || "").trim();
+    var now = new Date().toISOString();
+
+    if (editingShareCategoryId) {
+      if (canManageShareCategories) {
+        if (!name) {
+          setToast(L("Inserisci il nome della categoria Share"));
+          return;
+        }
+        updateShareProject(selected.id, function (project) {
+          return {
+            ...project,
+            categories: (project.categories || []).map(function (category) {
+              return String(category.id) === String(editingShareCategoryId)
+                ? {
+                    ...category,
+                    name: name,
+                    icon: String(newShareCategoryIcon || "🏷️"),
+                    color: String(newShareCategoryColor || selected.color || confirmButtonColor || "#4F8FF7"),
+                    updatedAt: now,
+                  }
+                : category;
+            }),
+          };
+        });
+      }
+      setShareCategoryMappingValue(editingShareCategoryId, shareCategoryMappingDraft);
+      resetNewShareCategoryForm();
+      setToast(L("Categoria Share aggiornata"));
+      return;
+    }
+
+    if (!canManageShareCategories) return;
+    if (!name) {
+      setToast(L("Inserisci il nome della categoria Share"));
+      return;
+    }
+    var category = {
+      id: "sc_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8),
+      name: name,
+      icon: String(newShareCategoryIcon || "🏷️"),
+      color: String(newShareCategoryColor || selected.color || confirmButtonColor || "#4F8FF7"),
+      status: "active",
+      createdAt: now,
+      updatedAt: now,
+    };
+    updateShareProject(selected.id, function (project) {
+      return { ...project, categories: (project.categories || []).concat([category]) };
+    });
+    if (shareCategoryMappingDraft) setShareCategoryMappingValue(category.id, shareCategoryMappingDraft);
+    if (!shareCategoryId) setShareCategoryId(String(category.id));
+    resetNewShareCategoryForm();
+    setToast(L("Categoria Share aggiunta"));
+  }
+  function deleteShareProjectCategory(categoryId) {
+    if (!selected || !canManageShareCategories) return;
+    if (!window.confirm(L("Eliminare questa categoria Share? Le spese storiche resteranno conservate e useranno la categoria personale predefinita.")))
+      return;
+    var now = new Date().toISOString();
+    updateShareProject(selected.id, function (project) {
+      return {
+        ...project,
+        categories: (project.categories || []).map(function (category) {
+          return String(category.id) === String(categoryId)
+            ? {
+                ...category,
+                status: "deleted",
+                deletedAt: now,
+                updatedAt: now,
+              }
+            : category;
+        }),
+      };
+    });
+    if (String(shareCategoryId || "") === String(categoryId))
+      setShareCategoryId("");
+    setEditingShareCategoryId("");
+    setEditingShareCategoryName("");
+    setToast(L("Categoria Share eliminata"));
+  }
+  function moveShareProjectCategory(categoryId, direction) {
+    if (!selected || !canManageShareCategories) return;
+    var visibleIds = projectShareCategories.map(function (category) {
+      return String(category.id || "");
+    });
+    var currentIndex = visibleIds.indexOf(String(categoryId || ""));
+    if (currentIndex < 0) return;
+    var targetIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= visibleIds.length) return;
+    var swapId = visibleIds[targetIndex];
+    updateShareProject(selected.id, function (project) {
+      var categories = (project.categories || []).slice();
+      var indexA = categories.findIndex(function (category) {
+        return String(category && category.id || "") === String(categoryId || "");
+      });
+      var indexB = categories.findIndex(function (category) {
+        return String(category && category.id || "") === String(swapId || "");
+      });
+      if (indexA < 0 || indexB < 0) return project;
+      var temp = categories[indexA];
+      categories[indexA] = categories[indexB];
+      categories[indexB] = temp;
+      return {
+        ...project,
+        categories: categories,
+        updatedAt: new Date().toISOString(),
+      };
+    });
   }
   function createProjectFromDraft() {
     if (shareProjectLimitReached) {
@@ -1564,9 +2253,15 @@ export function SharePanel() {
         });
         return;
       }
-      name = foundUser
-        ? foundUser.name || foundUser.displayName || (foundUser.username ? "@" + foundUser.username : email)
-        : email;
+      var foundFullName = foundUser
+        ? normalizeShareDisplayName(
+            [foundUser.firstName, foundUser.lastName].filter(Boolean).join(" ") ||
+            foundUser.name || foundUser.displayName || foundUser.fullName || ""
+          )
+        : "";
+      name = participantNameLooksUsable(foundUser || { email: email, username: usernameLookup }, foundFullName)
+        ? foundFullName
+        : L("Partecipante");
       var item = {
         id: "p_" + Date.now(),
         uid: foundUser ? foundUser.uid : null,
@@ -1578,8 +2273,17 @@ export function SharePanel() {
         role: "member",
         status: "pending",
       };
+      // FIX 2.4.3 - invitedEmails serve alle regole Firestore: chi e' invitato ma non
+      // ha ancora accettato non figura fra memberUids, e senza questo elenco non
+      // potrebbe leggere il progetto ne' aggiungersi accettando.
       updateShareProject(selected.id, function (p) {
-        return { ...p, participants: (p.participants || []).concat([item]) };
+        var pendingEmails = Array.isArray(p.invitedEmails) ? p.invitedEmails.slice() : [];
+        if (email && pendingEmails.indexOf(email) < 0) pendingEmails.push(email);
+        return {
+          ...p,
+          participants: (p.participants || []).concat([item]),
+          invitedEmails: pendingEmails,
+        };
       });
       await createShareInvite(selected, item, email, name, foundUser);
       setNewPersonName("");
@@ -1653,7 +2357,13 @@ export function SharePanel() {
         return;
       }
       if (foundUser) {
-        var name = foundUser.name || foundUser.displayName || nm || em || ph;
+        var foundContactFullName = normalizeShareDisplayName(
+          [foundUser.firstName, foundUser.lastName].filter(Boolean).join(" ") ||
+          foundUser.name || foundUser.displayName || foundUser.fullName || ""
+        );
+        var name = participantNameLooksUsable(foundUser, foundContactFullName)
+          ? foundContactFullName
+          : (nm || L("Partecipante"));
         var item = {
           id: "p_" + Date.now(),
           uid: foundUser.uid,
@@ -1964,6 +2674,37 @@ export function SharePanel() {
     selectedShareIds().length > 0 &&
     currentShareValidation.ok &&
     !currentShareValidation.blocking;
+  function resetSettlementForm() {
+    setSettlementFrom(currentShareMemberId || (participants[0] ? participants[0].id : "me"));
+    var defaultTo = activeParticipants.find(function (p) { return String(p.id) !== String(currentShareMemberId || "me"); }) || participants.find(function (p) { return String(p.id) !== String(currentShareMemberId || "me"); }) || null;
+    setSettlementTo(defaultTo ? defaultTo.id : "");
+    setSettlementAmount("");
+    setSettlementDate(todayStr());
+    setSettlementComment("");
+    setEditingSettlementActivityId(null);
+    setSharePendingReceipt(null);
+  }
+  function openNewSettlementPopup() {
+    resetSettlementForm();
+    setSettlementPopupOpen(true);
+  }
+  function openShareProjectArchiveConfirm(mode: "archive" | "restore") {
+    if (!selected) return;
+    setShareProjectArchiveMode(mode);
+    setShareProjectArchiveConfirmOpen(true);
+  }
+  function confirmShareProjectArchiveAction() {
+    if (!selected) return;
+    var mode = shareProjectArchiveMode === "restore" ? "restore" : "archive";
+    updateShareProject(selected.id, function (p) {
+      return mode === "restore"
+        ? { ...p, status: "active", archivedAt: null, restoredAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+        : { ...p, status: "archived", archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    });
+    setShareProjectArchiveConfirmOpen(false);
+    setToast(L(mode === "restore" ? "Progetto ripristinato" : "Progetto archiviato"));
+  }
+
   var settlementFormValid =
     !!selected &&
     parseFloat(settlementAmount) > 0 &&
@@ -2081,6 +2822,7 @@ export function SharePanel() {
       exchangeRateDate: String(shareFx.exchangeRateDate || new Date().toISOString().slice(0, 10)),
       exchangeRateSource: String(shareFx.exchangeRateSource || "base"),
       desc: shareDesc || "Spesa condivisa",
+      shareCategoryId: String(shareCategoryId || ""),
       paidBy: sharePaidBy,
       date: shareDate,
       time: shareEditingActivityId
@@ -2138,6 +2880,9 @@ export function SharePanel() {
         });
       }
       resetShareExpenseForm();
+      setShareProjectTab("attivita");
+      setShareExpenseFormOpen(false);
+      setShareEditingActivityId(null);
       setToast(
         shareEditingActivityId
           ? L("Spesa Share aggiornata")
@@ -2186,6 +2931,7 @@ export function SharePanel() {
       exchangeRateSource: String(a.exchangeRateSource || "base"),
     });
     setShareDesc(a.desc || "");
+    setShareCategoryId(String(a.shareCategoryId || ""));
     setSharePaidBy(a.paidBy || currentShareMemberId || "me");
     setShareDate(a.date || todayStr());
     var ids = Object.keys(a.shares || {});
@@ -2217,6 +2963,17 @@ export function SharePanel() {
     setShareProjectTab("attivita");
     setShareExpenseFormOpen(true);
   }
+  function startEditSettlement(a) {
+    if (!a || a.kind !== "settlement") return;
+    setEditingSettlementActivityId(a.id);
+    setSettlementFrom(String(a.from || currentShareMemberId || "me"));
+    setSettlementTo(String(a.to || ""));
+    setSettlementAmount(String(shareRound(Number(a.amount || 0)) || ""));
+    setSettlementDate(a.date || todayStr());
+    setSettlementComment(String(a.comment || a.desc || ""));
+    setSharePendingReceipt(activeShareReceiptForActivity(a.id) || null);
+    setSettlementPopupOpen(true);
+  }
   function addSettlement() {
     if (!settlementFormValid) return;
     var toId = settlementTo;
@@ -2231,34 +2988,95 @@ export function SharePanel() {
       });
       return;
     }
+    var previousSettlement = editingSettlementActivityId
+      ? ((selected && selected.activities) || []).find(function (x) {
+          return String(x && x.id) === String(editingSettlementActivityId);
+        }) || null
+      : null;
+    var activityId = editingSettlementActivityId || Date.now();
     var activity = {
-      id: Date.now(),
+      id: activityId,
       kind: "settlement",
       amount: parseFloat(settlementAmount),
       from: settlementFrom,
       to: toId,
       date: settlementDate,
-      time: new Date().toTimeString().slice(0, 5),
+      time: editingSettlementActivityId
+        ? (previousSettlement && previousSettlement.time) || new Date().toTimeString().slice(0, 5)
+        : new Date().toTimeString().slice(0, 5),
       desc: String(settlementComment || "").trim() || "Saldo tra partecipanti",
       comment: String(settlementComment || "").trim(),
-      createdAt: new Date().toISOString(),
+      receiptId: sharePendingReceipt
+        ? sharePendingReceipt.id
+        : previousSettlement && previousSettlement.receiptId || "",
+      createdAt: editingSettlementActivityId
+        ? (previousSettlement && previousSettlement.createdAt) || new Date().toISOString()
+        : new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
     updateShareProject(selected.id, function (p) {
+      if (editingSettlementActivityId) {
+        return {
+          ...p,
+          activities: (p.activities || []).map(function (a) {
+            return String(a.id) === String(editingSettlementActivityId) ? activity : a;
+          }),
+        };
+      }
       return { ...p, activities: [activity].concat(p.activities || []) };
     });
-    setSettlementAmount("");
-    setSettlementComment("");
+    if (sharePendingReceipt) {
+      var stored = {
+        ...sharePendingReceipt,
+        projectId: String(selected.id),
+        activityId: String(activityId),
+        retentionMonths: 6,
+      };
+      setShareReceiptUploads(function (list) {
+        return [stored].concat(
+          (list || []).filter(function (r) {
+            return String(r.id) !== String(stored.id);
+          })
+        );
+      });
+      saveShareAttachment(stored).catch(function (error) {
+        console.error("Share attachment upload error", error);
+        setToast({
+          text: L("Il saldo è stato salvato, ma l'allegato non è stato sincronizzato."),
+          type: "warning",
+          icon: "⚠️",
+          color: "#FFF8E1",
+          textColor: "#856404",
+        });
+      });
+    }
+    var wasEditingSettlement = !!editingSettlementActivityId;
+    resetSettlementForm();
     setSettlementPopupOpen(false);
-    setToast("Saldo registrato");
+    setShareProjectTab("attivita");
+    setShareExpenseFormOpen(false);
+    setShareEditingActivityId(null);
+    setToast(L(wasEditingSettlement ? "Saldo aggiornato" : "Saldo registrato"));
   }
+
   function deleteActivity(aid) {
     if (!selected) return;
-    if (!window.confirm(L("Eliminare questa spesa Share?"))) return;
+    var targetActivity = ((selected && selected.activities) || []).find(function (a) {
+      return String(a && a.id) === String(aid);
+    });
+    var isSettlement = !!(targetActivity && targetActivity.kind === "settlement");
+    if (!window.confirm(L(isSettlement ? "Eliminare questa operazione di saldo?" : "Eliminare questa spesa Share?"))) return;
     updateShareProject(selected.id, function (p) {
+      var deletedActivityIds = Array.isArray(p.deletedActivityIds)
+        ? p.deletedActivityIds.map(String)
+        : [];
+      var deletedId = String(aid);
+      if (deletedActivityIds.indexOf(deletedId) < 0) deletedActivityIds.push(deletedId);
       return {
         ...p,
+        deletedActivityIds: deletedActivityIds,
         activities: (p.activities || []).filter(function (a) {
-          return a.id !== aid;
+          return String(a && a.id) !== deletedId;
         }),
       };
     });
@@ -2267,7 +3085,7 @@ export function SharePanel() {
         return String(r.activityId || "") !== String(aid);
       });
     });
-    setToast("Spesa Share eliminata");
+    setToast(L(isSettlement ? "Operazione di saldo eliminata" : "Spesa Share eliminata"));
   }
   function balances() {
     var bal = {};
@@ -2321,6 +3139,261 @@ export function SharePanel() {
         }, 0)
     : 0;
   var myBalance = b[currentShareMemberId] || 0;
+  async function exportShareProjectXlsx() {
+    if (!selected) return;
+    var exportNameMap: any = { ...(shareResolvedParticipantNames || {}) };
+    for (var exportIndex = 0; exportIndex < (participants || []).length; exportIndex++) {
+      var exportParticipant: any = participants[exportIndex];
+      if (!exportParticipant) continue;
+      var exportKey = String(exportParticipant.id || exportParticipant.uid || "");
+      if (!exportKey || exportNameMap[exportKey]) continue;
+      if (exportParticipant.uid === userId && currentUser && currentUser.name) {
+        exportNameMap[exportKey] = String(currentUser.name).replace(/\s+/g, " ").trim();
+        continue;
+      }
+      if (!exportParticipant.uid && !exportParticipant.email && !exportParticipant.username) continue;
+      try {
+        var exportFound = await findRegisteredUserForShare(
+          exportParticipant.email || "",
+          exportParticipant.phone || "",
+          exportParticipant.username || "",
+          exportParticipant.uid || ""
+        );
+        var exportFirstLast = [exportFound && exportFound.firstName, exportFound && exportFound.lastName]
+          .map(normalizeShareDisplayName)
+          .filter(Boolean)
+          .join(" ");
+        var exportFull = normalizeShareDisplayName(
+          exportFirstLast || (exportFound && (exportFound.name || exportFound.displayName || exportFound.fullName)) || ""
+        );
+        if (participantNameLooksUsable({ ...exportParticipant, ...(exportFound || {}) }, exportFull)) {
+          exportNameMap[exportKey] = exportFull;
+        }
+      } catch (_shareExcelNameResolveError) {}
+    }
+    function exportFullName(p) {
+      var key = String((p && (p.id || p.uid)) || "");
+      var resolvedExport = normalizeShareDisplayName(key && exportNameMap[key]);
+      if (resolvedExport && participantNameLooksUsable(p, resolvedExport)) return resolvedExport;
+      return personFullName(p);
+    }
+    function exportPersonLabel(p) {
+      var full = exportFullName(p);
+      var parts = full.split(/\s+/).filter(Boolean);
+      if (!parts.length) return full;
+      var first = parts[0];
+      var sameFirst = (participants || []).filter(function (candidate) {
+        var candidateParts = exportFullName(candidate).split(/\s+/).filter(Boolean);
+        return candidateParts.length && candidateParts[0].toLocaleLowerCase() === first.toLocaleLowerCase();
+      });
+      if (sameFirst.length > 1 && parts.length > 1) {
+        return first + " " + String(parts[parts.length - 1] || "").slice(0, 1).toUpperCase() + ".";
+      }
+      return first;
+    }
+    function xml(value) {
+      return String(value == null ? "" : value)
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+    }
+    function colName(index) {
+      var name = "";
+      var n = index + 1;
+      while (n > 0) {
+        var r = (n - 1) % 26;
+        name = String.fromCharCode(65 + r) + name;
+        n = Math.floor((n - 1) / 26);
+      }
+      return name;
+    }
+    function splitModeLabel(mode) {
+      if (mode === "percent") return L("Percentuali");
+      if (mode === "amount") return L("Importi");
+      return L("Equa");
+    }
+    var rows: any[] = [];
+    var merges: string[] = [];
+    function addRow(values, style, height) {
+      var rowIndex = rows.length + 1;
+      rows.push({ values: values || [], style: style == null ? 0 : style, height: height || 20 });
+      return rowIndex;
+    }
+    function section(title) {
+      var r = addRow([title], 3, 24);
+      merges.push("A" + r + ":H" + r);
+    }
+    function participantName(id) {
+      var p = participants.find(function (x) { return String(x.id) === String(id); });
+      return p ? exportPersonLabel(p) : L("Partecipante");
+    }
+    function exportShareCategoryName(activity) {
+      var shareCategoryId = String((activity && activity.shareCategoryId) || "");
+      if (!shareCategoryId) return L("Senza categoria");
+      var shareCategory = ((selected && selected.categories) || []).find(function (category) {
+        return String(category && category.id || "") === shareCategoryId;
+      });
+      return shareCategory && shareCategory.name ? String(shareCategory.name) : L("Senza categoria");
+    }
+    var theme = projectTheme(selected);
+    var titleRow = addRow([String(theme.icon || "🤝") + "  " + String(selected.name || selected.title || L("Progetto Share"))], 1, 34);
+    merges.push("A" + titleRow + ":H" + titleRow);
+    var descRow = addRow([String(selected.description || L("Nessuna descrizione"))], 2, 26);
+    merges.push("A" + descRow + ":H" + descRow);
+    addRow([], 0, 9);
+
+    section(L("Partecipanti"));
+    addRow([L("Nome"), L("Email"), L("Stato"), "", "", "", ""], 4, 22);
+    (participants || []).forEach(function (p) {
+      var contactEmail = normalizeEmail(p.email || "");
+      var status = p.status === "archived" ? L("Archiviato") : p.pending || p.status === "pending" ? L("Invito in attesa") : L("Attivo");
+      addRow([exportFullName(p), contactEmail, status, "", "", "", ""], 0, 20);
+    });
+    if (!(participants || []).length) addRow([L("Nessun partecipante")], 7, 20);
+    addRow([], 0, 9);
+
+    section(L("Transazioni"));
+    addRow([L("Data"), L("Descrizione"), L("Categoria Share"), L("Da / Pagato da"), L("A / Condivisa con"), L("Suddivisione"), L("Valuta"), L("Importo")], 4, 22);
+    ((selected && selected.activities) || []).forEach(function (a) {
+      if (a.kind === "settlement") {
+        addRow([
+          fmtDate(a.date, dateFmt),
+          a.comment || a.desc || L("Saldo tra partecipanti"),
+          "",
+          participantName(a.from),
+          participantName(a.to),
+          L("Saldo / Rimborso"),
+          String(a.currency || a.baseCurrency || _c.currency || "EUR"),
+          { n: Number(a.amount || 0), style: 5 },
+        ], 0, 20);
+      } else {
+        var sharedWith = Object.keys(a.shares || {}).map(participantName).filter(Boolean).join(", ");
+        var txCurrency = String(a.currency || a.baseCurrency || _c.currency || "EUR");
+        var txAmount = a.originalAmount != null && a.currency && a.baseCurrency && String(a.currency) !== String(a.baseCurrency)
+          ? Number(a.originalAmount || 0)
+          : Number(a.amount || 0);
+        addRow([
+          fmtDate(a.date, dateFmt),
+          a.desc || L("Spesa condivisa"),
+          exportShareCategoryName(a),
+          participantName(a.paidBy || "me"),
+          sharedWith,
+          splitModeLabel(a.splitMode || "equal"),
+          txCurrency,
+          { n: txAmount, style: 5 },
+        ], 0, 20);
+      }
+    });
+    if (!((selected && selected.activities) || []).length) addRow([L("Nessuna transazione")], 7, 20);
+    addRow([], 0, 9);
+
+    section(L("Saldi"));
+    addRow([L("Chi paga"), L("Chi riceve"), L("Importo"), "", "", "", ""], 4, 22);
+    (debts || []).forEach(function (d) {
+      addRow([participantName(d.from), participantName(d.to), { n: Number(d.amount || 0), style: 5 }, "", "", "", ""], 0, 20);
+    });
+    if (!(debts || []).length) addRow([L("Nessun saldo aperto")], 7, 20);
+    addRow([], 0, 9);
+
+    section(L("Pagamenti da effettuare"));
+    addRow([L("Chi deve pagare"), L("Chi deve ricevere"), L("Importo"), L("Istruzione"), "", "", ""], 4, 22);
+    (debts || []).forEach(function (d) {
+      var fromName = participantName(d.from);
+      var toName = participantName(d.to);
+      addRow([
+        fromName,
+        toName,
+        { n: Number(d.amount || 0), style: 5 },
+        fromName + " → " + toName,
+        "",
+        "",
+        "",
+      ], 0, 20);
+    });
+    if (!(debts || []).length) addRow([L("Nessun pagamento da effettuare")], 7, 20);
+    addRow([], 0, 9);
+
+    section(L("Riassunto"));
+    addRow([L("Spese progetto"), { n: Number(totalSpent || 0), style: 6 }, "", "", "", "", ""], 0, 22);
+    addRow([L("Mi devono"), { n: Math.max(0, Number(myBalance || 0)), style: 6 }, "", "", "", "", ""], 0, 22);
+    addRow([L("Devo"), { n: Math.max(0, -Number(myBalance || 0)), style: 6 }, "", "", "", "", ""], 0, 22);
+
+    var sheetRows = "";
+    rows.forEach(function (row, ri) {
+      var rn = ri + 1;
+      sheetRows += '<row r="' + rn + '" ht="' + row.height + '" customHeight="1">';
+      for (var ci = 0; ci < Math.max(1, row.values.length); ci++) {
+        var raw = row.values[ci] == null ? "" : row.values[ci];
+        var cellStyle = row.style || 0;
+        var addr = colName(ci) + rn;
+        if (raw && typeof raw === "object" && raw.n !== undefined) {
+          cellStyle = raw.style == null ? cellStyle : raw.style;
+          sheetRows += '<c r="' + addr + '" s="' + cellStyle + '" t="n"><v>' + String(Number(raw.n) || 0) + '</v></c>';
+        } else {
+          sheetRows += '<c r="' + addr + '" s="' + cellStyle + '" t="inlineStr"><is><t xml:space="preserve">' + xml(raw) + '</t></is></c>';
+        }
+      }
+      sheetRows += "</row>";
+    });
+    var sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<cols><col min="1" max="1" width="16" customWidth="1"/><col min="2" max="2" width="34" customWidth="1"/><col min="3" max="3" width="22" customWidth="1"/><col min="4" max="4" width="22" customWidth="1"/><col min="5" max="5" width="30" customWidth="1"/><col min="6" max="6" width="18" customWidth="1"/><col min="7" max="7" width="12" customWidth="1"/><col min="8" max="8" width="16" customWidth="1"/></cols>' +
+      '<sheetData>' + sheetRows + '</sheetData>' +
+      (merges.length ? '<mergeCells count="' + merges.length + '">' + merges.map(function (m) { return '<mergeCell ref="' + m + '"/>'; }).join("") + '</mergeCells>' : "") +
+      '<sheetViews><sheetView workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      '</worksheet>';
+    var stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+      '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>' +
+      '<fonts count="5">' +
+      '<font><sz val="11"/><name val="Aptos"/></font>' +
+      '<font><b/><sz val="20"/><color rgb="FFFFFFFF"/><name val="Aptos Display"/></font>' +
+      '<font><i/><sz val="11"/><color rgb="FF667085"/><name val="Aptos"/></font>' +
+      '<font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Aptos"/></font>' +
+      '<font><b/><sz val="11"/><color rgb="FF20242C"/><name val="Aptos"/></font>' +
+      '</fonts>' +
+      '<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF378ADD"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FF7F77DD"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF5FF"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      '<borders count="2"><border/><border><left style="thin"><color rgb="FFDDE2EA"/></left><right style="thin"><color rgb="FFDDE2EA"/></right><top style="thin"><color rgb="FFDDE2EA"/></top><bottom style="thin"><color rgb="FFDDE2EA"/></bottom></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="8">' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFill="1" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="3" fillId="3" borderId="0" xfId="0" applyFill="1" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>' +
+      '<xf numFmtId="0" fontId="4" fillId="4" borderId="1" xfId="0" applyFill="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" wrapText="1"/></xf>' +
+      '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>' +
+      '<xf numFmtId="164" fontId="4" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>' +
+      '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment vertical="center"/></xf>' +
+      '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    var workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Share" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    var workbookRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    var rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    var contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    var enc = new TextEncoder();
+    function bytes(v) { return enc.encode(String(v)); }
+    function u16(n) { return [n & 255, (n >> 8) & 255]; }
+    function u32(n) { return [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255]; }
+    var crcTable: any[] = [];
+    for (var ci = 0; ci < 256; ci++) { var cv = ci; for (var ck = 0; ck < 8; ck++) cv = cv & 1 ? (0xEDB88320 ^ (cv >>> 1)) : cv >>> 1; crcTable[ci] = cv; }
+    function crc(data) { var r = 0xFFFFFFFF; for (var i = 0; i < data.length; i++) r = crcTable[(r ^ data[i]) & 255] ^ (r >>> 8); return (r ^ 0xFFFFFFFF) >>> 0; }
+    function entry(name, data) { var nb = bytes(name), db = data instanceof Uint8Array ? data : bytes(data), cr = crc(db), flag = 0x0800; var lh = [0x50,0x4B,0x03,0x04,20,0].concat(u16(flag),u16(0),u16(0),u16(0),u32(cr),u32(db.length),u32(db.length),u16(nb.length),u16(0)); return { lh: lh, nb: nb, db: db, cr: cr, off: 0 }; }
+    var entries: any[] = [entry("[Content_Types].xml", contentTypes), entry("_rels/.rels", rootRels), entry("xl/workbook.xml", workbookXml), entry("xl/_rels/workbook.xml.rels", workbookRels), entry("xl/styles.xml", stylesXml), entry("xl/worksheets/sheet1.xml", sheetXml)];
+    var zip: number[] = [], off = 0;
+    entries.forEach(function (en) { en.off = off; var rec = en.lh.concat(Array.from(en.nb), Array.from(en.db)); zip = zip.concat(rec); off += rec.length; });
+    var cdStart = off, cd: number[] = [], flag = 0x0800;
+    entries.forEach(function (en) { cd = cd.concat([0x50,0x4B,0x01,0x02,20,0,20,0].concat(u16(flag),u16(0),u16(0),u16(0),u32(en.cr),u32(en.db.length),u32(en.db.length),u16(en.nb.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(en.off),Array.from(en.nb))); });
+    zip = zip.concat(cd, [0x50,0x4B,0x05,0x06,0,0,0,0].concat(u16(entries.length),u16(entries.length),u32(cd.length),u32(cdStart),u16(0)));
+    var safeName = String(selected.name || selected.title || "Share").replace(/[\\/:*?"<>|]+/g, "_").trim() || "Share";
+    androidDownload(
+      "fAInance_Share_" + safeName + ".xlsx",
+      new Blob([new Uint8Array(zip)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+      function () { setToast({ text: L("File Excel Share pronto"), type: "success", icon: "📊" }); }
+    );
+  }
+
   var shareCheck = shareValidation();
   var showShareCheck =
     shareCheck.blocking &&
@@ -2367,6 +3440,11 @@ export function SharePanel() {
         String(a.paidBy || "") !== String(shareFilterPaidBy)
       )
         return false;
+      if (
+        shareFilterCategoryId &&
+        (a.kind === "settlement" || String(a.shareCategoryId || "") !== String(shareFilterCategoryId))
+      )
+        return false;
       return true;
     })
     .slice()
@@ -2393,6 +3471,7 @@ export function SharePanel() {
     shareFilterAmountMin ||
     shareFilterAmountMax ||
     shareFilterPaidBy ||
+    shareFilterCategoryId ||
     shareSortDirection !== "desc"
   );
   function resetShareFilters() {
@@ -2402,6 +3481,7 @@ export function SharePanel() {
     setShareFilterAmountMin("");
     setShareFilterAmountMax("");
     setShareFilterPaidBy("");
+    setShareFilterCategoryId("");
     setShareSortDirection("desc");
   }
   function toggleShareFilterSection(id) {
@@ -2430,6 +3510,13 @@ export function SharePanel() {
         return String(x.id) === String(shareFilterPaidBy);
       });
       return p ? personLabel(p) : L("Tutti i pagatori");
+    }
+    if (id === "category") {
+      if (!shareFilterCategoryId) return L("Tutte le categorie");
+      var shareCategory = projectShareCategories.find(function (x) {
+        return String(x.id) === String(shareFilterCategoryId);
+      });
+      return shareCategory ? String(shareCategory.name || L("Categoria")) : L("Tutte le categorie");
     }
     if (id === "order")
       return shareSortDirection === "asc"
@@ -2492,7 +3579,7 @@ export function SharePanel() {
               <span
                 style={{
                   display: "block",
-                  fontSize: 11,
+                  fontSize: 10.5,
                   color: subC,
                   marginTop: 2,
                   overflow: "hidden",
@@ -2535,7 +3622,15 @@ export function SharePanel() {
     { id: "saldi", label: L("Saldi") },
   ];
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+    <div id="share_panel_root" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <input
+        ref={shareReceiptFileInputRef}
+        type="file"
+        accept="image/*,.jpg,.jpeg,.png,.webp"
+        capture="environment"
+        onChange={onShareReceiptFileSelected}
+        style={{ display: "none" }}
+      />
       <div
         style={{
           display: "flex",
@@ -2596,7 +3691,7 @@ export function SharePanel() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontSize: 22,
+                fontSize: 20,
                 flexShrink: 0,
               }}
             >
@@ -2642,6 +3737,91 @@ export function SharePanel() {
               style={{ padding: "9px 10px", fontSize: 12 }}
             >
               {L("Rifiuta")}
+            </Btn>
+          </div>
+        </div>
+      )}
+      {showNewShareCategoryPopup && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.58)", zIndex: 10145, display: "flex", alignItems: "center", justifyContent: "center", padding: "7vh 16px 3vh", boxSizing: "border-box", overflowY: "auto" }}
+          onMouseDown={function (e) { if (e.target === e.currentTarget) resetNewShareCategoryForm(); }}
+        >
+          <div style={{ position: "relative", width: "100%", maxWidth: 520, background: cardBg, borderRadius: 22, border: "1px solid " + borderC, boxShadow: "0 18px 65px rgba(0,0,0,0.38)", padding: "20px 18px 18px" }}>
+            <div style={{ position: "absolute", right: 14, top: 14 }}>
+              <PopupCloseButton onClick={resetNewShareCategoryForm} dark={dark} label={L("Chiudi")} />
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 950, color: textC, marginBottom: 16, paddingRight: 44 }}>
+              {L(editingShareCategoryId ? "Modifica categoria" : "Nuova categoria")}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: 12, alignItems: "start", opacity: canManageShareCategories ? 1 : .65 }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 850, color: subC, marginBottom: 6 }}>{L("Icona")}</div>
+                  <EmojiPicker value={newShareCategoryIcon} onChange={function (v) { if (canManageShareCategories) setNewShareCategoryIcon(v); }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 850, color: subC, marginBottom: 6 }}>{L("Colore")}</div>
+                  <AppColorSelector value={newShareCategoryColor} disabled={!canManageShareCategories} onChange={function (v) { if (canManageShareCategories) setNewShareCategoryColor(v); }} compact={true} />
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, color: subC, marginBottom: 6 }}>{L("Nome categoria")}</div>
+                <input autoFocus={canManageShareCategories} disabled={!canManageShareCategories} value={newShareCategoryName} onChange={function (e) { if (canManageShareCategories) setNewShareCategoryName(e.target.value); }} onKeyDown={function (e) { if (e.key === "Enter") addShareProjectCategory(); }} placeholder={L("Inserisci il nome della categoria")} style={{ ...sinp, width: "100%", boxSizing: "border-box", borderRadius: 16, padding: "13px 14px", border: "1px solid " + (dark ? "#484860" : "#D9E1F5"), background: dark ? "#242437" : "#FBFCFF", boxShadow: dark ? "none" : "0 8px 18px rgba(79,143,247,0.08)", fontSize: 14, fontWeight: 700 }} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 850, color: subC, marginBottom: 6 }}>{L("Categoria personale per le mie statistiche")}</div>
+                <select value={shareCategoryMappingDraft} onChange={function (e) { setShareCategoryMappingDraft(e.target.value); }} style={{ ...sinp, width: "100%", boxSizing: "border-box", borderRadius: 16, padding: "13px 14px", border: "1px solid " + (dark ? "#806318" : "#E4BF60"), background: dark ? "#302816" : "#FFF9EC", boxShadow: dark ? "none" : "0 8px 18px rgba(223,175,58,0.14)", fontWeight: 700, fontSize: 14 }}>
+                  <option value="">{(shareDefaultPersonalCategory ? shareDefaultPersonalCategory.name : L("Altro")) + " (" + L("categoria Default") + ")"}</option>
+                  {personalShareCategories.map(function (personalCategory) {
+                    return <option key={personalCategory.id} value={String(personalCategory.id)}>{personalCategory.icon || "🏷️"} {personalCategory.name}</option>;
+                  })}
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
+              <Btn onClick={addShareProjectCategory} disabled={!editingShareCategoryId && (!canManageShareCategories || !String(newShareCategoryName || "").trim())} bg={(!editingShareCategoryId && (!canManageShareCategories || !String(newShareCategoryName || "").trim())) ? "#A8A8A8" : confirmButtonColor} style={{ flex: 1, padding: 12, fontWeight: 950 }}>{L("Salva")}</Btn>
+              <Btn onClick={resetNewShareCategoryForm} bg={dark ? "#333" : "#f0f0f0"} color={textC} style={{ padding: "12px 16px", fontWeight: 900 }}>{L("Annulla")}</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+      {shareReceiptConfirmationOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={L("Ricevuta caricata")}
+          onMouseDown={function (event) {
+            if (event.target === event.currentTarget) setShareReceiptConfirmationOpen(false);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 10155,
+            background: "rgba(0,0,0,0.58)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "7vh 16px 3vh",
+            boxSizing: "border-box",
+            overflowY: "auto",
+          }}
+        >
+          <div style={{ position: "relative", width: "100%", maxWidth: 420, background: cardBg, borderRadius: 22, border: "1px solid " + borderC, boxShadow: "0 18px 65px rgba(0,0,0,0.38)", padding: "20px 18px 18px" }}>
+            <div style={{ position: "absolute", right: 14, top: 14 }}>
+              <PopupCloseButton onClick={function () { setShareReceiptConfirmationOpen(false); }} dark={dark} label={L("Chiudi")} />
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 950, color: textC, marginBottom: 8, paddingRight: 44 }}>
+              {L("Ricevuta caricata")}
+            </div>
+            <div style={{ fontSize: 12.5, lineHeight: 1.45, color: subC, marginBottom: 18 }}>
+              {L("La foto della ricevuta è stata caricata correttamente.")}
+            </div>
+            <Btn
+              onClick={function () { setShareReceiptConfirmationOpen(false); }}
+              bg={confirmButtonColor}
+              style={{ width: "100%", padding: "11px 14px", fontWeight: 900 }}
+            >
+              {L("OK")}
             </Btn>
           </div>
         </div>
@@ -2950,12 +4130,12 @@ export function SharePanel() {
                         flexShrink: 0,
                       }}
                     >
-                      <FainanceIcon value={theme.icon} size={24} />
+                      <FainanceIcon value={theme.icon} size={21} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div
                         style={{
-                          fontSize: 14,
+                          fontSize: 13.5,
                           fontWeight: 900,
                           color: textC,
                           overflow: "hidden",
@@ -3132,6 +4312,23 @@ export function SharePanel() {
           </div>
         </div>
       )}
+      {!selected && (
+        <div
+          style={{
+            background: cardBg,
+            border: "1px solid " + borderC,
+            borderRadius: 18,
+            padding: 18,
+            color: textC,
+            boxShadow: dark ? "none" : "0 8px 24px rgba(15,23,42,.06)",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 950, marginBottom: 5 }}>{L("Nessun progetto Share selezionato")}</div>
+          <div style={{ fontSize: 12, color: subC, lineHeight: 1.45 }}>
+            {L(projects.length ? "Seleziona un progetto per continuare." : "Non ci sono progetti Share disponibili.")}
+          </div>
+        </div>
+      )}
       {selected && (
         <>
           <div
@@ -3147,134 +4344,255 @@ export function SharePanel() {
               var theme = projectTheme(selected);
               return (
                 <div
-                  style={{ display: "flex", gap: 12, alignItems: "flex-start" }}
+                  style={{ display: "flex", gap: 10, alignItems: "flex-start" }}
                 >
                   <div
                     style={{
-                      width: 54,
-                      height: 54,
-                      borderRadius: 16,
+                      width: 44,
+                      height: 44,
+                      borderRadius: 14,
                       background: theme.color,
                       color: "#fff",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: 26,
+                      fontSize: 22,
                       flexShrink: 0,
                       boxShadow: dark
                         ? "none"
                         : "0 8px 18px " + theme.color + "44",
                     }}
                   >
-                    <FainanceIcon value={theme.icon} size={24} />
+                    <FainanceIcon value={theme.icon} size={21} />
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
                     <div
                       style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        flexWrap: "wrap",
+                        fontSize: 14,
+                        fontWeight: 900,
+                        color: textC,
+                        lineHeight: 1.14,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        minWidth: 0,
+                        width: "100%",
                       }}
                     >
-                      <div
-                        style={{
-                          fontSize: 18,
-                          fontWeight: 900,
-                          color: textC,
-                          lineHeight: 1.18,
-                          whiteSpace: "normal",
-                          overflowWrap: "anywhere",
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {selected.name || "Progetto"}
-                      </div>
+                      {selected.name || "Progetto"}
                     </div>
                     <div
                       style={{
-                        fontSize: 12,
+                        fontSize: 10.5,
                         color: subC,
-                        marginTop: 4,
-                        whiteSpace: "pre-wrap",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
                       }}
                     >
                       {selected.description ||
                         L("Progetti, spese condivise e saldi")}
                     </div>
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "flex-end",
-                      gap: 6,
-                      flexShrink: 0,
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        onClick={function () {
-                          setProjectNameDraft(
-                            selected ? selected.name || "" : ""
-                          );
-                          setProjectDescDraft(
-                            selected ? selected.description || "" : ""
-                          );
-                          setProjectIconDraft(
-                            selected ? selected.icon || "🤝" : "🤝"
-                          );
-                          setProjectColorDraft(
-                            selected ? selected.color || "#4F8FF7" : "#4F8FF7"
-                          );
-                          setProjectEditingDetails(true);
-                        }}
-                        style={{
-                          background: "#EEF4FF",
-                          border: "1px solid #BFD7FF",
-                          color: confirmButtonColor,
-                          borderRadius: 10,
-                          padding: "8px 10px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        ✏
-                      </button>
-                      <button
-                        onClick={function () {
-                          requestDeleteProject(selected.id);
-                        }}
-                        style={{
-                          background: "#fff0f0",
-                          border: "1px solid #ffd0d0",
-                          color: expenseColor,
-                          borderRadius: 10,
-                          padding: "8px 10px",
-                          cursor: "pointer",
-                        }}
-                      >
-                        🗑
-                      </button>
-                    </div>
-                    <span
+                    <div
                       style={{
-                        display: "inline-flex",
+                        display: "flex",
                         alignItems: "center",
-                        padding: "4px 10px",
-                        borderRadius: 999,
-                        background: theme.color + "18",
-                        color: theme.color,
-                        fontSize: 11,
-                        fontWeight: 900,
+                        justifyContent: "space-between",
+                        gap: 8,
+                        minWidth: 0,
+                        marginTop: 2,
                       }}
                     >
-                      {L("Progetto attivo")}
-                    </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, flex: 1 }}>
+                        <select
+                          value={shareProjectTab}
+                          onChange={function (e) { setShareProjectTab(e.target.value); }}
+                          style={{
+                            ...sinp,
+                            minWidth: 0,
+                            width: "100%",
+                            maxWidth: 150,
+                            fontSize: 11,
+                            fontWeight: 800,
+                            padding: "7px 24px 7px 8px",
+                            borderRadius: 11,
+                            background: dark ? "#232335" : "#F7F8FC",
+                            border: "1px solid " + borderC,
+                            color: textC,
+                          }}
+                        >
+                          <option value="attivita">{L("Spese")}</option>
+                          <option value="categorie">{L("Categorie")}</option>
+                          <option value="partecipanti">{L("Partecipanti")}</option>
+                          <option value="riassunto">{L("Riassunto e Saldi")}</option>
+                        </select>
+                        {selected && selected.status === "archived" && (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              background: dark ? "#333" : "#F0F0F0",
+                              color: textC,
+                              fontSize: 10,
+                              fontWeight: 900,
+                              flexShrink: 0,
+                            }}
+                          >
+                            {L("Archiviato")}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                        <button
+                          onClick={function () {
+                            setProjectNameDraft(
+                              selected ? selected.name || "" : ""
+                            );
+                            setProjectDescDraft(
+                              selected ? selected.description || "" : ""
+                            );
+                            setProjectIconDraft(
+                              selected ? selected.icon || "🤝" : "🤝"
+                            );
+                            setProjectColorDraft(
+                              selected ? selected.color || "#4F8FF7" : "#4F8FF7"
+                            );
+                            setProjectEditingDetails(true);
+                          }}
+                          title={L("Modifica")}
+                          style={{
+                            background: "#EEF4FF",
+                            border: "1px solid #BFD7FF",
+                            color: confirmButtonColor,
+                            borderRadius: 8,
+                            width: 24,
+                            height: 24,
+                            padding: 0,
+                            cursor: "pointer",
+                          }}
+                        >
+                          ✏
+                        </button>
+                        <button
+                          onClick={function () {
+                            openShareProjectArchiveConfirm(selected && selected.status === "archived" ? "restore" : "archive");
+                          }}
+                          title={L(selected && selected.status === "archived" ? "Ripristina" : "Archivia")}
+                          style={{
+                            background: dark ? "#2F2F39" : "#F3F4F7",
+                            border: "1px solid " + borderC,
+                            color: textC,
+                            borderRadius: 8,
+                            width: 24,
+                            height: 24,
+                            padding: 0,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {selected && selected.status === "archived" ? "📂" : "🗂️"}
+                        </button>
+                        <button
+                          onClick={function () {
+                            requestDeleteProject(selected.id);
+                          }}
+                          title={L("Elimina")}
+                          style={{
+                            background: "#fff0f0",
+                            border: "1px solid #ffd0d0",
+                            color: expenseColor,
+                            borderRadius: 8,
+                            width: 24,
+                            height: 24,
+                            padding: 0,
+                            cursor: "pointer",
+                          }}
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               );
             })()}
           </div>
+          {shareProjectArchiveConfirmOpen && (
+            <div
+              style={{
+                position: "fixed",
+                inset: 0,
+                background: "rgba(0,0,0,0.45)",
+                zIndex: 9998,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "16px",
+                boxSizing: "border-box",
+              }}
+              onClick={function (e) {
+                if (e.target === e.currentTarget) setShareProjectArchiveConfirmOpen(false);
+              }}
+            >
+              <div
+                style={{
+                  position: "relative",
+                  width: "100%",
+                  maxWidth: 420,
+                  background: cardBg,
+                  border: "1px solid " + borderC,
+                  borderRadius: 22,
+                  padding: 18,
+                  boxShadow: dark ? "none" : "0 18px 42px rgba(15,23,42,.18)",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 6 }}>
+                  <PopupCloseButton onClick={function () { setShareProjectArchiveConfirmOpen(false); }} dark={dark} label={L("Chiudi")} />
+                </div>
+                <div style={{ fontSize: 17, fontWeight: 950, color: textC, marginBottom: 6 }}>
+                  {L(shareProjectArchiveMode === "restore" ? "Ripristina progetto" : "Archivia progetto")}
+                </div>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: subC, marginBottom: 16 }}>
+                  {L(shareProjectArchiveMode === "restore" ? "Vuoi ripristinare questo progetto Share?" : "Vuoi archiviare questo progetto Share?")}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={function () { setShareProjectArchiveConfirmOpen(false); }}
+                    style={{
+                      border: "1px solid " + borderC,
+                      background: dark ? "#2E2E3C" : "#F6F7FB",
+                      color: textC,
+                      borderRadius: 13,
+                      padding: "11px 10px",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {L("Annulla")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmShareProjectArchiveAction}
+                    style={{
+                      border: 0,
+                      background: confirmButtonColor,
+                      color: "#fff",
+                      borderRadius: 13,
+                      padding: "11px 10px",
+                      fontSize: 12,
+                      fontWeight: 900,
+                      cursor: "pointer",
+                    }}
+                  >
+                    {L(shareProjectArchiveMode === "restore" ? "Ripristina" : "Archivia")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           {projectEditingDetails && (
             <div
               style={{
@@ -3433,46 +4751,6 @@ export function SharePanel() {
               </div>
             </div>
           )}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(3,1fr)",
-              gap: 8,
-            }}
-          >
-            {[
-              { id: "attivita", label: L("Progetto") },
-              { id: "partecipanti", label: L("Partecipanti") },
-              { id: "riassunto", label: L("Riassunto e Saldi") },
-            ].map(function (tb) {
-              var active = shareProjectTab === tb.id;
-              return (
-                <button
-                  key={tb.id}
-                  onClick={function () {
-                    setShareProjectTab(tb.id);
-                  }}
-                  style={{
-                    border:
-                      "1px solid " + (active ? secondaryButtonColor : borderC),
-                    background: active
-                      ? secondaryButtonColor
-                      : dark
-                      ? "#333"
-                      : "#f0f0f0",
-                    color: active ? "#fff" : textC,
-                    borderRadius: btnRadius,
-                    padding: "11px 8px",
-                    fontSize: 12,
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  {tb.label}
-                </button>
-              );
-            })}
-          </div>
           {shareProjectTab === "attivita" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <Btn
@@ -3755,7 +5033,7 @@ export function SharePanel() {
                                   width: "min(150px, 100%)",
                                 }}
                               >
-                                {!String(shareAmount || "").trim() && (
+                                {!String(shareAmount || "").trim() && !shareAmountFocused && (
                                   <div
                                     style={{
                                       position: "absolute",
@@ -3779,6 +5057,8 @@ export function SharePanel() {
                                   inputMode="decimal"
                                   placeholder=""
                                   value={shareAmount}
+                                  onFocus={function () { setShareAmountFocused(true); }}
+                                  onBlur={function () { setShareAmountFocused(false); }}
                                   onChange={function (e) {
                                     setShareAmount(e.target.value);
                                   }}
@@ -3808,7 +5088,7 @@ export function SharePanel() {
                                 />
                               </div>
                             </div>
-                            {!String(shareAmount || "").trim() && (
+                            {!String(shareAmount || "").trim() && !shareAmountFocused && (
                               <div
                                 style={{
                                   fontSize: 13,
@@ -3863,8 +5143,8 @@ export function SharePanel() {
                             }}
                             style={{
                               ...sinp,
-                              minHeight: 72,
-                              height: 72,
+                              minHeight: 40,
+                              height: 40,
                               resize: "none",
                               padding: "11px 12px",
                               lineHeight: 1.25,
@@ -3891,15 +5171,52 @@ export function SharePanel() {
                               fontWeight: 800,
                               color: subC,
                               display: "block",
-                              marginBottom: 8,
+                              marginBottom: 6,
                             }}
                           >
-                            {L("Data")}
+                            {L("Categoria")}
                           </label>
+                          <select
+                            value={shareCategoryId}
+                            onChange={function (e) {
+                              setShareCategoryId(e.target.value);
+                            }}
+                            style={sinp}
+                          >
+                            <option value="">{L("Senza categoria")}</option>
+                            {projectShareCategories.map(function (category) {
+                              return (
+                                <option key={category.id} value={String(category.id)}>
+                                  {category.icon || "🏷️"} {category.name}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {!projectShareCategories.length && (
+                            <div style={{ fontSize: 11, color: subC, marginTop: 6 }}>
+                              {canManageShareCategories
+                                ? L("Crea le categorie del progetto dalla scheda Categorie.")
+                                : L("Il proprietario del progetto non ha ancora creato categorie.")}
+                            </div>
+                          )}
+                        </div>
+                        <div
+                          style={{
+                            background: dark ? "#1f1f31" : "#fff",
+                            border:
+                              "1px solid " + (dark ? "#3d3d50" : "#ECE9F6"),
+                            borderRadius: 16,
+                            padding: 10,
+                            boxShadow: dark
+                              ? "none"
+                              : "0 4px 12px rgba(83,74,183,0.05)",
+                            marginBottom: 10,
+                          }}
+                        >
                           <div
                             style={{
                               display: "grid",
-                              gridTemplateColumns: ".58fr .62fr 1.12fr 2.04fr",
+                              gridTemplateColumns: isMobile ? ".84fr 1.02fr 1.28fr 1.62fr" : ".8fr 1fr 1.18fr 1.7fr",
                               gap: 5,
                               alignItems: "center",
                             }}
@@ -3929,10 +5246,13 @@ export function SharePanel() {
                                     : "#fff",
                                 color:
                                   shareDate === todayStr() ? "#7F77DD" : textC,
-                                fontSize: 11,
+                                fontSize: 9.8,
                                 fontWeight: 850,
                                 cursor: "pointer",
-                                whiteSpace: "nowrap",
+                                whiteSpace: "normal",
+                                lineHeight: 1.05,
+                                padding: "0 4px",
+                                textAlign: "center"
                               }}
                             >
                               {t.today}
@@ -3964,10 +5284,13 @@ export function SharePanel() {
                                   shareDate === dateOffset(1)
                                     ? "#7F77DD"
                                     : textC,
-                                fontSize: 11,
+                                fontSize: 9.2,
                                 fontWeight: 850,
                                 cursor: "pointer",
-                                whiteSpace: "nowrap",
+                                whiteSpace: "normal",
+                                lineHeight: 1.05,
+                                padding: "0 4px",
+                                textAlign: "center"
                               }}
                             >
                               {t.yesterday}
@@ -3999,12 +5322,12 @@ export function SharePanel() {
                                   shareDate === dateOffset(2)
                                     ? "#7F77DD"
                                     : textC,
-                                fontSize: 9.5,
+                                fontSize: 8.3,
                                 fontWeight: 850,
                                 cursor: "pointer",
                                 whiteSpace: "normal",
                                 lineHeight: 1.05,
-                                padding: "0 2px",
+                                padding: "0 3px",
                                 textAlign: "center",
                               }}
                             >
@@ -4030,7 +5353,8 @@ export function SharePanel() {
                               <span
                                 style={{
                                   pointerEvents: "none",
-                                  fontWeight: 850,
+                                  fontWeight: 700,
+                                  fontSize: 9.4,
                                   color: textC,
                                 }}
                               >
@@ -4297,131 +5621,78 @@ export function SharePanel() {
                             💡 {shareCheck.message}
                           </div>
                         )}
-                        <div
-                          style={{
-                            marginTop: 10,
-                            background: dark ? "#1f1f31" : "#F7F8FF",
-                            border: "1px solid " + borderC,
-                            borderRadius: 14,
-                            padding: 10,
-                          }}
-                        >
-                          <input
-                            ref={shareReceiptFileInputRef}
-                            type="file"
-                            accept="image/*,.jpg,.jpeg,.png,.webp"
-                            onChange={onShareReceiptFileSelected}
-                            style={{ display: "none" }}
-                          />
-                          <button
-                            type="button"
-                            onClick={requestShareReceiptUpload}
+                        {sharePendingReceipt && (
+                          <div
                             style={{
-                              width: "100%",
-                              border:
-                                "1px solid " +
-                                (shareReceiptAllowed()
-                                  ? confirmButtonColor
-                                  : borderC),
-                              background: shareReceiptAllowed()
-                                ? dark
-                                  ? "#252535"
-                                  : "#fff"
-                                : dark
-                                ? "#30303a"
-                                : "#eeeeee",
-                              color: shareReceiptAllowed()
-                                ? confirmButtonColor
-                                : subC,
-                              borderRadius: btnRadius,
-                              padding: "10px 12px",
-                              fontWeight: 900,
-                              cursor: "pointer",
-                              opacity: shareReceiptAllowed() ? 1 : 0.72,
+                              marginTop: 10,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              padding: 9,
+                              borderRadius: 13,
+                              border: "1px solid " + borderC,
+                              background: dark ? "#242437" : "#F8FAFD",
                             }}
                           >
-                            🧾{" "}
-                            {L(
-                              sharePendingReceipt
-                                ? "Ricevuta caricata"
-                                : "Carica ricevuta"
-                            )}
-                          </button>
-                          {sharePendingReceipt && (
                             <button
                               type="button"
-                              onClick={function () {
-                                setSharePendingReceipt(null);
-                              }}
+                              onClick={function () { setShareReceiptPreview(sharePendingReceipt); }}
+                              aria-label={L("Apri ricevuta")}
                               style={{
-                                marginTop: 7,
-                                width: "100%",
-                                border: "none",
-                                background: "transparent",
-                                color: expenseColor,
-                                fontSize: 11,
-                                fontWeight: 800,
+                                width: 76,
+                                height: 76,
+                                flex: "0 0 76px",
+                                padding: 0,
+                                border: "1px solid " + borderC,
+                                borderRadius: 11,
+                                overflow: "hidden",
+                                background: dark ? "#1E1E30" : "#FFFFFF",
                                 cursor: "pointer",
                               }}
                             >
-                              {L("Rimuovi ricevuta")}
+                              <img
+                                src={sharePendingReceipt.dataUrl}
+                                alt={L("Ricevuta caricata")}
+                                style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }}
+                              />
                             </button>
-                          )}
-                          <div
-                            style={{
-                              fontSize: 10.5,
-                              color: subC,
-                              lineHeight: 1.35,
-                              marginTop: 7,
-                            }}
-                          >
-                            {L(
-                              "Il documento resterà disponibile per 6 mesi dalla data di caricamento, poi verrà eliminato"
-                            )}
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 800, color: textC, marginBottom: 5 }}>
+                                🧾 {L("Ricevuta caricata")}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={function () { setShareReceiptPreview(sharePendingReceipt); }}
+                                style={{ border: "none", background: "transparent", color: confirmButtonColor, fontSize: 11, fontWeight: 750, cursor: "pointer", padding: 0, marginRight: 12 }}
+                              >
+                                {L("Apri ricevuta")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={function () { setSharePendingReceipt(null); }}
+                                style={{ border: "none", background: "transparent", color: expenseColor, fontSize: 11, fontWeight: 750, cursor: "pointer", padding: 0 }}
+                              >
+                                {L("Rimuovi ricevuta")}
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                        <div
-                          style={{
-                            marginTop: 10,
-                            marginBottom: 4,
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            gap: 10,
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <div style={{ fontSize: 12, color: subC }}>
-                            {L("Quote")}:{" "}
-                            {Object.keys(computeShares())
-                              .map(function (id) {
-                                var p = participants.find(function (x) {
-                                  return x.id === id;
-                                });
-                                return (
-                                  (p ? personLabel(p) : id) +
-                                  " " +
-                                  fmt(computeShares()[id])
-                                );
-                              })
-                              .join(" · ")}
+                        )}
+                        <div style={{ marginTop: 10, marginBottom: 4 }}>
+                          <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>
+                            {L("Quote")}: {" "}
+                            {Object.keys(computeShares()).map(function (id) {
+                              var p = participants.find(function (x) { return x.id === id; });
+                              return (p ? personLabel(p) : L("Partecipante")) + " " + fmt(computeShares()[id]);
+                            }).join(" · ")}
                           </div>
-                          <Btn
-                            onClick={addSharedActivity}
-                            bg={
-                              shareExpenseFormValid
-                                ? confirmButtonColor
-                                : "#A8A8A8"
-                            }
-                            disabled={!shareExpenseFormValid}
-                            style={{ minWidth: 132, padding: "11px 16px" }}
-                          >
-                            {L(
-                              shareEditingActivityId
-                                ? "Aggiorna spesa"
-                                : "Salva spesa"
-                            )}
-                          </Btn>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                            <Btn onClick={function () { requestShareReceiptUpload("expense"); }} bg={secondaryButtonColor} disabled={!shareReceiptAllowed()} style={{ padding: "11px 12px", fontWeight: 900, opacity: shareReceiptAllowed() ? 1 : .65 }}>
+                              🧾 {L(sharePendingReceipt ? "Ricevuta caricata" : "Carica ricevuta")}
+                            </Btn>
+                            <Btn onClick={addSharedActivity} bg={shareExpenseFormValid ? confirmButtonColor : "#A8A8A8"} disabled={!shareExpenseFormValid} style={{ padding: "11px 12px", fontWeight: 900 }}>
+                              {L(shareEditingActivityId ? "Aggiorna spesa" : "Salva spesa")}
+                            </Btn>
+                          </div>
                         </div>
                       </>
                     )}
@@ -4446,7 +5717,7 @@ export function SharePanel() {
                   }}
                 >
                   <div style={{ fontSize: 14, fontWeight: 900, color: textC }}>
-                    {L("Attività del progetto")}
+                    {L("Spese")}
                   </div>
                   <Btn
                     onClick={function () {
@@ -4503,12 +5774,27 @@ export function SharePanel() {
                   });
                   var editing =
                     shareEditingActivityId === a.id && a.kind !== "settlement";
+                  var activityShareCategory =
+                    a.kind !== "settlement"
+                      ? ((selected && selected.categories) || []).find(function (item) {
+                          return String((item && item.id) || "") === String(a.shareCategoryId || "");
+                        })
+                      : null;
+                  var activityShareCategoryColor = activityShareCategory
+                    ? String(activityShareCategory.color || confirmButtonColor || "#4F8FF7")
+                    : "";
                   return (
                     <div
                       key={a.id}
                       style={{
                         borderBottom: "1px solid " + borderC,
-                        padding: "10px 0",
+                        borderRadius: a.kind !== "settlement" ? 12 : 0,
+                        padding: "10px 8px",
+                        marginBottom: a.kind !== "settlement" ? 6 : 0,
+                        background:
+                          a.kind !== "settlement" && activityShareCategoryColor
+                            ? activityShareCategoryColor + (dark ? "26" : "18")
+                            : "transparent",
                       }}
                     >
                       {editing ? (
@@ -4647,7 +5933,7 @@ export function SharePanel() {
                                   : "#A8A8A8"
                               }
                             >
-                              {L("Salva modifica")}
+                              {L("Aggiorna spesa")}
                             </Btn>
                           </div>
                         </div>
@@ -4656,10 +5942,10 @@ export function SharePanel() {
                           style={{
                             display: "flex",
                             gap: 10,
-                            alignItems: "center",
+                            alignItems: "flex-start",
                           }}
                         >
-                          <span style={{ fontSize: 18 }}>
+                          <span style={{ fontSize: 18, marginTop: 1 }}>
                             {a.kind === "settlement" ? "↔️" : "🧾"}
                           </span>
                           <div style={{ flex: 1, minWidth: 0 }}>
@@ -4674,16 +5960,21 @@ export function SharePanel() {
                               }}
                             >
                               {a.kind === "settlement"
-                                ? (from ? personLabel(from) : a.from) +
+                                ? (from ? personLabel(from) : L("Partecipante")) +
                                   " " +
                                   L("ha pagato") +
                                   " " +
-                                  (to ? personLabel(to) : a.to)
+                                  (to ? personLabel(to) : L("Partecipante"))
                                 : a.desc}
                             </div>
                             <div style={{ fontSize: 11, color: subC }}>
                               {fmtDate(a.date, dateFmt)} · {a.time || "--:--"}
                             </div>
+                            {a.kind === "settlement" && !!shareExpandedActivityIds[a.id] && (
+                              <div style={{ marginTop: 6, fontSize: 11, color: subC, lineHeight: 1.35 }}>
+                                {L("Commento")}: {String(a.comment || "").trim() || "—"}
+                              </div>
+                            )}
                             {a.kind !== "settlement" && (
                               <div
                                 style={{
@@ -4693,101 +5984,107 @@ export function SharePanel() {
                                   gap: 4,
                                 }}
                               >
-                                <div style={{ fontSize: 11, color: textC }}>
-                                  {L("Pagata da")}:{" "}
-                                  {paid ? personLabel(paid) : a.paidBy || "—"}
-                                </div>
                                 <div style={{ fontSize: 11, color: subC }}>
-                                  {L("Condivisa con")}:{" "}
-                                  {Object.keys(a.shares || {})
-                                    .map(function (pid) {
-                                      var pp = participants.find(function (x) {
-                                        return x.id === pid;
-                                      });
-                                      return (
-                                        (pp ? personLabel(pp) : pid) +
-                                        " " +
-                                        fmt(a.shares[pid])
-                                      );
-                                    })
-                                    .join(" · ") || "—"}
+                                  {L("Categoria")}: {" "}
+                                  {activityShareCategory
+                                    ? (activityShareCategory.icon || "🏷️") + " " + activityShareCategory.name
+                                    : L("Senza categoria")}
                                 </div>
-                                {activeShareReceiptForActivity(a.id) && (
-                                  <button
-                                    type="button"
-                                    onClick={function () {
-                                      openStoredShareReceipt(
-                                        activeShareReceiptForActivity(a.id)
-                                      );
-                                    }}
-                                    style={{
-                                      alignSelf: "flex-start",
-                                      border: "none",
-                                      background: "transparent",
-                                      padding: 0,
-                                      color: confirmButtonColor,
-                                      fontSize: 11,
-                                      fontWeight: 900,
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    🧾 {L("Apri ricevuta")}
-                                  </button>
+                                {!!shareExpandedActivityIds[a.id] && (
+                                  <>
+                                    <div style={{ fontSize: 11, color: textC }}>
+                                      {L("Pagata da")}: {" "}
+                                      {paid ? personLabel(paid) : L("Partecipante")}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: subC }}>
+                                      {L("Condivisa con")}: {" "}
+                                      {Object.keys(a.shares || {})
+                                        .map(function (pid) {
+                                          var pp = participants.find(function (x) {
+                                            return x.id === pid;
+                                          });
+                                          return (
+                                            (pp ? personLabel(pp) : L("Partecipante")) +
+                                            " " +
+                                            fmt(a.shares[pid])
+                                          );
+                                        })
+                                        .join(" · ") || "—"}
+                                    </div>
+                                  </>
                                 )}
                               </div>
                             )}
                           </div>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              fontWeight: 900,
-                              color:
-                                a.kind === "settlement"
-                                  ? confirmButtonColor
-                                  : expenseColor,
-                            }}
-                          >
-                            {a.originalAmount && a.currency && a.currency !== (_c.currency || a.baseCurrency)
-                              ? Number(a.originalAmount).toLocaleString(lang || "it", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + a.currency
-                              : fmt(a.amount)}
-                            {a.originalAmount && a.currency && a.currency !== (_c.currency || a.baseCurrency) && (
-                              <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
-                                {fmt(a.baseAmount || a.amount)}
-                              </div>
-                            )}
-                          </div>
-                          {a.kind !== "settlement" && (
-                            <button
-                              onClick={function () {
-                                startEditSharedActivity(a);
-                              }}
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 }}>
+                            <div
                               style={{
-                                background: "#EEF4FF",
-                                border: "1px solid #BFD7FF",
-                                borderRadius: 9,
-                                padding: "5px 8px",
-                                cursor: "pointer",
-                                color: confirmButtonColor,
-                                fontSize: 12,
-                                fontWeight: 800,
+                                fontSize: 16,
+                                fontWeight: 900,
+                                color:
+                                  a.kind === "settlement"
+                                    ? confirmButtonColor
+                                    : expenseColor,
+                                textAlign: "right",
                               }}
                             >
-                              {L("Modifica")}
-                            </button>
-                          )}
-                          <button
-                            onClick={function () {
-                              deleteActivity(a.id);
-                            }}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              color: subC,
-                            }}
-                          >
-                            ×
-                          </button>
+                              {a.originalAmount && a.currency && a.currency !== (_c.currency || a.baseCurrency)
+                                ? Number(a.originalAmount).toLocaleString(lang || "it", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + a.currency
+                                : fmt(a.amount)}
+                              {a.originalAmount && a.currency && a.currency !== (_c.currency || a.baseCurrency) && (
+                                <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
+                                  {fmt(a.baseAmount || a.amount)}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                              <button
+                                type="button"
+                                title={shareExpandedActivityIds[a.id] ? L("Comprimi") : L("Espandi")}
+                                onClick={function () {
+                                  setShareExpandedActivityIds(function (prev) {
+                                    var next: any = Object.assign({}, prev || {});
+                                    next[a.id] = !next[a.id];
+                                    return next;
+                                  });
+                                }}
+                                style={{ border: "1px solid #D7DDEA", background: dark ? "#2A2A3D" : "#F5F7FB", color: textC, borderRadius: 8, width: 26, height: 26, cursor: "pointer", fontSize: 11, padding: 0 }}
+                              >
+                                {shareExpandedActivityIds[a.id] ? "▴" : "▾"}
+                              </button>
+                              {activeShareReceiptForActivity(a.id) && (
+                                <button
+                                  type="button"
+                                  title={L("Apri ricevuta")}
+                                  onClick={function () {
+                                    openStoredShareReceipt(activeShareReceiptForActivity(a.id));
+                                  }}
+                                  style={{ border: "1px solid #D6D1F7", background: dark ? "#2D2948" : "#F5F1FF", color: secondaryButtonColor, borderRadius: 8, width: 26, height: 26, cursor: "pointer", fontSize: 11, padding: 0 }}
+                                >
+                                  🧾
+                                </button>
+                              )}
+                              <button
+                                onClick={function () {
+                                  if (a.kind === "settlement") startEditSettlement(a);
+                                  else startEditSharedActivity(a);
+                                }}
+                                title={L("Modifica")}
+                                style={{ background: "#EEF4FF", border: "1px solid #BFD7FF", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: confirmButtonColor, fontSize: 11, padding: 0 }}
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                onClick={function () {
+                                  deleteActivity(a.id);
+                                }}
+                                title={L("Elimina")}
+                                style={{ background: "#FFF0F0", border: "1px solid #FFD0D0", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: expenseColor, fontSize: 11, padding: 0 }}
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -5029,6 +6326,29 @@ export function SharePanel() {
                         </div>
                       )}
                       {shareFilterAccordion(
+                        "category",
+                        L("Categoria Share"),
+                        "#8B5CF6",
+                        <div style={{ paddingTop: 10 }}>
+                          <select
+                            value={shareFilterCategoryId}
+                            onChange={function (e) {
+                              setShareFilterCategoryId(e.target.value);
+                            }}
+                            style={sinp}
+                          >
+                            <option value="">{L("Tutte le categorie")}</option>
+                            {projectShareCategories.map(function (category) {
+                              return (
+                                <option key={category.id} value={category.id}>
+                                  {category.name}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </div>
+                      )}
+                      {shareFilterAccordion(
                         "order",
                         L("Ordine"),
                         "#3B82F6",
@@ -5076,6 +6396,53 @@ export function SharePanel() {
               )}
             </div>
           )}
+          {shareProjectTab === "categorie" && (
+            <div style={{ background: cardBg, border: "1px solid " + borderC, borderRadius: 18, padding: 14, boxShadow: dark ? "none" : "0 8px 24px rgba(15,23,42,.06)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 950, color: textC }}>{L("Categorie")}</div>
+                  <FainanceInfoPopover label={L("Informazioni")} title={L("Categorie")} size={22} popupWidth={340}>
+                    <div style={{ lineHeight: 1.45 }}>
+                      {L("Le categorie appartengono al progetto e sono condivise con tutti i partecipanti. La mappatura sulla categoria personale è invece privata per ogni utente.")}
+                      <div style={{ marginTop: 8 }}>{L("Apri Modifica su una categoria per scegliere anche la categoria personale usata nelle tue statistiche. Se non scegli nulla viene usata la categoria predefinita per Share")}: {shareDefaultPersonalCategory ? shareDefaultPersonalCategory.name : L("Altro")}.</div>
+                    </div>
+                  </FainanceInfoPopover>
+                </div>
+                {canManageShareCategories && <Btn onClick={openNewShareCategoryPopup} bg={confirmButtonColor} style={{ padding: "9px 13px", fontWeight: 900, flexShrink: 0 }}>＋ {L("Aggiungi")}</Btn>}
+              </div>
+              {!canManageShareCategories && <div style={{ marginBottom: 10, padding: "9px 10px", borderRadius: 12, background: dark ? "#272738" : "#F5F4FB", color: subC, fontSize: 11 }}>{L("Solo il proprietario può modificare nome, icona e colore. Ogni partecipante può comunque modificare la propria mappatura personale.")}</div>}
+              {!projectShareCategories.length ? (
+                <div style={{ fontSize: 12, color: subC, padding: "8px 0" }}>{L("Non ci sono ancora categorie Share in questo progetto.")}</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {projectShareCategories.map(function (category, categoryIndex) {
+                    var categoryColor = String(category.color || selected.color || confirmButtonColor || "#4F8FF7");
+                    var mappedId = shareCategoryMappingValue(category.id);
+                    var mappedCategory = personalShareCategories.find(function (pc) { return String(pc.id) === String(mappedId || ""); });
+                    return (
+                      <div key={category.id} style={{ border: "1px solid " + categoryColor + "66", borderRadius: 14, padding: 11, background: categoryColor + (dark ? "26" : "18") }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                          <span style={{ width: 32, height: 32, borderRadius: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", background: categoryColor + "33", flexShrink: 0 }}><FainanceIcon value={category.icon || "🏷️"} size={19} /></span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 900, color: textC, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{category.name}</div>
+                            <div style={{ fontSize: 10.5, color: subC, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {mappedCategory ? L("Categoria personale") + ": " + (mappedCategory.icon || "🏷️") + " " + mappedCategory.name : L("Categoria personale") + ": " + (shareDefaultPersonalCategory ? shareDefaultPersonalCategory.name : L("Altro")) + " (" + L("predefinita") + ")"}
+                            </div>
+                          </div>
+                          {canManageShareCategories && <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                            <button type="button" title={L("Sposta su")} disabled={categoryIndex === 0} onClick={function () { moveShareProjectCategory(category.id, "up"); }} style={{ border: "1px solid #D7DDEA", background: categoryIndex === 0 ? (dark ? "#2A2A3D" : "#F5F7FB") : "#F5F7FB", opacity: categoryIndex === 0 ? .45 : 1, color: textC, borderRadius: 8, width: 28, height: 24, cursor: categoryIndex === 0 ? "default" : "pointer", padding: 0 }}>▴</button>
+                            <button type="button" title={L("Sposta giù")} disabled={categoryIndex === projectShareCategories.length - 1} onClick={function () { moveShareProjectCategory(category.id, "down"); }} style={{ border: "1px solid #D7DDEA", background: categoryIndex === projectShareCategories.length - 1 ? (dark ? "#2A2A3D" : "#F5F7FB") : "#F5F7FB", opacity: categoryIndex === projectShareCategories.length - 1 ? .45 : 1, color: textC, borderRadius: 8, width: 28, height: 24, cursor: categoryIndex === projectShareCategories.length - 1 ? "default" : "pointer", padding: 0 }}>▾</button>
+                          </div>}
+                          <button type="button" title={L("Modifica")} onClick={function () { openEditShareCategoryPopup(category); }} style={{ border: "1px solid #BFD7FF", background: "#EEF4FF", color: confirmButtonColor, borderRadius: 9, padding: "5px 8px", cursor: "pointer" }}>✏️</button>
+                          {canManageShareCategories && <button type="button" title={L("Elimina")} onClick={function () { deleteShareProjectCategory(category.id); }} style={{ border: "1px solid #FFD0D0", background: "#FFF0F0", color: expenseColor, borderRadius: 9, padding: "5px 8px", cursor: "pointer" }}>🗑️</button>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
           {shareProjectTab === "partecipanti" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div
@@ -5114,18 +6481,36 @@ export function SharePanel() {
                 >
                   {participants.map(function (p) {
                     var archived = p.status === "archived";
+                    var pending = p.status === "pending";
+                    var statusBg = pending
+                      ? dark ? "#3A301C" : "#FFF7DE"
+                      : archived
+                      ? dark ? "#2A2A34" : "#F4F4F6"
+                      : dark ? "#1D352E" : "#EAF8F2";
+                    var statusBorder = pending
+                      ? dark ? "#765E22" : "#F0CF70"
+                      : archived
+                      ? borderC
+                      : dark ? "#285A49" : "#BDEBDC";
+                    var statusColor = pending ? "#A46D00" : archived ? subC : incomeColor;
                     return (
                       <div
                         key={p.id}
                         style={{
-                          display: "flex",
+                          display: "grid",
+                          gridTemplateColumns: isMobile
+                            ? "38px minmax(0,1fr)"
+                            : "38px minmax(0,1fr) auto",
                           alignItems: "center",
-                          gap: 10,
+                          columnGap: 10,
+                          rowGap: 7,
                           padding: "10px 11px",
-                          border: "1px solid " + borderC,
+                          border: "1px solid " + (pending ? statusBorder : borderC),
                           borderRadius: 14,
-                          background: dark ? "#252535" : "#fff",
-                          opacity: archived ? 0.55 : 1,
+                          background: pending
+                            ? dark ? "#2E291E" : "#FFFCF2"
+                            : dark ? "#252535" : "#fff",
+                          opacity: archived ? 0.58 : 1,
                         }}
                       >
                         <div
@@ -5133,66 +6518,100 @@ export function SharePanel() {
                             width: 38,
                             height: 38,
                             borderRadius: 14,
-                            background:
-                              (p.kind === "fake"
-                                ? secondaryButtonColor
-                                : confirmButtonColor) + "22",
+                            background: pending
+                              ? dark ? "#4A3B18" : "#FFF0BF"
+                              : (p.kind === "fake"
+                                  ? secondaryButtonColor
+                                  : confirmButtonColor) + "22",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
                             fontWeight: 950,
-                            color:
-                              p.kind === "fake"
-                                ? secondaryButtonColor
-                                : confirmButtonColor,
+                            color: pending
+                              ? "#A46D00"
+                              : p.kind === "fake"
+                              ? secondaryButtonColor
+                              : confirmButtonColor,
                             flexShrink: 0,
                           }}
                         >
-                          {personLabel(p).slice(0, 1).toUpperCase()}
+                          {personFullName(p).slice(0, 1).toUpperCase()}
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ minWidth: 0 }}>
                           <div
-                            className="fai-ellipsis"
                             style={{
-                              fontSize: 13,
-                              fontWeight: 950,
-                              color: textC,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              minWidth: 0,
+                              flexWrap: "wrap",
                             }}
                           >
-                            {personLabel(p)}
+                            <div
+                              className="fai-ellipsis"
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 950,
+                                color: textC,
+                                minWidth: 0,
+                                maxWidth: "100%",
+                              }}
+                            >
+                              {personFullName(p)}
+                            </div>
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                minHeight: 20,
+                                padding: "2px 7px",
+                                borderRadius: 999,
+                                background: statusBg,
+                                border: "1px solid " + statusBorder,
+                                color: statusColor,
+                                fontSize: 10,
+                                fontWeight: 900,
+                                lineHeight: 1.1,
+                                whiteSpace: "nowrap",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {pending
+                                ? "⏳ " + L("Invito in attesa")
+                                : archived
+                                ? L("Archiviato")
+                                : "✓ " + L("Attivo")}
+                            </span>
                           </div>
                           <div
                             className="fai-ellipsis"
-                            style={{ fontSize: 11, color: subC, marginTop: 2 }}
+                            style={{ fontSize: 11, color: subC, marginTop: 3 }}
                           >
                             {L(
                               p.kind === "fake"
                                 ? "Persona Esterna"
                                 : p.kind === "registered"
                                 ? "Utente fAInance"
-                                : "Invito in attesa"
+                                : "Utente invitato"
                             )}
                             {p.email ? " · " + p.email : ""}
-                            {p.status === "pending"
-                              ? " · " + L("pendente")
-                              : ""}
-                            {archived ? " · " + L("archiviato") : ""}
                           </div>
                         </div>
                         {p.id !== "me" && (
                           <div
                             style={{
+                              gridColumn: isMobile ? "2" : "auto",
                               display: "flex",
                               gap: 6,
                               flexWrap: "wrap",
-                              justifyContent: "flex-end",
+                              justifyContent: isMobile ? "flex-start" : "flex-end",
+                              minWidth: 0,
                             }}
                           >
                             {archived ? (
                               <button
-                                onClick={function () {
-                                  restoreParticipant(p.id);
-                                }}
+                                onClick={function () { restoreParticipant(p.id); }}
                                 style={{
                                   background: "#eef8f4",
                                   border: "1px solid #bdebdc",
@@ -5207,9 +6626,7 @@ export function SharePanel() {
                               </button>
                             ) : (
                               <button
-                                onClick={function () {
-                                  archiveParticipant(p.id);
-                                }}
+                                onClick={function () { archiveParticipant(p.id); }}
                                 style={{
                                   background: "#fff8e1",
                                   border: "1px solid #ffe29a",
@@ -5224,9 +6641,7 @@ export function SharePanel() {
                               </button>
                             )}
                             <button
-                              onClick={function () {
-                                removeParticipant(p.id);
-                              }}
+                              onClick={function () { removeParticipant(p.id); }}
                               style={{
                                 background: "#fff0f0",
                                 border: "1px solid #ffd0d0",
@@ -5552,9 +6967,9 @@ export function SharePanel() {
                       }}
                     >
                       <span style={{ fontSize: 13, color: textC, flex: 1 }}>
-                        <strong>{from ? personLabel(from) : d.from}</strong>{" "}
+                        <strong>{from ? personLabel(from) : L("Partecipante")}</strong>{" "}
                         {L("deve pagare")}{" "}
-                        <strong>{to ? personLabel(to) : d.to}</strong>
+                        <strong>{to ? personLabel(to) : L("Partecipante")}</strong>
                       </span>
                       <span
                         style={{
@@ -5590,6 +7005,20 @@ export function SharePanel() {
                 >
                   {L("Registra saldo/rimborso")}
                 </Btn>
+                <Btn
+                  onClick={exportShareProjectXlsx}
+                  bg={secondaryButtonColor || "#5FAFE5"}
+                  color="#fff"
+                  disabled={false}
+                  style={{
+                    width: "100%",
+                    padding: "13px 14px",
+                    fontWeight: 950,
+                    marginTop: 10,
+                  }}
+                >
+                  📊 {L("Scarica progetto in Excel")}
+                </Btn>
               </div>
             </div>
           )}
@@ -5608,7 +7037,7 @@ export function SharePanel() {
                 overflowY: "auto",
               }}
               onClick={function (e) {
-                if (e.target === e.currentTarget) setSettlementPopupOpen(false);
+                if (e.target === e.currentTarget) { resetSettlementForm(); setSettlementPopupOpen(false); }
               }}
             >
               <div
@@ -5635,7 +7064,7 @@ export function SharePanel() {
                     <div
                       style={{ fontSize: 17, fontWeight: 950, color: textC }}
                     >
-                      ↔️ {L("Registra saldo/rimborso")}
+                      ↔️ {L(editingSettlementActivityId ? "Modifica saldo/rimborso" : "Registra saldo/rimborso")}
                     </div>
                     <div style={{ fontSize: 12, color: subC, marginTop: 3 }}>
                       {L(
@@ -5643,12 +7072,12 @@ export function SharePanel() {
                       )}
                     </div>
                   </div>
-                  <PopupCloseButton onClick={function () { setSettlementPopupOpen(false); }} dark={dark} label={L("Chiudi")} />
+                  <PopupCloseButton onClick={function () { resetSettlementForm(); setSettlementPopupOpen(false); }} dark={dark} label={L("Chiudi")} />
                 </div>
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "1fr",
+                    gridTemplateColumns: isMobile ? "minmax(0,1fr) 40px minmax(0,1fr)" : "minmax(0,1fr) 46px minmax(0,1fr)",
                     gap: 10,
                     marginBottom: 10,
                   }}
@@ -5688,6 +7117,35 @@ export function SharePanel() {
                       })}
                     </select>
                   </div>
+                  <button
+                    type="button"
+                    onClick={function () {
+                      var previousFrom = settlementFrom;
+                      setSettlementFrom(settlementTo);
+                      setSettlementTo(previousFrom);
+                    }}
+                    aria-label={L("Inverti Da e A")}
+                    title={L("Inverti Da e A")}
+                    style={{
+                      alignSelf: "center",
+                      justifySelf: "center",
+                      width: isMobile ? 36 : 40,
+                      height: isMobile ? 36 : 40,
+                      borderRadius: 999,
+                      border: "1px solid " + (secondaryButtonColor || confirmButtonColor),
+                      background: dark ? "#252535" : "#F0F7FF",
+                      color: secondaryButtonColor || confirmButtonColor,
+                      fontSize: 20,
+                      fontWeight: 950,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: 0,
+                    }}
+                  >
+                    ⇄
+                  </button>
                   <div
                     style={{
                       background: dark ? "#1f1f31" : "#F7F8FF",
@@ -5859,6 +7317,39 @@ export function SharePanel() {
                     style={{ ...sinp, minHeight: 68, resize: "vertical" }}
                   />
                 </div>
+                {sharePendingReceipt && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      border: "1px solid " + borderC,
+                      borderRadius: 14,
+                      padding: 10,
+                      marginBottom: 12,
+                      background: dark ? "#1f1f31" : "#F7F8FF",
+                    }}
+                  >
+                    <button type="button" onClick={function () { setShareReceiptPreview(sharePendingReceipt); }} style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer" }}>
+                      <img src={sharePendingReceipt.dataUrl} alt={L("Ricevuta caricata")} style={{ width: 52, height: 52, objectFit: "cover", borderRadius: 10, border: "1px solid " + borderC, display: "block" }} />
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, fontWeight: 900, color: textC }}>{L("Ricevuta caricata")}</div>
+                      <div style={{ fontSize: 11, color: subC, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sharePendingReceipt.name || L("Apri ricevuta")}</div>
+                    </div>
+                    <button type="button" onClick={function () { setSharePendingReceipt(null); }} style={{ border: "1px solid #FFD0D0", background: "#FFF0F0", color: expenseColor, borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>🗑️</button>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
+                  <Btn
+                    onClick={function () { requestShareReceiptUpload("settlement"); }}
+                    bg={dark ? "#333" : "#f0f0f0"}
+                    color={textC}
+                    style={{ flex: 1, padding: "12px 14px", fontWeight: 900 }}
+                  >
+                    🧾 {L(sharePendingReceipt ? "Sostituisci ricevuta" : "Carica ricevuta")}
+                  </Btn>
+                </div>
                 <Btn
                   onClick={addSettlement}
                   disabled={!settlementFormValid}
@@ -5869,7 +7360,7 @@ export function SharePanel() {
                     fontWeight: 950,
                   }}
                 >
-                  {L("Registra")}
+                  {L(editingSettlementActivityId ? "Aggiorna saldo" : "Registra")}
                 </Btn>
               </div>
             </div>
@@ -5925,9 +7416,9 @@ export function SharePanel() {
                       }}
                     >
                       <span style={{ fontSize: 13, color: textC, flex: 1 }}>
-                        <strong>{from ? personLabel(from) : d.from}</strong>{" "}
+                        <strong>{from ? personLabel(from) : L("Partecipante")}</strong>{" "}
                         {L("deve pagare")}{" "}
-                        <strong>{to ? personLabel(to) : d.to}</strong>
+                        <strong>{to ? personLabel(to) : L("Partecipante")}</strong>
                       </span>
                       <span
                         style={{

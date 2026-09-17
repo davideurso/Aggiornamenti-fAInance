@@ -2,7 +2,132 @@ import { useState, useEffect, useRef } from 'react';
 import { registerPlugin } from '@capacitor/core';
 import { useApp, EMOJI_LIST, fmtDate } from '../core';
 import { Btn, AppColorSelector, PopupCloseButton } from '../widget';
+// L'eliminazione rimuove anche eventuali file remoti; newAttachmentId genera id
+// univoci al posto di Date.now()+Math.random(), che era una somma in virgola mobile.
+import { deleteAttachment, newAttachmentId, readAttachmentDataUrl } from '../data/attachmentStorage';
+import { openFileWithSystem } from '../native/fileOpener';
 const FainanceFileNative:any=registerPlugin('FainanceFile');
+
+// Tetti di dimensione per gli allegati. Il contenuto viene codificato in base64 e salvato
+// dentro il documento Firestore userData/{uid}, che ha un limite RIGIDO di 1 MiB: senza
+// controllo, un solo PDF grande bloccava la sincronizzazione dell'intero account senza
+// alcun messaggio. La quota lascia spazio a movimenti, statistiche e resto del dataset.
+//
+// Questi limiti spariranno quando il caricamento passera' a Cloud Storage, che oggi non e'
+// utilizzabile perche' il servizio non risulta attivo sul progetto Firebase.
+const FAINANCE_DOC_MAX_FILE_BYTES = 400 * 1024;   // documenti non comprimibili (pdf, Office)
+const FAINANCE_IMAGE_MAX_FILE_BYTES = 1024 * 1024; // immagini: vengono compresse prima
+const FAINANCE_DOC_MAX_TOTAL_CHARS = 600000;      // caratteri base64 su tutti i documenti
+// FIX 2.1.0 — Tipo MIME ricavato dall'estensione.
+//
+// Il record salvava "type: f.type || \"file\"": quando il selettore file di Android non
+// fornisce il tipo (accade spesso con i documenti Office scelti da Drive o da un file
+// manager), veniva memorizzata la stringa letterale "file". All'apertura il plugin
+// nativo riceveva mimeType "file", che non corrisponde a nulla, e Android rispondeva
+// che non esiste un'app capace di aprirlo. Da qui il messaggio, che era falso.
+const FAINANCE_MIME_BY_EXTENSION: any = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  heic: "image/heic",
+  txt: "text/plain",
+  csv: "text/csv",
+  json: "application/json",
+  xml: "application/xml",
+  rtf: "application/rtf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  odt: "application/vnd.oasis.opendocument.text",
+  ods: "application/vnd.oasis.opendocument.spreadsheet",
+};
+
+/** Valori che non sono tipi MIME validi e che vanno ignorati. */
+function fainanceIsUsableMime(value: any): boolean {
+  var mime = String(value || "").trim().toLowerCase();
+  if (!mime) return false;
+  if (mime === "file" || mime === "application/octet-stream") return false;
+  return mime.indexOf("/") > 0;
+}
+
+/** Ricava il MIME dal nome del file, con il tipo dichiarato come prima scelta. */
+function fainanceResolveMime(fileName: any, declaredType: any): string {
+  if (fainanceIsUsableMime(declaredType)) return String(declaredType);
+  var name = String(fileName || "");
+  var dot = name.lastIndexOf(".");
+  if (dot >= 0) {
+    var ext = name.slice(dot + 1).toLowerCase();
+    if (FAINANCE_MIME_BY_EXTENSION[ext]) return FAINANCE_MIME_BY_EXTENSION[ext];
+  }
+  return "application/octet-stream";
+}
+
+/**
+ * Comprime un'immagine prima di salvarla. Il contenuto finisce in base64 dentro il
+ * documento Firestore userData/{uid}, che ha un limite rigido di 1 MiB: senza
+ * compressione una foto da 1 MB diventerebbe 1,37 MB di base64 e da sola supererebbe
+ * quel limite. Ridimensionata a 1600 px di lato lungo resta tipicamente sotto i 300 KB,
+ * quindi le foto si possono accettare fino a 1 MB di partenza.
+ */
+function fainanceCompressImageToDataUrl(file: any): Promise<string> {
+  return new Promise(function (resolve, reject) {
+    try {
+      var reader = new FileReader();
+      reader.onerror = function () {
+        reject(new Error("read-failed"));
+      };
+      reader.onload = function () {
+        var image = new Image();
+        image.onerror = function () {
+          reject(new Error("decode-failed"));
+        };
+        image.onload = function () {
+          try {
+            var maxSide = 1600;
+            var width = image.naturalWidth || image.width;
+            var height = image.naturalHeight || image.height;
+            var scale = Math.min(1, maxSide / Math.max(width, height));
+            var canvas = document.createElement("canvas");
+            canvas.width = Math.max(1, Math.round(width * scale));
+            canvas.height = Math.max(1, Math.round(height * scale));
+            var context = canvas.getContext("2d");
+            if (!context) {
+              reject(new Error("canvas-unavailable"));
+              return;
+            }
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            var out = canvas.toDataURL("image/jpeg", 0.72);
+            // Se anche cosi' resta grande, si abbassa la qualita' una volta sola.
+            if (out.length > FAINANCE_DOC_MAX_TOTAL_CHARS / 2) {
+              out = canvas.toDataURL("image/jpeg", 0.55);
+            }
+            resolve(out);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        image.src = String(reader.result || "");
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+function fainanceFormatBytes(n: any) {
+  var v = Number(n || 0);
+  if (v < 1024) return v + ' B';
+  if (v < 1024 * 1024) return Math.round(v / 1024) + ' KB';
+  return Math.round((v / 1024 / 1024) * 10) / 10 + ' MB';
+}
 
 export function AppuntiPanel() {
   var _c:any=useApp();
@@ -356,39 +481,118 @@ export function AppuntiPanel() {
         ev.target.value = "";
         return;
       }
+      function errorToast(message: string) {
+        setToast({ text: message, type: "error", translated: true });
+      }
+      // Il contenuto viene codificato in base64 e salvato dentro il documento Firestore
+      // userData/{uid}, che ha un limite RIGIDO di 1 MiB. Da qui i due tetti: uno per
+      // file e uno complessivo. Spariranno quando il caricamento passera' a Cloud
+      // Storage, oggi non utilizzabile perche' il servizio non risulta attivo.
+      var usedChars = (appuntiDocuments || []).reduce(function (sum: any, d: any) {
+        return sum + String((d && d.dataUrl) || "").length;
+      }, 0);
       files.forEach(function (file) {
+        // Il cast locale evita diagnostici aggiuntivi: files deriva da Array.from(...)
+        // ed e' quindi unknown[].
+        var f: any = file;
+        var mime = fainanceResolveMime(f.name, f.type);
         var allowed =
           /pdf|image|spreadsheet|excel|sheet|csv|officedocument|word|text|json|xml|rtf|opendocument/i.test(
-            file.type
+            mime
           ) ||
-          /\.(pdf|png|jpe?g|webp|gif|xlsx?|csv|docx?|rtf|txt|json|xml|ods|odt)$/i.test(
-            file.name
+          /\.(pdf|png|jpe?g|webp|gif|bmp|heic|xlsx?|csv|docx?|pptx?|rtf|txt|json|xml|ods|odt)$/i.test(
+            f.name
           );
         if (!allowed) {
-          setToast("Formato non supportato");
+          errorToast(L("Formato non supportato"));
           return;
         }
-        var reader = new FileReader();
-        reader.onload = function (e) {
-          var parsedName = splitDocumentFileName(file.name, file.type);
+
+        // FIX 2.1.0 — Le immagini sono accettate fino a 1 MB perche' vengono compresse
+        // prima di essere salvate: ridimensionate a 1600 px di lato lungo, una foto da
+        // 1 MB scende tipicamente sotto i 300 KB. I documenti non comprimibili (pdf,
+        // Word, Excel) restano a 400 KB: il loro base64 va nel documento Firestore e
+        // 1 MB diventerebbe 1,37 MB, oltre il limite di 1 MiB del documento stesso.
+        var isImage = mime.indexOf("image/") === 0;
+        var perFileLimit = isImage
+          ? FAINANCE_IMAGE_MAX_FILE_BYTES
+          : FAINANCE_DOC_MAX_FILE_BYTES;
+        var fileSize = Number(f.size || 0);
+        if (fileSize > perFileLimit) {
+          errorToast(
+            L("File troppo grande") + ": " + fainanceFormatBytes(fileSize) +
+            ". " + L("Limite") + " " + fainanceFormatBytes(perFileLimit) +
+            " " + L("per documento") + "."
+          );
+          return;
+        }
+
+        setToast({
+          text: L("Elaborazione in corso..."),
+          type: "info",
+          icon: "\u23F3",
+          translated: true,
+        });
+
+        void (async function () {
+          var dataUrl = "";
+          var storedMime = mime;
+          try {
+            if (isImage) {
+              dataUrl = await fainanceCompressImageToDataUrl(f);
+              storedMime = "image/jpeg";
+            } else {
+              dataUrl = await new Promise<string>(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onerror = function () {
+                  reject(new Error("read-failed"));
+                };
+                reader.onload = function () {
+                  resolve(String(reader.result || ""));
+                };
+                reader.readAsDataURL(f);
+              });
+            }
+          } catch (readError: any) {
+            console.error("Appunti read failed", readError);
+            errorToast(L("Lettura del file non riuscita"));
+            return;
+          }
+          if (!dataUrl) {
+            errorToast(L("Lettura del file non riuscita"));
+            return;
+          }
+          if (usedChars + dataUrl.length + 200 > FAINANCE_DOC_MAX_TOTAL_CHARS) {
+            errorToast(
+              L("Spazio documenti esaurito. Elimina qualche allegato prima di caricarne altri.")
+            );
+            return;
+          }
+          usedChars += dataUrl.length + 200;
+
+          var parsedName = splitDocumentFileName(f.name, f.type);
           setAppuntiDocuments(function (p) {
             return [
               {
-                id: Date.now() + Math.random(),
+                // Identificatore univoco. Date.now() + Math.random() era una SOMMA:
+                // produceva un numero in virgola mobile che perde precisione, con
+                // rischio di collisione fra file scelti nello stesso istante.
+                id: newAttachmentId(),
                 name: parsedName.name,
                 extension: parsedName.extension,
-                originalName: file.name,
-                type: file.type || "file",
-                size: file.size,
+                originalName: f.name,
+                // FIX 2.1.0 — mai piu' la stringa "file": qui va un MIME valido,
+                // altrimenti all'apertura Android non trova nessuna app.
+                type: storedMime,
+                size: fileSize,
                 createdAt: new Date().toISOString(),
-                dataUrl: e.target.result,
+                dataUrl: dataUrl,
               },
               ...p,
             ];
           });
-          setToast("Documento caricato");
-        };
-        reader.readAsDataURL(file);
+          setToast({ text: L("Documento caricato"), type: "success", translated: true });
+        })();
       });
       ev.target.value = "";
     }
@@ -601,28 +805,30 @@ export function AppuntiPanel() {
         .filter(Boolean)
         .join("\n");
     }
+    // FIX 2.0.5 — Legge entrambe le forme: i record storici hanno il base64 in dataUrl,
+    // i nuovi hanno storagePath e il contenuto su Cloud Storage. Su piattaforma nativa il
+    // plugin FainanceFile accetta solo un data URL, quindi il file viene scaricato e
+    // convertito; sul web si apre direttamente l'URL di download, senza tenere il file
+    // in memoria.
     async function openAppuntiDocument(d) {
-      if (!d || !d.dataUrl) return;
+      if (!d || (!d.dataUrl && !d.storagePath)) return;
       try {
-        var cap = typeof window !== "undefined" ? window.Capacitor : null;
-        var native = !!(cap && cap.isNativePlatform && cap.isNativePlatform());
-        if (native && FainanceFileNative && FainanceFileNative.openFile) {
-          await FainanceFileNative.openFile({
-            dataUrl: d.dataUrl,
-            fileName: documentFullName(d) || "documento",
-            mimeType: d.type || "application/octet-stream",
-          });
-          return;
-        }
-        var link = document.createElement("a");
-        link.href = d.dataUrl;
-        link.download = documentFullName(d) || "documento";
-        link.target = "_blank";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        var dataUrl = d.dataUrl ? String(d.dataUrl) : await readAttachmentDataUrl(d);
+        if (!dataUrl) throw new Error("document-data-unavailable");
+        var fullName = documentFullName(d) || "documento";
+        var mimeType = fainanceResolveMime(fullName, d.type || "");
+        await openFileWithSystem({
+          dataUrl: dataUrl,
+          fileName: fullName,
+          mimeType: mimeType,
+        });
       } catch (e) {
-        setToast("Nessuna app disponibile per aprire questo documento");
+        try { console.error("Apertura documento non riuscita", e); } catch (_logOpen) {}
+        setToast({
+          text: L("Nessuna app disponibile per aprire questo documento"),
+          type: "error",
+          translated: true,
+        });
       }
     }
     function syncNoteEditorState() {
@@ -1186,12 +1392,12 @@ export function AppuntiPanel() {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 10,
-                  padding: "10px 0",
+                  gap: 8,
+                  padding: "9px 0",
                   borderBottom: "1px solid " + borderC,
                 }}
               >
-                <span style={{ fontSize: 20 }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>
                   {/image/i.test(d.type)
                     ? "🖼"
                     : /pdf/i.test(d.type) || /\.pdf$/i.test(documentFullName(d))
@@ -1211,26 +1417,6 @@ export function AppuntiPanel() {
                           }}
                           style={{ ...sinp, flex: 1, minWidth: 0 }}
                         />
-                        {docExtension && (
-                          <div
-                            title={L("L'estensione del file resta invariata")}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              minWidth: 58,
-                              padding: "0 10px",
-                              borderRadius: 8,
-                              border: "1px solid " + (dark ? "#4A4A60" : "#D9DCE5"),
-                              background: dark ? "#252535" : "#F4F5F8",
-                              color: subC,
-                              fontSize: 12,
-                              fontWeight: 800,
-                            }}
-                          >
-                            {docExtension}
-                          </div>
-                        )}
                       </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <Btn
@@ -1255,127 +1441,116 @@ export function AppuntiPanel() {
                     </div>
                   ) : (
                     <>
-                      <div
+                      <button
+                        type="button"
+                        onClick={function () { openAppuntiDocument(d); }}
+                        title={L("Apri") + ": " + docBaseName}
                         style={{
+                          width: "100%",
+                          padding: 0,
+                          border: "none",
+                          background: "transparent",
+                          textAlign: "left",
                           fontSize: 13,
-                          fontWeight: 600,
-                          color: textC,
+                          fontWeight: 750,
+                          color: confirmButtonColor,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
+                          cursor: (d.dataUrl || d.storagePath) ? "pointer" : "default",
                         }}
                       >
                         {docBaseName}
-                        {docExtension && <span style={{ color: subC, fontWeight: 600 }}>{docExtension}</span>}
-                      </div>
-                      <div style={{ fontSize: 11, color: subC }}>
-                        {fmtSize(d.size)} ·{" "}
-                        {d.createdAt
-                          ? fmtDate(d.createdAt.slice(0, 10), dateFmt)
-                          : ""}
+                      </button>
+                      <div style={{ fontSize: 11, color: subC, marginTop: 2 }}>
+                        {fmtSize(d.size)}
                       </div>
                     </>
                   )}
                 </div>
-                {!isEditingDoc && d.dataUrl && (
-                  <button
-                    onClick={function () {
-                      openAppuntiDocument(d);
-                    }}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      cursor: "pointer",
-                      color: "#7F77DD",
-                      fontSize: 13,
-                    }}
-                  >
-                    {L("Apri")}
-                  </button>
-                )}
                 {!isEditingDoc && (
-                  <button
-                    onClick={function () {
-                      editDocument(d);
-                    }}
+                  <div
                     style={{
-                      background: "#EEF4FF",
-                      border: "1px solid #BFD7FF",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                      color: "#378ADD",
-                      fontSize: 14,
-                      padding: "5px 8px",
-                      fontWeight: 700,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 3,
+                      flexShrink: 0,
                     }}
                   >
-                    ✏️
-                  </button>
+                    <button
+                      onClick={function () { editDocument(d); }}
+                      title={L("Modifica nome")}
+                      aria-label={L("Modifica nome")}
+                      style={{
+                        width: 25, height: 25, padding: 0,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        background: dark ? "#223047" : "#EEF4FF",
+                        border: "1px solid " + (dark ? "#355177" : "#BFD7FF"),
+                        borderRadius: 8, cursor: "pointer", color: "#378ADD",
+                        fontSize: 13, fontWeight: 900, lineHeight: 1,
+                      }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      disabled={documentIndex === 0}
+                      onClick={function () { moveDocument(d.id, -1); }}
+                      title={L("Sposta su")}
+                      aria-label={L("Sposta su")}
+                      style={{
+                        width: 24, height: 25, padding: 0,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        background: dark ? "#252535" : "#F7F7FA",
+                        border: "1px solid " + borderC, borderRadius: 8,
+                        cursor: documentIndex === 0 ? "not-allowed" : "pointer",
+                        color: textC, fontSize: 10, fontWeight: 900,
+                        opacity: documentIndex === 0 ? 0.3 : 1,
+                      }}
+                    >
+                      ▲
+                    </button>
+                    <button
+                      disabled={documentIndex === (appuntiDocuments || []).length - 1}
+                      onClick={function () { moveDocument(d.id, 1); }}
+                      title={L("Sposta giù")}
+                      aria-label={L("Sposta giù")}
+                      style={{
+                        width: 24, height: 25, padding: 0,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        background: dark ? "#252535" : "#F7F7FA",
+                        border: "1px solid " + borderC, borderRadius: 8,
+                        cursor: documentIndex === (appuntiDocuments || []).length - 1 ? "not-allowed" : "pointer",
+                        color: textC, fontSize: 10, fontWeight: 900,
+                        opacity: documentIndex === (appuntiDocuments || []).length - 1 ? 0.3 : 1,
+                      }}
+                    >
+                      ▼
+                    </button>
+                    <button
+                      onClick={function () {
+                        if (!window.confirm(L("Eliminare questo documento?"))) return;
+                        if (editingDocumentId === d.id) cancelDocumentEdit();
+                        if (d.storagePath) void deleteAttachment(String(d.storagePath));
+                        setAppuntiDocuments(function (p) {
+                          return p.filter(function (x) { return x.id !== d.id; });
+                        });
+                        setToast(L("Documento eliminato"));
+                      }}
+                      title={L("Elimina")}
+                      aria-label={L("Elimina")}
+                      style={{
+                        width: 25, height: 25, padding: 0,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        background: dark ? "#40262A" : "#FFF0F0",
+                        border: "1px solid " + (dark ? "#6A343C" : "#FFD0D0"),
+                        borderRadius: 8, cursor: "pointer", color: "#E24B4A",
+                        fontSize: 13, fontWeight: 900, lineHeight: 1,
+                      }}
+                    >
+                      🗑
+                    </button>
+                  </div>
                 )}
-                {!isEditingDoc && (
-                  <button
-                    disabled={documentIndex === 0}
-                    onClick={function () { moveDocument(d.id, -1); }}
-                    title={L("Sposta su")}
-                    style={{
-                      background: dark ? "#252535" : "#F7F7FA",
-                      border: "1px solid " + borderC,
-                      borderRadius: 8,
-                      cursor: documentIndex === 0 ? "not-allowed" : "pointer",
-                      color: textC,
-                      fontSize: 13,
-                      padding: "5px 7px",
-                      fontWeight: 800,
-                      opacity: documentIndex === 0 ? 0.35 : 1,
-                    }}
-                  >
-                    ▲
-                  </button>
-                )}
-                {!isEditingDoc && (
-                  <button
-                    disabled={documentIndex === (appuntiDocuments || []).length - 1}
-                    onClick={function () { moveDocument(d.id, 1); }}
-                    title={L("Sposta giù")}
-                    style={{
-                      background: dark ? "#252535" : "#F7F7FA",
-                      border: "1px solid " + borderC,
-                      borderRadius: 8,
-                      cursor: documentIndex === (appuntiDocuments || []).length - 1 ? "not-allowed" : "pointer",
-                      color: textC,
-                      fontSize: 13,
-                      padding: "5px 7px",
-                      fontWeight: 800,
-                      opacity: documentIndex === (appuntiDocuments || []).length - 1 ? 0.35 : 1,
-                    }}
-                  >
-                    ▼
-                  </button>
-                )}
-                <button
-                  onClick={function () {
-                    if (!window.confirm(L("Eliminare questo documento?"))) return;
-                    if (editingDocumentId === d.id) cancelDocumentEdit();
-                    setAppuntiDocuments(function (p) {
-                      return p.filter(function (x) {
-                        return x.id !== d.id;
-                      });
-                    });
-                    setToast("Documento eliminato");
-                  }}
-                  style={{
-                    background: "#FFF0F0",
-                    border: "1px solid #FFD0D0",
-                    borderRadius: 8,
-                    cursor: "pointer",
-                    color: "#E24B4A",
-                    fontSize: 14,
-                    padding: "5px 8px",
-                    fontWeight: 700,
-                  }}
-                >
-                  🗑️
-                </button>
               </div>
             );
           })}

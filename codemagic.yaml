@@ -20,12 +20,14 @@ workflows:
         bundle_identifier: it.fainanceapp.app
 
       vars:
+        IOS_BUILD_NUMBER: "253"
+        FAINANCE_IOS_VERSION: "2.1.1"
         BUNDLE_ID: "it.fainanceapp.app"
         WIDGET_BUNDLE_ID: "it.fainanceapp.app.widgets"
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "2.0.2"
+        APP_VERSION: "2.1.1"
         VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
         VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
@@ -75,7 +77,7 @@ workflows:
         script: |
           cd ios/App
 
-          IOS_BUILD_NUMBER="${PROJECT_BUILD_NUMBER:-${BUILD_NUMBER:-1}}"
+          export IOS_BUILD_NUMBER="253"
           case "$IOS_BUILD_NUMBER" in
             *[!0-9]*|"") IOS_BUILD_NUMBER="1" ;;
           esac

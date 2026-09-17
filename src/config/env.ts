@@ -34,7 +34,7 @@ const productionDefaults: FirebaseConfigShape = {
 };
 
 const requestedEnvironment: AppEnvironment =
-  env("VITE_APP_ENV").toLowerCase() === "test" ? "test" : "production";
+  import.meta.env.MODE === 'test' || env("VITE_APP_ENV").toLowerCase() === "test" ? "test" : "production";
 
 function productionConfig(): FirebaseConfigShape {
   return {
@@ -69,9 +69,9 @@ if (requestedEnvironment === "test" && !configuredTestFirebase) {
 if (
   requestedEnvironment === "test" &&
   configuredTestFirebase &&
-  configuredTestFirebase.projectId === productionDefaults.projectId
+  configuredTestFirebase.projectId !== 'fainance-test-20260823195207'
 ) {
-  throw new Error("FAINANCE_TEST_FIREBASE_PRODUCTION_PROJECT_FORBIDDEN");
+  throw new Error("FAINANCE_TEST_FIREBASE_PROJECT_MISMATCH");
 }
 
 export const appEnvironment: AppEnvironment = requestedEnvironment;
