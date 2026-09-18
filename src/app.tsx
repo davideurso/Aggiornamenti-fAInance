@@ -2415,56 +2415,36 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       )
     );
   }
-  function reconcileExpenseCategoryAssignmentsFromCloud(mergedValue, cloudValue, preserveLocalPending) {
-    var merged = Array.isArray(mergedValue) ? mergedValue : [];
-    var cloud = Array.isArray(cloudValue) ? cloudValue : [];
-    if (preserveLocalPending || !cloud.length) return merged;
-    var cloudByKey: any = {};
-    cloud.forEach(function (item) {
-      var key = accountSyncRecordKey("expense", item);
-      if (key) cloudByKey[key] = item;
-    });
-    return merged.map(function (item) {
-      var key = accountSyncRecordKey("expense", item);
-      var remote = key ? cloudByKey[key] : null;
-      if (!remote || remote.catId === undefined || remote.catId === null || String(remote.catId) === "") return item;
-      if (String(item && item.catId) === String(remote.catId)) return item;
-      // Se questo dispositivo non ha modifiche locali pendenti, la categoria
-      // sincronizzata nel cloud e' autorevole. Evita che una vecchia cache iOS
-      // rimetta le uscite in Altro dopo il login su un account usato su Android.
-      return { ...item, catId: remote.catId };
-    });
+  function isRecoveredExpenseCategory(category) {
+    if (!category) return false;
+    var name = String(category.name || "").toLowerCase();
+    return !!category.recovered || name.indexOf(String(translateUiRuntimeText("Categoria recuperata") || "Categoria recuperata").toLowerCase()) === 0;
   }
-  function ensureReferencedExpenseCategories(categoryList, expenseList, recurringList, candidateLists) {
-    var out = ensureArrayValue(categoryList, []).slice();
-    var byId: any = {};
-    out.forEach(function (category) {
-      if (category && category.id != null) byId[String(category.id)] = category;
-    });
-    var candidates: any = {};
-    ensureArrayValue(DEFAULT_CATS, []).forEach(function (category) {
-      if (category && category.id != null) candidates[String(category.id)] = category;
-    });
-    ensureArrayValue(candidateLists, []).forEach(function (list) {
-      ensureArrayValue(list, []).forEach(function (category) {
-        if (category && category.id != null) candidates[String(category.id)] = category;
-      });
-    });
-    function ensure(item) {
-      if (!item || item.catId === undefined || item.catId === null) return;
-      var sid = String(item.catId);
-      if (!sid || byId[sid]) return;
-      var source = candidates[sid];
-      var name = String((source && source.name) || item.catName || item.categoryName || (translateUiRuntimeText("Categoria recuperata") + " " + sid));
-      var recovered = source
-        ? { ...source }
-        : { id: item.catId, name: name, icon: "🏷️", color: "#B4B2A9", group: "altro", recovered: true, custom: true };
-      out.push(recovered);
-      byId[sid] = recovered;
+  function repairRecoveredExpenseCategories(categoryList, candidateLists) {
+    var current = ensureArrayValue(categoryList, []).slice();
+    var candidatesById: any = {};
+    function addCandidate(category) {
+      if (!category || category.id === undefined || category.id === null) return;
+      if (isRecoveredExpenseCategory(category)) return;
+      var id = String(category.id);
+      if (!id || candidatesById[id]) return;
+      candidatesById[id] = category;
     }
-    ensureArrayValue(expenseList, []).forEach(ensure);
-    ensureArrayValue(recurringList, []).forEach(ensure);
-    return out;
+    ensureArrayValue(DEFAULT_CATS, []).forEach(addCandidate);
+    ensureArrayValue(candidateLists, []).forEach(function (list) {
+      ensureArrayValue(list, []).forEach(addCandidate);
+    });
+    var repaired = false;
+    var categories = current.map(function (category) {
+      if (!isRecoveredExpenseCategory(category)) return category;
+      var source = candidatesById[String(category && category.id)];
+      if (!source) return category;
+      repaired = true;
+      var restored = { ...source, id: category.id };
+      delete restored.recovered;
+      return restored;
+    });
+    return { categories: categories, repaired: repaired };
   }
 
   function chooseExpenseCatalog(
@@ -6137,11 +6117,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 expenseKey,
                 true
               );
-              mergedExpenses = reconcileExpenseCategoryAssignmentsFromCloud(
-                mergedExpenses,
-                cloudExpenses,
-                preserveLatestLocalOnFirst
-              );
               var mergedIncomes = mergeSyncRecords(
                 latestLocalIncomes,
                 cloudIncomes,
@@ -6490,12 +6465,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 DEFAULT_CATS,
                 DEFAULT_EXPENSE_CATEGORY_NAMES
               );
-              mergedCats = ensureReferencedExpenseCategories(
-                mergedCats,
-                mergedExpenses,
-                mergedRecurringBase,
-                [cloudExpenseCatalog.categories, localExpenseCatalog.categories]
+              var currentRecoveryValues = catalogRecoverySnapshotValues(
+                userKey("account_recovery_complete_v1")
               );
+              var previousRecoveryValues = catalogRecoverySnapshotValues(
+                userKey("account_recovery_complete_previous_v1")
+              );
+              var legacyOwnerForCats = String(
+                localStorage.getItem("fainance_legacy_storage_owner_uid_v2") || ""
+              );
+              var legacyUnscopedCats =
+                !legacyOwnerForCats || legacyOwnerForCats === String(userId)
+                  ? parseCatalogStorageValue("cats_v10")
+                  : undefined;
+              var repairedCategoryResult = repairRecoveredExpenseCategories(
+                mergedCats,
+                [
+                  latestLocalCats,
+                  cloudExpenseCatalog.categories,
+                  localExpenseCatalog.categories,
+                  catalogValueFromSnapshot(currentRecoveryValues, "cats_v10"),
+                  catalogValueFromSnapshot(previousRecoveryValues, "cats_v10"),
+                  parseCatalogStorageValue(userKey("recovery_legacy_cats_v10")),
+                  legacyUnscopedCats,
+                ]
+              );
+              mergedCats = repairedCategoryResult.categories;
+              var repairedExpenseCategories = !!repairedCategoryResult.repaired;
               var mergedExpenseGroups =
                 Array.isArray(expenseChoice.value.groups) &&
                 expenseChoice.value.groups.length
@@ -6540,7 +6536,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               if (
                 !readOnlyTestBuild &&
                 isFirstSnapshot &&
-                (expenseChoice.source === "local" || !cloudExpenseV2)
+                (expenseChoice.source === "local" ||
+                  !cloudExpenseV2 ||
+                  repairedExpenseCategories)
               ) {
                 var ect = Math.max(localExpenseTs, cloudExpenseTs, Date.now());
                 backfill.cats = mergedCats;
