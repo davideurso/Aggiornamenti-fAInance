@@ -14,6 +14,7 @@ import './ui/responsiveLayout.css';
 import { createFinanceEvolution, migrateFinanceEvolution, selectFinanceEvolution } from './data/financeEvolution';
 import { createAccountingPeriod } from './finance/accountingPeriod';
 import { PeriodPreferences } from './settings/PeriodPreferences';
+import { periodText } from './i18n/periodTranslations';
 import { budgetForPeriod, saveBudgetForPeriod, resetBudgetForPeriod } from './finance/budgetEngine';
 import { financeMessage } from './i18n/financeMessages';
 import { participantForUser, shareAmountForUser } from './finance/shareUserAmount';
@@ -185,6 +186,7 @@ import {
   SortableRows,
   PatrimonioSettingsPanel,
   PopupCloseButton,
+  FainancePickerModal,
   SortOrderPanel,
   DeleteDataPanel,
   ImportData,
@@ -15016,6 +15018,49 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       } catch (e) {}
       return raw;
     }
+    function setupLanguageCode() {
+      return String(setupLang || lang || getDefaultLang() || "it");
+    }
+    function setupLocale() {
+      var code = setupLanguageCode();
+      var localeMap: any = {
+        it: "it-IT",
+        en: "en-US",
+        es: "es-ES",
+        fr: "fr-FR",
+        de: "de-DE",
+        pt: "pt-PT",
+        pl: "pl-PL",
+        nl: "nl-NL",
+        ro: "ro-RO",
+        el: "el-GR",
+      };
+      return localeMap[code] || code || "it-IT";
+    }
+    function formatSetupPeriodDate(value: any) {
+      var d = value instanceof Date ? value : new Date(value);
+      if (!d || isNaN(d.getTime())) return "";
+      try {
+        return new Intl.DateTimeFormat(setupLocale(), {
+          weekday: "short",
+          day: "2-digit",
+          month: "short",
+        }).format(d);
+      } catch (e) {
+        return d.toLocaleDateString();
+      }
+    }
+    function renderSetupPeriodInline(value: string) {
+      return String(value || "")
+        .split(/(\*\*[^*]+\*\*)/g)
+        .filter(Boolean)
+        .map(function (part, idx) {
+          if (part.startsWith("**") && part.endsWith("**")) {
+            return <strong key={idx}>{part.slice(2, -2)}</strong>;
+          }
+          return <span key={idx}>{part}</span>;
+        });
+    }
     var step = Math.max(0, Math.min(initialSetupStep, maxStep));
     var primary = confirmButtonColor || "#378ADD";
     var panelStyle: any = {
@@ -15931,58 +15976,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         })
       : options;
     var pickerLayer = setupPicker ? (
-      <div
-        role="presentation"
-        onClick={function (e) {
-          if (e.target === e.currentTarget) closeSetupPicker();
-        }}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 10090,
-          background: "rgba(0,0,0,.52)",
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "center",
-          padding: isMobile ? 0 : 18,
-          boxSizing: "border-box",
-          overscrollBehavior: "contain",
-        }}
+      <FainancePickerModal
+        open={!!setupPicker}
+        title={SL("Seleziona un valore")}
+        onClose={closeSetupPicker}
+        zIndex={10120}
       >
         <div
-          role="dialog"
-          aria-modal="true"
-          onClick={function (e) {
-            e.stopPropagation();
-          }}
           style={{
             width: "100%",
-            maxWidth: 540,
-            maxHeight: isMobile ? "78vh" : "74vh",
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: isMobile ? "24px 24px 0 0" : 24,
-            padding: 16,
-            boxShadow: "0 -16px 50px rgba(0,0,0,.28)",
+            minWidth: 0,
+            boxSizing: "border-box",
             display: "flex",
             flexDirection: "column",
             gap: 12,
-            overscrollBehavior: "contain",
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-            }}
-          >
-            <div style={{ fontSize: 17, fontWeight: 950, color: textC }}>
-              {SL("Seleziona un valore")}
-            </div>
-            <PopupCloseButton onClick={closeSetupPicker} dark={dark} label={SL("Chiudi")} />
-          </div>
           {options.length > 12 && (
             <input
               value={setupPickerSearch}
@@ -15992,6 +16001,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               placeholder={SL("Cerca...")}
               style={{
                 width: "100%",
+                minWidth: 0,
+                maxWidth: "none",
                 boxSizing: "border-box",
                 border: "1px solid " + borderC,
                 borderRadius: 12,
@@ -16005,14 +16016,19 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           )}
           <div
             style={{
+              width: "100%",
+              minWidth: 0,
+              maxWidth: "none",
+              boxSizing: "border-box",
               overflowY: "auto",
               WebkitOverflowScrolling: "touch",
               overscrollBehavior: "contain",
               touchAction: "pan-y",
               display: "flex",
               flexDirection: "column",
+              alignItems: "stretch",
               gap: 7,
-              paddingBottom: 4,
+              paddingBottom: "max(4px, env(safe-area-inset-bottom, 0px))",
             }}
           >
             {filtered.map(function (x) {
@@ -16028,6 +16044,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   }}
                   style={{
                     width: "100%",
+                    minWidth: 0,
+                    maxWidth: "none",
+                    boxSizing: "border-box",
+                    flex: "0 0 auto",
+                    alignSelf: "stretch",
                     border: "1px solid " + (active ? primary : borderC),
                     background: active
                       ? dark
@@ -16038,8 +16059,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       : "#fff",
                     color: textC,
                     borderRadius: 12,
-                    padding: "13px",
+                    padding: "12px 13px",
                     fontSize: 14,
+                    lineHeight: 1.3,
                     fontWeight: active ? 950 : 750,
                     textAlign: "left",
                     cursor: "pointer",
@@ -16049,11 +16071,25 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     gap: 10,
                     touchAction: "manipulation",
                     WebkitTapHighlightColor: "transparent",
+                    overflow: "hidden",
                   }}
                 >
-                  <span>{x.label}</span>
+                  <span
+                    style={{
+                      minWidth: 0,
+                      flex: "1 1 auto",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {x.label}
+                  </span>
                   {active && (
-                    <span style={{ color: primary, fontWeight: 950 }}>✓</span>
+                    <span
+                      aria-hidden="true"
+                      style={{ color: primary, fontWeight: 950, flexShrink: 0 }}
+                    >
+                      ✓
+                    </span>
                   )}
                 </button>
               );
@@ -16061,6 +16097,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             {filtered.length === 0 && (
               <div
                 style={{
+                  width: "100%",
+                  boxSizing: "border-box",
                   textAlign: "center",
                   padding: 20,
                   color: subC,
@@ -16072,7 +16110,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             )}
           </div>
         </div>
-      </div>
+      </FainancePickerModal>
     ) : null;
     return (
       <div
@@ -16224,13 +16262,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                         {setupPeriodMode === "financial" ? SL("Mese finanziario") : SL("Mese solare")}
                       </div>
                       <div style={{ fontSize: 11, color: subC, marginTop: 2 }}>
-                        {String(preview.start || "").slice(0, 10)} → {String(preview.end || "").slice(0, 10)}
+                        {formatSetupPeriodDate(preview.start)} → {formatSetupPeriodDate(preview.end)}
                       </div>
                     </div>
                   );
                 })()}
-                <div style={{ fontSize: 11, color: subC, lineHeight: 1.4, marginTop: 9 }}>
-                  {SL("La scelta ricalcola i raggruppamenti di tutto lo storico. Le date e gli importi delle transazioni restano invariati.")}
+                <div style={{ fontSize: 11, color: subC, lineHeight: 1.45, marginTop: 9 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 7 }}>
+                    <span style={{ lineHeight: 1.45 }}>•</span>
+                    <span>{renderSetupPeriodInline(periodText(setupLanguageCode(), "calendarInfo"))}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: 4 }}>
+                    <span style={{ lineHeight: 1.45 }}>•</span>
+                    <span>{renderSetupPeriodInline(periodText(setupLanguageCode(), "financialInfo"))}</span>
+                  </div>
+                  <div style={{ height: 1, background: borderC, margin: "9px 0 8px" }} />
+                  <div>{renderSetupPeriodInline(periodText(setupLanguageCode(), "countingInfo"))}</div>
                 </div>
               </div>
             )}

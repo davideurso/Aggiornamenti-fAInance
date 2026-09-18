@@ -9500,36 +9500,6 @@ export function HistoryPanel() {
           ↕ {L("Ordina")}
         </button>
       </div>
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 10,
-          background: dark ? "#252535" : "#f8f8ff",
-          border: "1px solid " + borderC,
-          borderRadius: 14,
-          padding: "9px 11px",
-        }}
-      >
-        <div style={{ fontSize: 12, color: subC }}>
-          {L("Vista")}: <b style={{ color: textC }}>{activeTypeLabel()}</b>
-        </div>
-        <div style={{ fontSize: 12, color: subC, textAlign: "right" }}>
-          {L("Ordine")}:{" "}
-          <b style={{ color: textC }}>
-            {displaySortLabel(historySortDate, historySortDirection)}
-          </b>
-          <span style={{ display: "block", fontSize: 11 }}>
-            {L("E poi per")}:{" "}
-            {displaySortLabel(
-              historySortSecondary,
-              historySortSecondaryDirection
-            )}
-          </span>
-        </div>
-      </div>
       <div style={{ marginBottom: 10 }}>{searchBox()}</div>
       <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>
         {!firestoreReady

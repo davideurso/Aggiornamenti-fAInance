@@ -13,8 +13,3 @@ export const financeMessageRows: Record<string, string[]> = {
 export function financeMessage(language: string, kind: 'sync' | 'conflict') {
   return (financeMessageRows[language] || financeMessageRows.en)[kind === 'sync' ? 0 : 1];
 }
-export const cloudSavedMessages: Record<string, string> = {
-  it:'Salvato nel cloud', en:'Saved to cloud', es:'Guardado en la nube', fr:'Enregistré dans le cloud',
-  de:'In der Cloud gespeichert', pt:'Guardado na nuvem', pl:'Zapisano w chmurze', nl:'Opgeslagen in de cloud',
-  ro:'Salvat în cloud', el:'Αποθηκεύτηκε στο cloud',
-};

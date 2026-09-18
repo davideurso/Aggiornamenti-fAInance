@@ -2546,17 +2546,87 @@ export function SettingsPanel() {
       </div>
     );
   }
-  function SettingInfo({ id, text }) {
+  function renderInfoInlineParts(value) {
+    return String(value || "")
+      .split(/(\*\*[^*]+\*\*)/g)
+      .filter(Boolean)
+      .map(function (part, idx) {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={idx}>{part.slice(2, -2)}</strong>;
+        }
+        return <span key={idx}>{part}</span>;
+      });
+  }
+  function renderInfoBody(value) {
+    if (value == null || value === false) return null;
+    if (typeof value !== "string") return value;
+    var sections = String(value)
+      .split(/\n\s*\n/)
+      .map(function (section) { return section.trim(); })
+      .filter(Boolean);
+    return (
+      <div>
+        {sections.map(function (section, sectionIndex) {
+          var lines = section
+            .split("\n")
+            .map(function (line) { return line.trim(); })
+            .filter(Boolean);
+          var isList = lines.every(function (line) {
+            return line.startsWith("- ") || line.startsWith("• ");
+          });
+          return (
+            <div key={sectionIndex}>
+              {sectionIndex > 0 && (
+                <div
+                  style={{
+                    height: 1,
+                    background: dark ? "#4a446f" : "#d8d2ff",
+                    margin: "10px 0 9px",
+                  }}
+                />
+              )}
+              {isList ? (
+                <div style={{ paddingLeft: 1 }}>
+                  {lines.map(function (line, lineIndex) {
+                    var clean = line.replace(/^[-•]\s*/, "");
+                    return (
+                      <div
+                        key={lineIndex}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 8,
+                          marginTop: lineIndex ? 4 : 0,
+                        }}
+                      >
+                        <span style={{ lineHeight: 1.5 }}>•</span>
+                        <span>{renderInfoInlineParts(clean)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                lines.map(function (line, lineIndex) {
+                  return <div key={lineIndex}>{renderInfoInlineParts(line)}</div>;
+                })
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  function SettingInfo({ id, text, body }) {
     return (
       <FainanceInfoPopover
         label={L("Informazioni")}
-        body={L(text)}
+        body={renderInfoBody(body != null ? body : L(text))}
         size={19}
         popupWidth={280}
         popupOffsetY={27}
         popupAlign="right"
         buttonStyle={{ fontSize: 10 }}
-        popupStyle={{ fontSize: 11, lineHeight: 1.4 }}
+        popupStyle={{ fontSize: 11, lineHeight: 1.5 }}
       />
     );
   }
@@ -7596,7 +7666,10 @@ export function SettingsPanel() {
                 <span>{L("Tipo di periodo")}</span>
                 <SettingInfo
                   id="general_balance_period_type"
-                  text="Il Mese solare va dal primo all’ultimo giorno del mese. Il Mese finanziario parte dal giorno che scegli qui sotto, utile ad esempio per far coincidere il periodo con l’accredito dello stipendio. Se quel giorno non esiste in un mese, viene usato l’ultimo giorno disponibile."
+                  text={`- **Il mese solare** va dal primo all’ultimo giorno del mese.
+- **Il mese finanziario** parte invece dal giorno scelto da te e termina il giorno precedente del mese successivo.
+
+Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggiate.`}
                 />
               </div>
               <select
