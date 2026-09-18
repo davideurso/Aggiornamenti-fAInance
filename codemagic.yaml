@@ -20,7 +20,7 @@ workflows:
         bundle_identifier: it.fainanceapp.app
 
       vars:
-        IOS_BUILD_NUMBER: "254"
+        IOS_BUILD_NUMBER: "255"
         FAINANCE_IOS_VERSION: "2.1.1"
         BUNDLE_ID: "it.fainanceapp.app"
         WIDGET_BUNDLE_ID: "it.fainanceapp.app.widgets"
@@ -77,7 +77,7 @@ workflows:
         script: |
           cd ios/App
 
-          export IOS_BUILD_NUMBER="254"
+          export IOS_BUILD_NUMBER="255"
           case "$IOS_BUILD_NUMBER" in
             *[!0-9]*|"") IOS_BUILD_NUMBER="1" ;;
           esac
