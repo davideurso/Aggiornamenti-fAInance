@@ -124,6 +124,7 @@ import { applyAppTranslationPatches } from "./i18n/appTranslationPatches";
 import { pickFainanceContact } from "./native/appContacts";
 import {
   fainanceIsNativePlatform,
+  fainanceNativePlatform,
   fainanceSetMetaEventsConsent,
   fainanceLogMetaEvent,
 } from "./native/platform";
@@ -2414,6 +2415,58 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       )
     );
   }
+  function reconcileExpenseCategoryAssignmentsFromCloud(mergedValue, cloudValue, preserveLocalPending) {
+    var merged = Array.isArray(mergedValue) ? mergedValue : [];
+    var cloud = Array.isArray(cloudValue) ? cloudValue : [];
+    if (preserveLocalPending || !cloud.length) return merged;
+    var cloudByKey: any = {};
+    cloud.forEach(function (item) {
+      var key = accountSyncRecordKey("expense", item);
+      if (key) cloudByKey[key] = item;
+    });
+    return merged.map(function (item) {
+      var key = accountSyncRecordKey("expense", item);
+      var remote = key ? cloudByKey[key] : null;
+      if (!remote || remote.catId === undefined || remote.catId === null || String(remote.catId) === "") return item;
+      if (String(item && item.catId) === String(remote.catId)) return item;
+      // Se questo dispositivo non ha modifiche locali pendenti, la categoria
+      // sincronizzata nel cloud e' autorevole. Evita che una vecchia cache iOS
+      // rimetta le uscite in Altro dopo il login su un account usato su Android.
+      return { ...item, catId: remote.catId };
+    });
+  }
+  function ensureReferencedExpenseCategories(categoryList, expenseList, recurringList, candidateLists) {
+    var out = ensureArrayValue(categoryList, []).slice();
+    var byId: any = {};
+    out.forEach(function (category) {
+      if (category && category.id != null) byId[String(category.id)] = category;
+    });
+    var candidates: any = {};
+    ensureArrayValue(DEFAULT_CATS, []).forEach(function (category) {
+      if (category && category.id != null) candidates[String(category.id)] = category;
+    });
+    ensureArrayValue(candidateLists, []).forEach(function (list) {
+      ensureArrayValue(list, []).forEach(function (category) {
+        if (category && category.id != null) candidates[String(category.id)] = category;
+      });
+    });
+    function ensure(item) {
+      if (!item || item.catId === undefined || item.catId === null) return;
+      var sid = String(item.catId);
+      if (!sid || byId[sid]) return;
+      var source = candidates[sid];
+      var name = String((source && source.name) || item.catName || item.categoryName || (translateUiRuntimeText("Categoria recuperata") + " " + sid));
+      var recovered = source
+        ? { ...source }
+        : { id: item.catId, name: name, icon: "🏷️", color: "#B4B2A9", group: "altro", recovered: true, custom: true };
+      out.push(recovered);
+      byId[sid] = recovered;
+    }
+    ensureArrayValue(expenseList, []).forEach(ensure);
+    ensureArrayValue(recurringList, []).forEach(ensure);
+    return out;
+  }
+
   function chooseExpenseCatalog(
     localCatalog,
     cloudCatalog,
@@ -5854,7 +5907,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }
               } catch (error) {
                 financeSchemaCompatibleRef.current = false;
-
+                
                 setFirestoreReady(false);
                 setToast({ text: financeMessage(lang, 'sync'), type: 'error' });
                 return;
@@ -5923,14 +5976,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   // Only the resolved write promise acknowledges the pending revision.
                   firestoreHydratedRef.current = true;
                   setFirestoreReady(true);
-
+                  
                   return;
                 } else {
                   // Non applicare uno snapshot precedente alla modifica locale: altrimenti
                   // l'elemento appena creato scompare prima del salvataggio sul cloud.
                   firestoreHydratedRef.current = true;
                   setFirestoreReady(true);
-
+                  
                   return;
                 }
               }
@@ -6083,6 +6136,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 mergedAccountDeleted,
                 expenseKey,
                 true
+              );
+              mergedExpenses = reconcileExpenseCategoryAssignmentsFromCloud(
+                mergedExpenses,
+                cloudExpenses,
+                preserveLatestLocalOnFirst
               );
               var mergedIncomes = mergeSyncRecords(
                 latestLocalIncomes,
@@ -6431,6 +6489,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 expenseChoice.value.categories,
                 DEFAULT_CATS,
                 DEFAULT_EXPENSE_CATEGORY_NAMES
+              );
+              mergedCats = ensureReferencedExpenseCategories(
+                mergedCats,
+                mergedExpenses,
+                mergedRecurringBase,
+                [cloudExpenseCatalog.categories, localExpenseCatalog.categories]
               );
               var mergedExpenseGroups =
                 Array.isArray(expenseChoice.value.groups) &&
@@ -8256,7 +8320,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             }
             firestoreHydratedRef.current = true;
             setFirestoreReady(true);
-
+            
             if (postHydrationSyncRequestedRef.current) {
               setTimeout(function () {
                 if (cancelled) return;
@@ -24749,7 +24813,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             flexDirection: "column",
             background: bgColor,
             overflow: "hidden",
-            paddingTop: "env(safe-area-inset-top, 0px)",
+            paddingTop:
+              fainanceNativePlatform() === "ios"
+                ? "max(env(safe-area-inset-top, 0px), 44px)"
+                : "env(safe-area-inset-top, 0px)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)",
             boxSizing: "border-box",
             ...({

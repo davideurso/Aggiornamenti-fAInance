@@ -1688,7 +1688,7 @@ export function AmountCalculatorButton({
             }}
           >
             <input
-              autoFocus
+              autoFocus={!embedded}
               value={expression}
               onChange={function (e) {
                 onEdit?.();
@@ -4270,7 +4270,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         >
           <div
             style={{
-              fontSize: isMobile ? "clamp(8.6px,2.8vw,9.8px)" : 11,
+              fontSize: isMobile ? "clamp(7.4px,2.35vw,8.6px)" : 10.5,
               fontWeight: 950,
               textTransform: "uppercase",
               letterSpacing: 0.35,
