@@ -9458,15 +9458,15 @@ export function HistoryPanel() {
   }, 0);
   var historyActionsStyle: any = {
     position: "sticky",
-    top: -14,
+    top: 0,
     zIndex: 20,
     display: "flex",
     gap: 8,
-    marginTop: historyActionsVisible ? -14 : 0,
+    marginTop: historyActionsVisible ? 6 : 0,
     marginBottom: historyActionsVisible ? 8 : 0,
     alignItems: "center",
     background: dark ? "#171724" : "#F7F8FF",
-    padding: historyActionsVisible ? "0 0 8px" : "0",
+    padding: historyActionsVisible ? "6px 0 8px" : "0",
     boxShadow: historyActionsVisible
       ? dark
         ? "0 -22px 0 #171724, 0 8px 14px rgba(23,23,36,.96)"

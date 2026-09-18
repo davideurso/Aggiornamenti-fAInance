@@ -2447,6 +2447,88 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return { categories: categories, repaired: repaired };
   }
 
+  async function readCloudExpenseCategoryBackupCandidates() {
+    if (!userId) return [];
+    try {
+      var backupSnap: any = await getDocs(
+        query(collection(fbDb, "users", String(userId), "backups"), limit(16))
+      );
+      var rows = (backupSnap.docs || [])
+        .map(function (row) { return row && row.data ? row.data() : null; })
+        .filter(function (row) { return !!(row && row.payload); })
+        .sort(function (a, b) { return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0); });
+      var out: any[] = [];
+      for (var i = 0; i < rows.length && out.length < 8; i++) {
+        try {
+          var row: any = rows[i];
+          if (String(row.encoding || "") !== "gzip-base64-json-v1") continue;
+          var raw = String(row.payload || "");
+          if (!raw) continue;
+          var binary = atob(raw);
+          var bytes = new Uint8Array(binary.length);
+          for (var j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+          var DecompressionCtor: any = (globalThis as any).DecompressionStream;
+          if (!DecompressionCtor) break;
+          var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionCtor("gzip"));
+          var decoded = new TextDecoder().decode(await new Response(stream).arrayBuffer());
+          var parsed: any = JSON.parse(decoded);
+          var snapshot = parsed && parsed.snapshot && typeof parsed.snapshot === "object" ? parsed.snapshot : null;
+          var values = snapshot && snapshot.values && typeof snapshot.values === "object" ? snapshot.values : null;
+          var catsRaw = values ? values.cats_v10 : null;
+          if (catsRaw === null || catsRaw === undefined || catsRaw === "") continue;
+          var catsValue = typeof catsRaw === "string" ? JSON.parse(catsRaw) : catsRaw;
+          if (Array.isArray(catsValue) && catsValue.length) out.push(catsValue);
+        } catch (_backupCategoryError) {}
+      }
+      return out;
+    } catch (_backupReadError) {
+      return [];
+    }
+  }
+  function restoreReferencedExpenseCategories(categoryList, candidateLists, expenseRows) {
+    var current = ensureArrayValue(categoryList, []).slice();
+    var byId: any = {};
+    current.forEach(function (category) {
+      if (category && category.id !== undefined && category.id !== null) byId[String(category.id)] = category;
+    });
+    var candidatesById: any = {};
+    ensureArrayValue(candidateLists, []).forEach(function (list) {
+      ensureArrayValue(list, []).forEach(function (category) {
+        if (!category || category.id === undefined || category.id === null || isRecoveredExpenseCategory(category)) return;
+        var id = String(category.id);
+        if (!id || candidatesById[id]) return;
+        candidatesById[id] = category;
+      });
+    });
+    var referenced: any = {};
+    ensureArrayValue(expenseRows, []).forEach(function (row) {
+      if (row && row.catId !== undefined && row.catId !== null && String(row.catId) !== "") referenced[String(row.catId)] = true;
+    });
+    var repaired = false;
+    Object.keys(referenced).forEach(function (id) {
+      var existing = byId[id];
+      var source = candidatesById[id];
+      if (!source) return;
+      if (!existing) {
+        var added = { ...source };
+        delete added.recovered;
+        current.push(added);
+        byId[id] = added;
+        repaired = true;
+        return;
+      }
+      if (isRecoveredExpenseCategory(existing)) {
+        var replacement = { ...source, id: existing.id };
+        delete replacement.recovered;
+        var index = current.findIndex(function (category) { return String(category && category.id) === id; });
+        if (index >= 0) current[index] = replacement;
+        byId[id] = replacement;
+        repaired = true;
+      }
+    });
+    return { categories: current, repaired: repaired };
+  }
+
   function chooseExpenseCatalog(
     localCatalog,
     cloudCatalog,
@@ -4365,6 +4447,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [setupDateFmt, setSetupDateFmt] = useState(getDefaultDateFormat());
   var [setupFirstDay, setSetupFirstDay] = useState("mon");
   var [setupBalanceView, setSetupBalanceView] = useState("rateizzato");
+  var [setupPeriodMode, setSetupPeriodMode] = useState("calendar");
+  var [setupPeriodStartDay, setSetupPeriodStartDay] = useState(27);
   var [setupIncomeType, setSetupIncomeType] = useState("salario");
   var [setupExpenseCat, setSetupExpenseCat] = useState("4");
   var [setupExpenseMethod, setSetupExpenseMethod] = useState("8");
@@ -6478,20 +6562,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 !legacyOwnerForCats || legacyOwnerForCats === String(userId)
                   ? parseCatalogStorageValue("cats_v10")
                   : undefined;
+              var cloudBackupCategoryCandidates = isFirstSnapshot
+                ? await readCloudExpenseCategoryBackupCandidates()
+                : [];
+              if (cancelled) return;
+              var categoryRecoveryCandidates = [
+                latestLocalCats,
+                cloudExpenseCatalog.categories,
+                localExpenseCatalog.categories,
+                catalogValueFromSnapshot(currentRecoveryValues, "cats_v10"),
+                catalogValueFromSnapshot(previousRecoveryValues, "cats_v10"),
+                parseCatalogStorageValue(userKey("recovery_legacy_cats_v10")),
+                legacyUnscopedCats,
+              ].concat(cloudBackupCategoryCandidates);
               var repairedCategoryResult = repairRecoveredExpenseCategories(
                 mergedCats,
-                [
-                  latestLocalCats,
-                  cloudExpenseCatalog.categories,
-                  localExpenseCatalog.categories,
-                  catalogValueFromSnapshot(currentRecoveryValues, "cats_v10"),
-                  catalogValueFromSnapshot(previousRecoveryValues, "cats_v10"),
-                  parseCatalogStorageValue(userKey("recovery_legacy_cats_v10")),
-                  legacyUnscopedCats,
-                ]
+                categoryRecoveryCandidates
               );
               mergedCats = repairedCategoryResult.categories;
-              var repairedExpenseCategories = !!repairedCategoryResult.repaired;
+              var referencedCategoryResult = restoreReferencedExpenseCategories(
+                mergedCats,
+                categoryRecoveryCandidates,
+                mergedExpenses
+              );
+              mergedCats = referencedCategoryResult.categories;
+              var repairedExpenseCategories = !!(
+                repairedCategoryResult.repaired || referencedCategoryResult.repaired
+              );
               var mergedExpenseGroups =
                 Array.isArray(expenseChoice.value.groups) &&
                 expenseChoice.value.groups.length
@@ -14681,6 +14778,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setSetupDateFmt(getDefaultDateFormat());
     setSetupFirstDay("mon");
     setSetupBalanceView("rateizzato");
+    setSetupPeriodMode(balancePeriodMode === "financial" ? "financial" : "calendar");
+    setSetupPeriodStartDay(Math.max(1, Math.min(31, Number(financialMonthStartDay) || 27)));
     setSetupIncomeType("salario");
     setSetupExpenseCat("4");
     setSetupExpenseMethod("8");
@@ -14766,6 +14865,19 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setFirstDayOfWeek(String(setupFirstDay || "mon"));
     setHomeBalanceView(setupBalanceView === "reale" ? "reale" : "rateizzato");
     setStatsView(setupBalanceView === "reale" ? "reale" : "rateizzato");
+    var finalSetupPeriodMode = setupPeriodMode === "financial" ? "financial" : "calendar";
+    var finalSetupPeriodDay = finalSetupPeriodMode === "financial"
+      ? Math.max(1, Math.min(31, Number(setupPeriodStartDay) || 27))
+      : 1;
+    setBalancePeriodMode(finalSetupPeriodMode);
+    setFinancialMonthStartDay(finalSetupPeriodDay);
+    setFinanceEvolution(function (previous) {
+      return {
+        ...previous,
+        period: { mode: finalSetupPeriodMode, startDay: finalSetupPeriodDay },
+        periodIntroductionSeen: true,
+      };
+    });
     setDefaultIncomeType(String(setupIncomeType || "salario"));
     setDefaultExpenseCat(String(setupExpenseCat || "4"));
     setDefaultExpenseMethod(String(setupExpenseMethod || "8"));
@@ -15972,9 +16084,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           zIndex: 10060,
           background: dark ? "rgba(8,10,18,.94)" : "rgba(245,248,252,.97)",
           display: "flex",
-          alignItems: "center",
+          alignItems: "flex-start",
           justifyContent: "center",
-          padding: 16,
+          minHeight: "100dvh",
+          overflowY: "auto",
+          WebkitOverflowScrolling: "touch",
+          padding: "max(16px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom))",
           boxSizing: "border-box",
           overscrollBehavior: "contain",
         }}
@@ -15983,10 +16098,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           style={{
             width: "100%",
             maxWidth: isMobile ? 440 : 540,
-            maxHeight: "95vh",
-            overflowY: "auto",
-            WebkitOverflowScrolling: "touch",
+            maxHeight: "none",
+            overflow: "visible",
             overscrollBehavior: "contain",
+            margin: "auto 0",
             background: cardBg,
             border: "1px solid " + borderC,
             borderRadius: 26,
@@ -16064,7 +16179,61 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             {body}
-            {essential && step === 0 && <PeriodPreferences />}
+            {essential && step === 0 && (
+              <div style={panelStyle}>
+                <div style={{ fontSize: 16, fontWeight: 950, color: textC, marginBottom: 12 }}>
+                  {SL("Periodo di bilancio")}
+                </div>
+                <label style={{ ...labelStyle, marginBottom: 6 }}>{SL("Tipo di periodo")}</label>
+                <select
+                  value={setupPeriodMode}
+                  onChange={function (e) {
+                    var mode = e.target.value === "financial" ? "financial" : "calendar";
+                    setSetupPeriodMode(mode);
+                    if (mode === "calendar") setSetupPeriodStartDay(1);
+                    else if (Number(setupPeriodStartDay) <= 1) setSetupPeriodStartDay(27);
+                  }}
+                  style={{ width: "100%", boxSizing: "border-box", border: "1px solid " + borderC, borderRadius: 12, padding: "11px 12px", background: dark ? "#1E1E30" : "#fff", color: textC, fontSize: 14 }}
+                >
+                  <option value="calendar">{SL("Mese solare")}</option>
+                  <option value="financial">{SL("Mese finanziario")}</option>
+                </select>
+                {setupPeriodMode === "financial" && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ ...labelStyle, marginBottom: 6 }}>{SL("Giorno di inizio")}</label>
+                    <select
+                      value={setupPeriodStartDay}
+                      onChange={function (e) { setSetupPeriodStartDay(Math.max(1, Math.min(31, Number(e.target.value) || 27))); }}
+                      style={{ width: "100%", boxSizing: "border-box", border: "1px solid " + borderC, borderRadius: 12, padding: "11px 12px", background: dark ? "#1E1E30" : "#fff", color: textC, fontSize: 14 }}
+                    >
+                      {Array.from({ length: 31 }, function (_, i) { return i + 1; }).map(function (day) {
+                        return <option key={day} value={day}>{day}</option>;
+                      })}
+                    </select>
+                  </div>
+                )}
+                {(() => {
+                  var preview = balancePeriodRangeForDate(
+                    new Date(),
+                    setupPeriodMode === "financial" ? "financial" : "calendar",
+                    setupPeriodMode === "financial" ? Math.max(1, Math.min(31, Number(setupPeriodStartDay) || 27)) : 1
+                  );
+                  return (
+                    <div style={{ marginTop: 10, padding: "9px 11px", borderRadius: 10, background: dark ? "#252535" : "#F7F7FA", border: "1px solid " + borderC }}>
+                      <div style={{ fontSize: 12, fontWeight: 850, color: textC }}>
+                        {setupPeriodMode === "financial" ? SL("Mese finanziario") : SL("Mese solare")}
+                      </div>
+                      <div style={{ fontSize: 11, color: subC, marginTop: 2 }}>
+                        {String(preview.start || "").slice(0, 10)} → {String(preview.end || "").slice(0, 10)}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div style={{ fontSize: 11, color: subC, lineHeight: 1.4, marginTop: 9 }}>
+                  {SL("La scelta ricalcola i raggruppamenti di tutto lo storico. Le date e gli importi delle transazioni restano invariati.")}
+                </div>
+              </div>
+            )}
           </div>
           {essential && step === 4 ? (
             <div
