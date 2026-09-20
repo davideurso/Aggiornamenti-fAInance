@@ -288,8 +288,18 @@ export function NotificationCenter({
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
   // Le azioni globali restano disponibili anche nella chat dell'Agente AI.
   const hideFloatingActions = false;
+  const iosNative = (() => {
+    try {
+      const cap: any = (window as any).Capacitor;
+      return !!(cap && typeof cap.getPlatform === "function" && cap.getPlatform() === "ios");
+    } catch (_error) {
+      return false;
+    }
+  })();
   const actionTop = ctx.isMobile
-    ? "calc(env(safe-area-inset-top,0px) + 9px)"
+    ? iosNative
+      ? "max(calc(env(safe-area-inset-top,0px) + 9px), 53px)"
+      : "calc(env(safe-area-inset-top,0px) + 9px)"
     : 14;
   if (!userId) return null;
 
@@ -313,16 +323,17 @@ export function NotificationCenter({
   const actionButton = {
     width: 34,
     height: 34,
-    borderRadius: 12,
-    border: "1px solid " + borderC,
-    background: cardBg,
+    borderRadius: ctx.isMobile ? 12 : 0,
+    border: ctx.isMobile ? "1px solid " + borderC : "none",
+    background: ctx.isMobile ? cardBg : "transparent",
     color: textC,
-    boxShadow: dark ? "none" : "0 5px 16px rgba(15,23,42,.13)",
+    boxShadow: ctx.isMobile ? (dark ? "none" : "0 5px 16px rgba(15,23,42,.13)") : "none",
     cursor: "pointer",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     position: "relative" as const,
+    padding: 0,
   };
 
   return (

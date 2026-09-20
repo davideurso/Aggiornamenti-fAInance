@@ -41,11 +41,8 @@
 			</array>
 		</dict>
 	</array>
-	$1253</string>
-	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
-	<true/>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
-	<false/>
+	<true/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-4502496181111632~7115058902</string>
 	<key>LSRequiresIPhoneOS</key>

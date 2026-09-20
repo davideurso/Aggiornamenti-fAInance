@@ -311,8 +311,9 @@ export function clearFainanceLocalAccountData(uid){
     }
   }catch(e){}
 }
-export function dateOffset(n){var d=new Date();d.setDate(d.getDate()-n);return d.toISOString().split("T")[0];}
-export function todayStr(){return dateOffset(0);}
+export function localDateKey(d){var value=d instanceof Date?d:new Date(d||Date.now());var y=value.getFullYear();var m=String(value.getMonth()+1).padStart(2,"0");var day=String(value.getDate()).padStart(2,"0");return y+"-"+m+"-"+day;}
+export function dateOffset(n){var d=new Date();d.setDate(d.getDate()-Number(n||0));return localDateKey(d);}
+export function todayStr(){return localDateKey(new Date());}
 export function fmtDate(iso,fmt){if(!iso)return "";var p=iso.split("-");if(fmt==="mdy")return p[1]+"/"+p[2]+"/"+p[0];if(fmt==="ymd")return iso;return p[2]+"/"+p[1]+"/"+p[0];}
 export function parseMoney(value){
   if(typeof value==="number")return isFinite(value)?value:0;

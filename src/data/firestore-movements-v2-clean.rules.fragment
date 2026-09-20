@@ -1,0 +1,32 @@
+// Merge inside match /databases/{database}/documents { ... }
+// Movement Sync V2 rules: offline queue + one-time legacy migration.
+
+match /users/{uid}/movementsV2/{movementId} {
+  allow read: if request.auth != null && request.auth.uid == uid;
+
+  allow create: if request.auth != null &&
+    request.auth.uid == uid &&
+    request.resource.data.uid == uid &&
+    request.resource.data.schemaVersion == 2 &&
+    request.resource.data.kind in ["expense", "income"] &&
+    request.resource.data.recordId is string &&
+    request.resource.data.deleted is bool &&
+    request.resource.data.updatedAtMs is int;
+
+  allow update: if request.auth != null &&
+    request.auth.uid == uid &&
+    request.resource.data.uid == uid &&
+    request.resource.data.schemaVersion == 2 &&
+    request.resource.data.kind == resource.data.kind &&
+    request.resource.data.recordId == resource.data.recordId &&
+    request.resource.data.deleted is bool &&
+    request.resource.data.updatedAtMs is int &&
+    request.resource.data.updatedAtMs >= resource.data.updatedAtMs &&
+    !(resource.data.deleted == true && request.resource.data.deleted == false);
+
+  allow delete: if false;
+}
+
+match /users/{uid}/syncMeta/{metaId} {
+  allow read, write: if request.auth != null && request.auth.uid == uid;
+}

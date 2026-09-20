@@ -15,6 +15,12 @@ export function ToolsPanel(){
   const [transaction,setTransaction]=useState<any>(null),[direction,setDirection]=useState('expense'),[project,setProject]=useState<string|null>(null),[sharePicker,setSharePicker]=useState(false);
   const request=useRef(0),abort=useRef<AbortController|null>(null);
   useEffect(()=>()=>{request.current++;abort.current?.abort();},[]);
+  useEffect(()=>{
+    const id=requestAnimationFrame(()=>{
+      try{const active=document.activeElement as HTMLElement|null;if(active&&typeof active.blur==='function')active.blur();}catch{}
+    });
+    return()=>cancelAnimationFrame(id);
+  },[page]);
   const tools=pruneToolHistory(ctx.financeEvolution.tools),projects=(ctx.shareProjects||[]).filter(p=>p.id!=null);
   const style:any={'--tool-card':ctx.cardBg,'--tool-text':ctx.textC,'--tool-sub':ctx.subC||'#77808b','--tool-border':ctx.borderC,'--tool-primary':ctx.confirmButtonColor||'#378ADD','--tool-soft':ctx.dark?'#253445':'#edf5fc'};
   const number=(value:number,code?:string)=>new Intl.NumberFormat(ctx.lang||'it',{minimumFractionDigits:code?currencyDigits(code):0,maximumFractionDigits:code?currencyDigits(code):2}).format(value);

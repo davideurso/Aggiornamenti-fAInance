@@ -1,23 +1,16 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import AppWithLogin from './app'
-import fainanceTestIcon from './assets/fainance-test-icon.png'
 import { EmailActionScreen, isFainanceEmailActionUrl } from './auth/EmailActionScreen'
+import { initializeFainanceAnalytics } from './analytics/firebaseAnalytics'
+import { appEnvironment } from './config/env'
 
 const bootWindow = window as any
-const isFainanceTestRuntime = import.meta.env.MODE === 'test' || String(import.meta.env.VITE_APP_ENV || '').toLowerCase() === 'test'
-if (isFainanceTestRuntime) {
-  document.title = 'fAInance Test'
-  document.documentElement.setAttribute('data-fainance-environment', 'test')
-  let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
-  if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.appendChild(icon) }
-  icon.href = fainanceTestIcon
-  let touch = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]')
-  if (!touch) { touch = document.createElement('link'); touch.rel = 'apple-touch-icon'; document.head.appendChild(touch) }
-  touch.href = fainanceTestIcon
-}
+document.title = appEnvironment === 'test' ? 'fAInance Test' : 'fAInance'
+document.documentElement.setAttribute('data-fainance-environment', appEnvironment)
 bootWindow.__FAINANCE_BUNDLE_STARTED__ = true
 bootWindow.__FAINANCE_BOOT_FATAL__ = null
+
 
 try {
   const rootElement = document.getElementById('root')
@@ -32,6 +25,14 @@ try {
   requestAnimationFrame(() => {
     bootWindow.__FAINANCE_REACT_MOUNTED__ = true
     try { window.dispatchEvent(new CustomEvent('fainance-react-mounted')) } catch (_e) {}
+
+    // Start native Analytics only after the UI/Capacitor runtime has mounted.
+    // This avoids a one-shot early return before the native bridge is ready.
+    window.setTimeout(() => {
+      initializeFainanceAnalytics().catch((error) => {
+        console.warn('Firebase Analytics startup failed', error)
+      })
+    }, 250)
   })
 } catch (error) {
   bootWindow.__FAINANCE_BOOT_FATAL__ = error

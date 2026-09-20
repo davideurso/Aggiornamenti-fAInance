@@ -280,6 +280,8 @@ export function SettingsPanel() {
     incomeTypeOverrides,
     incomeTypes,
     incomes,
+    movementSyncV2Active,
+    movementSyncV2Mode,
     installedAppInfo,
     isMobile,
     isNativeIOSApp,
@@ -467,6 +469,10 @@ export function SettingsPanel() {
     setWidgetShareBgAlpha,
     setWidgetShareBgColor,
     setWidgetShareTitleColor,
+    setWidget2BgColor,
+    setWidget3BgColor,
+    setWidgetFidelityBgColor,
+    setWidgetShoppingListBgColor,
     setWidgetShoppingListAutoUpdate,
     setWidgetShoppingListBgAlpha,
     setWidgetShoppingListIconColor,
@@ -514,6 +520,7 @@ export function SettingsPanel() {
     userKey,
     widget2AccentColor,
     widget2AutoUpdate,
+    widget2BgColor,
     widget2BgAlpha,
     widget2BodyColor,
     widget2MaxChars,
@@ -521,6 +528,7 @@ export function SettingsPanel() {
     widget2TitleColor,
     widget3AccentColor,
     widget3AutoUpdate,
+    widget3BgColor,
     widget3BgAlpha,
     widget3PercentColor,
     widget3SelectedGoalId,
@@ -539,6 +547,7 @@ export function SettingsPanel() {
     widgetExpenseColor,
     widgetExpenseLabel,
     widgetFidelityAutoUpdate,
+    widgetFidelityBgColor,
     widgetFidelityBgAlpha,
     widgetFidelityIconColor,
     widgetFidelityTextColor,
@@ -558,6 +567,7 @@ export function SettingsPanel() {
     widgetShareSelectedProjectId,
     widgetShareTitleColor,
     widgetShoppingListAutoUpdate,
+    widgetShoppingListBgColor,
     widgetShoppingListBgAlpha,
     widgetShoppingListIconColor,
     widgetShoppingListTextColor,
@@ -2546,17 +2556,87 @@ export function SettingsPanel() {
       </div>
     );
   }
-  function SettingInfo({ id, text }) {
+  function renderInfoInlineParts(value) {
+    return String(value || "")
+      .split(/(\*\*[^*]+\*\*)/g)
+      .filter(Boolean)
+      .map(function (part, idx) {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          return <strong key={idx}>{part.slice(2, -2)}</strong>;
+        }
+        return <span key={idx}>{part}</span>;
+      });
+  }
+  function renderInfoBody(value) {
+    if (value == null || value === false) return null;
+    if (typeof value !== "string") return value;
+    var sections = String(value)
+      .split(/\n\s*\n/)
+      .map(function (section) { return section.trim(); })
+      .filter(Boolean);
+    return (
+      <div>
+        {sections.map(function (section, sectionIndex) {
+          var lines = section
+            .split("\n")
+            .map(function (line) { return line.trim(); })
+            .filter(Boolean);
+          var isList = lines.every(function (line) {
+            return line.startsWith("- ") || line.startsWith("• ");
+          });
+          return (
+            <div key={sectionIndex}>
+              {sectionIndex > 0 && (
+                <div
+                  style={{
+                    height: 1,
+                    background: dark ? "#4a446f" : "#d8d2ff",
+                    margin: "10px 0 9px",
+                  }}
+                />
+              )}
+              {isList ? (
+                <div style={{ paddingLeft: 1 }}>
+                  {lines.map(function (line, lineIndex) {
+                    var clean = line.replace(/^[-•]\s*/, "");
+                    return (
+                      <div
+                        key={lineIndex}
+                        style={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 8,
+                          marginTop: lineIndex ? 4 : 0,
+                        }}
+                      >
+                        <span style={{ lineHeight: 1.5 }}>•</span>
+                        <span>{renderInfoInlineParts(clean)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                lines.map(function (line, lineIndex) {
+                  return <div key={lineIndex}>{renderInfoInlineParts(line)}</div>;
+                })
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  function SettingInfo({ id, text, body }) {
     return (
       <FainanceInfoPopover
         label={L("Informazioni")}
-        body={L(text)}
+        body={renderInfoBody(body != null ? body : L(text))}
         size={19}
         popupWidth={280}
         popupOffsetY={27}
         popupAlign="right"
         buttonStyle={{ fontSize: 10 }}
-        popupStyle={{ fontSize: 11, lineHeight: 1.4 }}
+        popupStyle={{ fontSize: 11, lineHeight: 1.5 }}
       />
     );
   }
@@ -3277,6 +3357,32 @@ export function SettingsPanel() {
             gap: 10,
           }}
         >
+          <div
+            style={{
+              background: cardBg,
+              border: "1px solid " + borderC,
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 8 }}>
+              {L("Colore sfondo")}
+            </div>
+            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
+          </div>
+          <div
+            style={{
+              background: cardBg,
+              border: "1px solid " + borderC,
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
+              {L("Colore sfondo")}
+            </div>
+            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
+          </div>
           <div>
             <div
               style={{
@@ -3357,10 +3463,23 @@ export function SettingsPanel() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr",
             gap: 10,
           }}
         >
+          <div
+            style={{
+              background: cardBg,
+              border: "1px solid " + borderC,
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
+              {L("Colore sfondo")}
+            </div>
+            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
+          </div>
           <Palette
             title={L("Sfondo widget")}
             value={draft.bgColor}
@@ -3385,6 +3504,19 @@ export function SettingsPanel() {
             }}
             items={WIDGET_INC_PALETTE}
           />
+        </div>
+        <div
+          style={{
+            background: cardBg,
+            border: "1px solid " + borderC,
+            borderRadius: 14,
+            padding: 14,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
+            {L("Colore sfondo")}
+          </div>
+          <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
         </div>
         <div
           style={{
@@ -3604,6 +3736,7 @@ export function SettingsPanel() {
       Number(widget2TextSize) || 14
     );
     var [draftBgAlpha, setDraftBgAlpha] = useState(numOr(widget2BgAlpha, 65));
+    var [draftBgColor, setDraftBgColor] = useState(widget2BgColor || "#1E1E30");
     function save() {
       var max = parseInt(draftMaxChars, 10) || 500;
       max = Math.max(20, Math.min(2000, max));
@@ -3615,6 +3748,7 @@ export function SettingsPanel() {
       var textSize = Math.max(10, Math.min(28, Number(draftTextSize) || 14));
       setWidget2MaxChars(max);
       setWidget2TextSize(textSize);
+      setWidget2BgColor(draftBgColor || "#1E1E30");
       setWidget2BgAlpha(alpha);
       saveWidgetSettingsToNative(true, {
         ...widgetSettingsPayload(),
@@ -3622,6 +3756,7 @@ export function SettingsPanel() {
           ...widgetSettingsPayload().noteWidget,
           maxChars: max,
           textSize: textSize,
+          bgColor: draftBgColor || "#1E1E30",
           bgAlpha: alpha,
           titleColor: widget2TitleColor,
           bodyColor: widget2BodyColor,
@@ -3641,6 +3776,19 @@ export function SettingsPanel() {
             gap: 10,
           }}
         >
+          <div
+            style={{
+              background: cardBg,
+              border: "1px solid " + borderC,
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 8 }}>
+              {L("Colore sfondo")}
+            </div>
+            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
+          </div>
           <div
             style={{
               background: cardBg,
@@ -3730,10 +3878,36 @@ export function SettingsPanel() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
             gap: 10,
           }}
         >
+          <div
+            style={{
+              background: cardBg,
+              border: "1px solid " + borderC,
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 800,
+                color: textC,
+                marginBottom: 8,
+              }}
+            >
+              {L("Colore sfondo")}
+            </div>
+            <AppColorSelector
+              value={draftBgColor}
+              onChange={function (color) {
+                setDraftBgColor(color);
+              }}
+              compact={true}
+            />
+          </div>
           <div
             style={{
               background: cardBg,
@@ -3941,17 +4115,20 @@ export function SettingsPanel() {
       target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0;
     var gColor = widget3AccentColor;
     var [draftBgAlpha, setDraftBgAlpha] = useState(numOr(widget3BgAlpha, 65));
+    var [draftBgColor, setDraftBgColor] = useState(widget3BgColor || "#1E1E30");
     function save() {
       var rawAlpha = Number(draftBgAlpha);
       var alpha = Math.max(
         0,
         Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65)
       );
+      setWidget3BgColor(draftBgColor || "#1E1E30");
       setWidget3BgAlpha(alpha);
       saveWidgetSettingsToNative(true, {
         ...widgetSettingsPayload(),
         goalWidget: {
           ...widgetSettingsPayload().goalWidget,
+          bgColor: draftBgColor || "#1E1E30",
           bgAlpha: alpha,
           showPercent: !!widget3ShowPercent,
           showAmounts: !!widget3ShowAmounts,
@@ -3966,6 +4143,19 @@ export function SettingsPanel() {
         <WidgetIntroCard icon="🎯" title="Obiettivo">
           {"Scegli il contenuto dal widget; qui personalizzi l’aspetto."}
         </WidgetIntroCard>
+        <div
+          style={{
+            background: cardBg,
+            border: "1px solid " + borderC,
+            borderRadius: 14,
+            padding: 14,
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
+            {L("Colore sfondo")}
+          </div>
+          <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
+        </div>
         <div
           style={{
             background: cardBg,
@@ -4346,6 +4536,7 @@ export function SettingsPanel() {
       Number(values.textSize) || 13
     );
     var [draftBgAlpha, setDraftBgAlpha] = useState(numOr(values.bgAlpha, 65));
+    var [draftBgColor, setDraftBgColor] = useState(values.bgColor || "#1E1E30");
     useEffect(
       function () {
         setDraftBgAlpha(numOr(values.bgAlpha, 65));
@@ -4358,6 +4549,12 @@ export function SettingsPanel() {
       },
       [values.textSize]
     );
+    useEffect(
+      function () {
+        setDraftBgColor(values.bgColor || "#1E1E30");
+      },
+      [values.bgColor]
+    );
     function save() {
       var textSize = Math.max(10, Math.min(28, Number(draftTextSize) || 13));
       var rawAlpha = Number(draftBgAlpha);
@@ -4366,8 +4563,9 @@ export function SettingsPanel() {
         Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65)
       );
       setters.setTextSize(textSize);
+      if (setters.setBgColor) setters.setBgColor(draftBgColor || "#1E1E30");
       setters.setBgAlpha(alpha);
-      onSave({ textSize: textSize, bgAlpha: alpha });
+      onSave({ textSize: textSize, bgColor: draftBgColor || "#1E1E30", bgAlpha: alpha });
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -4426,10 +4624,36 @@ export function SettingsPanel() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
+            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
             gap: 10,
           }}
         >
+          <div
+            style={{
+              background: cardBg,
+              border: "1px solid " + borderC,
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 800,
+                color: textC,
+                marginBottom: 8,
+              }}
+            >
+              {L("Colore sfondo")}
+            </div>
+            <AppColorSelector
+              value={draftBgColor}
+              onChange={function (color) {
+                setDraftBgColor(color);
+              }}
+              compact={true}
+            />
+          </div>
           <div
             style={{
               background: cardBg,
@@ -4610,6 +4834,7 @@ export function SettingsPanel() {
         shoppingListWidget: {
           ...widgetSettingsPayload().shoppingListWidget,
           textSize: extra.textSize,
+          bgColor: extra.bgColor || widgetShoppingListBgColor || "#1E1E30",
           bgAlpha: extra.bgAlpha,
           iconColor: widgetShoppingListIconColor,
           titleColor: widgetShoppingListTitleColor,
@@ -4623,6 +4848,8 @@ export function SettingsPanel() {
         <WidgetGenericStylePanel
           key={
             "shop_" +
+            widgetShoppingListBgColor +
+            "_" +
             widgetShoppingListBgAlpha +
             "_" +
             widgetShoppingListTextSize
@@ -4634,6 +4861,7 @@ export function SettingsPanel() {
           description="Personalizza testo, colori e aggiornamento del widget."
           values={{
             textSize: widgetShoppingListTextSize,
+            bgColor: widgetShoppingListBgColor,
             bgAlpha: widgetShoppingListBgAlpha,
             iconColor: widgetShoppingListIconColor,
             titleColor: widgetShoppingListTitleColor,
@@ -4642,6 +4870,7 @@ export function SettingsPanel() {
           }}
           setters={{
             setTextSize: setWidgetShoppingListTextSize,
+            setBgColor: setWidgetShoppingListBgColor,
             setBgAlpha: setWidgetShoppingListBgAlpha,
             setIconColor: setWidgetShoppingListIconColor,
             setTitleColor: setWidgetShoppingListTitleColor,
@@ -4661,6 +4890,7 @@ export function SettingsPanel() {
         fidelityWidget: {
           ...widgetSettingsPayload().fidelityWidget,
           textSize: extra.textSize,
+          bgColor: extra.bgColor || widgetFidelityBgColor || "#1E1E30",
           bgAlpha: extra.bgAlpha,
           iconColor: widgetFidelityIconColor,
           titleColor: widgetFidelityTitleColor,
@@ -4679,6 +4909,7 @@ export function SettingsPanel() {
           description="Personalizza testo, colori e aggiornamento del widget."
           values={{
             textSize: widgetFidelityTextSize,
+            bgColor: widgetFidelityBgColor,
             bgAlpha: widgetFidelityBgAlpha,
             iconColor: widgetFidelityIconColor,
             titleColor: widgetFidelityTitleColor,
@@ -4687,6 +4918,7 @@ export function SettingsPanel() {
           }}
           setters={{
             setTextSize: setWidgetFidelityTextSize,
+            setBgColor: setWidgetFidelityBgColor,
             setBgAlpha: setWidgetFidelityBgAlpha,
             setIconColor: setWidgetFidelityIconColor,
             setTitleColor: setWidgetFidelityTitleColor,
@@ -7596,7 +7828,10 @@ export function SettingsPanel() {
                 <span>{L("Tipo di periodo")}</span>
                 <SettingInfo
                   id="general_balance_period_type"
-                  text="Il Mese solare va dal primo all’ultimo giorno del mese. Il Mese finanziario parte dal giorno che scegli qui sotto, utile ad esempio per far coincidere il periodo con l’accredito dello stipendio. Se quel giorno non esiste in un mese, viene usato l’ultimo giorno disponibile."
+                  text={`- **Il mese solare** va dal primo all’ultimo giorno del mese.
+- **Il mese finanziario** parte invece dal giorno scelto da te e termina il giorno precedente del mese successivo.
+
+Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggiate.`}
                 />
               </div>
               <select
@@ -13425,6 +13660,46 @@ export function SettingsPanel() {
       <div>
         <PageHeader title="Dati" />
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div
+            style={{
+              background: cardBg,
+              borderRadius: 14,
+              border: "1px solid " + borderC,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 900, color: textC }}>
+              Sync movimenti V2
+            </div>
+            <div
+              style={{
+                marginTop: 5,
+                fontSize: 12,
+                fontWeight: 800,
+                color: movementSyncV2Active ? "#1D9E75" : movementSyncV2Mode === "checking" ? "#EF9F27" : subC,
+              }}
+            >
+              {movementSyncV2Active
+                ? String(movementSyncV2Mode || "").indexOf("migrated") >= 0
+                  ? "Migrazione movimenti completata - Sync V2 attivo"
+                  : movementSyncV2Mode === "clean" || movementSyncV2Mode === "new-clean-account"
+                    ? "ATTIVO - account Test pulito"
+                    : movementSyncV2Mode === "local-marker-offline"
+                      ? "Sync V2 attivo - verifica cloud al ritorno online"
+                      : "Sync V2 attivo"
+                : String(movementSyncV2Mode || "").indexOf("migration-running:") === 0
+                  ? "Migrazione movimenti in background - " + String(movementSyncV2Mode || "").split(":")[1]
+                  : String(movementSyncV2Mode || "").indexOf("device-catchup:") === 0
+                    ? "Allineamento di questo dispositivo - " + String(movementSyncV2Mode || "").split(":")[1]
+                    : movementSyncV2Mode === "migration-error"
+                      ? "Migrazione in pausa - nuovo tentativo automatico"
+                      : movementSyncV2Mode === "checking"
+                        ? "Verifica account in corso..."
+                        : movementSyncV2Mode === "legacy-migration-required"
+                          ? "Migrazione pronta - l'app resta utilizzabile"
+                          : "Sync movimenti V2 in preparazione"}
+            </div>
+          </div>
           <StableImportDataAccordionCard
             icon="📥"
             title={dataTitle("Importa dati")}
