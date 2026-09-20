@@ -238,6 +238,34 @@ export function HomePanel() {
     setAiDismissed,
   }: any = ctx;
   var expenses: any[] = ctx.expensesForAnalysis || rawExpenses || [];
+  // Cache dei confronti usati dal worklet Riepilogo: con account storici molto
+  // grandi evitiamo di ripercorrere migliaia di movimenti a ogni render della Home.
+  var summaryTrendMetrics = useMemo(
+    function () {
+      function shiftKey(key: any, delta: number) {
+        var parts = String(key || "").split("-");
+        var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+        if (!y || !m) return String(key || "");
+        var d = new Date(y, m - 1 + delta, 1, 12, 0, 0, 0);
+        return String(d.getFullYear()) + "-" + String(d.getMonth() + 1).padStart(2, "0");
+      }
+      function total(items: any[], key: any) {
+        return (items || []).reduce(function (sum: number, item: any) {
+          return sum + amountForBalancePeriodMonth(item, key, homeBalanceView, balancePeriodMode, financialMonthStartDay);
+        }, 0);
+      }
+      var previousKey = shiftKey(curMonthKey, -1);
+      var prevExp = total(rawExpenses || [], previousKey);
+      var prevInc = total(incomes || [], previousKey);
+      var prev12 = 0;
+      for (var i = 0; i < 12; i++) {
+        var key = shiftKey(previousKey, -i);
+        prev12 += total(incomes || [], key) - total(rawExpenses || [], key);
+      }
+      return { prevMonthExp: prevExp, prevMonthInc: prevInc, prevMonthBal: prevInc - prevExp, prev12Balance: prev12 };
+    },
+    [rawExpenses, incomes, curMonthKey, homeBalanceView, balancePeriodMode, financialMonthStartDay]
+  );
   var t = TRANSLATIONS[lang] || TRANSLATIONS.it;
   // Traduzioni esatte della Home: evitano frasi ibride quando il traduttore generico
   // prova a tradurre separatamente parti della stessa etichetta.
@@ -3138,79 +3166,333 @@ export function HomePanel() {
       var summaryShowDecimals = !(w.params && w.params.showDecimals === false);
       function summaryAmountNode(value: any) {
         var raw = String(value == null ? "" : value);
-        var m = raw.match(/^(.*?)([\.,])(\d{2})(\s*[^\d]*)$/);
+        var locale =
+          lang === "en" ? "en-US" :
+          lang === "es" ? "es-ES" :
+          lang === "fr" ? "fr-FR" :
+          lang === "de" ? "de-DE" :
+          lang === "pt" ? "pt-PT" :
+          lang === "pl" ? "pl-PL" :
+          lang === "nl" ? "nl-NL" :
+          lang === "ro" ? "ro-RO" :
+          lang === "el" ? "el-GR" : "it-IT";
+        var m = raw.match(/^(.*?)(-?\d+)(?:([\.,])(\d{1,2}))?(\s*[^\d]*)$/);
         if (!m) return raw;
-        if (!summaryShowDecimals) return m[1] + m[4];
+        var groupedInt = Number(m[2]).toLocaleString(locale, { maximumFractionDigits: 0 });
+        if (!summaryShowDecimals || !m[3] || !m[4]) return m[1] + groupedInt + m[5];
         return (
           <>
-            {m[1]}
+            {m[1] + groupedInt}
             <span style={{ fontSize: "0.66em", fontWeight: 400 }}>
-              {m[2] + m[3]}
+              {m[3] + m[4]}
             </span>
-            {m[4]}
+            {m[5]}
           </>
         );
       }
-      var secBal = fmtSec && fmtSec(curMonthInc - curMonthExp);
+      function shiftMonthKey(key: any, delta: number) {
+        var raw = String(key || "");
+        var parts = raw.split("-");
+        var y = parseInt(parts[0], 10);
+        var m = parseInt(parts[1], 10);
+        if (!y || !m) return raw;
+        var d = new Date(y, m - 1 + delta, 1, 12, 0, 0, 0);
+        var yy = String(d.getFullYear());
+        var mm = String(d.getMonth() + 1).padStart(2, "0");
+        return yy + "-" + mm;
+      }
+      function sumPeriod(items: any[], monthKey: any) {
+        return (items || []).reduce(function (acc: number, item: any) {
+          return (
+            acc +
+            amountForBalancePeriodMonth(
+              item,
+              monthKey,
+              homeBalanceView,
+              balancePeriodMode,
+              financialMonthStartDay
+            )
+          );
+        }, 0);
+      }
+      function sumTrailingPeriods(items: any[], endMonthKey: any, periods: number) {
+        var total = 0;
+        for (var i = 0; i < periods; i++) {
+          total += sumPeriod(items, shiftMonthKey(endMonthKey, -i));
+        }
+        return total;
+      }
+      function pct(current: number, previous: number) {
+        var cur = Number(current || 0);
+        var prev = Number(previous || 0);
+        if (!isFinite(cur) || !isFinite(prev)) return null;
+        if (Math.abs(prev) < 0.00001) {
+          if (Math.abs(cur) < 0.00001) return 0;
+          return 100;
+        }
+        return Math.round((Math.abs(cur - prev) / Math.abs(prev)) * 100);
+      }
+      function trendLabel(kind: string) {
+        var labels: any = {
+          it: kind === "year" ? "rispetto ai 12 mesi precedenti" : "rispetto al mese scorso",
+          en: kind === "year" ? "vs previous 12 months" : "vs last month",
+          es: kind === "year" ? "vs los 12 meses anteriores" : "vs el mes pasado",
+          fr: kind === "year" ? "vs les 12 mois précédents" : "vs le mois dernier",
+          de: kind === "year" ? "vs. den vorherigen 12 Monaten" : "vs. letzten Monat",
+          pt: kind === "year" ? "vs os 12 meses anteriores" : "vs mês passado",
+          pl: kind === "year" ? "vs poprzednie 12 miesięcy" : "vs poprzedni miesiąc",
+          nl: kind === "year" ? "vs vorige 12 maanden" : "vs vorige maand",
+          ro: kind === "year" ? "vs ultimele 12 luni" : "vs luna trecută",
+          el: kind === "year" ? "σε σχέση με τους προηγούμενους 12 μήνες" : "σε σχέση με τον προηγούμενο μήνα",
+        };
+        return labels[lang] || labels.it;
+      }
+      function trendColor(current: number, previous: number, positiveWhenUp: boolean, baseColor: string) {
+        if (Number(current || 0) === Number(previous || 0)) return baseColor;
+        return current >= previous ? (positiveWhenUp ? incomeColor : expenseColor) : (positiveWhenUp ? expenseColor : incomeColor);
+      }
+      function sparkPath(points: number[]) {
+        var max = Math.max.apply(null, points);
+        var min = Math.min.apply(null, points);
+        var spread = Math.max(1, max - min);
+        return points
+          .map(function (n, i) {
+            var x = i * 22;
+            var y = 30 - ((n - min) / spread) * 18;
+            return (i === 0 ? "M" : "L") + x + " " + y;
+          })
+          .join(" ");
+      }
+      function SummaryTrendCard(props: any) {
+        var accent = props.accent;
+        var soft = props.soft || accent + "18";
+        var pillColor = props.pillColor || accent;
+        if (compact) {
+          return (
+            <div
+              style={{
+                minWidth: 0,
+                minHeight: 34,
+                padding: "6px 7px",
+                borderRadius: 12,
+                background: dark ? "rgba(255,255,255,.045)" : soft,
+                display: "grid",
+                gridTemplateColumns: "26px minmax(0,1fr) auto",
+                alignItems: "center",
+                gap: 6,
+              }}
+            >
+              <div
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 999,
+                  background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.62)",
+                  color: accent,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 14,
+                  lineHeight: 1,
+                  fontWeight: 900,
+                }}
+              >
+                {props.icon}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: "#64748b",
+                    fontWeight: 750,
+                    lineHeight: 1.05,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {props.title}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.1,
+                    fontWeight: 900,
+                    color: accent,
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {props.value}
+                </div>
+              </div>
+              {props.pctText ? (
+                <div
+                  style={{
+                    borderRadius: 999,
+                    padding: "3px 5px",
+                    background: pillColor + "18",
+                    color: pillColor,
+                    fontSize: 8,
+                    fontWeight: 850,
+                    lineHeight: 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {props.arrow} {props.pctText}
+                </div>
+              ) : null}
+            </div>
+          );
+        }
+        var expanded = doubleSize;
+        if (!expanded) {
+          return (
+            <div
+              style={{
+                minWidth: 0,
+                padding: "8px 9px",
+                display: "grid",
+                gridTemplateColumns: "28px minmax(0,1fr)",
+                gridTemplateRows: "26px 22px",
+                columnGap: 7,
+                rowGap: 3,
+                alignItems: "center",
+                position: "relative",
+                borderRight: !isMobile && !props.isLast ? "1px solid rgba(15,23,42,.08)" : "none",
+                borderBottom: isMobile && props.rowIndex === 0 ? "1px solid rgba(15,23,42,.08)" : "none",
+                background: dark ? "rgba(255,255,255,.035)" : soft,
+              }}
+            >
+              <div style={{ width: 26, height: 26, borderRadius: 999, background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.62)", color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900 }}>
+                {props.icon}
+              </div>
+              <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.05, fontWeight: 750, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.title}</div>
+              <div style={{ gridColumn: "1 / span 2", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 5, minWidth: 0 }}>
+                <div style={{ fontSize: 16, lineHeight: 1, fontWeight: 900, color: accent, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.value}</div>
+                {props.pctText ? <div style={{ borderRadius: 999, padding: "3px 6px", background: pillColor + "18", color: pillColor, fontSize: 8, fontWeight: 850, lineHeight: 1, whiteSpace: "nowrap" }}>{props.arrow} {props.pctText}</div> : null}
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div
+            style={{
+              minWidth: 0,
+              minHeight: isMobile ? 128 : 122,
+              padding: isMobile ? "12px 11px" : "14px 13px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              gap: 6,
+              position: "relative",
+              borderRight: !isMobile && !props.isLast ? "1px solid rgba(15,23,42,.08)" : "none",
+              borderBottom: isMobile && props.rowIndex === 0 ? "1px solid rgba(15,23,42,.08)" : "none",
+              background: dark ? "rgba(255,255,255,.035)" : soft,
+            }}
+          >
+            <div style={{ width: 36, height: 36, borderRadius: 999, background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.60)", color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: props.title === L("Saldo ultimi 12 mesi") ? 19 : 21, fontWeight: 900 }}>{props.icon}</div>
+            <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.12, fontWeight: 750 }}>{props.title}</div>
+            <div style={{ fontSize: isMobile ? 17 : 18, lineHeight: 1.06, fontWeight: 900, color: accent, minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}>{props.value}</div>
+            {props.pctText ? <div style={{ display: "inline-flex", alignItems: "center", gap: 4, alignSelf: "flex-start", borderRadius: 999, padding: "4px 8px", background: pillColor + "18", color: pillColor, fontSize: 10, fontWeight: 850, lineHeight: 1, whiteSpace: "nowrap" }}><span>{props.arrow}</span><span>{props.pctText}</span></div> : null}
+            <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.15 }}>{props.caption}</div>
+          </div>
+        );
+      }
+      var prevMonthExp = summaryTrendMetrics.prevMonthExp;
+      var prevMonthInc = summaryTrendMetrics.prevMonthInc;
+      var prevMonthBal = summaryTrendMetrics.prevMonthBal;
+      var prev12Balance = summaryTrendMetrics.prev12Balance;
+      var expPct = pct(curMonthExp, prevMonthExp);
+      var incPct = pct(curMonthInc, prevMonthInc);
+      var balPct = pct(curMonthInc - curMonthExp, prevMonthBal);
+      var y12Pct = pct(last12Balance, prev12Balance);
+      var cards = [
+        {
+          title: L("Uscite mese"),
+          value: summaryAmountNode(fmt(curMonthExp)),
+          accent: expenseColor,
+          icon: "↓",
+          soft: expenseColor + "18",
+          pctText: expPct == null ? "" : "+" + expPct + "%",
+          arrow: "↗",
+          pillColor: trendColor(curMonthExp, prevMonthExp, false, expenseColor),
+          caption: trendLabel("month"),
+          path: sparkPath([Math.max(prevMonthExp * 0.78, 0), prevMonthExp, curMonthExp * 0.92, curMonthExp]),
+        },
+        {
+          title: L("Entrate mese"),
+          value: summaryAmountNode(fmt(curMonthInc)),
+          accent: incomeColor,
+          icon: "↑",
+          soft: incomeColor + "18",
+          pctText: incPct == null ? "" : "+" + incPct + "%",
+          arrow: "↗",
+          pillColor: trendColor(curMonthInc, prevMonthInc, true, incomeColor),
+          caption: trendLabel("month"),
+          path: sparkPath([Math.max(prevMonthInc * 0.8, 0), prevMonthInc, curMonthInc * 0.88, curMonthInc]),
+        },
+        {
+          title: L("Saldo mese"),
+          value: summaryAmountNode(fmt(curMonthInc - curMonthExp)),
+          accent: "#378ADD",
+          icon: "=" ,
+          soft: "#dbeafe",
+          pctText: balPct == null ? "" : "+" + balPct + "%",
+          arrow: "↗",
+          pillColor: trendColor(curMonthInc - curMonthExp, prevMonthBal, true, "#378ADD"),
+          caption: trendLabel("month"),
+          path: sparkPath([prevMonthBal * 0.75, prevMonthBal, (curMonthInc - curMonthExp) * 0.85, curMonthInc - curMonthExp]),
+        },
+        {
+          title: L("Saldo ultimi 12 mesi"),
+          value: summaryAmountNode(fmt(last12Balance)),
+          accent: BALANCE_COLOR,
+          icon: (
+            <span style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, height: 16, color: "currentColor" }}>
+              <span style={{ width: 3, height: 7, borderRadius: 3, background: "currentColor" }} />
+              <span style={{ width: 3, height: 11, borderRadius: 3, background: "currentColor" }} />
+              <span style={{ width: 3, height: 16, borderRadius: 3, background: "currentColor" }} />
+            </span>
+          ),
+          soft: "#ede9fe",
+          pctText: y12Pct == null ? "" : "+" + y12Pct + "%",
+          arrow: "↗",
+          pillColor: trendColor(last12Balance, prev12Balance, true, BALANCE_COLOR),
+          caption: trendLabel("year"),
+          path: sparkPath([prev12Balance * 0.75, prev12Balance, last12Balance * 0.88, last12Balance]),
+        },
+      ];
       return (
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: compact
-              ? "1fr"
-              : isMobile
-              ? "1fr 1fr"
-              : "repeat(4,1fr)",
-            gap: compact ? 8 : 12,
+            background: dark ? "#1e293b" : "#ffffff",
+            borderRadius: 22,
+            border: dark ? "1px solid rgba(255,255,255,.07)" : "1px solid rgba(15,23,42,.06)",
+            boxShadow: dark ? "none" : "0 10px 28px rgba(15,23,42,.05)",
+            overflow: "hidden",
           }}
         >
-          <StatCard
-            title={L("Uscite mese")}
-            value={summaryAmountNode(fmt(curMonthExp))}
-            valueWeight={400}
-            color={expenseColor}
-            bg={expenseColor + "22"}
-            sub={
-              (fmtSec &&
-                fmtSec(curMonthExp) &&
-                (secRateLoading ? "..." : summaryAmountNode(fmtSec(curMonthExp)))) ||
-              undefined
-            }
-          />
-          <StatCard
-            title={L("Entrate mese")}
-            value={summaryAmountNode(fmt(curMonthInc))}
-            valueWeight={400}
-            color={incomeColor}
-            bg={incomeColor + "22"}
-            sub={
-              (fmtSec &&
-                fmtSec(curMonthInc) &&
-                (secRateLoading ? "..." : summaryAmountNode(fmtSec(curMonthInc)))) ||
-              undefined
-            }
-          />
-          <StatCard
-            title={L("Saldo mese")}
-            value={summaryAmountNode(fmt(curMonthInc - curMonthExp))}
-            valueWeight={400}
-            color="#378ADD"
-            bg="#e8f4ff"
-            sub={(secBal && (secRateLoading ? "..." : summaryAmountNode(secBal))) || undefined}
-          />
-          <StatCard
-            title={L("Saldo ultimi 12 mesi")}
-            value={summaryAmountNode(fmt(last12Balance))}
-            valueWeight={400}
-            color={BALANCE_COLOR}
-            bg="#e8f4ff"
-            sub={
-              (fmtSec &&
-                fmtSec(last12Balance) &&
-                (secRateLoading ? "..." : summaryAmountNode(fmtSec(last12Balance)))) ||
-              undefined
-            }
-          />
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: compact ? "1fr" : isMobile ? "1fr 1fr" : "repeat(4,1fr)",
+              gap: compact ? 6 : 0,
+              padding: compact ? 6 : 0,
+            }}
+          >
+            {cards.map(function (card, idx) {
+              return (
+                <SummaryTrendCard
+                  key={String(card.title) + idx}
+                  {...card}
+                  isLast={idx === cards.length - 1 || (isMobile && idx % 2 === 1)}
+                  rowIndex={isMobile ? Math.floor(idx / 2) : 0}
+                />
+              );
+            })}
+          </div>
         </div>
       );
     }
@@ -5039,18 +5321,19 @@ export function HomePanel() {
       var summaryHasSecondary = !!(secondaryCurrency && secRate);
       // Deve coincidere con le minHeight reali di StatCard (96/78px),
       // più il padding verticale del worklet: altrimenti l'ultima riga viene tagliata.
-      var summaryCardHeight = summaryHasSecondary ? 96 : 78;
+      var summaryCardHeight = compact ? 34 : size === "2x" ? (isMobile ? 142 : 128) : 62;
       var summaryColumns = compact ? 1 : isMobile ? 2 : 4;
       var summaryRows = Math.ceil(4 / summaryColumns);
-      var summaryGap = compact ? 8 : 12;
-      var summaryPadding = compact ? 20 : 32;
-      var summaryHeaderHeight = homeShowTitle(w) ? 30 : 0;
+      var summaryGap = compact ? 6 : 8;
+      var summaryPadding = compact ? 16 : size === "2x" ? (isMobile ? 54 : 36) : 24;
+      var summaryHeaderHeight = homeShowTitle(w) ? (size === "2x" ? 38 : 30) : 0;
       var summaryRequiredHeight =
         summaryRows * summaryCardHeight +
         Math.max(0, summaryRows - 1) * summaryGap +
         summaryPadding +
         summaryHeaderHeight;
       targetH = Math.max(targetH, summaryRequiredHeight);
+      if (size === "2x" && isMobile) targetH = Math.max(targetH, homeShowTitle(w) ? 388 : 350);
     }
     var rowSpan = Math.max(3, Math.ceil((targetH + 14) / (8 + 14)));
     var payload = available
@@ -9143,14 +9426,6 @@ export function HistoryPanel() {
                   name={L(sharePersonalCategory.name)}
                   small
                 />
-              )}
-              {e._share && e._sharePaidBy && (
-                <span style={{ fontSize: 11, color: subC }}>
-                  {L("Pagata da")}{" "}
-                  <strong style={{ fontWeight: 800, color: textC }}>
-                    {e._sharePaidBy}
-                  </strong>
-                </span>
               )}
               {m && (
                 <Badge

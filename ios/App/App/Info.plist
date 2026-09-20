@@ -41,8 +41,7 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleVersion</key>
-	<string>181</string>
+	$1259</string>
 	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
 	<true/>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
@@ -56,7 +55,7 @@
 	<key>NSContactsUsageDescription</key>
 	<string>fAInance usa la rubrica solo per inserire il titolare di un debito o credito.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>fAInance usa Face ID per proteggere l’accesso ai tuoi dati finanziari.</string>
+	<string>fAInance usa Face ID per proteggere lâ€™accesso ai tuoi dati finanziari.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>fAInance usa il microfono per registrare brevi comandi vocali e trasformarli in movimenti finanziari.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

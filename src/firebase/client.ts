@@ -8,7 +8,7 @@ import {
   initializeAuth,
   setPersistence,
 } from "firebase/auth";
-import { getFirestore, initializeFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { firebaseConfig } from "../config/env";
 
@@ -49,11 +49,17 @@ function createFainanceAuth() {
 }
 
 export const fbAuth = createFainanceAuth();
-// The TEST browser connection repeatedly stalled on WebChannel streams.
-// Use Firebase's supported buffering-proxy transport in this environment only.
-export const fbDb = firebaseConfig.projectId === 'fainance-test-20260823195207'
-  ? initializeFirestore(firebaseApp, { experimentalForceLongPolling: true })
-  : getFirestore(firebaseApp);
+// Movement Sync V2 relies on Firestore's native persistent offline queue.
+// The same cache is used on Web and native WebViews, so pending writes survive
+// app/browser restarts without a custom movement outbox.
+export const fbDb = initializeFirestore(firebaseApp, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager(),
+  }),
+  ...(firebaseConfig.projectId === 'fainance-test-20260823195207'
+    ? { experimentalForceLongPolling: true }
+    : {}),
+});
 // FIX 2.0.5 — Cloud Storage non era mai stato inizializzato. Serve per spostare gli
 // allegati fuori dal documento Firestore userData/{uid}, che ha un limite di 1 MiB.
 export const fbStorage = getStorage(firebaseApp);

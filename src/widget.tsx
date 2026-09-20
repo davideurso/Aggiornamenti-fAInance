@@ -3879,6 +3879,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
   var [f, setF] = useState(function () {
     return readFormDraft(type);
   });
+  var [dateTouched, setDateTouched] = useState(!!initialValue);
   var [amountFocused, setAmountFocused] = useState(false);
   var amountInputRef = useRef(null);
   useEffect(
@@ -3890,6 +3891,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
   useEffect(
     function () {
       setF(readFormDraft(type));
+      setDateTouched(!!initialValue);
     },
     [type, defaultCat.id, defaultMethod.id, defaultIncomeType.id]
   );
@@ -3972,11 +3974,11 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         foreign && Number(f.baseAmount) > 0 ? Number(f.baseAmount) : amount,
       exchangeRate: Number(f.exchangeRate || 1),
       exchangeRateDate: String(
-        f.exchangeRateDate || new Date().toISOString().slice(0, 10)
+        f.exchangeRateDate || todayStr()
       ),
       exchangeRateSource: String(f.exchangeRateSource || "base"),
       desc: f.desc,
-      date: f.date,
+      date: dateTouched ? f.date : todayStr(),
       rateizzato: f.rateizzato,
       rate: f.rate,
       rateDirection: f.rateDirection || "forward",
@@ -3991,6 +3993,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
     try {
       localStorage.removeItem(formDraftKey(type));
     } catch (e) {}
+    setDateTouched(false);
     setF(emptyFormForType(type));
   }
   var secondaryC = secondaryButtonColor || "#7F77DD";
@@ -4508,6 +4511,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           <button
             type="button"
             onClick={function () {
+              setDateTouched(true);
               setF(function (p) {
                 return { ...p, date: todayStr() };
               });
@@ -4519,6 +4523,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           <button
             type="button"
             onClick={function () {
+              setDateTouched(true);
               setF(function (p) {
                 return { ...p, date: dateOffset(1) };
               });
@@ -4530,6 +4535,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           <button
             type="button"
             onClick={function () {
+              setDateTouched(true);
               setF(function (p) {
                 return { ...p, date: dateOffset(2) };
               });
@@ -4565,6 +4571,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
               type="date"
               value={f.date}
               onChange={function (e) {
+                setDateTouched(true);
                 setF(function (p) {
                   return { ...p, date: e.target.value };
                 });

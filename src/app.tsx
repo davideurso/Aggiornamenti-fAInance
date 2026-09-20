@@ -264,6 +264,17 @@ import {
   accountSyncRecordKey,
 } from "./data/syncAlgorithms";
 import {
+  acknowledgeMovementSyncV2Device,
+  completeMovementSyncV2Migration,
+  ensureMovementIds,
+  isMovementSyncV2LocallyActive,
+  migrateLegacyMovementSnapshotV2,
+  movementStateFromV2,
+  movementSyncV2AccountStatus,
+  watchMovementSyncV2,
+  writeMovementDiffV2,
+} from "./data/movementSyncCleanV2";
+import {
   bulkMovementRowLimit,
   bulkMovementCooldownMonths,
   movementWithMethodSnapshot,
@@ -1454,6 +1465,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var postHydrationSyncRequestedRef = useRef(false);
   var accountSyncErrorToastAtRef = useRef(0);
   var [accountSyncRetryPulse, setAccountSyncRetryPulse] = useState(0);
+  // Clean Movement Sync V2 is deliberately enabled only for accounts with no
+  // legacy expenses/incomes. Old accounts stay on the untouched legacy path until
+  // the engine has passed isolated tests and a separate migration is added.
+  var movementSyncV2InitiallyActive = isMovementSyncV2LocallyActive(userId);
+  var movementSyncV2ActiveRef = useRef(movementSyncV2InitiallyActive);
+  // During migration the UI stays on the legacy state, but every live movement
+  // change is mirrored to V2. This keeps the app fully usable while the old
+  // archive is copied in the background.
+  var movementSyncV2WriteThroughRef = useRef(false);
+  var movementSyncV2MigrationRunningRef = useRef(false);
+  var [movementSyncV2MigrationRetryPulse, setMovementSyncV2MigrationRetryPulse] = useState(0);
+  var [movementSyncV2Active, setMovementSyncV2Active] = useState(movementSyncV2InitiallyActive);
+  var [movementSyncV2Mode, setMovementSyncV2Mode] = useState(
+    movementSyncV2InitiallyActive ? "local-marker" : "checking"
+  );
 
   function persistAccountSyncError(phase: string, e: any, transient: boolean) {
     if (!userId) return;
@@ -2083,13 +2109,29 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var current = Array.isArray(expensesRef.current) ? expensesRef.current : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
-    var prepared = fromCloud
-      ? Array.isArray(requested)
-        ? requested
-        : []
-      : prepareAccountCollectionWrite("expense", current, requested);
+    var requestedArray = Array.isArray(requested) ? requested : [];
+    // Do not wait for React effects after an offline restart. If this account was
+    // already enabled for V2, the persisted marker is authoritative immediately.
+    var v2ActiveNow = movementSyncV2ActiveRef.current || isMovementSyncV2LocallyActive(userId);
+    if (v2ActiveNow) movementSyncV2ActiveRef.current = true;
+    var v2WriteThroughNow = v2ActiveNow || movementSyncV2WriteThroughRef.current;
+    var prepared = v2ActiveNow
+      ? ensureMovementIds("expense", requestedArray)
+      : fromCloud
+        ? requestedArray
+        : prepareAccountCollectionWrite("expense", current, requestedArray);
     if (!fromCloud) {
-      localStorage.setItem(userKey('exp_v10'), JSON.stringify(prepared));
+      try { localStorage.setItem(userKey("exp_v10"), JSON.stringify(prepared)); } catch (_e) {}
+    }
+    // While migration is running, mirror both local edits and legacy cloud merges
+    // into V2. Once V2 is authoritative, cloud-applied V2 state is never written
+    // back to itself.
+    if (v2WriteThroughNow && !fromCloud) {
+      writeMovementDiffV2(userId, "expense", current, prepared, function (error) {
+        console.error("Movement Sync V2 expense write failed", error);
+      });
+    }
+    if (!fromCloud && !v2ActiveNow) {
       markPendingAccountSync(true);
     }
     expensesRef.current = prepared;
@@ -2102,13 +2144,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var current = Array.isArray(incomesRef.current) ? incomesRef.current : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
-    var prepared = fromCloud
-      ? Array.isArray(requested)
-        ? requested
-        : []
-      : prepareAccountCollectionWrite("income", current, requested);
+    var requestedArray = Array.isArray(requested) ? requested : [];
+    var v2ActiveNow = movementSyncV2ActiveRef.current || isMovementSyncV2LocallyActive(userId);
+    if (v2ActiveNow) movementSyncV2ActiveRef.current = true;
+    var v2WriteThroughNow = v2ActiveNow || movementSyncV2WriteThroughRef.current;
+    var prepared = v2ActiveNow
+      ? ensureMovementIds("income", requestedArray)
+      : fromCloud
+        ? requestedArray
+        : prepareAccountCollectionWrite("income", current, requestedArray);
     if (!fromCloud) {
-      localStorage.setItem(userKey('inc_v10'), JSON.stringify(prepared));
+      try { localStorage.setItem(userKey("inc_v10"), JSON.stringify(prepared)); } catch (_e) {}
+    }
+    if (v2WriteThroughNow && !fromCloud) {
+      writeMovementDiffV2(userId, "income", current, prepared, function (error) {
+        console.error("Movement Sync V2 income write failed", error);
+      });
+    }
+    if (!fromCloud && !v2ActiveNow) {
       markPendingAccountSync(true);
     }
     incomesRef.current = prepared;
@@ -3868,6 +3921,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("widget2_body_color_v1"),
     "#CCFFFFFF"
   );
+  var [widget2BgColor, setWidget2BgColor] = useStorage(
+    userKey("widget2_bg_color_v1"),
+    "#1E1E30"
+  );
   var [widget2BgAlpha, setWidget2BgAlpha] = useStorage(
     userKey("widget2_bg_alpha_v1"),
     25
@@ -3903,6 +3960,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [widget3PercentColor, setWidget3PercentColor] = useStorage(
     userKey("widget3_percent_color_v1"),
     "#EF7D00"
+  );
+  var [widget3BgColor, setWidget3BgColor] = useStorage(
+    userKey("widget3_bg_color_v1"),
+    "#1E1E30"
   );
   var [widget3BgAlpha, setWidget3BgAlpha] = useStorage(
     userKey("widget3_bg_alpha_v1"),
@@ -3968,6 +4029,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     useStorage(userKey("widget_shopping_list_title_color_v1"), "#FFFFFF");
   var [widgetShoppingListTextColor, setWidgetShoppingListTextColor] =
     useStorage(userKey("widget_shopping_list_text_color_v1"), "#EDEDF7");
+  var [widgetShoppingListBgColor, setWidgetShoppingListBgColor] = useStorage(
+    userKey("widget_shopping_list_bg_color_v1"),
+    "#1E1E30"
+  );
   var [widgetShoppingListBgAlpha, setWidgetShoppingListBgAlpha] = useStorage(
     userKey("widget_shopping_list_bg_alpha_v1"),
     65
@@ -3999,6 +4064,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [widgetFidelityTextColor, setWidgetFidelityTextColor] = useStorage(
     userKey("widget_fidelity_text_color_v1"),
     "#FFFFFF"
+  );
+  var [widgetFidelityBgColor, setWidgetFidelityBgColor] = useStorage(
+    userKey("widget_fidelity_bg_color_v1"),
+    "#1E1E30"
   );
   var [widgetFidelityBgAlpha, setWidgetFidelityBgAlpha] = useStorage(
     userKey("widget_fidelity_bg_alpha_v1"),
@@ -5193,6 +5262,124 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
   }, []);
 
+  useEffect(
+    function () {
+      if (!userId) return;
+      var cancelled = false;
+
+      function scheduleMigrationRetry() {
+        setTimeout(function () {
+          if (!cancelled) setMovementSyncV2MigrationRetryPulse(function (value) { return value + 1; });
+        }, 5000);
+      }
+
+      movementSyncV2AccountStatus(
+        userId,
+        Array.isArray(expensesRef.current) ? expensesRef.current : [],
+        Array.isArray(incomesRef.current) ? incomesRef.current : [],
+        accountDeletedRecords
+      )
+        .then(function (result) {
+          if (cancelled) return;
+          if (result.active) {
+            movementSyncV2WriteThroughRef.current = false;
+            movementSyncV2ActiveRef.current = true;
+            setMovementSyncV2Active(true);
+            setMovementSyncV2Mode(String(result.reason || "active"));
+            return;
+          }
+
+          movementSyncV2ActiveRef.current = false;
+          setMovementSyncV2Active(false);
+          setMovementSyncV2Mode(String(result.reason || "legacy"));
+
+          var migrationReason = String(result.reason || "");
+          var shouldMirror = migrationReason === "migration-running" || migrationReason === "device-catchup-required";
+          if (shouldMirror) movementSyncV2WriteThroughRef.current = true;
+
+          var shouldMigrate =
+            migrationReason === "legacy-migration-required" ||
+            migrationReason === "migration-running" ||
+            migrationReason === "device-catchup-required";
+          if (!shouldMigrate || isOffline || !firestoreReady || movementSyncV2MigrationRunningRef.current) return;
+
+          movementSyncV2MigrationRunningRef.current = true;
+          movementSyncV2WriteThroughRef.current = true;
+          var deviceCatchup = migrationReason === "device-catchup-required";
+          setMovementSyncV2Mode(deviceCatchup ? "device-catchup:0/0" : "migration-running:0/0");
+
+          var reportProgress = function (progress) {
+            if (cancelled) return;
+            setMovementSyncV2Mode(
+              (deviceCatchup ? "device-catchup:" : "migration-running:") +
+                String(progress.done || 0) + "/" + String(progress.total || 0)
+            );
+          };
+
+          migrateLegacyMovementSnapshotV2(
+            userId,
+            Array.isArray(expensesRef.current) ? expensesRef.current : [],
+            Array.isArray(incomesRef.current) ? incomesRef.current : [],
+            accountDeletedRecords,
+            { announceMigration: !deviceCatchup, onProgress: reportProgress }
+          )
+            .then(function () {
+              if (deviceCatchup) {
+                return acknowledgeMovementSyncV2Device(userId);
+              }
+              return completeMovementSyncV2Migration(userId);
+            })
+            .then(function () {
+              if (cancelled) return;
+              movementSyncV2ActiveRef.current = true;
+              movementSyncV2WriteThroughRef.current = false;
+              setMovementSyncV2Active(true);
+              setMovementSyncV2Mode(deviceCatchup ? "migrated-device-catchup" : "migrated");
+            })
+            .catch(function (error) {
+              if (cancelled) return;
+              // Keep write-through enabled after a started migration. The app stays
+              // usable and new movements keep reaching V2 while the retry waits.
+              movementSyncV2WriteThroughRef.current = true;
+              setMovementSyncV2Mode("migration-error");
+              console.error("Movement Sync V2 background migration failed", error);
+              scheduleMigrationRetry();
+            })
+            .finally(function () {
+              movementSyncV2MigrationRunningRef.current = false;
+            });
+        })
+        .catch(function (error) {
+          if (cancelled) return;
+          movementSyncV2ActiveRef.current = false;
+          setMovementSyncV2Active(false);
+          setMovementSyncV2Mode("check-error");
+          console.error("Movement Sync V2 account check failed", error);
+          if (!isOffline) scheduleMigrationRetry();
+        });
+      return function () { cancelled = true; };
+    },
+    [userId, isOffline, firestoreReady, movementSyncV2MigrationRetryPulse]
+  );
+
+  useEffect(
+    function () {
+      if (!movementSyncV2Active || !userId) return;
+      return watchMovementSyncV2(
+        userId,
+        function (records) {
+          var state = movementStateFromV2(records);
+          setExpenses(state.expenses, true);
+          setIncomes(state.incomes, true);
+        },
+        function (error) {
+          console.error("Movement Sync V2 listener failed", error);
+        }
+      );
+    },
+    [movementSyncV2Active, userId]
+  );
+
   function currentHomeSyncValue() {
     return {
       homeBalanceView: homeBalanceView === "reale" ? "reale" : "rateizzato",
@@ -6271,8 +6458,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   needsBackfill = true;
                 }
                 [
-                  ["expenses", cloudExpenses, mergedExpenses],
-                  ["incomes", cloudIncomes, mergedIncomes],
+                  ...(movementSyncV2ActiveRef.current ? [] : [
+                    ["expenses", cloudExpenses, mergedExpenses],
+                    ["incomes", cloudIncomes, mergedIncomes],
+                  ]),
                   ["recurring", cloudRecurring, mergedRecurring],
                   ["goals", cloudGoals, mergedGoals],
                   ["alerts", cloudAlerts, mergedAlerts],
@@ -6693,8 +6882,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 needsBackfill = true;
               }
               setAccountDeletedRecordsRaw(mergedAccountDeleted);
-              setExpenses(mergedExpenses, true);
-              setIncomes(mergedIncomes, true);
+              if (!movementSyncV2ActiveRef.current) {
+                setExpenses(mergedExpenses, true);
+                setIncomes(mergedIncomes, true);
+              }
               setRecurring(mergedRecurring);
               setGoals(mergedGoals);
               setAlerts(mergedAlerts);
@@ -8481,8 +8672,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     [
       'financeEvolution',
       'financeEvolutionUpdatedAt',
-      "expenses",
-      "incomes",
+      ...(movementSyncV2ActiveRef.current ? [] : ["expenses", "incomes"]),
       "recurring",
       "goals",
       "alerts",
@@ -8497,6 +8687,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       if (compactSource[field] === undefined && previous[field] !== undefined)
         compactSource[field] = previous[field];
     });
+    if (movementSyncV2ActiveRef.current) {
+      delete compactSource.expenses;
+      delete compactSource.incomes;
+      if (compactSource.dataIntegrityV1 && typeof compactSource.dataIntegrityV1 === "object") {
+        compactSource.dataIntegrityV1 = { ...compactSource.dataIntegrityV1 };
+        delete compactSource.dataIntegrityV1.expenses;
+        delete compactSource.dataIntegrityV1.incomes;
+      }
+    }
     compactSource.accountSyncSchemaVersion = 5;
     var compressed = await fainanceCompressAccountDataV5(compactSource);
     var write: any = {};
@@ -8944,6 +9143,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       updatedAt: new Date().toISOString(),
       updatedAtMs: now,
     };
+    if (movementSyncV2ActiveRef.current) {
+      delete savePayload.expenses;
+      delete savePayload.incomes;
+      if (savePayload.dataIntegrityV1 && typeof savePayload.dataIntegrityV1 === "object") {
+        delete savePayload.dataIntegrityV1.expenses;
+        delete savePayload.dataIntegrityV1.incomes;
+      }
+    }
     // Guard anti-regressione Budget. Un dispositivo senza Budget configurato
     // non puo' sovrascrivere un piano gia' configurato nel cloud durante il
     // salvataggio di dati non correlati. La cancellazione esplicita resta valida
@@ -13746,8 +13953,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.0.1";
-  var FAINANCE_CURRENT_VERSION_CODE = 213;
+  var FAINANCE_CURRENT_VERSION = "2.1.3";
+  var FAINANCE_CURRENT_VERSION_CODE = 223;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
     "market://details?id=" + FAINANCE_ANDROID_PACKAGE_ID;
@@ -21075,6 +21282,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         titleColor: widgetShoppingListTitleColor || "#FFFFFF",
         textColor: widgetShoppingListTextColor || "#EDEDF7",
         textSize: Number(widgetShoppingListTextSize) || 13,
+        bgColor: widgetShoppingListBgColor || "#1E1E30",
         bgAlpha: numOr(widgetShoppingListBgAlpha, 65),
         autoUpdate: !!widgetShoppingListAutoUpdate,
         selectedListId: String(
@@ -21110,6 +21318,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         titleColor: widgetFidelityTitleColor || "#FFFFFF",
         textColor: widgetFidelityTextColor || "#FFFFFF",
         textSize: Number(widgetFidelityTextSize) || 14,
+        bgColor: widgetFidelityBgColor || "#1E1E30",
         bgAlpha: numOr(widgetFidelityBgAlpha, 65),
         autoUpdate: !!widgetFidelityAutoUpdate,
         selectedCardId: selectedFidelityCard
@@ -21177,6 +21386,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         accentColor: widget2AccentColor,
         titleColor: widget2TitleColor,
         bodyColor: widget2BodyColor,
+        bgColor: widget2BgColor || "#1E1E30",
         bgAlpha: numOr(widget2BgAlpha, 65),
         maxChars: Number(widget2MaxChars) || 500,
         textSize: Number(widget2TextSize) || 14,
@@ -21211,6 +21421,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         accentColor: widget3AccentColor,
         textColor: widget3TextColor,
         percentColor: widget3PercentColor,
+        bgColor: widget3BgColor || "#1E1E30",
         bgAlpha: numOr(widget3BgAlpha, 65),
         autoUpdate: !!widget3AutoUpdate,
         selectedGoalId: widget3SelectedGoalId,
@@ -21990,6 +22201,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       widget2AccentColor,
       widget2TitleColor,
       widget2BodyColor,
+      widget2BgColor,
       widget2BgAlpha,
       widget2MaxChars,
       widget2TextSize,
@@ -22001,6 +22213,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       widget3AccentColor,
       widget3TextColor,
       widget3PercentColor,
+      widget3BgColor,
       widget3BgAlpha,
       widget3SelectedGoalId,
       widget3ShowPercent,
@@ -22021,6 +22234,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       widgetShoppingListIconColor,
       widgetShoppingListTitleColor,
       widgetShoppingListTextColor,
+      widgetShoppingListBgColor,
       widgetShoppingListBgAlpha,
       widgetShoppingListAutoUpdate,
       activeShoppingListId,
@@ -22031,6 +22245,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       widgetFidelityIconColor,
       widgetFidelityTitleColor,
       widgetFidelityTextColor,
+      widgetFidelityBgColor,
       widgetFidelityBgAlpha,
       widgetFidelityAutoUpdate,
       widgetDebtCreditsEnabled,
@@ -23259,7 +23474,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       },
       history: { id: "history", icon: "📋", label: sectionLabel("history") },
       stats: { id: "stats", icon: "📊", label: sectionLabel("stats") },
-      appunti: { id: "appunti", icon: "🗂", label: sectionLabel("appunti") },
+      appunti: { id: "appunti", icon: "📝", label: sectionLabel("appunti") },
       voice: { id: "voice", icon: "🎙️", label: sectionLabel("voice") },
       share: { id: "share", icon: "🤝", label: "Share" },
       debtCredits: {
@@ -24361,6 +24576,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setExpenses,
     incomes,
     setIncomes,
+    movementSyncV2Active,
+    movementSyncV2Mode,
     sym,
     fmt,
     dark,
@@ -24737,6 +24954,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setWidget2BodyColor,
     widget2AccentColor,
     setWidget2AccentColor,
+    widget2BgColor,
+    setWidget2BgColor,
     widget2BgAlpha,
     setWidget2BgAlpha,
     widget2TextSize,
@@ -24757,6 +24976,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setWidget3AccentColor,
     widget3PercentColor,
     setWidget3PercentColor,
+    widget3BgColor,
+    setWidget3BgColor,
     widget3BgAlpha,
     setWidget3BgAlpha,
     widget3ShowPercent,
@@ -24891,12 +25112,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setWidgetDebtCreditsTextSize,
     setWidgetDebtCreditsTitleColor,
     setWidgetFidelityAutoUpdate,
+    setWidgetFidelityBgColor,
     setWidgetFidelityBgAlpha,
     setWidgetFidelityIconColor,
     setWidgetFidelityTextColor,
     setWidgetFidelityTextSize,
     setWidgetFidelityTitleColor,
     setWidgetShoppingListAutoUpdate,
+    setWidgetShoppingListBgColor,
     setWidgetShoppingListBgAlpha,
     setWidgetShoppingListIconColor,
     setWidgetShoppingListTextColor,
@@ -24919,6 +25142,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     widgetDebtCreditsTextSize,
     widgetDebtCreditsTitleColor,
     widgetFidelityAutoUpdate,
+    widgetFidelityBgColor,
     widgetFidelityBgAlpha,
     widgetFidelityIconColor,
     widgetFidelityTextColor,
@@ -24928,6 +25152,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     widgetPlanName,
     widgetSettingsPayload,
     widgetShoppingListAutoUpdate,
+    widgetShoppingListBgColor,
     widgetShoppingListBgAlpha,
     widgetShoppingListIconColor,
     widgetShoppingListTextColor,
@@ -25417,7 +25642,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   background: headerBg,
                   borderBottom: "1px solid " + borderC,
-                  padding: "10px 24px",
+                  padding: "10px 108px 10px 24px",
                   display: "flex",
                   justifyContent: "flex-end",
                   alignItems: "center",
@@ -25464,24 +25689,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   <span style={{ fontSize: 11, color: subC }}>
                     {curYear}: {fmt(yearExp)} / {fmt(yearInc)}
                   </span>
-                  <Btn
-                    onClick={function () {
-                      exportToCSV(expensesForAnalysis, incomes, cats, methods, dateFmt);
-                    }}
-                    bg={incomeColor}
-                    style={{ padding: "5px 10px", fontSize: 11 }}
-                  >
-                    CSV
-                  </Btn>
-                  <Btn
-                    onClick={function () {
-                      exportToXLSX(expensesForAnalysis, incomes, cats, methods, dateFmt);
-                    }}
-                    bg="#217346"
-                    style={{ padding: "5px 10px", fontSize: 11 }}
-                  >
-                    Excel
-                  </Btn>
                 </div>
               </div>
             )}
