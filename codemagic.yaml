@@ -22,7 +22,6 @@ workflows:
       vars:
         FAINANCE_IOS_VERSION: "2.1.3"
         IOS_BUILD_NUMBER: "259"
-        FAINANCE_IOS_VERSION: "2.1.3"
         BUNDLE_ID: "it.fainanceapp.app"
         WIDGET_BUNDLE_ID: "it.fainanceapp.app.widgets"
         APPLE_TEAM_ID: "SSV4P8694F"
@@ -113,6 +112,11 @@ workflows:
 
           xcrun agvtool new-marketing-version "$APP_VERSION" || true
           xcrun agvtool new-version -all "$IOS_BUILD_NUMBER" || true
+
+          /usr/bin/plutil -lint App/Info.plist || exit 1
+          if [ -f "FainanceWidgets/Info.plist" ]; then
+            /usr/bin/plutil -lint FainanceWidgets/Info.plist || exit 1
+          fi
 
           cat App/Info.plist
 
