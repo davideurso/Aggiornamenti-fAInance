@@ -2,6 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../core";
 import { PopupCloseButton } from "../widget";
 import {
+  isMundelyBridgeEnabled,
+  pullMundelyBridge,
+  respondMundelyLink,
+  syncMundelyTripsToShare,
+  syncMundelyExpensesToShare,
+  syncMundelyCategoryCatalogToShare,
+  reconcileFainanceShareExpensesToMundely,
+  syncMundelyBridgeNow,
+  type MundelyLinkRequest,
+} from "../integrations/mundelyBridge";
+import {
   deleteAppNotification,
   markAppNotificationRead,
   watchAppNotifications,
@@ -265,6 +276,64 @@ export function NotificationInboxSettingsCard({ userId }: { userId: string }) {
   );
 }
 
+
+function MundelyLinkRequestRows({
+  requests,
+  busyId,
+  onDecision,
+}: {
+  requests: MundelyLinkRequest[];
+  busyId: string;
+  onDecision: (request: MundelyLinkRequest, decision: "approve" | "reject") => Promise<void>;
+}) {
+  const ctx: any = useApp();
+  const L = (text: string) => ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
+  const dark = !!ctx.dark;
+  const textC = ctx.textC || (dark ? "#f5f5f5" : "#232323");
+  const subC = ctx.subC || (dark ? "#a9a9b5" : "#777");
+  const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
+  const primary = ctx.confirmButtonColor || "#378ADD";
+  if (!requests.length) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      {requests.map((request) => (
+        <div key={request.id} style={{ border: `1px solid ${primary}66`, background: primary + "10", borderRadius: 15, padding: 11, marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <span style={{ fontSize: 23, lineHeight: 1.1 }}>🔗</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ color: textC, fontWeight: 950, fontSize: 13 }}>{L("Collega Mundely")}</div>
+              <div style={{ color: subC, fontSize: 12, lineHeight: 1.42, marginTop: 4 }}>
+                {L("Una richiesta da Mundely vuole collegare questo account fAInance. Accetta per sincronizzare automaticamente ogni viaggio con un progetto Share.")}
+              </div>
+              <div style={{ color: subC, fontSize: 10, marginTop: 5 }}>
+                {L("Account richiesto")}: {request.requestedIdentifier}
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                <button
+                  type="button"
+                  disabled={busyId === request.id}
+                  onClick={() => void onDecision(request, "reject")}
+                  style={{ flex: 1, minHeight: 34, borderRadius: 10, border: `1px solid ${borderC}`, background: dark ? "#2a2a3a" : "#fff", color: textC, fontWeight: 850, cursor: "pointer" }}
+                >
+                  {L("Rifiuta")}
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === request.id}
+                  onClick={() => void onDecision(request, "approve")}
+                  style={{ flex: 1, minHeight: 34, borderRadius: 10, border: 0, background: primary, color: "#fff", fontWeight: 900, cursor: "pointer" }}
+                >
+                  {busyId === request.id ? L("Attendi...") : L("Collega")}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function NotificationCenter({
   userId,
   onOpen,
@@ -277,6 +346,8 @@ export function NotificationCenter({
   const ctx: any = useApp();
   const [items, setItems] = useNotificationItems(userId);
   const [open, setOpen] = useState(false);
+  const [mundelyRequests, setMundelyRequests] = useState<MundelyLinkRequest[]>([]);
+  const [mundelyBusyId, setMundelyBusyId] = useState("");
   const L = (text: string) =>
     ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
   const dark = !!ctx.dark;
@@ -286,6 +357,61 @@ export function NotificationCenter({
   const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
   const primary = ctx.confirmButtonColor || "#378ADD";
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
+  const notificationCount = unread.length + mundelyRequests.length;
+  useEffect(() => {
+    if (!userId || !isMundelyBridgeEnabled()) {
+      setMundelyRequests([]);
+      return;
+    }
+    let cancelled = false;
+    let running = false;
+    const refresh = async () => {
+      if (running || cancelled) return;
+      running = true;
+      try {
+        const payload = await pullMundelyBridge();
+        if (cancelled) return;
+        setMundelyRequests(payload.linkRequests);
+        await syncMundelyTripsToShare(payload.tripSyncs);
+        await syncMundelyCategoryCatalogToShare(payload.linkedTrips);
+        await syncMundelyExpensesToShare(payload.expenseSyncs);
+        await reconcileFainanceShareExpensesToMundely(payload.linkedTrips);
+      } catch (_error) {
+        // Test bridge failures remain silent in the notification center; Mundely stays fail-closed.
+      } finally {
+        running = false;
+      }
+    };
+    const refreshBridgeOnly = () => { void syncMundelyBridgeNow().catch(() => undefined); };
+    (window as any).__mundelyBridgeRefreshNow = refreshBridgeOnly;
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 3000);
+    const onFocus = () => void refresh();
+    const onVisibility = () => {
+      // hidden fires while the user is leaving fAInance: start the reverse sync
+      // before Android suspends WebView timers. visible is the normal safety pass.
+      if (document.visibilityState === "hidden") refreshBridgeOnly();
+      else void refresh();
+    };
+    const onPageHide = () => refreshBridgeOnly();
+    const onShareMutation = () => {
+      refreshBridgeOnly();
+      [100, 450, 1100, 2400].forEach((delay) => window.setTimeout(refreshBridgeOnly, delay));
+    };
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pagehide", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("fainance:share-mutated", onShareMutation as EventListener);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      if ((window as any).__mundelyBridgeRefreshNow === refreshBridgeOnly) delete (window as any).__mundelyBridgeRefreshNow;
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pagehide", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("fainance:share-mutated", onShareMutation as EventListener);
+    };
+  }, [userId]);
   // Le azioni globali restano disponibili anche nella chat dell'Agente AI.
   const hideFloatingActions = false;
   const iosNative = (() => {
@@ -311,6 +437,25 @@ export function NotificationCenter({
     if (item.actionType || item.type === "share_invite") {
       onOpen?.(item);
       setOpen(false);
+    }
+  }
+
+  async function decideMundelyLink(request: MundelyLinkRequest, decision: "approve" | "reject") {
+    if (!request?.id || mundelyBusyId) return;
+    setMundelyBusyId(request.id);
+    try {
+      await respondMundelyLink(request.id, decision);
+      setMundelyRequests((current) => current.filter((item) => item.id !== request.id));
+      if (decision === "approve") {
+        const payload = await pullMundelyBridge().catch(() => ({ linkRequests: [], tripSyncs: [], expenseSyncs: [], linkedTrips: [] }));
+        setMundelyRequests(payload.linkRequests);
+        await syncMundelyTripsToShare(payload.tripSyncs);
+        await syncMundelyCategoryCatalogToShare(payload.linkedTrips);
+        await syncMundelyExpensesToShare(payload.expenseSyncs);
+        await reconcileFainanceShareExpensesToMundely(payload.linkedTrips);
+      }
+    } finally {
+      setMundelyBusyId("");
     }
   }
 
@@ -355,9 +500,9 @@ export function NotificationCenter({
         </button>
         <button type="button" aria-label={L("Apri centro notifiche")} onClick={() => setOpen(true)} style={{ ...actionButton, fontSize: 17 }}>
           🔔
-          {unread.length > 0 && (
+          {notificationCount > 0 && (
             <span style={{ position: "absolute", right: -5, top: -6, minWidth: 19, height: 19, padding: "0 4px", borderRadius: 999, background: "#E24B4A", color: "#fff", border: "2px solid " + cardBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 950, boxSizing: "border-box" }}>
-              {unread.length > 99 ? "99+" : unread.length}
+              {notificationCount > 99 ? "99+" : notificationCount}
             </span>
           )}
         </button>
@@ -379,6 +524,7 @@ export function NotificationCenter({
               )}
               <PopupCloseButton onClick={() => setOpen(false)} dark={dark} label={L("Chiudi")} />
             </div>
+            <MundelyLinkRequestRows requests={mundelyRequests} busyId={mundelyBusyId} onDecision={decideMundelyLink} />
             <NotificationRows items={items} userId={userId} onOpen={openItem} />
           </section>
         </div>

@@ -4,8 +4,10 @@ import AppWithLogin from './app'
 import { EmailActionScreen, isFainanceEmailActionUrl } from './auth/EmailActionScreen'
 import { initializeFainanceAnalytics } from './analytics/firebaseAnalytics'
 import { appEnvironment } from './config/env'
+import { markStartupPhase } from './utils/startupDiagnostics'
 
 const bootWindow = window as any
+markStartupPhase('bundle_ready')
 document.title = appEnvironment === 'test' ? 'fAInance Test' : 'fAInance'
 document.documentElement.setAttribute('data-fainance-environment', appEnvironment)
 bootWindow.__FAINANCE_BUNDLE_STARTED__ = true
@@ -26,7 +28,7 @@ try {
     bootWindow.__FAINANCE_REACT_MOUNTED__ = true
     try { window.dispatchEvent(new CustomEvent('fainance-react-mounted')) } catch (_e) {}
 
-    // Start native Analytics only after the UI/Capacitor runtime has mounted.
+    // Start Analytics after the UI/runtime has mounted on native and Web.
     // This avoids a one-shot early return before the native bridge is ready.
     window.setTimeout(() => {
       initializeFainanceAnalytics().catch((error) => {

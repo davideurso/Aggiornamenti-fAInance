@@ -1,6 +1,8 @@
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from '../analytics/useAnalyticsFlow';
 import { AutomaticRulesPanel } from '../sections/AutomaticRulesPanel';
 import { rulesText } from '../i18n/automaticRulesTranslations';
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { migrateFinanceEvolution, mergeFinanceEvolution } from '../data/financeEvolution';
 import { periodForDate, periodLabel } from '../finance/periodEngine';
 import { generalPeriodTranslation } from '../i18n/generalPeriodTranslations';
@@ -82,6 +84,24 @@ import {
 } from "../icons/customIconLibrary";
 
 const FainanceFileNativeBackup: any = registerPlugin("FainanceFile");
+const FainanceWidgetBridgeSettings: any = registerPlugin("WidgetBridge");
+
+const TOOL_WIDGET_APPEARANCE_DEFAULTS: any = {
+  calculator: {
+    bgColor: "#1E1E30", bgAlpha: 10, buttonColor: "#263247",
+    secondaryButtonColor: "#3A4255", accentColor: "#315CFF",
+    titleColor: "#FFFFFF", textColor: "#FFFFFF", buttonStyle: "soft",
+  },
+  converter: {
+    bgColor: "#1E1E30", bgAlpha: 10, buttonColor: "#263247",
+    secondaryButtonColor: "#3A4255", accentColor: "#315CFF",
+    titleColor: "#FFFFFF", textColor: "#FFFFFF", buttonStyle: "soft",
+  },
+  ai: {
+    bgColor: "#1E1E30", bgAlpha: 100, titleColor: "#FFFFFF",
+    accentColor: "#AFC2FF", buttonStyle: "soft",
+  },
+};
 
 function StableNestedPanelHost({ render }: { render: () => any }) {
   return render();
@@ -582,6 +602,18 @@ export function SettingsPanel() {
     userKey ? userKey("history_currency_priority_v1") : "history_currency_priority_v1",
     "paid"
   );
+  var [calculatorWidgetAppearance, setCalculatorWidgetAppearance] = useStorage(
+    userKey ? userKey("widget_calculator_appearance_v2") : "widget_calculator_appearance_v2",
+    TOOL_WIDGET_APPEARANCE_DEFAULTS.calculator
+  );
+  var [converterWidgetAppearance, setConverterWidgetAppearance] = useStorage(
+    userKey ? userKey("widget_converter_appearance_v2") : "widget_converter_appearance_v2",
+    TOOL_WIDGET_APPEARANCE_DEFAULTS.converter
+  );
+  var [aiWidgetAppearance, setAiWidgetAppearance] = useStorage(
+    userKey ? userKey("widget_ai_appearance_v2") : "widget_ai_appearance_v2",
+    TOOL_WIDGET_APPEARANCE_DEFAULTS.ai
+  );
 
   var [adminSession, setAdminSession] = useState<AdminSession | null>(null);
   useEffect(function () {
@@ -606,6 +638,7 @@ export function SettingsPanel() {
   var [dataExportMenuOpen, setDataExportMenuOpen] = useState(false);
   var [dataDeleteSelection, setDataDeleteSelection] = useState([]);
   var [backupImportBusy, setBackupImportBusy] = useState(false);
+  useEffect(() => () => { finishAnalyticsFlow("backup_import", "abandoned", { reason: "navigation" }); }, []);
   var [pendingBackupImport, setPendingBackupImport] = useState<any>(null);
   var backupJsonFileInputRef = useRef<any>(null);
   var [syncDiagnostic, setSyncDiagnostic] = useState<any>(null);
@@ -2378,6 +2411,76 @@ export function SettingsPanel() {
   function L(s) {
     return generalPeriodTranslation(s,lang) ?? translateWidgetSettingsText(s);
   }
+
+  function useWidgetDraftState(key, initialValue) {
+    var storageKey = (userId ? "user_" + userId + "_" : "") + "widget_settings_draft_" + String(key);
+    var [value, setValueRaw] = useState(function () {
+      try {
+        var saved = sessionStorage.getItem(storageKey);
+        if (saved != null) return JSON.parse(saved);
+      } catch (e) {}
+      return typeof initialValue === "function" ? initialValue() : initialValue;
+    });
+    function setValue(next) {
+      setValueRaw(function (prev) {
+        var resolved = typeof next === "function" ? next(prev) : next;
+        try { sessionStorage.setItem(storageKey, JSON.stringify(resolved)); } catch (e) {}
+        return resolved;
+      });
+    }
+    return [value, setValue];
+  }
+
+  function clearWidgetDraftState(key) {
+    try {
+      var storageKey = (userId ? "user_" + userId + "_" : "") + "widget_settings_draft_" + String(key);
+      sessionStorage.removeItem(storageKey);
+    } catch (e) {}
+  }
+
+  function widgetColorLabel(value) {
+    return String(L(value) || value || "").replace(/\s*\*+\s*/g, " ").trim();
+  }
+
+  function WidgetColorSection({ title, items }) {
+    return (
+      <div style={{ background: cardBg, border: "1px solid " + borderC, borderRadius: 16, padding: 14 }}>
+        {!!title && <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 10 }}>{L(title)}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,minmax(0,1fr))" : "repeat(3,minmax(0,1fr))", gap: 10 }}>
+          {(items || []).map(function (item) {
+            return (
+              <div key={item.key || item.label} style={{ background: dark ? "#252535" : "#FAFAFF", border: "1px solid " + borderC, borderRadius: 14, padding: 12, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: textC, marginBottom: 8, overflowWrap: "anywhere" }}>{widgetColorLabel(item.label)}</div>
+                <div style={{ display:"flex", alignItems:"center", minWidth:0 }}>
+                  <AppColorSelector value={item.value || "#FFFFFF"} onChange={item.onChange} compact={true} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  useLayoutEffect(function () {
+    if (!settingsPage) return;
+    function resetSettingsScroll() {
+      try {
+        var mobile = document.querySelector(".fainance-mobile-content");
+        if (mobile && typeof (mobile as any).scrollTo === "function") (mobile as any).scrollTo({ top: 0, left: 0, behavior: "auto" });
+        if (mobile) (mobile as any).scrollTop = 0;
+        if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+        if (document.documentElement) document.documentElement.scrollTop = 0;
+        if (document.body) document.body.scrollTop = 0;
+        if (typeof window !== "undefined" && typeof window.scrollTo === "function") window.scrollTo(0, 0);
+      } catch (e) {}
+    }
+    resetSettingsScroll();
+    var raf = requestAnimationFrame(resetSettingsScroll);
+    var timer1 = setTimeout(resetSettingsScroll, 60);
+    var timer2 = setTimeout(resetSettingsScroll, 220);
+    return function () { cancelAnimationFrame(raf); clearTimeout(timer1); clearTimeout(timer2); };
+  }, [settingsPage]);
   function safeWidgetAllowed(kind) {
     try {
       return typeof isWidgetAllowed === "function" ? !!isWidgetAllowed(kind) : true;
@@ -2435,6 +2538,9 @@ export function SettingsPanel() {
       appearance_widget_fidelity: "appearance_widget",
       appearance_widget_debt_credits: "appearance_widget",
       appearance_widget_share: "appearance_widget",
+      appearance_widget_calculator: "appearance_widget",
+      appearance_widget_converter: "appearance_widget",
+      appearance_widget_ai: "appearance_widget",
       appearance_nav: "appearance",
       sections_income: "sections",
       sections_expense: "sections",
@@ -2477,9 +2583,11 @@ export function SettingsPanel() {
       debt_credits_settings: "📉", notifications: "🔔", patrimonio_settings: "💎",
       patrimonio_areas_settings: "📂", patrimonio_entries_settings: "💎", patrimonio_mode_settings: "⚙️", patrimonio_display_settings: "👁️",
       appearance: "🎨", appearance_app: "🎨", appearance_nav: "📱", appearance_icons: "🖼️",
-      appearance_widget: "🧩", appearance_widget_quick: "⚡", appearance_widget_note: "📝",
+      appearance_widget: "🧱", appearance_widget_quick: "⚡", appearance_widget_note: "📝",
       appearance_widget_goal: "🎯", appearance_widget_shopping_list: "🧺", appearance_widget_fidelity: "💳",
-      appearance_widget_debt_credits: "📉", appearance_widget_share: "🤝", history_settings: "📚",
+      appearance_widget_debt_credits: "📉", appearance_widget_share: "🤝",
+      appearance_widget_calculator: "🧮", appearance_widget_converter: "⇄", appearance_widget_ai: "🤖",
+      history_settings: "📚",
       data: "💾", delete: "🗑️", plans_settings: "💎", info_support: "🗂️", support_info: "💬",
       support: "💬", info: "ℹ️", terms_conditions: "📄", privacy_policy: "🔐", values: "🗂️",
       admin_center: "🛡️", automatic_rules: "⚙️", share_settings: "🤝"
@@ -2913,6 +3021,24 @@ export function SettingsPanel() {
             lockedMessage: safeWidgetLockedMessage("share"),
           },
           {
+            id: "appearance_widget_calculator",
+            icon: "🧮",
+            label: "Calcolatrice",
+            desc: "Calcoli rapidi dalla Home, con layout adattivo.",
+          },
+          {
+            id: "appearance_widget_converter",
+            icon: "⇄",
+            label: "Convertitore valuta",
+            desc: "Conversione offline con l’ultimo tasso salvato nell’app.",
+          },
+          {
+            id: "appearance_widget_ai",
+            icon: "🤖",
+            label: "Agente AI",
+            desc: "Grillo Parlante ridimensionabile dalla Home.",
+          },
+          {
             id: "appearance_widget_debt_credits",
             icon: "📉",
             label: "Debiti / Crediti",
@@ -2924,6 +3050,106 @@ export function SettingsPanel() {
         ]}
       />
     );
+  }
+
+  function WidgetToolAppearanceSettingsPanel({ kind }: { kind: "calculator" | "converter" | "ai" }) {
+    var [instanceId] = useState(function () {
+      if (kind === "ai") return 0;
+      try {
+        var raw = localStorage.getItem("fainance_widget_settings_instance_v1") || "";
+        if (!raw) return 0;
+        var parsed = JSON.parse(raw);
+        var id = Number(parsed && parsed.id);
+        var type = String((parsed && parsed.type) || "").toLowerCase();
+        var fresh = Date.now() - Number((parsed && parsed.at) || 0) < 300000;
+        return fresh && type === kind && Number.isFinite(id) && id > 0 ? id : 0;
+      } catch (e) { return 0; }
+    });
+    var current = kind === "calculator" ? calculatorWidgetAppearance : kind === "converter" ? converterWidgetAppearance : aiWidgetAppearance;
+    var defaults = TOOL_WIDGET_APPEARANCE_DEFAULTS[kind];
+    var initialTitle = kind === "calculator" ? "Calcolatrice" : kind === "converter" ? "Convertitore" : "Agente AI";
+    var draftKey = "fainance_widget_settings_draft_v1_" + kind + "_" + String(instanceId || 0);
+    var [draft, setDraft] = useState(function () {
+      var base = { showTitle: true, titleText: initialTitle, showTransaction: true, ...defaults, ...(current || {}) };
+      try {
+        var saved = sessionStorage.getItem(draftKey);
+        if (saved) return { ...base, ...JSON.parse(saved) };
+      } catch (e) {}
+      return base;
+    });
+    function dset(key, value) {
+      setDraft(function(prev) {
+        var next = { ...prev, [key]: value };
+        try { sessionStorage.setItem(draftKey, JSON.stringify(next)); } catch (e) {}
+        return next;
+      });
+    }
+    function radiusFor(id) { var x = BUTTON_STYLES.find(function (b) { return b.id === id; }); return x ? Math.max(5, Math.round(x.r * 0.7)) : 10; }
+    function rgba(hex, transparency) {
+      var h = String(hex || "#1E1E30").replace("#", ""); if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+      var r=parseInt(h.slice(0,2),16)||0, g=parseInt(h.slice(2,4),16)||0, b=parseInt(h.slice(4,6),16)||0; var a=(100-Math.max(0,Math.min(100,Number(transparency)||0)))/100;
+      return "rgba("+r+","+g+","+b+","+a+")";
+    }
+    function save() {
+      var next = { ...draft, bgAlpha: Math.max(0, Math.min(100, Number(draft.bgAlpha) || 0)) };
+      if (kind === "calculator") setCalculatorWidgetAppearance(next);
+      else if (kind === "converter") setConverterWidgetAppearance(next);
+      else setAiWidgetAppearance(next);
+      try { sessionStorage.removeItem(draftKey); } catch (e) {}
+      Promise.resolve(FainanceWidgetBridgeSettings.saveToolAppearance({ kind: kind, widgetId: instanceId || undefined, settings: JSON.stringify(next) }))
+        .then(function(){ setToast && setToast({ text: L("Impostazioni widget aggiornate"), type: "success", icon: "✅" }); })
+        .catch(function(){ setToast && setToast({ text: L("Impostazioni salvate nell’app"), type: "success", icon: "✅" }); });
+    }
+    var isAi = kind === "ai";
+    return <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+      {!!instanceId && <div style={{ background: dark ? "#252535" : "#F0EDFF", border: "1px solid " + borderC, borderRadius: 12, padding: "10px 12px", color: textC, fontSize: 12, fontWeight: 800 }}>{L("Stai personalizzando questo widget specifico.")}</div>}
+
+      <div style={{ background: cardBg, border: "1px solid " + borderC, borderRadius: 16, padding: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 800, color: subC, marginBottom: 8 }}>{L("Anteprima")}</div>
+        <div style={{ background: rgba(draft.bgColor, draft.bgAlpha), borderRadius: 18, padding: 14, minHeight: isAi ? 150 : 220, border: "1px solid rgba(127,119,221,.22)", color: draft.textColor || draft.titleColor || "#fff" }}>
+          {(draft.showTitle !== false) && <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:12 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, fontWeight:900, color:draft.titleColor || "#fff" }}>{isAi ? <AIGrilloIcon size={28} /> : <FAInanceLogo size={26} />}<span>{L(draft.titleText || initialTitle)}</span></div>
+            {!isAi && <span style={{ color:draft.accentColor, fontWeight:900 }}>⚙</span>}
+          </div>}
+          {isAi ? <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:92 }}><AIGrilloIcon size={88} /></div> : kind === "calculator" ? <>
+            <div style={{ background: dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)", border:"1px solid rgba(127,119,221,.18)", borderRadius:14, padding:"10px 12px", marginBottom:10 }}><div style={{ textAlign:"right", fontSize:12, color:draft.titleColor }}>125 × 4</div><div style={{ textAlign:"right", fontSize:30, fontWeight:900, color:draft.textColor }}>500</div></div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:8 }}>{["7","8","9","÷","4","5","6","×"].map(function(x,i){var accent=i===3||i===7;return <div key={i} style={{ textAlign:"center", padding:"10px 4px", borderRadius:radiusFor(draft.buttonStyle), background:accent?draft.accentColor:draft.buttonColor, color:draft.textColor, fontWeight:900 }}>{x}</div>;})}</div>
+            {(draft.showTransaction !== false) && <div style={{ textAlign:"center", padding:"10px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>{L("Crea transazione")}</div>}
+          </> : <>
+            <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:10 }}><div style={{ flex:1, textAlign:"center", padding:"8px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>CHF</div><div style={{ color:draft.accentColor, fontWeight:900 }}>⇄</div><div style={{ flex:1, textAlign:"center", padding:"8px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>EUR</div></div>
+            <div style={{ background: dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)", border:"1px solid rgba(127,119,221,.18)", borderRadius:14, padding:"10px 12px", marginBottom:10 }}><div style={{ textAlign:"right", fontSize:15, color:draft.titleColor }}>77 CHF</div><div style={{ textAlign:"right", fontSize:28, fontWeight:900, color:draft.textColor }}>81,62 EUR</div><div style={{ textAlign:"right", fontSize:11, color:draft.titleColor, marginTop:6 }}>Offline · 1 CHF = 1,06 EUR</div></div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:8 }}>{["7","8","9","⌫","4","5","6","C"].map(function(x,i){return <div key={i} style={{ textAlign:"center", padding:"10px 4px", borderRadius:radiusFor(draft.buttonStyle), background:i===3||i===7?draft.secondaryButtonColor:draft.buttonColor, color:draft.textColor, fontWeight:900 }}>{x}</div>;})}</div>
+            {(draft.showTransaction !== false) && <div style={{ textAlign:"center", padding:"10px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>{L("Crea transazione")}</div>}
+          </>}
+        </div>
+      </div>
+
+      <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:16, padding:14 }}>
+        <div style={{ fontSize:13, fontWeight:900, color:textC, marginBottom:10 }}>{widgetColorLabel("Titolo")}</div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, marginBottom:10 }}><span style={{ color:textC, fontWeight:800 }}>{L("Mostra titolo")}</span><input type="checkbox" checked={draft.showTitle !== false} onChange={function(e){dset("showTitle",e.target.checked);}} /></div>
+        <input value={String(draft.titleText || initialTitle)} onChange={function(e){dset("titleText",e.target.value);}} placeholder={initialTitle} style={{ width:"100%", padding:"12px 14px", borderRadius:12, border:"1px solid "+borderC, background:dark?"#202033":"#fff", color:textC, boxSizing:"border-box" }} />
+      </div>
+
+      {!isAi && <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:16, padding:14 }}><div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}><span style={{ color:textC, fontWeight:900 }}>{L("Mostra Crea transazione")}</span><input type="checkbox" checked={draft.showTransaction !== false} onChange={function(e){dset("showTransaction",e.target.checked);}} /></div></div>}
+
+      <WidgetColorSection title="Base" items={[
+        { key:"bgColor", label:"Sfondo", value:draft.bgColor || defaults.bgColor, onChange:function(v){dset("bgColor",v);} },
+        { key:"titleColor", label:"Titolo", value:draft.titleColor || defaults.titleColor, onChange:function(v){dset("titleColor",v);} },
+      ].concat(isAi ? [] : [{ key:"textColor", label:"Testo", value:draft.textColor || defaults.textColor, onChange:function(v){dset("textColor",v);} }])} />
+      {!isAi && <WidgetColorSection title="Tasti" items={[
+        { key:"buttonColor", label:"Principali", value:draft.buttonColor || defaults.buttonColor, onChange:function(v){dset("buttonColor",v);} },
+        { key:"secondaryButtonColor", label:"Secondari", value:draft.secondaryButtonColor || defaults.secondaryButtonColor, onChange:function(v){dset("secondaryButtonColor",v);} },
+        { key:"accentColor", label:"Operazioni", value:draft.accentColor || defaults.accentColor, onChange:function(v){dset("accentColor",v);} },
+      ]} />}
+
+      <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}><div style={{ display:"flex", justifyContent:"space-between", gap:10, marginBottom:8 }}><div><div style={{ fontSize:13, fontWeight:900, color:textC }}>{L("Trasparenza sfondo")}</div><div style={{ fontSize:12, color:subC }}>{L("0% = pieno · 100% = trasparente")}</div></div><div style={{ fontWeight:900, color:"#7F77DD" }}>{draft.bgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draft.bgAlpha} onChange={function(e){dset("bgAlpha",Number(e.target.value));}} style={{ width:"100%" }} /></div>
+
+      {!isAi && <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}><div style={{ fontSize:13, fontWeight:900, color:textC, marginBottom:8 }}>{L("Bordi dei tasti")}</div><div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:8 }}>{BUTTON_STYLES.map(function(bs){var active=draft.buttonStyle===bs.id;return <button type="button" key={bs.id} onClick={function(){dset("buttonStyle",bs.id);}} style={{ padding:"10px", border:"2px solid "+(active?"#7F77DD":borderC), borderRadius:Math.max(5,Math.round(bs.r*.7)), background:active?(dark?"#2a2a3e":"#EEEDFE"):(dark?"#1e1e30":"#fff"), color:active?"#7F77DD":textC, fontWeight:active?900:600 }}>{L(bs.label)}</button>;})}</div></div>}
+
+      {kind === "converter" && <div style={{ background:cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14, color:textC }}><div style={{ fontSize:13, fontWeight:900, marginBottom:4 }}>{L("Uso offline")}</div><div style={{ fontSize:12, color:subC }}>{L("Il widget usa l’ultimo tasso registrato dal Convertitore dell’app.")}</div></div>}
+
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}><Btn bg="#6B7280" onClick={function(){var next={showTitle:true,titleText:initialTitle,showTransaction:true,...defaults};setDraft(next);try{sessionStorage.setItem(draftKey,JSON.stringify(next));}catch(e){}}}>{L("Ripristina")}</Btn><Btn onClick={save}>{L("Salva")}</Btn></div>
+    </div>;
   }
 
   function WidgetQuickAddSettingsPanel() {
@@ -2951,7 +3177,7 @@ export function SettingsPanel() {
       { name: "Blu", value: "#3498DB" },
       { name: "Royal", value: "#0D6EFD" },
     ];
-    var [draft, setDraft] = useState(function () {
+    var [draft, setDraft] = useWidgetDraftState("quick_add", function () {
       return {
         bgColor: widgetBgColor,
         bgAlpha: widgetBgAlpha,
@@ -3350,174 +3576,20 @@ export function SettingsPanel() {
             </div>
           )}
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 8 }}>
-              {L("Colore sfondo")}
-            </div>
-            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
-              {L("Colore sfondo")}
-            </div>
-            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: subC,
-                marginBottom: 5,
-              }}
-            >
-              {L("Titolo")}
-            </div>
-            <input
-              value={draft.title}
-              onChange={function (e) {
-                dset("title", e.target.value);
-              }}
-              style={sinp}
-            />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: subC,
-                marginBottom: 5,
-              }}
-            >
-              {L("Sottotitolo")}
-            </div>
-            <input
-              value={draft.subtitle}
-              onChange={function (e) {
-                dset("subtitle", e.target.value);
-              }}
-              style={sinp}
-            />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: subC,
-                marginBottom: 5,
-              }}
-            >
-              {L("Testo tasto uscita")}
-            </div>
-            <input
-              value={draft.expenseLabel}
-              onChange={function (e) {
-                dset("expenseLabel", stripWidgetPrefix(e.target.value));
-              }}
-              style={sinp}
-            />
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: 12,
-                fontWeight: 700,
-                color: subC,
-                marginBottom: 5,
-              }}
-            >
-              {L("Testo tasto entrata")}
-            </div>
-            <input
-              value={draft.incomeLabel}
-              onChange={function (e) {
-                dset("incomeLabel", stripWidgetPrefix(e.target.value));
-              }}
-              style={sinp}
-            />
+        <div style={{ background: cardBg, border: "1px solid " + borderC, borderRadius: 16, padding: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 10 }}>{L("Testi")}</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+            <div><div style={{ fontSize: 12, fontWeight: 800, color: subC, marginBottom: 5 }}>{widgetColorLabel("Titolo")}</div><input value={draft.title} onChange={function(e){dset("title",e.target.value);}} style={sinp} /></div>
+            <div><div style={{ fontSize: 12, fontWeight: 800, color: subC, marginBottom: 5 }}>{L("Sottotitolo")}</div><input value={draft.subtitle} onChange={function(e){dset("subtitle",e.target.value);}} style={sinp} /></div>
+            <div><div style={{ fontSize: 12, fontWeight: 800, color: subC, marginBottom: 5 }}>{L("Testo tasto uscita")}</div><input value={draft.expenseLabel} onChange={function(e){dset("expenseLabel",stripWidgetPrefix(e.target.value));}} style={sinp} /></div>
+            <div><div style={{ fontSize: 12, fontWeight: 800, color: subC, marginBottom: 5 }}>{L("Testo tasto entrata")}</div><input value={draft.incomeLabel} onChange={function(e){dset("incomeLabel",stripWidgetPrefix(e.target.value));}} style={sinp} /></div>
           </div>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
-              {L("Colore sfondo")}
-            </div>
-            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
-          </div>
-          <Palette
-            title={L("Sfondo widget")}
-            value={draft.bgColor}
-            onPick={function (v) {
-              dset("bgColor", v);
-            }}
-            items={WIDGET_BG_PALETTE}
-          />
-          <Palette
-            title={L("Pulsante uscita")}
-            value={draft.expenseColor}
-            onPick={function (v) {
-              dset("expenseColor", v);
-            }}
-            items={WIDGET_EXP_PALETTE}
-          />
-          <Palette
-            title={L("Pulsante entrata")}
-            value={draft.incomeColor}
-            onPick={function (v) {
-              dset("incomeColor", v);
-            }}
-            items={WIDGET_INC_PALETTE}
-          />
-        </div>
-        <div
-          style={{
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
-            {L("Colore sfondo")}
-          </div>
-          <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
-        </div>
+        <WidgetColorSection title="Colori" items={[
+          { key:"quick_bg", label:"Sfondo", value:draft.bgColor, onChange:function(v){dset("bgColor",v);} },
+          { key:"quick_expense", label:"Uscita", value:draft.expenseColor, onChange:function(v){dset("expenseColor",v);} },
+          { key:"quick_income", label:"Entrata", value:draft.incomeColor, onChange:function(v){dset("incomeColor",v);} },
+        ]} />
         <div
           style={{
             background: cardBg,
@@ -3729,795 +3801,130 @@ export function SettingsPanel() {
   }
 
   function WidgetNoteSettingsPanel() {
-    var [draftMaxChars, setDraftMaxChars] = useState(
-      String(widget2MaxChars || 500)
-    );
-    var [draftTextSize, setDraftTextSize] = useState(
-      Number(widget2TextSize) || 14
-    );
-    var [draftBgAlpha, setDraftBgAlpha] = useState(numOr(widget2BgAlpha, 65));
-    var [draftBgColor, setDraftBgColor] = useState(widget2BgColor || "#1E1E30");
+    var [draftMaxChars, setDraftMaxChars] = useWidgetDraftState("note_max_chars", String(widget2MaxChars || 500));
+    var [draftTextSize, setDraftTextSize] = useWidgetDraftState("note_text_size", Number(widget2TextSize) || 14);
+    var [draftBgAlpha, setDraftBgAlpha] = useWidgetDraftState("note_bg_alpha", numOr(widget2BgAlpha, 65));
+    var [draftBgColor, setDraftBgColor] = useWidgetDraftState("note_bg_color", widget2BgColor || "#1E1E30");
+    var [draftAccentColor, setDraftAccentColor] = useWidgetDraftState("note_accent_color", widget2AccentColor || "#7F77DD");
+    var [draftTitleColor, setDraftTitleColor] = useWidgetDraftState("note_title_color", widget2TitleColor || "#FFFFFF");
+    var [draftBodyColor, setDraftBodyColor] = useWidgetDraftState("note_body_color", widget2BodyColor || "#EDEDF7");
     function save() {
-      var max = parseInt(draftMaxChars, 10) || 500;
+      var max = parseInt(String(draftMaxChars), 10) || 500;
       max = Math.max(20, Math.min(2000, max));
       var rawAlpha = Number(draftBgAlpha);
-      var alpha = Math.max(
-        0,
-        Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65)
-      );
+      var alpha = Math.max(0, Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65));
       var textSize = Math.max(10, Math.min(28, Number(draftTextSize) || 14));
       setWidget2MaxChars(max);
       setWidget2TextSize(textSize);
-      setWidget2BgColor(draftBgColor || "#1E1E30");
+      setWidget2BgColor(String(draftBgColor || "#1E1E30"));
       setWidget2BgAlpha(alpha);
+      setWidget2AccentColor(draftAccentColor);
+      setWidget2TitleColor(draftTitleColor);
+      setWidget2BodyColor(draftBodyColor);
       saveWidgetSettingsToNative(true, {
         ...widgetSettingsPayload(),
         noteWidget: {
           ...widgetSettingsPayload().noteWidget,
           maxChars: max,
           textSize: textSize,
-          bgColor: draftBgColor || "#1E1E30",
+          bgColor: String(draftBgColor || "#1E1E30"),
           bgAlpha: alpha,
-          titleColor: widget2TitleColor,
-          bodyColor: widget2BodyColor,
-          accentColor: widget2AccentColor,
+          titleColor: draftTitleColor,
+          bodyColor: draftBodyColor,
+          accentColor: draftAccentColor,
         },
       });
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <WidgetIntroCard icon="📝" title="Nota / Coordinata / Carta">
-          {"Scegli il contenuto dal widget; qui personalizzi l’aspetto."}
-        </WidgetIntroCard>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 8 }}>
-              {L("Colore sfondo")}
-            </div>
-            <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
+        <WidgetIntroCard icon="📝" title="Nota / Coordinata / Carta">{"Scegli il contenuto dal widget; qui personalizzi l’aspetto."}</WidgetIntroCard>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+          <div style={{ background: cardBg, border: "1px solid " + borderC, borderRadius: 14, padding: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 5 }}>{L("Numero massimo di caratteri")}</div>
+            <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>{L("Limite del testo mostrato nel widget.")}</div>
+            <input type="number" inputMode="numeric" min="20" max="2000" value={draftMaxChars} onChange={function(e){setDraftMaxChars(e.target.value);}} onBlur={function(){var n=parseInt(String(draftMaxChars),10);setDraftMaxChars(String(n?Math.max(20,Math.min(2000,n)):500));}} style={{ ...sinp, width:"100%" }} />
           </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 900,
-                color: textC,
-                marginBottom: 5,
-              }}
-            >
-              {L("Numero massimo di caratteri")}
-            </div>
-            <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>
-              {L("Limite del testo mostrato nel widget.")}
-            </div>
-            <input
-              type="number"
-              inputMode="numeric"
-              min="20"
-              max="2000"
-              value={draftMaxChars}
-              onChange={function (e) {
-                setDraftMaxChars(e.target.value);
-              }}
-              onBlur={function () {
-                var n = parseInt(draftMaxChars, 10);
-                if (!n) setDraftMaxChars("500");
-                else setDraftMaxChars(String(Math.max(20, Math.min(2000, n))));
-              }}
-              style={{ ...sinp, width: "100%" }}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 900,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Grandezza testo")}
-            </div>
-            <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>
-              {L("Dimensione del contenuto mostrato nel widget.")}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <input
-                type="range"
-                min="10"
-                max="28"
-                step="1"
-                value={draftTextSize}
-                onChange={function (e) {
-                  setDraftTextSize(Number(e.target.value));
-                }}
-                style={{ flex: 1 }}
-              />
-              <input
-                type="number"
-                min="10"
-                max="28"
-                value={draftTextSize}
-                onChange={function (e) {
-                  setDraftTextSize(
-                    Math.max(10, Math.min(28, Number(e.target.value) || 14))
-                  );
-                }}
-                style={{ ...sinp, width: 74 }}
-              />
-            </div>
+          <div style={{ background: cardBg, border: "1px solid " + borderC, borderRadius: 14, padding: 14 }}>
+            <div style={{ fontSize: 13, fontWeight: 900, color: textC, marginBottom: 8 }}>{L("Grandezza testo")}</div>
+            <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>{L("Dimensione del contenuto mostrato nel widget.")}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}><input type="range" min="10" max="28" step="1" value={draftTextSize} onChange={function(e){setDraftTextSize(Number(e.target.value));}} style={{flex:1}}/><input type="number" min="10" max="28" value={draftTextSize} onChange={function(e){setDraftTextSize(Math.max(10,Math.min(28,Number(e.target.value)||14)));}} style={{...sinp,width:74}}/></div>
           </div>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore sfondo")}
-            </div>
-            <AppColorSelector
-              value={draftBgColor}
-              onChange={function (color) {
-                setDraftBgColor(color);
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore icona")}
-            </div>
-            <AppColorSelector
-              value={widget2AccentColor}
-              onChange={function (color) {
-                setWidget2AccentColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  noteWidget: {
-                    ...widgetSettingsPayload().noteWidget,
-                    accentColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore titolo")}
-            </div>
-            <AppColorSelector
-              value={widget2TitleColor}
-              onChange={function (color) {
-                setWidget2TitleColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  noteWidget: {
-                    ...widgetSettingsPayload().noteWidget,
-                    titleColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore testo")}
-            </div>
-            <AppColorSelector
-              value={widget2BodyColor}
-              onChange={function (color) {
-                setWidget2BodyColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  noteWidget: {
-                    ...widgetSettingsPayload().noteWidget,
-                    bodyColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
+        <WidgetColorSection title="Colori" items={[
+          { key:"note_bg", label:"Sfondo", value:draftBgColor, onChange:function(v){setDraftBgColor(v);} },
+          { key:"note_icon", label:"Colore icona", value:draftAccentColor, onChange:function(v){setDraftAccentColor(v);} },
+          { key:"note_title", label:"Colore titolo", value:draftTitleColor, onChange:function(v){setDraftTitleColor(v);} },
+          { key:"note_text", label:"Colore testo", value:draftBodyColor, onChange:function(v){setDraftBodyColor(v);} },
+        ]} />
+        <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:8 }}><div><div style={{ fontSize:13, fontWeight:900, color:textC }}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:"#7F77DD"}}>{draftBgAlpha}%</div></div>
+          <input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}} />
         </div>
-        <div
-          style={{
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginBottom: 8,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: textC }}>
-                {L("Trasparenza sfondo widget")}
-              </div>
-              <div style={{ fontSize: 12, color: subC }}>
-                {L("100% = completamente trasparente. 0% = sfondo pieno.")}
-              </div>
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#7F77DD" }}>
-              {draftBgAlpha}%
-            </div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={draftBgAlpha}
-            onChange={function (e) {
-              setDraftBgAlpha(Number(e.target.value));
-            }}
-            style={{ width: "100%" }}
-          />
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={draftBgAlpha}
-            onChange={function (e) {
-              setDraftBgAlpha(
-                Math.max(0, Math.min(100, Number(e.target.value) || 0))
-              );
-            }}
-            style={{ ...sinp, width: 90, marginTop: 8 }}
-          />
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 12,
-            padding: "12px 14px",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: textC }}>
-              {L("Aggiornamento automatico")}
-            </div>
-            <div style={{ fontSize: 12, color: subC }}>
-              {L(
-                "Aggiorna i widget già installati quando cambi contenuti o impostazioni."
-              )}
-            </div>
-          </div>
-          <Toggle
-            label=""
-            checked={!!widget2AutoUpdate}
-            onChange={function () {
-              setWidget2AutoUpdate(!widget2AutoUpdate);
-            }}
-          />
-        </div>
-        <Btn
-          onClick={save}
-          bg="#7F77DD"
-          style={{ width: "100%", padding: 12, fontWeight: 800 }}
-        >
-          {L("Salva e aggiorna widget")}
-        </Btn>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, background:cardBg, border:"1px solid "+borderC, borderRadius:12, padding:"12px 14px" }}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Aggiornamento automatico")}</div><div style={{fontSize:12,color:subC}}>{L("Aggiorna i widget già installati quando cambi contenuti o impostazioni.")}</div></div><Toggle label="" checked={!!widget2AutoUpdate} onChange={function(){setWidget2AutoUpdate(!widget2AutoUpdate);}}/></div>
+        <Btn onClick={save} bg="#7F77DD" style={{ width:"100%", padding:12, fontWeight:800 }}>{L("Salva e aggiorna widget")}</Btn>
       </div>
     );
   }
 
   function WidgetGoalSettingsPanel() {
-    var selectedGoal =
-      (goals || []).find(function (g) {
-        return String(g.id) === String(widget3SelectedGoalId);
-      }) ||
-      (goals || [])[0] ||
-      null;
+    var selectedGoal = (goals || []).find(function (g) { return String(g.id) === String(widget3SelectedGoalId); }) || (goals || [])[0] || null;
     var target = selectedGoal ? Number(selectedGoal.target || 0) : 0;
     var saved = selectedGoal ? Number(selectedGoal.saved || 0) : 0;
-    var pct =
-      target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0;
-    var gColor = widget3AccentColor;
-    var [draftBgAlpha, setDraftBgAlpha] = useState(numOr(widget3BgAlpha, 65));
-    var [draftBgColor, setDraftBgColor] = useState(widget3BgColor || "#1E1E30");
+    var pct = target > 0 ? Math.min(100, Math.round((saved / target) * 100)) : 0;
+    var [draftBgAlpha, setDraftBgAlpha] = useWidgetDraftState("goal_bg_alpha", numOr(widget3BgAlpha, 65));
+    var [draftBgColor, setDraftBgColor] = useWidgetDraftState("goal_bg_color", widget3BgColor || "#1E1E30");
+    var [draftAccentColor, setDraftAccentColor] = useWidgetDraftState("goal_accent_color", widget3AccentColor || "#EF7D00");
+    var [draftTextColor, setDraftTextColor] = useWidgetDraftState("goal_text_color", widget3TextColor || "#FFFFFF");
+    var [draftPercentColor, setDraftPercentColor] = useWidgetDraftState("goal_percent_color", widget3PercentColor || "#EF7D00");
+    var gColor = draftAccentColor;
     function save() {
       var rawAlpha = Number(draftBgAlpha);
-      var alpha = Math.max(
-        0,
-        Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65)
-      );
-      setWidget3BgColor(draftBgColor || "#1E1E30");
+      var alpha = Math.max(0, Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65));
+      setWidget3BgColor(String(draftBgColor || "#1E1E30"));
       setWidget3BgAlpha(alpha);
+      setWidget3AccentColor(draftAccentColor);
+      setWidget3TextColor(draftTextColor);
+      setWidget3PercentColor(draftPercentColor);
       saveWidgetSettingsToNative(true, {
         ...widgetSettingsPayload(),
         goalWidget: {
           ...widgetSettingsPayload().goalWidget,
-          bgColor: draftBgColor || "#1E1E30",
+          bgColor: String(draftBgColor || "#1E1E30"),
           bgAlpha: alpha,
           showPercent: !!widget3ShowPercent,
           showAmounts: !!widget3ShowAmounts,
-          accentColor: widget3AccentColor,
-          textColor: widget3TextColor,
-          percentColor: widget3PercentColor,
+          accentColor: draftAccentColor,
+          textColor: draftTextColor,
+          percentColor: draftPercentColor,
         },
       });
     }
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <WidgetIntroCard icon="🎯" title="Obiettivo">
-          {"Scegli il contenuto dal widget; qui personalizzi l’aspetto."}
-        </WidgetIntroCard>
-        <div
-          style={{
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 800, color: textC, marginBottom: 8 }}>
-            {L("Colore sfondo")}
-          </div>
-          <AppColorSelector value={draftBgColor} onChange={setDraftBgColor} compact={true} />
-        </div>
-        <div
-          style={{
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div
-            style={{
-              background: dark ? "#111827" : "#F8FAFC",
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 12,
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 24,
-                background: gColor,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 24,
-                color: "#fff",
-              }}
-            >
-              <FainanceIcon
-                value={selectedGoal ? selectedGoal.icon || "🎯" : "🎯"}
-                size={28}
-              />
+      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        <WidgetIntroCard icon="🎯" title="Obiettivo">{"Scegli il contenuto dal widget; qui personalizzi l’aspetto."}</WidgetIntroCard>
+        <div style={{ background:cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}>
+          <div style={{ background:dark?"#111827":"#F8FAFC", border:"1px solid "+borderC, borderRadius:14, padding:12, display:"flex", alignItems:"center", gap:12 }}>
+            <div style={{ width:48, height:48, borderRadius:24, background:gColor, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}><FainanceIcon value={selectedGoal ? selectedGoal.icon || "🎯" : "🎯"} size={28}/></div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div style={{fontSize:16,fontWeight:900,color:draftTextColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedGoal ? selectedGoal.name || "Obiettivo" : "Anteprima obiettivo"}</div>{widget3ShowPercent&&<div style={{fontSize:16,fontWeight:900,color:draftPercentColor}}>{pct}%</div>}</div>
+              <div style={{height:8,borderRadius:8,background:dark?"#273244":"#E5E7EB",overflow:"hidden",marginTop:8}}><div style={{width:pct+"%",height:"100%",background:gColor,borderRadius:8}}/></div>
+              {widget3ShowAmounts&&<div style={{fontSize:12,color:draftTextColor,marginTop:5,opacity:.82}}><span style={{color:draftPercentColor,fontWeight:800}}>{fmt(saved)}</span> / {fmt(target)}</div>}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 10,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 900,
-                    color: widget3TextColor,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {selectedGoal
-                    ? selectedGoal.name || "Obiettivo"
-                    : "Anteprima obiettivo"}
-                </div>
-                {widget3ShowPercent && (
-                  <div
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 900,
-                      color: widget3PercentColor,
-                    }}
-                  >
-                    {pct}%
-                  </div>
-                )}
-              </div>
-              <div
-                style={{
-                  height: 8,
-                  borderRadius: 8,
-                  background: dark ? "#273244" : "#E5E7EB",
-                  overflow: "hidden",
-                  marginTop: 8,
-                }}
-              >
-                <div
-                  style={{
-                    width: pct + "%",
-                    height: "100%",
-                    background: gColor,
-                    borderRadius: 8,
-                  }}
-                />
-              </div>
-              {widget3ShowAmounts && (
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: widget3TextColor,
-                    marginTop: 5,
-                    opacity: 0.82,
-                  }}
-                >
-                  <span style={{ color: widget3PercentColor, fontWeight: 800 }}>
-                    {fmt(saved)}
-                  </span>{" "}
-                  / {fmt(target)}
-                </div>
-              )}
-            </div>
-            <div style={{ fontSize: 18, color: subC }}>⚙</div>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 12,
-              padding: "12px 14px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: textC }}>
-                {L("Mostra percentuale")}
-              </div>
-              <div style={{ fontSize: 12, color: subC }}>
-                {L("Mostra la percentuale di avanzamento.")}
-              </div>
-            </div>
-            <Toggle
-              label=""
-              checked={!!widget3ShowPercent}
-              onChange={function () {
-                setWidget3ShowPercent(!widget3ShowPercent);
-              }}
-            />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: 12,
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 12,
-              padding: "12px 14px",
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: textC }}>
-                {L("Mostra importi")}
-              </div>
-              <div style={{ fontSize: 12, color: subC }}>
-                {L("Mostra importo raggiunto e target.")}
-              </div>
-            </div>
-            <Toggle
-              label=""
-              checked={!!widget3ShowAmounts}
-              onChange={function () {
-                setWidget3ShowAmounts(!widget3ShowAmounts);
-              }}
-            />
-          </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,background:cardBg,border:"1px solid "+borderC,borderRadius:12,padding:"12px 14px"}}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Mostra percentuale")}</div><div style={{fontSize:12,color:subC}}>{L("Mostra la percentuale di avanzamento.")}</div></div><Toggle label="" checked={!!widget3ShowPercent} onChange={function(){setWidget3ShowPercent(!widget3ShowPercent);}}/></div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,background:cardBg,border:"1px solid "+borderC,borderRadius:12,padding:"12px 14px"}}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Mostra importi")}</div><div style={{fontSize:12,color:subC}}>{L("Mostra importo raggiunto e target.")}</div></div><Toggle label="" checked={!!widget3ShowAmounts} onChange={function(){setWidget3ShowAmounts(!widget3ShowAmounts);}}/></div>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore barra/icona")}
-            </div>
-            <AppColorSelector
-              value={widget3AccentColor}
-              onChange={function (color) {
-                setWidget3AccentColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  goalWidget: {
-                    ...widgetSettingsPayload().goalWidget,
-                    accentColor: color,
-                    color: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore testo")}
-            </div>
-            <AppColorSelector
-              value={widget3TextColor}
-              onChange={function (color) {
-                setWidget3TextColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  goalWidget: {
-                    ...widgetSettingsPayload().goalWidget,
-                    textColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore percentuale")}
-            </div>
-            <AppColorSelector
-              value={widget3PercentColor}
-              onChange={function (color) {
-                setWidget3PercentColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  goalWidget: {
-                    ...widgetSettingsPayload().goalWidget,
-                    percentColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-        </div>
-        <div
-          style={{
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginBottom: 8,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: textC }}>
-                {L("Trasparenza sfondo widget")}
-              </div>
-              <div style={{ fontSize: 12, color: subC }}>
-                {L("100% = completamente trasparente. 0% = sfondo pieno.")}
-              </div>
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#7F77DD" }}>
-              {draftBgAlpha}%
-            </div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={draftBgAlpha}
-            onChange={function (e) {
-              setDraftBgAlpha(Number(e.target.value));
-            }}
-            style={{ width: "100%" }}
-          />
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={draftBgAlpha}
-            onChange={function (e) {
-              setDraftBgAlpha(
-                Math.max(0, Math.min(100, Number(e.target.value) || 0))
-              );
-            }}
-            style={{ ...sinp, width: 90, marginTop: 8 }}
-          />
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: textC }}>
-              {L("Aggiornamento automatico")}
-            </div>
-            <div style={{ fontSize: 12, color: subC }}>
-              {L("Aggiorna il widget quando cambia l’obiettivo.")}
-            </div>
-          </div>
-          <Toggle
-            label=""
-            checked={!!widget3AutoUpdate}
-            onChange={function () {
-              setWidget3AutoUpdate(!widget3AutoUpdate);
-            }}
-          />
-        </div>
-        <Btn
-          onClick={save}
-          bg="#7F77DD"
-          style={{ width: "100%", padding: 12, fontWeight: 800 }}
-        >
-          {L("Salva e aggiorna widget")}
-        </Btn>
+        <WidgetColorSection title="Colori" items={[
+          { key:"goal_bg", label:"Sfondo", value:draftBgColor, onChange:function(v){setDraftBgColor(v);} },
+          { key:"goal_bar", label:"Colore barra/icona", value:draftAccentColor, onChange:function(v){setDraftAccentColor(v);} },
+          { key:"goal_text", label:"Colore testo", value:draftTextColor, onChange:function(v){setDraftTextColor(v);} },
+          { key:"goal_pct", label:"Colore percentuale", value:draftPercentColor, onChange:function(v){setDraftPercentColor(v);} },
+        ]}/>
+        <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:8}}><div><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:"#7F77DD"}}>{draftBgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}}/></div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Aggiornamento automatico")}</div><div style={{fontSize:12,color:subC}}>{L("Aggiorna il widget quando cambia l’obiettivo.")}</div></div><Toggle label="" checked={!!widget3AutoUpdate} onChange={function(){setWidget3AutoUpdate(!widget3AutoUpdate);}}/></div>
+        <Btn onClick={save} bg="#7F77DD" style={{width:"100%",padding:12,fontWeight:800}}>{L("Salva e aggiorna widget")}</Btn>
       </div>
     );
   }
@@ -4532,297 +3939,41 @@ export function SettingsPanel() {
     onSave,
     showIntro,
   }) {
-    var [draftTextSize, setDraftTextSize] = useState(
-      Number(values.textSize) || 13
-    );
-    var [draftBgAlpha, setDraftBgAlpha] = useState(numOr(values.bgAlpha, 65));
-    var [draftBgColor, setDraftBgColor] = useState(values.bgColor || "#1E1E30");
-    useEffect(
-      function () {
-        setDraftBgAlpha(numOr(values.bgAlpha, 65));
-      },
-      [values.bgAlpha]
-    );
-    useEffect(
-      function () {
-        setDraftTextSize(Number(values.textSize) || 13);
-      },
-      [values.textSize]
-    );
-    useEffect(
-      function () {
-        setDraftBgColor(values.bgColor || "#1E1E30");
-      },
-      [values.bgColor]
-    );
+    var [draftTextSize, setDraftTextSize] = useWidgetDraftState(kind + "_text_size", Number(values.textSize) || 13);
+    var [draftBgAlpha, setDraftBgAlpha] = useWidgetDraftState(kind + "_bg_alpha", numOr(values.bgAlpha, 65));
+    var [draftBgColor, setDraftBgColor] = useWidgetDraftState(kind + "_bg_color", values.bgColor || "#1E1E30");
+    var [draftIconColor, setDraftIconColor] = useWidgetDraftState(kind + "_icon_color", values.iconColor || "#7F77DD");
+    var [draftTitleColor, setDraftTitleColor] = useWidgetDraftState(kind + "_title_color", values.titleColor || "#FFFFFF");
+    var [draftTextColor, setDraftTextColor] = useWidgetDraftState(kind + "_text_color", values.textColor || "#EDEDF7");
     function save() {
       var textSize = Math.max(10, Math.min(28, Number(draftTextSize) || 13));
       var rawAlpha = Number(draftBgAlpha);
-      var alpha = Math.max(
-        0,
-        Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65)
-      );
+      var alpha = Math.max(0, Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65));
       setters.setTextSize(textSize);
-      if (setters.setBgColor) setters.setBgColor(draftBgColor || "#1E1E30");
+      if (setters.setBgColor) setters.setBgColor(String(draftBgColor || "#1E1E30"));
       setters.setBgAlpha(alpha);
-      onSave({ textSize: textSize, bgColor: draftBgColor || "#1E1E30", bgAlpha: alpha });
+      setters.setIconColor(draftIconColor);
+      setters.setTitleColor(draftTitleColor);
+      setters.setTextColor(draftTextColor);
+      onSave({ textSize: textSize, bgColor: String(draftBgColor || "#1E1E30"), bgAlpha: alpha, iconColor: draftIconColor, titleColor: draftTitleColor, textColor: draftTextColor });
     }
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        {showIntro !== false && (
-          <WidgetIntroCard icon={icon} title={title}>
-            {description}
-          </WidgetIntroCard>
-        )}
-        <div
-          style={{
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 13,
-              fontWeight: 900,
-              color: textC,
-              marginBottom: 8,
-            }}
-          >
-            {L("Grandezza testo")}
-          </div>
-          <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>
-            {L("Dimensione del contenuto mostrato nel widget.")}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <input
-              type="range"
-              min="10"
-              max="28"
-              step="1"
-              value={draftTextSize}
-              onChange={function (e) {
-                setDraftTextSize(Number(e.target.value));
-              }}
-              style={{ flex: 1 }}
-            />
-            <input
-              type="number"
-              min="10"
-              max="28"
-              value={draftTextSize}
-              onChange={function (e) {
-                setDraftTextSize(
-                  Math.max(10, Math.min(28, Number(e.target.value) || 13))
-                );
-              }}
-              style={{ ...sinp, width: 74 }}
-            />
-          </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+        {showIntro !== false && <WidgetIntroCard icon={icon} title={title}>{description}</WidgetIntroCard>}
+        <div style={{ background:cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}>
+          <div style={{fontSize:13,fontWeight:900,color:textC,marginBottom:8}}>{L("Grandezza testo")}</div>
+          <div style={{fontSize:12,color:subC,marginBottom:8}}>{L("Dimensione del contenuto mostrato nel widget.")}</div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><input type="range" min="10" max="28" step="1" value={draftTextSize} onChange={function(e){setDraftTextSize(Number(e.target.value));}} style={{flex:1}}/><input type="number" min="10" max="28" value={draftTextSize} onChange={function(e){setDraftTextSize(Math.max(10,Math.min(28,Number(e.target.value)||13)));}} style={{...sinp,width:74}}/></div>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "repeat(4, 1fr)",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore sfondo")}
-            </div>
-            <AppColorSelector
-              value={draftBgColor}
-              onChange={function (color) {
-                setDraftBgColor(color);
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore icona")}
-            </div>
-            <AppColorSelector
-              value={values.iconColor}
-              onChange={function (color) {
-                setters.setIconColor(color);
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore titolo")}
-            </div>
-            <AppColorSelector
-              value={values.titleColor}
-              onChange={function (color) {
-                setters.setTitleColor(color);
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore testo")}
-            </div>
-            <AppColorSelector
-              value={values.textColor}
-              onChange={function (color) {
-                setters.setTextColor(color);
-              }}
-              compact={true}
-            />
-          </div>
-        </div>
-        <div
-          style={{
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              marginBottom: 8,
-            }}
-          >
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 900, color: textC }}>
-                {L("Trasparenza sfondo widget")}
-              </div>
-              <div style={{ fontSize: 12, color: subC }}>
-                {L("100% = completamente trasparente. 0% = sfondo pieno.")}
-              </div>
-            </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#7F77DD" }}>
-              {draftBgAlpha}%
-            </div>
-          </div>
-          <input
-            type="range"
-            min="0"
-            max="100"
-            step="1"
-            value={draftBgAlpha}
-            onChange={function (e) {
-              setDraftBgAlpha(Number(e.target.value));
-            }}
-            style={{ width: "100%" }}
-          />
-          <input
-            type="number"
-            min="0"
-            max="100"
-            value={draftBgAlpha}
-            onChange={function (e) {
-              setDraftBgAlpha(
-                Math.max(0, Math.min(100, Number(e.target.value) || 0))
-              );
-            }}
-            style={{ ...sinp, width: 90, marginTop: 8 }}
-          />
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-            background: cardBg,
-            border: "1px solid " + borderC,
-            borderRadius: 14,
-            padding: 14,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 800, color: textC }}>
-              {L("Aggiornamento automatico")}
-            </div>
-            <div style={{ fontSize: 12, color: subC }}>
-              {L(
-                "Aggiorna i widget già installati quando cambi contenuti o impostazioni."
-              )}
-            </div>
-          </div>
-          <Toggle
-            label=""
-            checked={!!values.autoUpdate}
-            onChange={function () {
-              setters.setAutoUpdate(!values.autoUpdate);
-            }}
-          />
-        </div>
-        <Btn
-          onClick={save}
-          bg="#7F77DD"
-          style={{ width: "100%", padding: 12, fontWeight: 800 }}
-        >
-          {L("Salva e aggiorna widget")}
-        </Btn>
+        <WidgetColorSection title="Colori" items={[
+          { key:kind+"_bg", label:"Sfondo", value:draftBgColor, onChange:function(v){setDraftBgColor(v);} },
+          { key:kind+"_icon", label:"Colore icona", value:draftIconColor, onChange:function(v){setDraftIconColor(v);} },
+          { key:kind+"_title", label:"Colore titolo", value:draftTitleColor, onChange:function(v){setDraftTitleColor(v);} },
+          { key:kind+"_text", label:"Colore testo", value:draftTextColor, onChange:function(v){setDraftTextColor(v);} },
+        ]}/>
+        <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:8}}><div><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:"#7F77DD"}}>{draftBgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}}/></div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Aggiornamento automatico")}</div><div style={{fontSize:12,color:subC}}>{L("Aggiorna i widget già installati quando cambi contenuti o impostazioni.")}</div></div><Toggle label="" checked={!!values.autoUpdate} onChange={function(){setters.setAutoUpdate(!values.autoUpdate);}}/></div>
+        <Btn onClick={save} bg="#7F77DD" style={{width:"100%",padding:12,fontWeight:800}}>{L("Salva e aggiorna widget")}</Btn>
       </div>
     );
   }
@@ -4836,9 +3987,9 @@ export function SettingsPanel() {
           textSize: extra.textSize,
           bgColor: extra.bgColor || widgetShoppingListBgColor || "#1E1E30",
           bgAlpha: extra.bgAlpha,
-          iconColor: widgetShoppingListIconColor,
-          titleColor: widgetShoppingListTitleColor,
-          textColor: widgetShoppingListTextColor,
+          iconColor: extra.iconColor,
+          titleColor: extra.titleColor,
+          textColor: extra.textColor,
           autoUpdate: !!widgetShoppingListAutoUpdate,
         },
       });
@@ -4892,9 +4043,9 @@ export function SettingsPanel() {
           textSize: extra.textSize,
           bgColor: extra.bgColor || widgetFidelityBgColor || "#1E1E30",
           bgAlpha: extra.bgAlpha,
-          iconColor: widgetFidelityIconColor,
-          titleColor: widgetFidelityTitleColor,
-          textColor: widgetFidelityTextColor,
+          iconColor: extra.iconColor,
+          titleColor: extra.titleColor,
+          textColor: extra.textColor,
           autoUpdate: !!widgetFidelityAutoUpdate,
         },
       });
@@ -4939,9 +4090,9 @@ export function SettingsPanel() {
           ...widgetSettingsPayload().debtCreditsWidget,
           textSize: extra.textSize,
           bgAlpha: extra.bgAlpha,
-          iconColor: widgetDebtCreditsIconColor,
-          titleColor: widgetDebtCreditsTitleColor,
-          textColor: widgetDebtCreditsTextColor,
+          iconColor: extra.iconColor,
+          titleColor: extra.titleColor,
+          textColor: extra.textColor,
           autoUpdate: !!widgetDebtCreditsAutoUpdate,
         },
       });
@@ -4986,9 +4137,12 @@ export function SettingsPanel() {
       }) ||
       (shareProjects || [])[0] ||
       null;
-    var [draftBgAlpha, setDraftBgAlpha] = useState(
-      numOr(widgetShareBgAlpha, 65)
-    );
+    var [draftBgAlpha, setDraftBgAlpha] = useWidgetDraftState("share_bg_alpha", numOr(widgetShareBgAlpha, 65));
+    var [draftBgColor, setDraftBgColor] = useWidgetDraftState("share_bg_color", widgetShareBgColor || "#1E1E30");
+    var [draftAccentColor, setDraftAccentColor] = useWidgetDraftState("share_accent_color", widgetShareAccentColor || "#7F77DD");
+    var [draftActivityColor, setDraftActivityColor] = useWidgetDraftState("share_activity_color", widgetShareActivityColor || "#378ADD");
+    var [draftTitleColor, setDraftTitleColor] = useWidgetDraftState("share_title_color", widgetShareTitleColor || "#FFFFFF");
+    var [draftBodyColor, setDraftBodyColor] = useWidgetDraftState("share_body_color", widgetShareBodyColor || "#D8D6F2");
     function projectBalance(project) {
       if (!project)
         return { net: 0, owed: 0, owe: 0, last: "Nessuna attività recente" };
@@ -5058,16 +4212,21 @@ export function SettingsPanel() {
         Math.min(100, Number.isFinite(rawAlpha) ? rawAlpha : 65)
       );
       setWidgetShareBgAlpha(alpha);
+      setWidgetShareBgColor(draftBgColor);
+      setWidgetShareAccentColor(draftAccentColor);
+      setWidgetShareActivityColor(draftActivityColor);
+      setWidgetShareTitleColor(draftTitleColor);
+      setWidgetShareBodyColor(draftBodyColor);
       saveWidgetSettingsToNative(true, {
         ...widgetSettingsPayload(),
         shareWidget: {
           ...widgetSettingsPayload().shareWidget,
-          bgColor: widgetShareBgColor,
+          bgColor: draftBgColor,
           bgAlpha: alpha,
-          accentColor: widgetShareAccentColor,
-          activityColor: widgetShareActivityColor,
-          titleColor: widgetShareTitleColor,
-          bodyColor: widgetShareBodyColor,
+          accentColor: draftAccentColor,
+          activityColor: draftActivityColor,
+          titleColor: draftTitleColor,
+          bodyColor: draftBodyColor,
           buttonStyle: widgetButtonStyle,
           projectId: selected ? String(selected.id) : "",
           projectName: selected
@@ -5092,7 +4251,7 @@ export function SettingsPanel() {
         >
           <div
             style={{
-              background: widgetShareBgColor,
+              background: draftBgColor,
               borderRadius: 14,
               padding: 12,
               border: "1px solid rgba(255,255,255,.18)",
@@ -5112,7 +4271,7 @@ export function SettingsPanel() {
                   style={{
                     fontSize: 14,
                     fontWeight: 900,
-                    color: widgetShareTitleColor,
+                    color: draftTitleColor,
                   }}
                 >
                   Share
@@ -5120,7 +4279,7 @@ export function SettingsPanel() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: widgetShareBodyColor,
+                    color: draftBodyColor,
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -5147,14 +4306,14 @@ export function SettingsPanel() {
                   textAlign: "center",
                 }}
               >
-                <div style={{ fontSize: 10, color: widgetShareBodyColor }}>
+                <div style={{ fontSize: 10, color: draftBodyColor }}>
                   {L("Saldo")}
                 </div>
                 <div
                   style={{
                     fontSize: 17,
                     fontWeight: 900,
-                    color: widgetShareTitleColor,
+                    color: draftTitleColor,
                   }}
                 >
                   {fmt(preview.net)}
@@ -5163,19 +4322,19 @@ export function SettingsPanel() {
               <div
                 style={{
                   fontSize: 11,
-                  color: widgetShareBodyColor,
+                  color: draftBodyColor,
                   lineHeight: 1.8,
                 }}
               >
                 <div>
                   {L("Ti devono")}:{" "}
-                  <strong style={{ color: widgetShareTitleColor }}>
+                  <strong style={{ color: draftTitleColor }}>
                     {fmt(preview.owed)}
                   </strong>
                 </div>
                 <div>
                   {L("Devi")}:{" "}
-                  <strong style={{ color: widgetShareTitleColor }}>
+                  <strong style={{ color: draftTitleColor }}>
                     {fmt(preview.owe)}
                   </strong>
                 </div>
@@ -5200,7 +4359,7 @@ export function SettingsPanel() {
             >
               <div
                 style={{
-                  background: widgetShareAccentColor,
+                  background: draftAccentColor,
                   color: "#fff",
                   borderRadius: shareButtonRadius(),
                   padding: "9px 5px",
@@ -5213,7 +4372,7 @@ export function SettingsPanel() {
               </div>
               <div
                 style={{
-                  background: widgetShareActivityColor,
+                  background: draftActivityColor,
                   color: "#fff",
                   borderRadius: shareButtonRadius(),
                   padding: "9px 5px",
@@ -5253,146 +4412,13 @@ export function SettingsPanel() {
             </div>
           </div>
         </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr",
-            gap: 10,
-          }}
-        >
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Sfondo")}
-            </div>
-            <AppColorSelector
-              value={widgetShareBgColor}
-              onChange={function (color) {
-                setWidgetShareBgColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  shareWidget: {
-                    ...widgetSettingsPayload().shareWidget,
-                    bgColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore Uscita")}
-            </div>
-            <AppColorSelector
-              value={widgetShareAccentColor}
-              onChange={function (color) {
-                setWidgetShareAccentColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  shareWidget: {
-                    ...widgetSettingsPayload().shareWidget,
-                    accentColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore Entrata")}
-            </div>
-            <AppColorSelector
-              value={widgetShareActivityColor}
-              onChange={function (color) {
-                setWidgetShareActivityColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  shareWidget: {
-                    ...widgetSettingsPayload().shareWidget,
-                    activityColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-          <div
-            style={{
-              background: cardBg,
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 14,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 800,
-                color: textC,
-                marginBottom: 8,
-              }}
-            >
-              {L("Colore titolo")}
-            </div>
-            <AppColorSelector
-              value={widgetShareTitleColor}
-              onChange={function (color) {
-                setWidgetShareTitleColor(color);
-                saveWidgetSettingsToNative(false, {
-                  ...widgetSettingsPayload(),
-                  shareWidget: {
-                    ...widgetSettingsPayload().shareWidget,
-                    titleColor: color,
-                  },
-                });
-              }}
-              compact={true}
-            />
-          </div>
-        </div>
+        <WidgetColorSection title="Colori" items={[
+          { key:"share_bg", label:"Sfondo", value:draftBgColor, onChange:function(v){setDraftBgColor(v);} },
+          { key:"share_expense", label:"Colore Uscita", value:draftAccentColor, onChange:function(v){setDraftAccentColor(v);} },
+          { key:"share_income", label:"Colore Entrata", value:draftActivityColor, onChange:function(v){setDraftActivityColor(v);} },
+          { key:"share_title", label:"Colore titolo", value:draftTitleColor, onChange:function(v){setDraftTitleColor(v);} },
+          { key:"share_text", label:"Colore testo", value:draftBodyColor, onChange:function(v){setDraftBodyColor(v);} },
+        ]} />
         <div
           style={{
             background: cardBg,
@@ -11281,7 +10307,7 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
             },
             {
               id: "appearance_widget",
-              icon: "🧩",
+              icon: "🧱",
               label: "Widget",
               desc: "Configurazione separata del widget Android",
             },
@@ -12116,6 +11142,27 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
         <WidgetQuickAddSettingsPanel />
       </div>
     );
+  if (settingsPage === "appearance_widget_calculator")
+    return (
+      <div>
+        <PageHeader title="Calcolatrice" />
+        <WidgetToolAppearanceSettingsPanel key="calculator" kind="calculator" />
+      </div>
+    );
+  if (settingsPage === "appearance_widget_converter")
+    return (
+      <div>
+        <PageHeader title="Convertitore valuta" />
+        <WidgetToolAppearanceSettingsPanel key="converter" kind="converter" />
+      </div>
+    );
+  if (settingsPage === "appearance_widget_ai")
+    return (
+      <div>
+        <PageHeader title="Agente AI" />
+        <WidgetToolAppearanceSettingsPanel key="ai" kind="ai" />
+      </div>
+    );
   if (settingsPage === "appearance_widget_note") {
     if (!safeWidgetAllowed("note"))
       return (
@@ -12925,6 +11972,7 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
     });
   }
   function showBackupImportError(err) {
+    finishAnalyticsFlow("backup_import", "failed", { reason: "validation" });
     if (String((err && err.message) || err).startsWith('FINANCE_BACKUP_')) {
       setToast({ text: financeMessage(lang, 'conflict'), type: 'error', icon: '🚫', color: '#E24B4A' });
       return;
@@ -12960,6 +12008,7 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
     return value;
   }
   async function stageBackupJsonText(text) {
+    startAnalyticsFlow("backup_import", { method: "backup" });
     var cleanText = String(text || "")
       .replace(/^\uFEFF/, "")
       .replace(/\u0000/g, "")
@@ -12977,6 +12026,7 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
   async function handleBackupJsonFile(e) {
     var f = e.target.files && e.target.files[0];
     if (!f) return;
+    startAnalyticsFlow("backup_import", { method: "backup" });
     var input = e.target;
     setBackupImportBusy(true);
     try {
@@ -12995,10 +12045,11 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
   }
   async function handleNativeBackupJsonFile() {
     if (backupImportBusy) return;
+    startAnalyticsFlow("backup_import", { method: "backup" });
     setBackupImportBusy(true);
     try {
       var picked = await FainanceFileNativeBackup.pickJson();
-      if (!picked || picked.cancelled) return;
+      if (!picked || picked.cancelled) { finishAnalyticsFlow("backup_import", "cancelled", { reason: "user_cancel" }); return; }
       if (!picked.dataBase64) throw new Error("BACKUP_NATIVE_DATA_MISSING");
       await stageBackupJsonText(decodeNativeBackupBase64(picked.dataBase64));
     } catch (err) {
@@ -13011,7 +12062,9 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
     if (!pendingBackupImport || !pendingBackupImport.data) return;
     var data = pendingBackupImport.data;
     try {
+      startAnalyticsFlow("backup_import", { method: "backup" });
       applyBackupData(data, mode === "merge" ? "merge" : "replace");
+      finishAnalyticsFlow("backup_import", "completed", { operation: mode === "merge" ? "merge" : "replace" });
       setPendingBackupImport(null);
     } catch (error) {
       showBackupImportError(error);
@@ -13837,7 +12890,7 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
                 >
                   <div style={{ position: "absolute", right: 12, top: 12 }}>
                     <PopupCloseButton
-                      onClick={function () { setPendingBackupImport(null); }}
+                      onClick={function () { finishAnalyticsFlow("backup_import", "cancelled", { reason: "user_cancel" }); setPendingBackupImport(null); }}
                       dark={dark}
                       label={L("Chiudi")}
                     />
@@ -14861,6 +13914,15 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
                     badge: "Apri",
                   },
                   {
+                    icon: "▶️",
+                    label: "Tutorial YouTube",
+                    desc: "Guarda i tutorial ufficiali di fAInance",
+                    action: function () {
+                      openExternal("https://www.youtube.com/@fAInanceApp");
+                    },
+                    badge: "Apri",
+                  },
+                  {
                     icon: "🌐",
                     label: "Sito web ufficiale",
                     desc: "fainanceapp.it",
@@ -14949,37 +14011,6 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
               <ContactForm currentUser={currentUser} />
             </div>
           )}
-          <div
-            style={{
-              background: dark ? "#252535" : "#f5f5f5",
-              borderRadius: 12,
-              padding: "12px 16px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <span style={{ fontSize: 12, color: subC }}>
-              fAInance v
-              {String(installedAppInfo.version || FAINANCE_CURRENT_VERSION)}
-            </span>
-            <span
-              style={{
-                minHeight: 22,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                lineHeight: 1,
-                fontSize: 11,
-                background: "#f0f0f0",
-                color: "#888",
-                borderRadius: 20,
-                padding: "0 10px",
-              }}
-            >
-              {planLabel(currentPlan, lang)}
-            </span>
-          </div>
         </div>
       </div>
     );
@@ -15046,18 +14077,6 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
     var APP_VERSION = String(
       installedAppInfo.version || FAINANCE_CURRENT_VERSION
     );
-    var APP_VERSION_CODE =
-      Number(installedAppInfo.code || FAINANCE_CURRENT_VERSION_CODE) ||
-      FAINANCE_CURRENT_VERSION_CODE;
-    var APP_PLATFORM = String(
-      installedAppInfo.platform || appUpdatePlatform() || "web"
-    );
-    var APP_PLATFORM_LABEL =
-      APP_PLATFORM === "android"
-        ? "Android"
-        : APP_PLATFORM === "ios"
-        ? "iOS"
-        : "Web";
     var updateStatus = appUpdateManualStatus;
     var setUpdateStatus = setAppUpdateManualStatus;
     async function checkForUpdates() {
@@ -15566,55 +14585,6 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
                 ›
               </span>
             </button>
-          </div>
-
-          {/* Build info */}
-          <div
-            style={{
-              background: cardBg,
-              borderRadius: 14,
-              border: "1px solid " + borderC,
-              padding: 16,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 12,
-                color: subC,
-                marginBottom: 8,
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: 1,
-              }}
-            >
-              Informazioni tecniche
-            </div>
-            {[
-              ["Versione", APP_VERSION],
-              ["Build", String(APP_VERSION_CODE)],
-              ["Piattaforma", APP_PLATFORM_LABEL],
-              ["Storage", "localStorage"],
-            ].map(function (row) {
-              return (
-                <div
-                  key={row[0]}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    padding: "7px 0",
-                    borderBottom: "1px solid " + borderC,
-                  }}
-                >
-                  <span style={{ fontSize: 13, color: subC }}>{L(row[0])}</span>
-                  <span
-                    data-no-translate="true"
-                    style={{ fontSize: 13, color: textC, fontWeight: 500 }}
-                  >
-                    {row[1]}
-                  </span>
-                </div>
-              );
-            })}
           </div>
           <div
             style={{

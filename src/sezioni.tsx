@@ -1,3 +1,5 @@
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import { assistantUsesDefaultPayment } from './finance/assistantRuleDefaults';
 import { evaluateAutomaticRules } from './finance/automaticRules';
 import { SavingsHomeClosing } from './sections/SavingsClosurePanel';
@@ -6871,6 +6873,7 @@ export function HomePanel() {
 export function SpesePanel() {
   // ── Destructure completo dal context ─────────────────────────────────────
   var _c: any = useApp();
+  useAnalyticsFlow(_c.speseSubTab === "add", "movement", _c.addSubTab === "bulk" ? "bulk" : _c.addSubTab === "receipt" ? "receipt" : "manual");
   var {
     lang,
     cats,
@@ -11344,9 +11347,11 @@ export function ConsulenteAIPanel() {
         return;
       }
       function callExternalAI() {
+        startAnalyticsFlow("ai_request", { method: "advice" });
         setAiLoading(true);
         callFinanceAgent(q, preparedRequest)
           .then(function (ans) {
+            finishAnalyticsFlow("ai_request", "completed");
             setAiChat(function (p) {
               return [
                 ...p,
@@ -11355,6 +11360,7 @@ export function ConsulenteAIPanel() {
             });
           })
           .catch(function (err) {
+            finishAnalyticsFlow("ai_request", "failed", { reason: "service" });
             var rawErr =
               err && err.message ? err.message : "errore sconosciuto";
             var local = botAnswer(q);
@@ -14423,14 +14429,15 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     if(type==="response.output_audio_transcript.done"){clearVoiceNotice();var at=String(event.transcript||realtimeAssistantDraftRef.current||"").trim();realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");if(at){lastRealtimeAssistantTranscriptRef.current=at;appendMessage("assistant",at);}return;}
     if(type==="output_audio_buffer.started"){setSpeaking(true);setBusy(false);return;}
     if(type==="output_audio_buffer.stopped"||type==="output_audio_buffer.cleared"){setSpeaking(false);setBusy(false);return;}
-    if(type==="response.created"){clearVoiceNotice();setBusy(true);return;}
+    if(type==="response.created"){startAnalyticsFlow("ai_request", { method: "realtime" });clearVoiceNotice();setBusy(true);return;}
     if(type==="response.function_call_arguments.done"){handleRealtimeFunctionCall(event);return;}
-    if(type==="response.done"){setBusy(false);clearVoiceNotice();return;}
-    if(type==="error"){setBusy(false);var realtimeMessage=realtimeServerFailure(event.error||{});if(realtimeMessage)showTemporaryVoiceNotice(realtimeMessage,/^Non ho capito bene/i.test(realtimeMessage)?4200:6200);return;}
+    if(type==="response.done"){finishAnalyticsFlow("ai_request", event.response && event.response.status === "failed" ? "failed" : event.response && event.response.status === "cancelled" ? "cancelled" : "completed");setBusy(false);clearVoiceNotice();return;}
+    if(type==="error"){finishAnalyticsFlow("ai_request", "failed", { reason: "service" });setBusy(false);var realtimeMessage=realtimeServerFailure(event.error||{});if(realtimeMessage)showTemporaryVoiceNotice(realtimeMessage,/^Non ho capito bene/i.test(realtimeMessage)?4200:6200);return;}
   }
   function realtimePermissionDeniedMessage(){return assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"permissionDenied");}
   async function ensureRealtimeMicrophonePermission(){if(!nativePlatform())return true;var mod:any=await import("@capgo/capacitor-speech-recognition");var speech:any=mod.SpeechRecognition||mod.default||mod;if(!speech)throw new Error(realtimePermissionDeniedMessage());var permission:any=speech.checkPermissions?await speech.checkPermissions():{};function granted(p:any){var speechState=String((p&&p.speechRecognition)||"").toLowerCase(),micState=String((p&&p.microphone)||"").toLowerCase();if(nativePlatformName()==="ios")return micState==="granted"||(micState===""&&speechState==="granted");return micState==="granted"||speechState==="granted";}if(!granted(permission)&&speech.requestPermissions)permission=await speech.requestPermissions();if(!granted(permission))throw new Error(realtimePermissionDeniedMessage());return true;}
   function disconnectRealtime(nextStatus?:string){
+    finishAnalyticsFlow("ai_request", "abandoned", { reason: "navigation" });
     setNativeAssistantAudio(false);
     try{if(realtimeConnectionAbortRef.current)realtimeConnectionAbortRef.current.abort();}catch(e){}
     realtimeConnectionAbortRef.current=null;
@@ -15033,6 +15040,22 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   }
   function addShoppingRecords(specs,listId){var items=(specs||[]).filter(function(x){return String(x.name||"").trim();});if(!items.length)throw new Error("Nessun prodotto valido.");var activeCount=(shoppingItems||[]).filter(function(x){return !x.archived&&String(x.listId||"main")===String(listId);}).length;var lim=PLAN_LIMITS&&PLAN_LIMITS[currentPlan]?PLAN_LIMITS[currentPlan].shoppingListItems:Infinity;if(lim!==Infinity&&activeCount+items.length>Number(lim))throw new Error(upgradeMessage?upgradeMessage("shoppingListItems"):"Limite della lista della spesa raggiunto.");setShoppingItems(function(source){var next=Array.isArray(source)?source.slice():[],added:any[]=[];items.forEach(function(spec,idx){var name=String(spec.name||"").trim(),area=resolveArea(spec.area),catalog=next.find(function(x){return x.archived&&normalized(x.name)===normalized(name)&&normalized(x.area)===normalized(area);}),catalogId=catalog?String(catalog.productId||catalog.id):("prod_"+Date.now()+"_"+idx+"_"+Math.floor(Math.random()*9999)),unit=resolveShoppingUnit(spec.unit,catalog&&catalog.unit);if(!catalog)next.push({id:catalogId,productId:catalogId,name:name,area:area,note:spec.note||"",qty:String(spec.quantity||"1"),unit:unit,bought:false,archived:true,listId:"",order:Date.now()+idx,createdAt:new Date().toISOString(),catalogOnly:true,usageCount:1});added.push({id:"shop_"+Date.now()+"_"+idx+"_"+Math.floor(Math.random()*9999),productId:catalogId,name:name,area:area,note:spec.note||"",qty:String(spec.quantity||"1"),unit:unit,bought:false,archived:false,listId:String(listId||"main"),order:Date.now()+idx,createdAt:new Date().toISOString(),catalogOnly:false});});return added.concat(next);});}
   function executeAction(a){
+    try {
+      var result = executeActionUntracked(a);
+      // Movement saves can wait for a rewarded action; their actual completion
+      // is recorded by addExpenses/addIncomes, not by this dispatch wrapper.
+      trackAnalyticsEvent("fainance_ai_action", { action: a && a.action, result: a && (a.action === "create_expense" || a.action === "create_income") ? "requested" : "completed" });
+      if (a && a.action === "create_goal") {
+        startAnalyticsFlow("goal", { method: "assistant", operation: "create" });
+        finishAnalyticsFlow("goal", "completed");
+      }
+      return result;
+    } catch (error) {
+      trackAnalyticsEvent("fainance_ai_action", { action: a && a.action, result: "failed" });
+      throw error;
+    }
+  }
+  function executeActionUntracked(a){
     var shareSignal=[a&&a.summary,a&&a.description,a&&a.projectName].join(" ").toLowerCase();if(a&&a.action==="create_expense"&&/(spesa condivisa|spesa share|share expense|shared expense|split expense|divid|nel progetto|progetto share)/i.test(shareSignal))return executeAction({...a,action:"create_share_expense"});
     if(a.action==="create_expense"){var ok=addExpenses([assistantExpenseDraft(a)],"assistant");if(ok===false)throw new Error("Non è stato possibile aggiungere l’uscita.");return actionSummary(a);}
     if(a.action==="create_income"){var amount2=Number(a.amount)||0;if(amount2<=0)throw new Error("Importo non valido.");var it=findNamed(incomeTypes,a.incomeTypeName,defaultIncomeType);if(!it)throw new Error("Tipo di entrata non trovato o ambiguo.");var ok2=addIncomes([{id:Date.now()+Math.random(),amount:amount2,type:it.id,_ruleDefaultFields:[!a.incomeTypeName?"type":null,!a.description?"desc":null].filter(Boolean),desc:a.description||it.name,date:validISODate(a.date,false),rateizzato:!!a.rateizzato,rate:Math.max(1,Number(a.rate)||1)}],"assistant");if(ok2===false)throw new Error("Non è stato possibile aggiungere l’entrata.");return actionSummary(a);}
@@ -15095,13 +15118,14 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   function confirmPending(userText){if(String(userText||"").trim())appendMessage("user",userText);try{pendingActions.forEach(function(a){executeAction(a);});updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");appendMessage("assistant",msg);speak(msg,true);}catch(e){var msg2=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error");appendMessage("assistant",msg2);speak(msg2,true);}}
   function cancelPending(userText){appendMessage("user",userText||V.cancel);updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"cancelled");appendMessage("assistant",msg);speak(msg,true);}
   async function callAssistant(q,providedResolution?:any){
+    startAnalyticsFlow("ai_request", { method: "assistant" });
     lastVoiceUserRequestRef.current=String(q||"");
     setBusy(true);setAiLoading(true);setVoiceError("");
     try{
       var token="";if(fbAuth.currentUser)token=await fbAuth.currentUser.getIdToken();
       var headers:any={"Content-Type":"application/json"};if(token)headers.Authorization="Bearer "+token;
       var ctrl=new AbortController();assistantRequestAbortRef.current=ctrl;var timer=setTimeout(function(){ctrl.abort();},70000);
-      var assistantRequest=buildAssistantRequestPayload({question:q,languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(),chatHistory:(aiChat||[]).filter(function(m){return m&&(m.role==="user"||m.role==="assistant");}).slice(-16).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
+      var assistantRequest=buildAssistantRequestPayload({question:q,languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(),chatHistory:(aiChat||[]).filter(function(m){return m&&(m.role==="user"||m.role==="assistant");}).slice(-16).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
       var attachment=activeAttachmentRef.current;
       if(attachment){
         if(attachment.isImage){requestPayload.imageDataUrl=attachment.dataUrl;requestPayload.imageName=attachment.name||"allegato.jpg";}
@@ -15114,11 +15138,13 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       var answer=String((data&&data.answer)||"").trim()||assistantRuntimeText(assistantLang,"noAnswer");
       if(assistantAnswerNeedsTranslation(answer,assistantLang)){try{var translateResponse=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,body:JSON.stringify(buildAssistantTranslationPayload(answer,assistantLang))});var translateData:any=await translateResponse.json();var corrected=String((translateData&&translateData.answer)||"").trim();if(corrected)answer=corrected;}catch(e){}}answer=compactAssistantAnswer(answer,assistantLang,1400);
       var actions=realtimeActionsFrom(data&&data.actions).filter(function(a){return a&&a.action&&a.action!=="none";}),openActions=actions.filter(function(a){return a.action==="open_section";}),writeActions=actions.filter(function(a){return a.action!=="open_section";});
+      finishAnalyticsFlow("ai_request", "completed");
       if(writeActions.length){updatePendingActions(writeActions);return;}
       appendMessage("assistant",answer);
       if(openActions.length){setToast({text:answer,type:"success",icon:"✨"});openSection(openActions[0]);return;}
       speak(answer,true);
     }catch(e){
+      finishAnalyticsFlow("ai_request", "failed", { reason: "service" });
       if(e&&e.name==="AbortError"&&!mountedRef.current)return;
       var msg=realtimeFailureMessage(e,"assistant",Number((e&&e.httpStatus)||0));setVoiceError(msg);appendMessage("assistant",msg);
     }finally{if(mountedRef.current){setBusy(false);setAiLoading(false);}}

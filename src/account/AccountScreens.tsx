@@ -1,3 +1,5 @@
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from '../analytics/useAnalyticsFlow';
 import { useState, useEffect, useMemo } from "react";
 import { useApp, fbAuth, doc, setDoc, appBanner, fmtDate } from "../core";
 import { translateFainanceText } from "../traduzioni";
@@ -112,6 +114,8 @@ function fainanceV24VerificationNoticeIsError(value: any) {
 
 export function LoginScreen({ onLogin }) {
   var [mode, setMode] = useState("login");
+  useAnalyticsFlow(mode === "register", "registration", "email");
+  useEffect(() => { trackAnalyticsSection(mode === "register" ? "register" : "login"); }, [mode]);
   var [email, setEmail] = useState("");
   var [password, setPassword] = useState("");
   var [firstName, setFirstName] = useState("");
@@ -212,6 +216,7 @@ export function LoginScreen({ onLogin }) {
   };
 
   async function doLogin() {
+    startAnalyticsFlow("login", { method: "email" });
     setError("");
     setInfoText("");
     setVerificationEmail("");
@@ -229,6 +234,7 @@ export function LoginScreen({ onLogin }) {
           ? await accountRequiresEmailVerification(authUser)
           : false;
       if (requiresVerification) {
+        finishAnalyticsFlow("login", "failed", { reason: "verification_required" });
         writeTechnicalLog({
           category: "AUTH_FAILURE",
           operation: "email-password-login",
@@ -264,6 +270,7 @@ export function LoginScreen({ onLogin }) {
             String(email || "").indexOf("@") >= 0 ? "email" : "username",
         },
       }).catch(function () {});
+      finishAnalyticsFlow("login", "completed");
       onLogin(
         {
           id: authUser.uid,
@@ -273,6 +280,7 @@ export function LoginScreen({ onLogin }) {
         authUser
       );
     } catch (err: any) {
+      finishAnalyticsFlow("login", "failed", { reason: "service" });
       queuePreAuthTechnicalLog({
         category: "AUTH_FAILURE",
         operation: "email-or-username-login",
@@ -295,6 +303,7 @@ export function LoginScreen({ onLogin }) {
   }
 
   async function doRegister() {
+    startAnalyticsFlow("registration", { method: "email" });
     // FAINANCE_V71_POST_AUTH_RECOVERY
     var fainanceV71CreatedAuthUser:any=null;
     var fainanceV71VerificationSent=false;
@@ -313,13 +322,13 @@ export function LoginScreen({ onLogin }) {
     var cleanName = [cleanFirstName, cleanLastName].join(" ");
     var cleanEmail = String(email || "").trim().toLowerCase();
     var cleanUsername = normalizeUsername(username);
-    if (!cleanFirstName) { setError(L("Inserisci il tuo nome.")); return; }
-    if (!cleanLastName) { setError(L("Inserisci il tuo cognome.")); return; }
-    if (!cleanEmail.includes("@")) { setError(L("Email non valida.")); return; }
+    if (!cleanFirstName) { setError(L("Inserisci il tuo nome.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (!cleanLastName) { setError(L("Inserisci il tuo cognome.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (!cleanEmail.includes("@")) { setError(L("Email non valida.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
     var usernameValidation = cleanUsername ? validateUsername(cleanUsername) : "USERNAME_REQUIRED";
-    if (usernameValidation) { setError(usernameErrorText(usernameValidation)); return; }
-    if (password.length < 6) { setError(L("Password: minimo 6 caratteri.")); return; }
-    if (password !== confirmPwd) { setError(L("Le password non coincidono.")); return; }
+    if (usernameValidation) { setError(usernameErrorText(usernameValidation)); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (password.length < 6) { setError(L("Password: minimo 6 caratteri.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (password !== confirmPwd) { setError(L("Le password non coincidono.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
     try { sessionStorage.setItem("fainance_registration_pending_email_v1", cleanEmail); } catch (_pendingRegistrationError) {}
     setLoading(true);
     try {
@@ -328,6 +337,8 @@ export function LoginScreen({ onLogin }) {
       try {
         authUser = await registerEmailAccount(cleanEmail, password);
       fainanceV71CreatedAuthUser=authUser;
+      trackAnalyticsEvent('fainance_account_created', { method: 'email' });
+      finishAnalyticsFlow("registration", "completed");
       try{
         await sendAccountEmailVerification(authUser,loginLang());
         fainanceV71VerificationSent=true;
@@ -350,6 +361,7 @@ export function LoginScreen({ onLogin }) {
           try {
             authUser = await signInWithEmailAccount(cleanEmail, password);
             repairingExisting = true;
+            finishAnalyticsFlow("registration", "cancelled", { reason: "validation" });
           } catch (_repairLoginError) {
             throw createErr;
           }
@@ -406,6 +418,7 @@ export function LoginScreen({ onLogin }) {
         setInfoText(L("Account creato. Ti abbiamo inviato un link di verifica via email prima del primo accesso."));
       }
     } catch (err: any) {
+      finishAnalyticsFlow("registration", "failed", { reason: "service" });
       try { sessionStorage.removeItem("fainance_registration_pending_email_v1"); } catch (_pendingRegistrationError) {}
       if (err && err.message && String(err.message).indexOf("USERNAME_") === 0) setError(usernameErrorText(String(err.message)));
       else if (err && (err.message === "REGISTRATION_ACCOUNT_EXISTS" || err.code === "auth/email-already-in-use")) setError(L("Email già registrata. Accedi con l’account esistente."));
@@ -461,6 +474,7 @@ export function LoginScreen({ onLogin }) {
   }
 
   async function doGoogle() {
+    startAnalyticsFlow("login", { method: "google" });
     setError("");
     setInfoText("");
     setLoading(true);
@@ -471,8 +485,10 @@ export function LoginScreen({ onLogin }) {
         category: "AUTH_SUCCESS",
         operation: "google-login",
       }).catch(function () {});
+      finishAnalyticsFlow("login", "completed");
       onLogin(fainanceBasicUserPayload(user), user);
     } catch (err: any) {
+      finishAnalyticsFlow("login", "failed", { reason: "service" });
       queuePreAuthTechnicalLog({
         category: "AUTH_FAILURE",
         operation: "google-login",
@@ -485,6 +501,7 @@ export function LoginScreen({ onLogin }) {
   }
 
   async function doApple() {
+    startAnalyticsFlow("login", { method: "apple" });
     setError("");
     setInfoText("");
     setLoading(true);
@@ -495,8 +512,10 @@ export function LoginScreen({ onLogin }) {
         category: "AUTH_SUCCESS",
         operation: "apple-login",
       }).catch(function () {});
+      finishAnalyticsFlow("login", "completed");
       onLogin(fainanceBasicUserPayload(user), user);
     } catch (err: any) {
+      finishAnalyticsFlow("login", "failed", { reason: "service" });
       queuePreAuthTechnicalLog({
         category: "AUTH_FAILURE",
         operation: "apple-login",

@@ -56,9 +56,9 @@ export const fbDb = initializeFirestore(firebaseApp, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager(),
   }),
-  ...(firebaseConfig.projectId === 'fainance-test-20260823195207'
-    ? { experimentalForceLongPolling: true }
-    : {}),
+  // Let Firestore detect whether this network needs long polling. Forcing it
+  // delays every server read on otherwise compatible connections.
+  experimentalAutoDetectLongPolling: true,
 });
 // FIX 2.0.5 — Cloud Storage non era mai stato inizializzato. Serve per spostare gli
 // allegati fuori dal documento Firestore userData/{uid}, che ha un limite di 1 MiB.

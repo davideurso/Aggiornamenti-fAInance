@@ -1,108 +1,127 @@
-import { Capacitor } from "@capacitor/core";
-import { App } from "@capacitor/app";
-import { FirebaseAnalytics } from "@capacitor-community/firebase-analytics";
-import { appEnvironment } from "../config/env";
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import { App } from '@capacitor/app';
+import { FirebaseAnalytics } from '@capacitor-community/firebase-analytics';
+import { appEnvironment, firebaseConfig } from '../config/env';
+import { assertAnalyticsIdentity, sanitizeAnalyticsEvent } from './analyticsPolicy';
 
-const ANALYTICS_DIAGNOSTIC_KEY = "fainance_analytics_diagnostic_v1";
-const OPEN_EVENT_NAME = "fainance_app_open";
-const OPEN_EVENT_DEDUPE_MS = 2500;
+const guard = registerPlugin<{ getConfiguration(): Promise<{ projectId: string; appId: string }> }>('FainanceAnalyticsGuard');
+type Event = NonNullable<ReturnType<typeof sanitizeAnalyticsEvent>>;
+type Sink = (event: Event) => Promise<void>;
+let sink: Sink | null = null;
+let boot: Promise<void> | null = null;
+let retryAfter = 0;
+let queue: Event[] = [];
+let draining = false;
+let listenersInstalled = false;
+let lastOpen = 0;
+let lastSection = '';
+const flows = new Map<string, Record<string, unknown>>();
 
-let analyticsBootPromise: Promise<void> | null = null;
-let analyticsReady = false;
-let appStateListenerInstalled = false;
-let lastOpenLoggedAt = 0;
+function diagnostic(status: 'ok' | 'error', stage: string) {
+  if (appEnvironment === 'test') console.debug('[fAInance Analytics]', status, stage);
+  try { localStorage.setItem('fainance_analytics_diagnostic_v1', JSON.stringify({ status, stage, environment: appEnvironment, at: new Date().toISOString() })); } catch {}
+}
 
-function writeDiagnostic(status: "ok" | "error", details: Record<string, unknown>) {
+async function drain() {
+  if (draining || !sink) return;
+  draining = true;
   try {
-    localStorage.setItem(
-      ANALYTICS_DIAGNOSTIC_KEY,
-      JSON.stringify({ status, at: new Date().toISOString(), ...details }),
-    );
-  } catch (_error) {}
+    while (queue.length && sink) {
+      const event = queue.shift()!;
+      try { await sink(event); diagnostic('ok', event.name); }
+      catch { diagnostic('error', 'event_delivery'); }
+    }
+  } finally { draining = false; }
 }
 
-async function getNativeAppId(): Promise<string> {
-  const info = await App.getInfo();
-  return String(info?.id || "").trim().toLowerCase();
+export function trackAnalyticsEvent(name: string, params: Record<string, unknown> = {}): void {
+  const event = sanitizeAnalyticsEvent(name, params);
+  if (!event) return;
+  if (queue.length >= 100) queue.shift();
+  queue.push(event);
+  if (sink) void drain();
+  else if (Date.now() >= retryAfter) void initializeFainanceAnalytics();
 }
 
-function assertExpectedNativeIdentity(nativeAppId: string) {
-  if (appEnvironment === "test" && nativeAppId !== "it.fainanceapp.app.test") {
-    throw new Error(`FAINANCE_TEST_NATIVE_APP_ID_MISMATCH:${nativeAppId || "missing"}`);
+export function startAnalyticsFlow(flow: string, params: Record<string, unknown> = {}): void {
+  if (flows.has(flow)) return;
+  const safe = sanitizeAnalyticsEvent('fainance_flow', { ...params, flow, step: 'started' });
+  if (!safe) return;
+  flows.set(flow, safe.params);
+  trackAnalyticsEvent(safe.name, safe.params);
+}
+
+export function finishAnalyticsFlow(flow: string, step: 'completed' | 'failed' | 'cancelled' | 'abandoned', params: Record<string, unknown> = {}): void {
+  const started = flows.get(flow);
+  if (!started) return;
+  flows.delete(flow);
+  trackAnalyticsEvent('fainance_flow', { ...started, ...params, flow, step });
+}
+
+export function trackAnalyticsSection(section: string): void {
+  if (!sanitizeAnalyticsEvent('fainance_section_view', { section }) || lastSection === section) return;
+  lastSection = section;
+  trackAnalyticsEvent('fainance_section_view', { section });
+}
+
+function opened(reason: 'cold_start' | 'foreground') {
+  if (Date.now() - lastOpen < 2500) return;
+  lastOpen = Date.now();
+  trackAnalyticsEvent('fainance_app_open', { open_reason: reason });
+}
+
+function installListeners() {
+  if (listenersInstalled) return;
+  listenersInstalled = true;
+  if (Capacitor.isNativePlatform()) {
+    void App.addListener('appStateChange', ({ isActive }) => { if (isActive) opened('foreground'); })
+      .catch(() => { listenersInstalled = false; diagnostic('error', 'lifecycle_listener'); });
+  } else {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') opened('foreground'); });
+    window.addEventListener('pagehide', (event) => {
+      if (event.persisted) return;
+      for (const flow of [...flows.keys()]) finishAnalyticsFlow(flow, 'abandoned', { reason: 'page_exit' });
+    });
   }
 }
 
-async function logAppOpen(nativeAppId: string, reason: "cold_start" | "foreground") {
-  const now = Date.now();
-  if (now - lastOpenLoggedAt < OPEN_EVENT_DEDUPE_MS) return;
-
-  await FirebaseAnalytics.logEvent({
-    name: OPEN_EVENT_NAME,
-    params: {
-      environment: String(appEnvironment || "production"),
-      platform: String(Capacitor.getPlatform() || "native"),
-      native_app_id: nativeAppId || "unknown",
-      open_reason: reason,
-    },
-  });
-
-  lastOpenLoggedAt = now;
-  writeDiagnostic("ok", {
-    event: OPEN_EVENT_NAME,
-    environment: appEnvironment,
-    nativeAppId,
-    reason,
-  });
-}
-
-/**
- * Starts native Firebase Analytics only after the Capacitor runtime is ready.
- *
- * Important: do not use window.Capacitor as the startup gate. On some native
- * launches the global bridge can be observed before it is fully populated;
- * an early return would permanently skip our custom event while Firebase's
- * native automatic events continue to work. Using Capacitor/App imports gives
- * us the authoritative native runtime and app id.
- */
 export function initializeFainanceAnalytics(): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return Promise.resolve();
-  if (analyticsReady) return Promise.resolve();
-  if (analyticsBootPromise) return analyticsBootPromise;
-
-  analyticsBootPromise = (async () => {
+  if (sink) return Promise.resolve();
+  if (boot) return boot;
+  if (Date.now() < retryAfter) return Promise.resolve();
+  boot = (async () => {
     try {
-      const nativeAppId = await getNativeAppId();
-      assertExpectedNativeIdentity(nativeAppId);
-
-      await FirebaseAnalytics.setCollectionEnabled({ enabled: true });
-      await logAppOpen(nativeAppId, "cold_start");
-      analyticsReady = true;
-
-      if (!appStateListenerInstalled) {
-        appStateListenerInstalled = true;
-        await App.addListener("appStateChange", ({ isActive }) => {
-          if (!isActive) return;
-          logAppOpen(nativeAppId, "foreground").catch((error) => {
-            writeDiagnostic("error", {
-              stage: "foreground_event",
-              message: String((error as any)?.message || error),
-              nativeAppId,
-            });
-            console.warn("Firebase Analytics foreground event failed", error);
-          });
-        });
+      const expected = assertAnalyticsIdentity(appEnvironment, firebaseConfig.projectId);
+      const common = { environment: appEnvironment, platform: Capacitor.getPlatform(), analytics_schema: '1' };
+      if (Capacitor.isNativePlatform()) {
+        await FirebaseAnalytics.setCollectionEnabled({ enabled: false });
+        // Verify the real native Firebase project before enabling collection.
+        const configuration = await guard.getConfiguration();
+        assertAnalyticsIdentity(appEnvironment, firebaseConfig.projectId, configuration);
+        await FirebaseAnalytics.setCollectionEnabled({ enabled: true });
+        sink = async event => { await FirebaseAnalytics.logEvent({ name: event.name, params: { ...event.params, ...common } }); };
+      } else {
+        if (new URLSearchParams(window.location.search).has('oobCode')) {
+          queue = []; retryAfter = Infinity; return;
+        }
+        const [firebase, analytics] = await Promise.all([import('firebase/app'), import('firebase/analytics')]);
+        if (!await analytics.isSupported()) { queue = []; retryAfter = Infinity; diagnostic('error', 'browser_unsupported'); return; }
+        const app = firebase.getApps().find(item => item.name === 'fainance-analytics') || firebase.initializeApp({
+          ...firebaseConfig, appId: expected.webAppId, measurementId: expected.measurementId,
+        }, 'fainance-analytics');
+        const web = analytics.initializeAnalytics(app, { config: {
+          send_page_view: false, page_location: window.location.origin + '/', page_referrer: '', page_title: 'fAInance',
+          allow_google_signals: false, allow_ad_personalization_signals: false,
+        } });
+        sink = async event => { analytics.logEvent(web, event.name, { ...event.params, ...common, page_location: window.location.origin + '/', page_referrer: '', page_title: 'fAInance' }); };
       }
-    } catch (error) {
-      analyticsBootPromise = null;
-      writeDiagnostic("error", {
-        stage: "initialize",
-        message: String((error as any)?.message || error),
-        environment: appEnvironment,
-      });
-      console.warn("Firebase Analytics initialization failed", error);
-      throw error;
+      opened('cold_start');
+      installListeners();
+      await drain();
+    } catch {
+      queue = []; retryAfter = Date.now() + 30000;
+      diagnostic('error', 'initialize');
     }
-  })();
-
-  return analyticsBootPromise;
+  })().finally(() => { boot = null; });
+  return boot;
 }

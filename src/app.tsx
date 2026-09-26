@@ -1,6 +1,8 @@
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import {ToolsPanel} from './sections/ToolsPanel';
 import {toolsText} from './i18n/toolsTranslations';
-import {pruneToolHistory} from './finance/tools';
+import {pruneToolHistory,addToolHistory} from './finance/tools';
 import { evaluateAutomaticRules } from './finance/automaticRules';
 import { rulesText } from './i18n/automaticRulesTranslations';
 import { goalSavedAmount } from './finance/savingsGoals';
@@ -3271,6 +3273,52 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     const clean=()=>{const current=financeEvolutionRef.current,tools=pruneToolHistory(current.tools);if(tools.calculator.length!==current.tools.calculator.length||tools.converter.length!==current.tools.converter.length)setFinanceEvolution({...current,tools});};
     clean();const timer=setInterval(clean,60000);return ()=>clearInterval(timer);
   },[userId,financeEvolution.tools]);
+  useEffect(function () {
+    var disposed = false;
+    var resumeListener = null;
+    async function pullToolWidgetHistory() {
+      try {
+        if (!(window && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+        var bridge = window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetBridge;
+        if (!bridge || !bridge.consumeToolHistory) return;
+        var response = await bridge.consumeToolHistory();
+        if (disposed) return;
+        var rows = [];
+        try { rows = JSON.parse((response && response.items) || "[]"); } catch (e) { rows = []; }
+        if (!Array.isArray(rows) || !rows.length) return;
+        setFinanceEvolution(function (previous) {
+          var nextTools = previous.tools;
+          var changed = false;
+          rows.forEach(function (row) {
+            try {
+              var section = String(row && row.section || "");
+              if (section !== "calculator" && section !== "converter") return;
+              var created = Number(row && row.createdAtMs || Date.parse(row && row.createdAt || "")) || Date.now();
+              var item = section === "calculator"
+                ? { id: String(row.id || ("widget-calculator-" + created)), result: Number(row.result) }
+                : { id: String(row.id || ("widget-converter-" + created)), from: String(row.from || ""), to: String(row.to || ""), amount: Number(row.amount), result: Number(row.result), rate: Number(row.rate) };
+              nextTools = addToolHistory(nextTools, section, item, created);
+              changed = true;
+            } catch (e) {}
+          });
+          return changed ? { ...previous, tools: nextTools } : previous;
+        });
+      } catch (e) {}
+    }
+    pullToolWidgetHistory();
+    try {
+      import("@capacitor/app").then(function (mod) {
+        if (!disposed && mod && mod.App && mod.App.addListener) {
+          mod.App.addListener("resume", pullToolWidgetHistory).then(function (listener) { resumeListener = listener; }).catch(function () {});
+        }
+      }).catch(function () {});
+    } catch (e) {}
+    return function () {
+      disposed = true;
+      try { if (resumeListener && resumeListener.remove) resumeListener.remove(); } catch (e) {}
+    };
+  }, [userId]);
+
   function savePeriodBudget(key, plan, scope = 'future') {
     setFinanceEvolution(previous => saveBudgetForPeriod(previous, budgetPlan, key, plan, scope as 'month' | 'future'));
   }
@@ -3509,7 +3557,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     markDisplayPreferencesChange();
     return setShowPatrimonioDecimalsRaw(!!value);
   }
-  var [secRate, setSecRate] = useState(null);
+  var [secRateCache, setSecRateCache] = useStorage(
+    userKey("pref_secondary_rate_cache_v1"),
+    null
+  );
+  var [secRate, setSecRate] = useState(function () {
+    try {
+      var cached = secRateCache && typeof secRateCache === "object" ? secRateCache : null;
+      if (
+        cached &&
+        String(cached.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+        String(cached.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase() &&
+        Number(cached.rate) > 0
+      ) return Number(cached.rate);
+    } catch (e) {}
+    return null;
+  });
   var [secRateLoading, setSecRateLoading] = useState(false);
   var secSym = secondaryCurrency
     ? (
@@ -3520,27 +3583,78 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     : "";
   useEffect(
     function () {
+      try {
+        if (
+          secRateCache &&
+          typeof secRateCache === "object" &&
+          String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+          String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase() &&
+          Number(secRateCache.rate) > 0
+        ) setSecRate(Number(secRateCache.rate));
+      } catch (e) {}
+    },
+    [secRateCache, currency, secondaryCurrency]
+  );
+  useEffect(
+    function () {
       if (!secondaryCurrency) {
         setSecRate(null);
         return;
       }
+      var cachedRate = null;
+      try {
+        if (
+          secRateCache &&
+          typeof secRateCache === "object" &&
+          String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+          String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase() &&
+          Number(secRateCache.rate) > 0
+        ) cachedRate = Number(secRateCache.rate);
+      } catch (e) {}
+      if (cachedRate) setSecRate(cachedRate);
       setSecRateLoading(true);
       fetch("https://api.exchangerate-api.com/v4/latest/" + currency)
         .then(function (r) {
+          if (!r || !r.ok) throw new Error("FX_HTTP");
           return r.json();
         })
         .then(function (d) {
-          var r = d.rates && d.rates[secondaryCurrency];
-          setSecRate(r || null);
+          var r = Number(d && d.rates && d.rates[secondaryCurrency]);
+          if (!Number.isFinite(r) || r <= 0) throw new Error("FX_RATE");
+          var cached = {
+            from: String(currency || "EUR").toUpperCase(),
+            to: String(secondaryCurrency || "USD").toUpperCase(),
+            rate: r,
+            createdAt: new Date().toISOString(),
+          };
+          setSecRate(r);
+          setSecRateCache(cached);
         })
         .catch(function () {
-          setSecRate(null);
+          if (!cachedRate) setSecRate(null);
         })
         .finally(function () {
           setSecRateLoading(false);
         });
     },
     [secondaryCurrency, currency]
+  );
+  useEffect(
+    function () {
+      try {
+        if (!secondaryCurrency || !Number(secRate) || Number(secRate) <= 0) return;
+        if (!(window && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+        var bridge = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetBridge;
+        if (!bridge || !bridge.saveToolRate) return;
+        bridge.saveToolRate({
+          from: String(currency || "EUR"),
+          to: String(secondaryCurrency || "USD"),
+          rate: Number(secRate),
+          createdAt: secRateCache && secRateCache.createdAt ? String(secRateCache.createdAt) : new Date().toISOString(),
+        }).catch(function () {});
+      } catch (e) {}
+    },
+    [currency, secondaryCurrency, secRate, secRateCache && secRateCache.createdAt]
   );
   function fmtSec(val) {
     if (!secRate || !secondaryCurrency) return null;
@@ -4111,6 +4225,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     useStorage(userKey("widget_debt_credits_auto_update_v1"), true);
 
   var [tab, setTabRaw] = useState("home");
+  useEffect(() => { trackAnalyticsSection(tab); }, [tab]);
   function setTab(nextTab) {
     var requestedTab = String(nextTab || "");
     if (requestedTab === "debtCredits" && currentPlan !== "premium") {
@@ -10423,9 +10538,30 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     if (!cloudProject.ownerUid || String(cloudProject.ownerUid) !== String(userId || ""))
       delete cloudProject.categories;
+    // MUNDELY_52_SHARE_WRITE_REFRESH
+    function notifyMundelyBridgeAfterShareCloudWrite() {
+      var isMundelyLinked =
+        String((cloudProject && cloudProject.sourceApp) || "").toLowerCase() === "mundely" ||
+        !!String((cloudProject && cloudProject.mundelyTripId) || "").trim() ||
+        String(pid || "").indexOf("mundely_") === 0;
+      if (!isMundelyLinked || typeof window === "undefined") return;
+      [0, 180, 650, 1600].forEach(function (delay) {
+        window.setTimeout(function () {
+          try {
+            window.dispatchEvent(new CustomEvent("fainance:share-mutated"));
+          } catch (_eventError) {}
+          try {
+            var refreshNow = (window as any).__mundelyBridgeRefreshNow;
+            if (typeof refreshNow === "function") refreshNow();
+          } catch (_refreshError) {}
+        }, delay);
+      });
+    }
     function attemptShareSync(attempt) {
       setDoc(doc(fbDb, "shareProjects", pid), cloudProject, {
         merge: true,
+      }).then(function () {
+        notifyMundelyBridgeAfterShareCloudWrite();
       }).catch(async function (e) {
         var code = String((e && e.code) || "unknown")
           .replace(/^firestore\//, "")
@@ -11202,6 +11338,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var debtCreditId = "";
     var goalId = "";
     var widgetSettingsType = "";
+    var widgetSettingsId = "";
     try {
       var parsed = new URL(
         raw,
@@ -11237,6 +11374,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         parsed.searchParams.get("widget") ||
         parsed.searchParams.get("type") ||
         "";
+      widgetSettingsId = parsed.searchParams.get("widgetId") || "";
     } catch (e) {
       var im = raw.match(/[?&](?:shareInvite|invite)=([^&]+)/);
       var pm = raw.match(/[?&](?:shareProject|project)=([^&]+)/);
@@ -11245,6 +11383,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var dm = raw.match(/[?&](?:debtId|debt|creditId|credit)=([^&]+)/);
       var gm = raw.match(/[?&](?:goalId|goal)=([^&]+)/);
       var wm = raw.match(/[?&](?:widget|type)=([^&]+)/);
+      var wim = raw.match(/[?&]widgetId=([^&]+)/);
       shareInviteId = im ? decodeURIComponent(im[1]) : "";
       shareProjectId = pm ? decodeURIComponent(pm[1]) : "";
       fidelityCardId = cm ? decodeURIComponent(cm[1]) : "";
@@ -11252,6 +11391,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       debtCreditId = dm ? decodeURIComponent(dm[1]) : "";
       goalId = gm ? decodeURIComponent(gm[1]) : "";
       widgetSettingsType = wm ? decodeURIComponent(wm[1]) : "";
+      widgetSettingsId = wim ? decodeURIComponent(wim[1]) : "";
     }
     function dispatchWidgetEvent(eventName, detail) {
       [80, 240, 650, 1200, 2000].forEach(function (ms) {
@@ -11263,6 +11403,29 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           } catch (e) {}
         }, ms);
       });
+    }
+    if (url.indexOf("tool-transaction") >= 0 || url.indexOf("open-tools") >= 0) {
+      var toolPacket = null;
+      try {
+        var toolUrl = new URL(raw, window && window.location ? window.location.origin : SHARE_WEB_APP_URL);
+        toolPacket = {
+          source: toolUrl.searchParams.get("source") || toolUrl.searchParams.get("tool") || "calculator",
+          resultAmount: Number(toolUrl.searchParams.get("resultAmount") || toolUrl.searchParams.get("amount") || 0),
+          resultCurrency: toolUrl.searchParams.get("resultCurrency") || toolUrl.searchParams.get("currency") || currency || "EUR",
+          originalAmount: Number(toolUrl.searchParams.get("originalAmount") || 0),
+          originalCurrency: toolUrl.searchParams.get("originalCurrency") || "",
+          rate: Number(toolUrl.searchParams.get("rate") || 0),
+          ts: Date.now(),
+        };
+      } catch (e) {}
+      if (url.indexOf("tool-transaction") >= 0 && toolPacket) {
+        try { localStorage.setItem("fainance_tool_widget_transaction_v1", JSON.stringify(toolPacket)); } catch (e) {}
+        dispatchWidgetEvent("fainance-open-tool-transaction", toolPacket);
+      }
+      setTab("tools");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
     }
     if (
       url.indexOf("open-plan-info") >= 0 ||
@@ -11498,6 +11661,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       setMobileMenu(false);
     }
     if (url.indexOf("widget-settings") >= 0) {
+      try {
+        var parsedWidgetId = parseInt(String(widgetSettingsId || ""), 10);
+        if (Number.isFinite(parsedWidgetId) && parsedWidgetId > 0) {
+          localStorage.setItem("fainance_widget_settings_instance_v1", JSON.stringify({ type: String(widgetSettingsType || ""), id: parsedWidgetId, at: Date.now() }));
+        }
+      } catch (e) {}
       var widgetPageMap = {
         quick: "appearance_widget_quick",
         note: "appearance_widget_note",
@@ -11508,6 +11677,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         debtcredits: "appearance_widget_debt_credits",
         debt_credits: "appearance_widget_debt_credits",
         share: "appearance_widget_share",
+        calculator: "appearance_widget_calculator",
+        converter: "appearance_widget_converter",
+        ai: "appearance_widget_ai",
+        agent: "appearance_widget_ai",
       };
       var normalizedWidgetType = String(widgetSettingsType || "")
         .replace(/[^a-zA-Z_]/g, "")
@@ -13391,11 +13564,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       // index.html imposta il flag nativo; il controllo del protocollo è un'ulteriore tutela.
       var nativeDomTranslationDisabled = false;
       try {
+        var cap = (window as any).Capacitor;
         nativeDomTranslationDisabled =
           !!(window as any).__FAINANCE_DISABLE_DOM_TRANSLATION__ ||
-          String(
-            (window.location && window.location.protocol) || ""
-          ).toLowerCase() === "capacitor:";
+          !!(cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) ||
+          String((window.location && window.location.protocol) || "").toLowerCase() === "capacitor:";
       } catch (e) {}
       if (nativeDomTranslationDisabled) return;
       var root = document.getElementById("root");
@@ -19472,6 +19645,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
   var WIDGET_PLAN_REQUIREMENTS = {
     quick: "free",
+    calculator: "free",
+    converter: "free",
     note: "base",
     goal: "base",
     shoppingList: "free",
@@ -19482,6 +19657,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   };
   var WIDGET_TYPE_ORDER = [
     "quick",
+    "calculator",
+    "converter",
     "fidelity",
     "shoppingList",
     "note",
@@ -19829,9 +20006,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
       return true;
     }
+    startAnalyticsFlow("movement", { method: source || "manual", kind: "expense" });
     var ruleBatch;
     try {ruleBatch=prepareAutomaticMovements(list,'expense',source);list=ruleBatch.items;}
-    catch {setToast({text:rulesText(lang,'error'),type:'error'});return false;}
+    catch {setToast({text:rulesText(lang,'error'),type:'error'});finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;}
     var hasInstalment = list.some(function (x) {
       return !!x.rateizzato;
     });
@@ -19858,7 +20036,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           color: "#EF9F27",
           icon: "⚠️",
         });
-        return false;
+        finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
       }
     }
     if (!canUsePlanFeature(feature, amount)) {
@@ -19868,9 +20046,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         color: "#E24B4A",
         icon: "🚫",
       });
-      return false;
+      finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
     }
-    if(!approveAutomaticAlerts(ruleBatch.alerts))return false;
+    if(!approveAutomaticAlerts(ruleBatch.alerts)){finishAnalyticsFlow("movement", "cancelled", { reason: "user_cancel" });return false;}
     function save() {
       var usedAfter = rewardedFeatureConfig(feature)
         ? planCount(featureUsageKey(feature)) + amount
@@ -19897,6 +20075,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           })
           .concat(p);
       });
+      finishAnalyticsFlow("movement", list.some(x => Math.abs(parseMoney(x.amount)) > 0) ? "completed" : "failed", { kind: "expense" });
       if (feature === "manualMovement")
         setToast(singleMovementSuccessToast("Uscita aggiunta.", usedAfter));
       else if (feature === "instalmentMovement")
@@ -19964,9 +20143,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
       return true;
     }
+    startAnalyticsFlow("movement", { method: source || "manual", kind: "income" });
     var ruleBatch;
     try {ruleBatch=prepareAutomaticMovements(list,'income',source);list=ruleBatch.items;}
-    catch {setToast({text:rulesText(lang,'error'),type:'error'});return false;}
+    catch {setToast({text:rulesText(lang,'error'),type:'error'});finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;}
     var hasInstalment = list.some(function (x) {
       return !!x.rateizzato;
     });
@@ -19991,7 +20171,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           color: "#EF9F27",
           icon: "⚠️",
         });
-        return false;
+        finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
       }
     }
     if (!canUsePlanFeature(feature, amount)) {
@@ -20001,9 +20181,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         color: "#E24B4A",
         icon: "🚫",
       });
-      return false;
+      finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
     }
-    if(!approveAutomaticAlerts(ruleBatch.alerts))return false;
+    if(!approveAutomaticAlerts(ruleBatch.alerts)){finishAnalyticsFlow("movement", "cancelled", { reason: "user_cancel" });return false;}
     function save() {
       var usedAfter = rewardedFeatureConfig(feature)
         ? planCount(featureUsageKey(feature)) + amount
@@ -20030,6 +20210,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           })
           .concat(p);
       });
+      finishAnalyticsFlow("movement", list.some(x => Math.abs(parseMoney(x.amount)) > 0) ? "completed" : "failed", { kind: "income" });
       if (feature === "manualMovement")
         setToast(singleMovementSuccessToast("Entrata aggiunta.", usedAfter));
       else if (feature === "instalmentMovement")
@@ -21268,6 +21449,52 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         logoKind: "official",
         logoLabel: "fAI",
       },
+      toolsWidget: {
+        primaryCurrency: currency || "EUR",
+        secondaryCurrency: secondaryCurrency || (currency === "EUR" ? "USD" : "EUR"),
+        recentCurrencies: (financeEvolution && financeEvolution.tools && financeEvolution.tools.recentCurrencies) || [],
+        lastCurrencyPair: (financeEvolution && financeEvolution.tools && financeEvolution.tools.lastCurrencyPair) || null,
+        lastRate:
+          secondaryCurrency && Number(secRate) > 0
+            ? {
+                from: String(currency || "EUR"),
+                to: String(secondaryCurrency),
+                rate: Number(secRate),
+                createdAt:
+                  secRateCache &&
+                  String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+                  String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase()
+                    ? String(secRateCache.createdAt || new Date().toISOString())
+                    : new Date().toISOString(),
+              }
+            : null,
+        rateCache: ([
+          ...(secondaryCurrency && Number(secRate) > 0
+            ? [{
+                from: String(currency || "EUR"),
+                to: String(secondaryCurrency),
+                rate: Number(secRate),
+                createdAt:
+                  secRateCache &&
+                  String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+                  String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase()
+                    ? String(secRateCache.createdAt || new Date().toISOString())
+                    : new Date().toISOString(),
+              }]
+            : []),
+          ...(((financeEvolution && financeEvolution.tools && financeEvolution.tools.rateCache) || []) as any[]),
+          ...(((financeEvolution && financeEvolution.tools && financeEvolution.tools.converter) || []) as any[]),
+        ]
+          .filter(function (row) { return row && row.from && row.to && Number(row.rate) > 0; })
+          .filter(function (row, index, rows) {
+            var key = String(row.from).toUpperCase() + ">" + String(row.to).toUpperCase();
+            return rows.findIndex(function (x) { return String(x.from).toUpperCase() + ">" + String(x.to).toUpperCase() === key; }) === index;
+          })
+          .slice(0, 60)
+          .map(function (row) { return { from: String(row.from), to: String(row.to), rate: Number(row.rate), createdAt: String(row.createdAt || "") }; })),
+        locale: lang || "it",
+        currencySymbol: sym || "€",
+      },
       shoppingListWidget: {
         enabled: isWidgetAllowed("shoppingList") && !!widgetShoppingListEnabled,
         title: L("Lista spesa"),
@@ -21589,6 +21816,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var shoppingListString = JSON.stringify(payload.shoppingListWidget || {});
       var fidelityString = JSON.stringify(payload.fidelityWidget || {});
       var debtCreditsString = JSON.stringify(payload.debtCreditsWidget || {});
+      var toolsString = JSON.stringify(payload.toolsWidget || {});
       var afterNativeUpdate = function () {
         if (showMessage) setToast("Widget aggiornato");
       };
@@ -21687,6 +21915,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               key: "widget_debt_credits_settings",
               value: debtCreditsString,
             }),
+            prefs.set({ key: "widget_tools_settings", value: toolsString }),
             prefs.set({
               key: "widget_current_plan",
               value: String(
@@ -21786,6 +22015,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             "widget_debt_credits_settings",
             debtCreditsString
           );
+          localStorage.setItem("widget_tools_settings", toolsString);
           localStorage.setItem(
             "widget_current_plan",
             String(
@@ -21829,6 +22059,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             shoppingList: shoppingListString,
             fidelity: fidelityString,
             debtCredits: debtCreditsString,
+            tools: toolsString,
             currentPlan: String(
               payload.widget_current_plan ||
                 currentPlanRef.current ||
@@ -21916,6 +22147,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   key: "widget_debt_credits_settings",
                   value: debtCreditsString,
                 }),
+                prefs.set({ key: "widget_tools_settings", value: toolsString }),
               ]).catch(function () {});
             }
             afterNativeUpdate();
@@ -21934,6 +22166,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
     }
   }
+
+  // Keep the offline converter widget aligned with the latest rate stored by the app.
+  useEffect(
+    function () {
+      try {
+        if (!firestoreReady) return;
+        if (!(window && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+        var timer = setTimeout(function () {
+          try { saveWidgetSettingsToNative(false); } catch (e) {}
+        }, 350);
+        return function () { clearTimeout(timer); };
+      } catch (e) {}
+    },
+    [
+      firestoreReady,
+      userId,
+      currency,
+      secondaryCurrency,
+      secRate,
+      secRateCache && secRateCache.createdAt,
+      lang,
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.converter) || []),
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.rateCache) || []),
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.recentCurrencies) || []),
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.lastCurrencyPair) || null),
+    ]
+  );
 
   // WIDGET RESTORE 2.0.0 — one-time migration.
   // The native widget layouts/providers are already identical to the live 2.0.0 build.
@@ -22266,6 +22525,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       creditCards,
       goals,
       financeEvolution,
+      currency,
+      secondaryCurrency,
+      lang,
       shareProjects,
       shareSelectedProjectId,
       confirmButtonColor,

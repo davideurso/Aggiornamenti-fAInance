@@ -1,4 +1,5 @@
 import type { User } from "firebase/auth";
+import { measureStartup } from '../utils/startupDiagnostics';
 import { doc, getDoc } from "firebase/firestore";
 import { fbDb } from "../firebase/client";
 import { currentAuthUser, watchAuthState } from "./authService";
@@ -83,8 +84,11 @@ export function buildSessionUserData(user: User, profile: any = {}): FainanceSes
 
 export async function resolveAccountSession(user: User): Promise<FainanceSessionUserData> {
   try {
-    let profile: any = await fainancePromiseTimeout(loadUserProfile(user.uid),7000,"Timeout profilo utente.").catch(() => ({}));
-    const accountResult: any = await fainancePromiseTimeout(getDoc(doc(fbDb, "userData", user.uid)),9000,"Timeout dati account.").catch(() => null);
+    const [profileResult, accountResult]: any[] = await Promise.all([
+      measureStartup('profile', fainancePromiseTimeout(loadUserProfile(user.uid),7000,"Timeout profilo utente.").catch(error => { throw sessionReadFailure('S1',error); })),
+      measureStartup('account', fainancePromiseTimeout(getDoc(doc(fbDb, "userData", user.uid)),9000,"Timeout dati account.").catch(error => { throw sessionReadFailure('S2',error); })),
+    ]);
+    let profile: any = profileResult;
     const accountData = accountResult?.exists?.() ? await fainanceExpandAccountCloudDataV5(accountResult.data() || {}) : {};
     const legal: any = fainanceResolveLegalAcceptance(profile, accountData);
     const split = splitDisplayName(profile.name || user.displayName || "Utente");
@@ -102,7 +106,7 @@ export async function resolveAccountSession(user: User): Promise<FainanceSession
 
     profile = { ...profile, firstName, lastName, name: displayName };
     if (profile.username && normalizedEmail) {
-      await fainancePromiseTimeout(
+      void fainancePromiseTimeout(
         ensureUsernameLoginAlias(user.uid,String(profile.username),normalizedEmail),
         5000,
         "Timeout alias username.",
@@ -132,17 +136,25 @@ export async function resolveAccountSession(user: User): Promise<FainanceSession
     if (legal) Object.assign(profileUpdate,{legalAcceptanceV2:legal,termsAccepted:true,privacyAccepted:true,metaEventsConsent:!!legal.metaEventsConsent,legalAcceptanceDate:String(legal.acceptedAt||"")});
     mergeUserProfile(user.uid, profileUpdate).catch(() => undefined);
     return userData;
-  } catch {
-    ensureBaseUserProfile(user).catch(() => undefined);
-    return buildSessionUserData(user, {});
+  } catch (error) {
+    // An unavailable read is not proof that a profile is missing.
+    // Never create or backfill profile fields from an unreadable account.
+    throw error;
   }
 }
 
-export function watchResolvedAccountSession(onUser: (user: User, data: FainanceSessionUserData) => void,onSignedOut: () => void): () => void {
+function sessionReadFailure(stage: 'S1' | 'S2', error: any): Error {
+  const reason = String(error?.message || '').startsWith('Timeout') ? 'T' :
+    String(error?.code || '').replace('firestore/','') === 'permission-denied' ? 'P' :
+    String(error?.code || '').replace('firestore/','') === 'unavailable' ? 'N' : 'E';
+  return new Error(stage + '-' + reason);
+}
+
+export function watchResolvedAccountSession(onUser: (user: User, data: FainanceSessionUserData) => void,onSignedOut: () => void,onError?: (error: unknown) => void): () => void {
   let cancelled = false;
   let resolved = false;
   let unsubscribe: (() => void) | null = null;
-  async function publishUser(user: User) { const data = await resolveAccountSession(user); if (!cancelled) onUser(user, data); }
+  async function publishUser(user: User) { try { const data = await resolveAccountSession(user); if (!cancelled) onUser(user, data); } catch (error) { if (!cancelled) onError?.(error); } }
   function resolveCurrentOrSignedOut() { const current = currentAuthUser(); if (current?.uid) void publishUser(current); else if (!cancelled) onSignedOut(); }
   const timer = setTimeout(() => { if (cancelled || resolved) return; resolved = true; resolveCurrentOrSignedOut(); }, 7000);
   try {

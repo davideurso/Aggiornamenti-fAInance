@@ -116,6 +116,141 @@ function startShareAttachmentCameraRestoreBridge() {
 startShareAttachmentCameraRestoreBridge();
 
 export function SharePanel() {
+    // MUNDELY_51_SHARE_SYNC_UI
+    if(false && typeof window!=="undefined" && document.documentElement.getAttribute("data-mundely-share-v51")!=="1"){
+      document.documentElement.setAttribute("data-mundely-share-v51","1");
+      const emitBridgeMutation=()=>{
+        window.dispatchEvent(new CustomEvent("fainance:share-mutated"));
+      };
+      const scheduleBridgeMutation=()=>{
+        [0,120,500,1200,2600,5000].forEach((delay)=>window.setTimeout(emitBridgeMutation,delay));
+      };
+      const normalizeMundelyLabel=(value)=>String(value||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g," ").trim();
+      const mundelyCategoryKey=(value)=>{
+        const s=normalizeMundelyLabel(value);
+        if(/senza categoria|no category|sin categoria/.test(s))return "none";
+        if(/\bcibo\b|\bfood\b|\bcomida\b/.test(s))return "food";
+        if(/trasport|transport/.test(s))return "transport";
+        if(/alloggio|accommodation|alojamiento|unterkunft|hebergement/.test(s))return "accommodation";
+        if(/\bstay\b|lodging|hotel/.test(s))return "accommodation_legacy";
+        if(/attivita|activities|activity|actividades/.test(s))return "activities";
+        if(/shopping|compras|einkaufe/.test(s))return "shopping";
+        if(/\baltro\b|\bother\b|\botro\b|sonstiges|autre/.test(s))return "other";
+        return "legacy";
+      };
+      const filterMundelyCategoryDialog=()=>{
+        const radios=Array.from(document.querySelectorAll('input[type="radio"]'));
+        const roots=[];
+        for(const radio of radios){
+          let node=radio.parentElement;
+          for(let depth=0;node&&depth<7;depth+=1,node=node.parentElement){
+            const count=node.querySelectorAll('input[type="radio"]').length;
+            if(count>=6&&count<=18){ if(!roots.includes(node))roots.push(node); break; }
+          }
+        }
+        for(const root of roots){
+          const localRadios=Array.from(root.querySelectorAll('input[type="radio"]'));
+          const rows=[];
+          for(let index=0;index<localRadios.length;index+=1){
+            const radio=localRadios[index];
+            const row=radio.closest('label,[role="radio"],.radio-row,.option-row,.list-row')||radio.parentElement;
+            if(row)rows.push({radio,row,index});
+          }
+          const keys=rows.map((item)=>mundelyCategoryKey(item.row.textContent||""));
+          const canonical=["food","transport","accommodation","activities","shopping","other"];
+          const present=new Set(keys.filter((key)=>canonical.includes(key)));
+          if(present.size<3)continue;
+          const chosen=new Map();
+          for(const key of canonical){
+            const options=rows.filter((item)=>mundelyCategoryKey(item.row.textContent||"")===key);
+            if(!options.length)continue;
+            let selected=null;
+            for(const item of options){
+              const signatureText=[item.radio.getAttribute("value"),item.radio.getAttribute("id"),item.radio.getAttribute("name"),item.row.getAttribute("data-value"),item.row.getAttribute("data-id"),item.row.getAttribute("data-category-id")].filter(Boolean).join(" ");
+              if(/sc_mundely_/i.test(signatureText)){ selected=item; break; }
+            }
+            if(!selected)selected=options[0];
+            chosen.set(key,selected);
+          }
+          for(const item of rows){
+            const key=mundelyCategoryKey(item.row.textContent||"");
+            const show=key==="none"||(canonical.includes(key)&&chosen.get(key)===item);
+            item.row.setAttribute("style",show?"":"display:none!important");
+          }
+        }
+      };
+      document.addEventListener("click",(event)=>{
+        const target=event.target;
+        const button=target&&typeof target.closest==="function"?target.closest("button,[role='button']"):null;
+        if(!button)return;
+        const label=String([button.getAttribute("aria-label"),button.getAttribute("title"),button.textContent].filter(Boolean).join(" ")).toLowerCase();
+        if(/salva|save|guardar|aggiungi|add|anadir|añadir|aggiorna|update|elimina|delete|remove|borrar/.test(label))scheduleBridgeMutation();
+      },true);
+      document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden")emitBridgeMutation(); });
+      window.addEventListener("pagehide",emitBridgeMutation);
+      const observer=new MutationObserver(filterMundelyCategoryDialog);
+      observer.observe(document.body,{childList:true,subtree:true});
+      window.setTimeout(filterMundelyCategoryDialog,0);
+    }
+
+    // MUNDELY_48_SHARE_SYNC_UI
+    if(false && typeof window!=="undefined" && !(window as any).__mundelyShareV48Hook){
+      (window as any).__mundelyShareV48Hook=true;
+      const dispatchBridgeMutation=()=>{
+        [120,700,1600].forEach((delay)=>window.setTimeout(()=>window.dispatchEvent(new CustomEvent("fainance:share-mutated")),delay));
+      };
+      document.addEventListener("click",(event)=>{
+        const target=event.target as Element|null;
+        const button=target&&typeof (target as any).closest==="function" ? target.closest("button") : null;
+        if(!button)return;
+        const label=String([
+          button.getAttribute("aria-label"),
+          button.getAttribute("title"),
+          button.textContent
+        ].filter(Boolean).join(" ")).toLowerCase();
+        if(/salva|save|guardar|aggiungi|add|añadir|aggiorna|update|elimina|delete|remove|borrar/.test(label)) dispatchBridgeMutation();
+      },true);
+
+      const filterMundelyCategories=()=>{
+        const roots=Array.from(document.querySelectorAll('[role="dialog"],.modal,.modal-content,.popup,.dialog'));
+        for(const root of roots){
+          const radios=Array.from(root.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
+          const mundely=radios.filter((radio)=>/^sc_mundely_(food|transport|accommodation|activities|shopping|other)_/i.test(String(radio.value||"")));
+          if(mundely.length<3)continue;
+          const seen=new Set<string>();
+          for(const radio of radios){
+            const value=String(radio.value||"");
+            const match=/^sc_mundely_(food|transport|accommodation|activities|shopping|other)_/i.exec(value);
+            const row=(radio.closest("label")||radio.parentElement) as HTMLElement|null;
+            if(!row)continue;
+            if(!value){row.style.display="";continue;}
+            if(!match){row.style.display="none";continue;}
+            const key=match[1].toLowerCase();
+            if(seen.has(key)){row.style.display="none";continue;}
+            seen.add(key); row.style.display="";
+          }
+        }
+      };
+      const observer=new MutationObserver(()=>filterMundelyCategories());
+      observer.observe(document.body,{childList:true,subtree:true});
+      window.setTimeout(filterMundelyCategories,0);
+    }
+
+    // MUNDELY_47_SHARE_CURRENCY
+    // MUNDELY_44_SHARE_CURRENCY
+    function formatShareBridgeAmount(activity:any,value:any){
+      var numeric=Number(value||0);
+      var code=String((activity&&((activity.currency||activity.originalCurrency||activity.mundelyCurrency)))||currency||"EUR").trim().toUpperCase()||"EUR";
+      try{return new Intl.NumberFormat(undefined,{style:"currency",currency:code}).format(numeric);}
+      catch(_e){return numeric.toFixed(2)+" "+code;}
+    }
+    function formatShareBridgeBaseAmount(value:any){
+      var numeric=Number(value||0);
+      var code=String(currency||"EUR").trim().toUpperCase()||"EUR";
+      try{return new Intl.NumberFormat(undefined,{style:"currency",currency:code}).format(numeric);}
+      catch(_e){return numeric.toFixed(2)+" "+code;}
+    }
+
   var _c: any = useApp();
   var {
     acceptShareInvite,
@@ -251,11 +386,65 @@ export function SharePanel() {
   var activeParticipants = participants.filter(function (p) {
     return p.status !== "archived";
   });
+  // FAINANCE_58_ARCHIVED_SHARE_READONLY
+  var selectedShareArchived = !!(
+    selected && String(selected.status || "").toLowerCase() === "archived"
+  );
+  // MUNDELY_52_CANONICAL_CATEGORIES
+  var selectedIsMundelyLinked = !!(
+    selected &&
+    (
+      String(selected.sourceApp || "").toLowerCase() === "mundely" ||
+      !!String(selected.mundelyTripId || "").trim() ||
+      String(selected.id || "").indexOf("mundely_") === 0
+    )
+  );
+  function canonicalMundelyShareCategoryKey(category) {
+    var raw = String(
+      (category && (category.mundelyCategoryKey || category.name || category.id)) || ""
+    )
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[\s-]+/g, "_");
+    var aliases = {
+      food: "food", cibo: "food", meal: "food", meals: "food", dining: "food", restaurant: "food",
+      transport: "transport", trasporti: "transport", transportation: "transport", travel: "transport",
+      accommodation: "accommodation", alloggio: "accommodation", stay: "accommodation", lodging: "accommodation", hotel: "accommodation", hotels: "accommodation",
+      activities: "activities", activity: "activities", attivita: "activities", experience: "activities", experiences: "activities",
+      shopping: "shopping", shops: "shopping",
+      other: "other", altro: "other", misc: "other", miscellaneous: "other",
+    };
+    if (aliases[raw]) return aliases[raw];
+    var idMatch = /^sc_mundely_(food|transport|accommodation|activities|shopping|other)(?:_|$)/.exec(
+      String((category && category.id) || "").toLowerCase()
+    );
+    return idMatch ? idMatch[1] : raw;
+  }
   var projectShareCategories = selected
     ? (selected.categories || []).filter(function (category) {
         return category && String(category.status || "active") !== "deleted";
       })
     : [];
+  if (selectedIsMundelyLinked && projectShareCategories.length) {
+    var canonicalOrder = ["food", "transport", "accommodation", "activities", "shopping", "other"];
+    var bestByKey = {};
+    projectShareCategories.forEach(function (category) {
+      var key = canonicalMundelyShareCategoryKey(category);
+      if (canonicalOrder.indexOf(key) < 0) return;
+      var score = 0;
+      if (String(category.sourceApp || "").toLowerCase() === "mundely") score += 20;
+      if (String(category.mundelyCategoryKey || "").toLowerCase() === key) score += 15;
+      if (String(category.id || "").toLowerCase().indexOf("sc_mundely_" + key + "_") === 0) score += 10;
+      if (canonicalMundelyShareCategoryKey({ name: category.name }) === key) score += 2;
+      var previous = bestByKey[key];
+      if (!previous || score > previous.score) bestByKey[key] = { category: category, score: score };
+    });
+    var canonicalOnly = canonicalOrder
+      .map(function (key) { return bestByKey[key] && bestByKey[key].category; })
+      .filter(Boolean);
+    if (canonicalOnly.length) projectShareCategories = canonicalOnly;
+  }
   var selectedCurrentParticipant = participants.find(function (participant) {
     return (
       participant &&
@@ -265,6 +454,7 @@ export function SharePanel() {
   });
   var canManageShareCategories = !!(
     selected &&
+    !selectedIsMundelyLinked &&
     (String(selected.ownerUid || "") === String(userId || "") ||
       (!selected.ownerUid && selectedCurrentParticipant && String(selectedCurrentParticipant.role || "") === "owner"))
   );
@@ -520,6 +710,18 @@ export function SharePanel() {
         .join("|"),
     ]
   );
+  function notifyArchivedShareProject() {
+    setToast({
+      text: L("Il progetto è archiviato. Ripristinalo per aggiungere nuove spese."),
+      type: "warning",
+      icon: "🗂️",
+      color: "#FFF8E1",
+      textColor: "#856404",
+    });
+  }
+  function canCreateShareExpense() {
+    return !!selected && !selectedShareArchived;
+  }
   function resetShareExpenseForm() {
     try {
       localStorage.removeItem("fainance_share_receipt_draft_v2");
@@ -561,7 +763,16 @@ export function SharePanel() {
     setShareReceiptReady(false);
     setShareExpenseMode("simple");
   }
+  useEffect(function () {
+    if (selectedShareArchived && shareExpenseFormOpen && !shareEditingActivityId) {
+      closeShareExpensePopup();
+    }
+  }, [selectedShareArchived, shareExpenseFormOpen, shareEditingActivityId]);
   function openShareExpensePopup(mode) {
+    if (selectedShareArchived && mode !== "income") {
+      notifyArchivedShareProject();
+      return;
+    }
     setShareProjectTab("attivita");
     setShareReceiptReady(false);
     if (mode === "receipt") {
@@ -597,6 +808,11 @@ export function SharePanel() {
     const draft=_c.toolShareDraft;
     if(!draft||consumedToolDraft.current===draft.id||!selected||String(selected.id)!==draft.projectId)return;
     consumedToolDraft.current=draft.id;
+    if (selectedShareArchived) {
+      _c.setToolShareDraft(null);
+      notifyArchivedShareProject();
+      return;
+    }
     resetShareExpenseForm();
     setShareAmount(draft.amount);setShareDate(draft.date);setShareDesc('');
     setShareFx({currency:draft.currency,baseCurrency:draft.baseCurrency,exchangeRate:draft.exchangeRate,exchangeRateDate:draft.exchangeRateDate,exchangeRateSource:draft.exchangeRateSource,baseAmount:draft.baseAmount});
@@ -688,6 +904,10 @@ export function SharePanel() {
   function applyShareReceiptDraftToForm(draft) {
     if (!draft || !selected || String(draft.projectId) !== String(selected.id))
       return false;
+    if (selectedShareArchived) {
+      notifyArchivedShareProject();
+      return false;
+    }
     var ids =
       draft.participantIds && draft.participantIds.length
         ? draft.participantIds
@@ -2696,6 +2916,9 @@ export function SharePanel() {
   function confirmShareProjectArchiveAction() {
     if (!selected) return;
     var mode = shareProjectArchiveMode === "restore" ? "restore" : "archive";
+    if (mode === "archive" && shareExpenseFormOpen && !shareEditingActivityId) {
+      closeShareExpensePopup();
+    }
     updateShareProject(selected.id, function (p) {
       return mode === "restore"
         ? { ...p, status: "active", archivedAt: null, restoredAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
@@ -2778,6 +3001,10 @@ export function SharePanel() {
       localStorage.removeItem("fainance_share_receipt_flow_v2");
     } catch (e) {}
     if (!selected) return;
+    if (!shareEditingActivityId && selectedShareArchived) {
+      notifyArchivedShareProject();
+      return;
+    }
     var shareTodayCount = (selected.activities || []).filter(function (a) {
       return (
         a.kind !== "settlement" &&
@@ -4755,19 +4982,40 @@ export function SharePanel() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <Btn
                 onClick={function () {
+                  if (selectedShareArchived) {
+                    notifyArchivedShareProject();
+                    return;
+                  }
                   setShareEditingActivityId(null);
                   openShareExpensePopup("simple");
                 }}
-                bg={confirmButtonColor}
+                bg={selectedShareArchived ? "#A8A8A8" : confirmButtonColor}
                 style={{
                   width: "100%",
                   padding: "14px 16px",
                   fontSize: 15,
                   fontWeight: 950,
+                  cursor: selectedShareArchived ? "not-allowed" : "pointer",
+                  opacity: selectedShareArchived ? 0.72 : 1,
                 }}
               >
-                ＋ {L("Aggiungi spesa")}
+                {selectedShareArchived ? "🔒 " : "＋ "}{L("Aggiungi spesa")}
               </Btn>
+              {selectedShareArchived && (
+                <div
+                  style={{
+                    background: dark ? "#3B3014" : "#FFF8D8",
+                    border: "1px solid " + (dark ? "#C8A53A" : "#E7CA6A"),
+                    borderRadius: 12,
+                    padding: "9px 11px",
+                    fontSize: 11.5,
+                    lineHeight: 1.45,
+                    color: dark ? "#FFF2BB" : "#6B5900",
+                  }}
+                >
+                  {L("Il progetto è archiviato. Ripristinalo per aggiungere nuove spese.")}
+                </div>
+              )}
               {(shareExpenseFormOpen || shareEditingActivityId) && (
                 <div
                   style={{
@@ -6006,7 +6254,7 @@ export function SharePanel() {
                                           return (
                                             (pp ? personLabel(pp) : L("Partecipante")) +
                                             " " +
-                                            fmt(a.shares[pid])
+                                            fmt((a && a.shares && a.shares[pid]) || 0)
                                           );
                                         })
                                         .join(" · ") || "—"}

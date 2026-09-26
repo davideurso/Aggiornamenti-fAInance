@@ -1554,3 +1554,60 @@ export function applyAppTranslationPatches(){
   put('Media mensile delle uscite',{it:'Media mensile delle uscite',en:'Monthly average expenses',es:'Media mensual de los gastos',fr:'Moyenne mensuelle des dépenses',de:'Monatliche Durchschnittsausgaben',pt:'Média mensal das despesas',pl:'Średnie miesięczne wydatki',nl:'Gemiddelde maanduitgaven',ro:'Media lunară a cheltuielilor',el:'Μέσος μηνιαίος όρος δαπανών'});
   try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
 })();
+
+// fAInance Test - Mundely bridge approval flow.
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  put('Collega Mundely',{it:'Collega Mundely',en:'Connect Mundely',es:'Conectar Mundely',fr:'Connecter Mundely',de:'Mundely verbinden',pt:'Ligar Mundely',pl:'Połącz Mundely',nl:'Mundely koppelen',ro:'Conectează Mundely',el:'Σύνδεση Mundely'});
+  put('Una richiesta da Mundely vuole collegare questo account fAInance. Accetta per sincronizzare automaticamente ogni viaggio con un progetto Share.',{it:'Una richiesta da Mundely vuole collegare questo account fAInance. Accetta per sincronizzare automaticamente ogni viaggio con un progetto Share.',en:'A request from Mundely wants to connect this fAInance account. Accept to automatically sync every trip with a Share project.',es:'Una solicitud de Mundely quiere conectar esta cuenta de fAInance. Acepta para sincronizar automáticamente cada viaje con un proyecto Share.',fr:'Une demande de Mundely souhaite connecter ce compte fAInance. Accepte pour synchroniser automatiquement chaque voyage avec un projet Share.',de:'Eine Anfrage von Mundely möchte dieses fAInance-Konto verbinden. Akzeptiere, um jede Reise automatisch mit einem Share-Projekt zu synchronisieren.',pt:'Um pedido do Mundely pretende ligar esta conta fAInance. Aceita para sincronizar automaticamente cada viagem com um projeto Share.',pl:'Prośba z Mundely chce połączyć to konto fAInance. Zaakceptuj, aby automatycznie synchronizować każdą podróż z projektem Share.',nl:'Een verzoek van Mundely wil dit fAInance-account koppelen. Accepteer om elke reis automatisch met een Share-project te synchroniseren.',ro:'O solicitare din Mundely dorește să conecteze acest cont fAInance. Acceptă pentru a sincroniza automat fiecare călătorie cu un proiect Share.',el:'Ένα αίτημα από το Mundely θέλει να συνδέσει αυτόν τον λογαριασμό fAInance. Αποδέξου για αυτόματο συγχρονισμό κάθε ταξιδιού με ένα έργο Share.'});
+  put('Account richiesto',{it:'Account richiesto',en:'Requested account',es:'Cuenta solicitada',fr:'Compte demandé',de:'Angefordertes Konto',pt:'Conta solicitada',pl:'Wskazane konto',nl:'Gevraagd account',ro:'Cont solicitat',el:'Ζητούμενος λογαριασμός'});
+  put('Rifiuta',{it:'Rifiuta',en:'Decline',es:'Rechazar',fr:'Refuser',de:'Ablehnen',pt:'Recusar',pl:'Odrzuć',nl:'Weigeren',ro:'Refuză',el:'Απόρριψη'});
+  put('Collega',{it:'Collega',en:'Connect',es:'Conectar',fr:'Connecter',de:'Verbinden',pt:'Ligar',pl:'Połącz',nl:'Koppelen',ro:'Conectează',el:'Σύνδεση'});
+  put('Attendi...',{it:'Attendi...',en:'Please wait...',es:'Espera...',fr:'Patiente...',de:'Bitte warten...',pt:'Aguarda...',pl:'Czekaj...',nl:'Even geduld...',ro:'Așteaptă...',el:'Περίμενε...'});
+  try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// FAINANCE_58_ARCHIVED_SHARE_TRANSLATIONS
+(function(){
+  var LANGS=['it','en','es','fr','de','pt','pl','nl','ro','el'];
+  function put(k,v){LANGS.forEach(function(c){var val=v[c]||v.en||v.it||k;if(!TRANSLATIONS[c])TRANSLATIONS[c]={};TRANSLATIONS[c][k]=val;try{if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){if(!FAINANCE_UI_TRANSLATIONS[c])FAINANCE_UI_TRANSLATIONS[c]={};FAINANCE_UI_TRANSLATIONS[c][k]=val;}}catch(e){}try{if(typeof FAINANCE_I18N_PHRASES!=='undefined'){if(!FAINANCE_I18N_PHRASES[c])FAINANCE_I18N_PHRASES[c]={};FAINANCE_I18N_PHRASES[c][k]=val;}}catch(e){}});}
+  put('Il progetto è archiviato. Ripristinalo per aggiungere nuove spese.',{
+    it:'Il progetto è archiviato. Ripristinalo per aggiungere nuove spese.',
+    en:'This project is archived. Restore it to add new expenses.',
+    es:'Este proyecto está archivado. Restáuralo para añadir nuevos gastos.',
+    fr:'Ce projet est archivé. Restaurez-le pour ajouter de nouvelles dépenses.',
+    de:'Dieses Projekt ist archiviert. Stelle es wieder her, um neue Ausgaben hinzuzufügen.',
+    pt:'Este projeto está arquivado. Restaura-o para adicionar novas despesas.',
+    pl:'Ten projekt jest zarchiwizowany. Przywróć go, aby dodawać nowe wydatki.',
+    nl:'Dit project is gearchiveerd. Herstel het om nieuwe uitgaven toe te voegen.',
+    ro:'Acest proiect este arhivat. Restaurează-l pentru a adăuga cheltuieli noi.',
+    el:'Αυτό το έργο είναι αρχειοθετημένο. Επαναφέρετέ το για να προσθέσετε νέες δαπάνες.'
+  });
+  put('Avanti: la rata parte dal mese selezionato e continua nei mesi successivi.',{
+    it:'Avanti: la rata parte dal mese selezionato e continua nei mesi successivi.',
+    en:'Forward: the instalment starts from the selected month and continues in the following months.',
+    es:'Hacia adelante: la cuota empieza en el mes seleccionado y continúa en los meses siguientes.',
+    fr:'En avant : l’échéance commence au mois sélectionné et continue les mois suivants.',
+    de:'Vorwärts: Die Rate beginnt im ausgewählten Monat und läuft in den folgenden Monaten weiter.',
+    pt:'Avançar: a prestação começa no mês selecionado e continua nos meses seguintes.',
+    pl:'Do przodu: rata zaczyna się od wybranego miesiąca i trwa w kolejnych miesiącach.',
+    nl:'Vooruit: de termijn start in de geselecteerde maand en loopt door in de volgende maanden.',
+    ro:'Înainte: rata începe din luna selectată și continuă în lunile următoare.',
+    el:'Μπροστά: η δόση ξεκινά από τον επιλεγμένο μήνα και συνεχίζει στους επόμενους μήνες.'
+  });
+  put('Indietro: la rata parte dal mese selezionato e viene distribuita anche nei mesi precedenti.',{
+    it:'Indietro: la rata parte dal mese selezionato e viene distribuita anche nei mesi precedenti.',
+    en:'Backward: the instalment starts from the selected month and is also distributed across previous months.',
+    es:'Hacia atrás: la cuota empieza en el mes seleccionado y también se distribuye en los meses anteriores.',
+    fr:'En arrière : l’échéance commence au mois sélectionné et est aussi répartie sur les mois précédents.',
+    de:'Rückwärts: Die Rate beginnt im ausgewählten Monat und wird auch auf vorherige Monate verteilt.',
+    pt:'Retroceder: a prestação começa no mês selecionado e também é distribuída pelos meses anteriores.',
+    pl:'Wstecz: rata zaczyna się od wybranego miesiąca i jest rozłożona także na poprzednie miesiące.',
+    nl:'Achteruit: de termijn start in de geselecteerde maand en wordt ook over vorige maanden verdeeld.',
+    ro:'Înapoi: rata începe din luna selectată și este distribuită și în lunile anterioare.',
+    el:'Πίσω: η δόση ξεκινά από τον επιλεγμένο μήνα και κατανέμεται και στους προηγούμενους μήνες.'
+  });
+  try{if(typeof fainanceTranslationCache!=='undefined')fainanceTranslationCache={};}catch(e){}
+})();

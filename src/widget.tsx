@@ -1,3 +1,5 @@
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import { savingsGoalText } from './i18n/savingsGoalsTranslations';
 import { goalSavedAmount, goalSavingsMinor, linkSavingsGoal } from './finance/savingsGoals';
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -789,6 +791,17 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
   var premium = !opts || opts.length === 0 || currentPlan === "premium";
   var dir = direction || "forward";
   var [infoOpen, setInfoOpen] = useState(false);
+  // FAINANCE_58_RATE_INFO_STYLE
+  function rateInfoLine(text) {
+    var value = String(text || "");
+    var colon = value.indexOf(":");
+    return (
+      <span>
+        {colon > 0 ? <strong>{value.slice(0, colon + 1)}</strong> : null}
+        {colon > 0 ? value.slice(colon + 1) : value}
+      </span>
+    );
+  }
   function setSafe(v) {
     var n = parseInt(v, 10);
     if (isNaN(n) || n < 1) n = 1;
@@ -896,12 +909,28 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
         })}
         <FainanceInfoPopover
           label={L("Informazioni")}
-          body={L(
-            "Avanti: la rata parte dal mese selezionato e continua nei mesi successivi. Indietro: la rata parte dal mese selezionato e viene distribuita anche nei mesi precedenti."
-          )}
-          size={26}
-          popupOffsetY={34}
+          body={
+            <div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <span style={{ lineHeight: 1.5 }}>•</span>
+                {rateInfoLine(
+                  L("Avanti: la rata parte dal mese selezionato e continua nei mesi successivi.")
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 5 }}>
+                <span style={{ lineHeight: 1.5 }}>•</span>
+                {rateInfoLine(
+                  L("Indietro: la rata parte dal mese selezionato e viene distribuita anche nei mesi precedenti.")
+                )}
+              </div>
+            </div>
+          }
+          size={19}
+          popupOffsetY={27}
           popupWidth={280}
+          popupAlign="right"
+          buttonStyle={{ fontSize: 10 }}
+          popupStyle={{ fontSize: 11, lineHeight: 1.5 }}
         />
       </div>
     </div>
@@ -3977,6 +4006,12 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         f.exchangeRateDate || todayStr()
       ),
       exchangeRateSource: String(f.exchangeRateSource || "base"),
+      toolSource: String(f.toolSource || ""),
+      toolOriginalAmount: Number(f.converterOriginalAmount || 0) || null,
+      toolOriginalCurrency: String(f.converterOriginalCurrency || ""),
+      toolConvertedAmount: Number(f.converterResultAmount || 0) || null,
+      toolConvertedCurrency: String(f.converterResultCurrency || ""),
+      toolConversionRate: Number(f.converterRate || 0) || null,
       desc: f.desc,
       date: dateTouched ? f.date : todayStr(),
       rateizzato: f.rateizzato,
@@ -6341,12 +6376,18 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
   var t = ctx.t,
     cats = effectiveExpenseCats(ctx.cats),
     methods = effectiveMethods(ctx.methods),
+    sym = ctx.sym,
     dark = ctx.dark,
     catOrder = ctx.catOrder,
     methodOrder = ctx.methodOrder,
     catSortMode = ctx.catSortMode,
     methodSortMode = ctx.methodSortMode,
     expenseGroups = effectiveExpenseGroups(ctx.expenseGroups),
+    expenseColor = ctx.expenseColor,
+    incomeColor = ctx.incomeColor,
+    confirmButtonColor = ctx.confirmButtonColor,
+    secondaryButtonColor = ctx.secondaryButtonColor,
+    btnRadius = ctx.btnRadius,
     isMobile = ctx.isMobile;
   var L =
     ctx.translateUiRuntimeText ||
@@ -6401,6 +6442,9 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
       rateizzato: false,
       rate: 12,
       rateDirection: "forward",
+      currency: String(ctx.currency || "EUR"),
+      baseCurrency: String(ctx.currency || "EUR"),
+      exchangeRate: 1,
     };
   }
   var [rows, setRows] = useState([blank()]);
@@ -6461,6 +6505,13 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
       });
     });
   }
+  function updPatch(id, patch) {
+    setRows(function (list) {
+      return list.map(function (row) {
+        return row._id === id ? { ...row, ...(patch || {}) } : row;
+      });
+    });
+  }
   var bulkHasValidRows = rows.some(function (r) {
     return (
       parseMoney(r.amount) > 0 &&
@@ -6483,10 +6534,20 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     if (!valid.length) return;
     var ok = onSave(
       valid.map(function (r) {
+        var rawAmount = parseMoney(r.amount);
+        var foreign = String(r.currency || ctx.currency) !== String(ctx.currency);
+        var baseAmount = foreign && Number(r.baseAmount) > 0 ? Number(r.baseAmount) : rawAmount;
         return {
           id: Date.now() + Math.random(),
           _ruleDefaultFields:r._ruleDefaultFields||[],
-          amount: parseFloat(r.amount),
+          amount: baseAmount,
+          originalAmount: foreign ? rawAmount : null,
+          currency: String(r.currency || ctx.currency || "EUR"),
+          baseCurrency: String(r.baseCurrency || ctx.currency || "EUR"),
+          baseAmount: baseAmount,
+          exchangeRate: Number(r.exchangeRate || 1),
+          exchangeRateDate: String(r.exchangeRateDate || todayStr()),
+          exchangeRateSource: String(r.exchangeRateSource || "base"),
           catId: Number(r.catId),
           methodId: Number(r.methodId),
           type: r.itype,
@@ -6502,585 +6563,345 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
   }
   var tc = dark ? "#aaa" : "#666";
 
-  // MOBILE: card layout per ogni riga, allineato al form singolo
+  // FAINANCE_58_BULK_MATCH_SINGLE
+  // MOBILE: ogni voce usa gli stessi componenti, proporzioni e spaziature del form singolo.
   if (isMobile) {
+    var btnC = type === "expense" ? expenseColor : incomeColor;
+    var mainButtonC = confirmButtonColor || "#378ADD";
+    var secondaryC = secondaryButtonColor || "#7F77DD";
+    var borderCMobile = dark ? "#444" : "#e8e8ee";
+    var scMobile = dark ? "#aaa" : "#777";
+    var tcMobile = dark ? "#eee" : "#333";
+    var fieldBgMobile = dark ? "#1e1e30" : "#fff";
+    var whiteSoftMobile = "rgba(255,255,255,.70)";
     var amountGradient =
       type === "expense"
         ? "linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)"
         : "linear-gradient(135deg,#062F49 0%,#075C83 55%,#041F33 100%)";
-    var fieldCard = {
-      background: dark ? "#1f1f31" : "#fff",
-      border: "1px solid " + (dark ? "#3d3d50" : "#ECE9F6"),
-      borderRadius: 16,
-      padding: 10,
-      boxShadow: dark ? "none" : "0 4px 12px rgba(83,74,183,0.05)",
+    var mobileInp = {
+      width: "100%",
+      borderRadius: 10,
+      border: "1px solid " + borderCMobile,
+      padding: "6px 8px",
+      fontSize: 14,
+      background: fieldBgMobile,
+      color: tcMobile,
+      boxSizing: "border-box",
+      outline: "none",
+      minWidth: 0,
     };
-    function dateBtnStyle(active) {
+    var mobileFieldCard = {
+      background: fieldBgMobile,
+      border: "1px solid " + borderCMobile,
+      borderRadius: 14,
+      padding: "7px 8px",
+      boxShadow: dark
+        ? "0 6px 16px rgba(0,0,0,.16)"
+        : "0 6px 18px rgba(31,60,120,.08), inset 0 1px 0 rgba(255,255,255,.86)",
+    };
+    var mobileLabel = {
+      fontSize: 11.8,
+      color: dark ? scMobile : "#343647",
+      display: "block",
+      marginBottom: 4,
+      fontWeight: 700,
+      textTransform: "uppercase",
+      letterSpacing: 0.35,
+    };
+    var mobileDateBtnBase = {
+      height: 38,
+      borderRadius: btnRadius,
+      border: "1px solid " + (dark ? "#3f3f52" : "#E4E2F2"),
+      background: dark ? "#252535" : "#fff",
+      color: tcMobile,
+      fontSize: 11.9,
+      fontWeight: 850,
+      cursor: "pointer",
+      boxShadow: dark ? "none" : "0 2px 8px rgba(0,0,0,.035)",
+      whiteSpace: "nowrap",
+    };
+    function mobileDateBtnStyle(active) {
       return {
-        height: 38,
-        borderRadius: 12,
-        border:
-          "1px solid " + (active ? "#7F77DD" : dark ? "#3f3f52" : "#E4E2F2"),
+        ...mobileDateBtnBase,
+        borderColor: active ? secondaryC : dark ? "#3f3f52" : "#E4E2F2",
         background: active
           ? dark
-            ? "#7F77DD44"
-            : "#7F77DD14"
+            ? secondaryC + "44"
+            : secondaryC + "14"
           : dark
           ? "#252535"
           : "#fff",
-        color: active ? "#7F77DD" : dark ? "#eee" : "#333",
-        fontSize: 11,
-        fontWeight: 850,
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        boxShadow: dark ? "none" : "0 2px 8px rgba(0,0,0,.035)",
+        color: active ? secondaryC : tcMobile,
       };
+    }
+    function bulkToggleSwitch(r) {
+      return (
+        <button
+          type="button"
+          aria-label={L("Rateizza")}
+          onClick={function () { upd(r._id, "rateizzato", !r.rateizzato); }}
+          style={{
+            width: 34,
+            height: 19,
+            borderRadius: 999,
+            border: "1px solid rgba(255,255,255,.45)",
+            background: r.rateizzato ? "rgba(255,255,255,.88)" : "rgba(255,255,255,.24)",
+            padding: 2,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: r.rateizzato ? "flex-end" : "flex-start",
+            transition: "all .18s ease",
+            boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
+          }}
+        >
+          <span
+            style={{
+              width: 15,
+              height: 15,
+              borderRadius: "50%",
+              background: r.rateizzato ? btnC : "#fff",
+              display: "block",
+              boxShadow: "0 2px 7px rgba(0,0,0,.20)",
+            }}
+          />
+        </button>
+      );
     }
     return (
       <div>
         {rows.map(function (r, idx) {
+          var amountHasValue = !!String(r.amount || "").trim();
+          var showAmountPlaceholder = !amountHasValue && bulkAmountFocusedId !== r._id;
           return (
             <div
               key={r._id}
+              className="fainance-entry-form fainance-bulk-entry-form"
               style={{
                 background: dark ? "#181827" : "#fff",
+                border: "1px solid " + borderCMobile,
                 borderRadius: 18,
-                border: "1px solid " + (dark ? "#3d3d50" : "#E6E2F7"),
                 padding: 10,
+                boxShadow: dark
+                  ? "0 14px 34px rgba(0,0,0,.20)"
+                  : "0 16px 38px rgba(83,74,183,.12)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
                 marginBottom: 12,
-                boxShadow: dark ? "none" : "0 8px 24px rgba(83,74,183,0.08)",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 10,
-                  padding: "2px 2px 0",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 900,
-                    color: dark ? "#eee" : "#333",
-                  }}
-                >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px 2px" }}>
+                <div style={{ fontSize: 18.6, fontWeight: 950, color: tcMobile, letterSpacing: 0.1 }}>
                   {L("Voce")} {idx + 1}
-                </span>
+                </div>
                 {rows.length > 1 && (
                   <button
+                    type="button"
+                    aria-label={L("Elimina")}
                     onClick={function () {
-                      setRows(function (p) {
-                        return p.filter(function (x) {
-                          return x._id !== r._id;
-                        });
-                      });
+                      setRows(function (p) { return p.filter(function (x) { return x._id !== r._id; }); });
                     }}
                     style={{
-                      width: 28,
-                      height: 28,
+                      width: 32,
+                      height: 32,
                       borderRadius: 10,
-                      border: "1px solid " + (dark ? "#444" : "#E6E2F7"),
+                      border: "1px solid " + borderCMobile,
                       background: dark ? "#252535" : "#fff",
-                      cursor: "pointer",
                       color: "#F87171",
                       fontSize: 18,
-                      lineHeight: 1,
+                      fontWeight: 900,
+                      cursor: "pointer",
                     }}
                   >
                     ×
                   </button>
                 )}
               </div>
+
               <div
+                className="fainance-entry-amount"
                 style={{
                   background: amountGradient,
                   borderRadius: 18,
-                  padding: "14px 14px",
+                  padding: "16px clamp(9px,3.6vw,14px)",
                   display: "grid",
-                  gridTemplateColumns: "44px minmax(0,1fr) 58px",
-                  gap: 6,
+                  gridTemplateColumns: "clamp(36px,11vw,44px) minmax(0,1fr) clamp(98px,29vw,108px)",
+                  gap: "clamp(3px,1.5vw,6px)",
                   alignItems: "center",
                   color: "#fff",
-                  boxShadow: dark ? "none" : "0 10px 24px rgba(83,74,183,.12)",
-                  marginBottom: 10,
+                  boxShadow: dark ? "0 12px 28px rgba(0,0,0,.20)" : "0 14px 30px rgba(83,74,183,.22)",
                 }}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: "50%",
-                    background: "rgba(255,255,255,.96)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: type === "expense" ? "#E24B4A" : "#1D9E75",
-                    fontSize: 18,
-                    boxShadow: "0 6px 16px rgba(0,0,0,.12)",
-                  }}
-                >
-                  {type === "expense" ? "💳" : "💰"}
-                </div>
+                <AmountCalculatorButton
+                  value={r.amount}
+                  onApply={function (next) { upd(r._id, "amount", next); }}
+                  inverse
+                  compact
+                  iconOnly
+                  iconSize={34}
+                />
                 <div style={{ minWidth: 0, textAlign: "center" }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 850,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.8,
-                      color: "rgba(255,255,255,.70)",
-                      marginBottom: 2,
-                    }}
-                  >
+                  <div style={{ fontSize: 12.6, fontWeight: 850, textTransform: "uppercase", letterSpacing: 0.8, color: whiteSoftMobile, marginBottom: 2 }}>
                     {L("Importo")}
                   </div>
-                  <div style={{ position: "relative" }}>
-                    {!String(r.amount || "").trim() && bulkAmountFocusedId !== r._id && (
-                      <div
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, maxWidth: "100%" }}>
+                    <div style={{ position: "relative", flex: "0 1 auto", minWidth: 0, maxWidth: "calc(100% - 48px)" }}>
+                      {showAmountPlaceholder && (
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "clamp(31.5px,10.4vw,37.5px)", fontWeight: 950, color: "#fff", lineHeight: 1, pointerEvents: "none", textShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
+                          _,__
+                        </div>
+                      )}
+                      <input
+                        ref={idx === 0 ? firstAmountInputRef : null}
+                        autoFocus={idx === 0}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder=""
+                        value={r.amount}
+                        onFocus={function () { setBulkAmountFocusedId(r._id); }}
+                        onBlur={function () { setBulkAmountFocusedId(function (current) { return current === r._id ? null : current; }); }}
+                        onChange={function (e) { upd(r._id, "amount", e.target.value); }}
                         style={{
-                          position: "absolute",
-                          inset: 0,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-start",
-                          fontSize: 34,
+                          width: amountHasValue ? Math.min(Math.max(String(r.amount || "").length + 0.5, 2), 7.5) + "ch" : 70,
+                          maxWidth: "100%",
+                          display: "block",
+                          margin: 0,
+                          border: "none",
+                          background: "transparent",
+                          padding: 0,
+                          textAlign: "center",
+                          fontSize: "clamp(31.5px,10.4vw,37.5px)",
                           fontWeight: 950,
                           color: "#fff",
+                          WebkitTextFillColor: "#fff",
+                          outline: "none",
                           lineHeight: 1,
-                          pointerEvents: "none",
+                          textShadow: "0 2px 10px rgba(0,0,0,.12)",
                         }}
-                      >
-                        _,__
-                      </div>
-                    )}
-                    <input
-                      ref={idx === 0 ? firstAmountInputRef : null}
-                      autoFocus={idx === 0}
-                      type="text"
-                      inputMode="decimal"
-                      placeholder=""
-                      value={r.amount}
-                      onFocus={function () {
-                        setBulkAmountFocusedId(r._id);
-                      }}
-                      onBlur={function () {
-                        setBulkAmountFocusedId(function (current) {
-                          return current === r._id ? null : current;
-                        });
-                      }}
-                      onChange={function (e) {
-                        upd(r._id, "amount", e.target.value);
-                      }}
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        background: "transparent",
-                        padding: 0,
-                        textAlign: "left",
-                        fontSize: 34,
-                        fontWeight: 950,
-                        color: "#fff",
-                        WebkitTextFillColor: "#fff",
-                        outline: "none",
-                        lineHeight: 1,
-                      }}
+                      />
+                    </div>
+                    <MultiCurrencyField
+                      inline
+                      compact
+                      value={r}
+                      amount={r.amount}
+                      onChange={function (patch) { updPatch(r._id, patch); }}
                     />
                   </div>
-                  {!String(r.amount || "").trim() && bulkAmountFocusedId !== r._id && (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "rgba(255,255,255,.70)",
-                        fontWeight: 600,
-                        marginTop: 4,
-                      }}
-                    >
+                  {showAmountPlaceholder && (
+                    <div style={{ fontSize: 14.6, color: whiteSoftMobile, fontWeight: 600, marginTop: 4 }}>
                       {L("Inserisci l'importo")}
                     </div>
                   )}
+                  {String(r.currency || ctx.currency) !== String(ctx.currency) && Number(r.baseAmount) > 0 && (
+                    <div style={{ fontSize: 11.6, color: whiteSoftMobile, marginTop: 3 }}>
+                      ≈ {Number(r.baseAmount).toFixed(2)} {String(ctx.currency || "EUR")}
+                    </div>
+                  )}
                 </div>
-                <div
-                  style={{
-                    height: "100%",
-                    minHeight: 52,
-                    borderLeft: "1px solid rgba(255,255,255,.32)",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 4,
-                    paddingLeft: 5,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 950,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.6,
-                      color: "#fff",
-                    }}
-                  >
+                <div style={{ height: "100%", minHeight: 52, borderLeft: "1px solid rgba(255,255,255,.32)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, paddingLeft: 12 }}>
+                  <div style={{ fontSize: "clamp(7.4px,2.35vw,8.6px)", fontWeight: 950, textTransform: "uppercase", letterSpacing: 0.35, color: "#fff", lineHeight: 0.95, textAlign: "center" }}>
                     {L("Rateizza")}
                   </div>
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "rateizzato", !r.rateizzato);
-                    }}
-                    style={{
-                      width: 34,
-                      height: 19,
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,.45)",
-                      background: r.rateizzato
-                        ? "rgba(255,255,255,.88)"
-                        : "rgba(255,255,255,.24)",
-                      padding: 2,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: r.rateizzato ? "flex-end" : "flex-start",
-                      boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 15,
-                        height: 15,
-                        borderRadius: "50%",
-                        background: r.rateizzato
-                          ? type === "expense"
-                            ? "#E24B4A"
-                            : "#1D9E75"
-                          : "#fff",
-                        display: "block",
-                        boxShadow: "0 2px 7px rgba(0,0,0,.20)",
-                      }}
-                    />
-                  </button>
+                  {bulkToggleSwitch(r)}
                 </div>
               </div>
+
               {r.rateizzato && (
-                <div
-                  style={{
-                    background: dark ? "#24213a" : "#F0EDFF",
-                    border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
-                    borderRadius: 14,
-                    padding: 10,
-                    marginBottom: 10,
-                  }}
-                >
+                <div style={{ background: dark ? "#24213a" : "#F0EDFF", border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"), borderRadius: 14, padding: 10 }}>
+                  <div style={{ fontSize: 12, color: dark ? "#BEB8FF" : "#534AB7", marginBottom: 7, fontWeight: 800 }}>
+                    {L("Rateizza")} · {r.rate} {L("mesi")}
+                  </div>
                   <RatePicker
                     value={r.rate}
                     direction={r.rateDirection || "forward"}
-                    onChange={function (n) {
-                      upd(r._id, "rate", n);
-                    }}
-                    onDirectionChange={function (d) {
-                      upd(r._id, "rateDirection", d);
-                    }}
+                    onChange={function (n) { upd(r._id, "rate", n); }}
+                    onDirectionChange={function (d) { upd(r._id, "rateDirection", d); }}
                   />
                 </div>
               )}
+
               {type === "expense" ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 8,
-                    marginBottom: 10,
-                  }}
-                >
-                  <div style={fieldCard}>
-                    <label
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: tc,
-                        display: "block",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {L("Categoria")}
-                    </label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "clamp(5px,2vw,8px)" }}>
+                  <div style={{ ...mobileFieldCard, padding: "4px clamp(5px,1.9vw,7px)" }}>
+                    <label style={mobileLabel}>{L("Categoria")}</label>
                     <div style={{ position: "relative", minWidth: 0 }}>
                       <select
                         value={r.catId}
-                        onChange={function (e) {
-                          upd(r._id, "catId", e.target.value);
-                        }}
-                        style={{
-                          ...inp,
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          padding: "10px 18px 10px 2px",
-                          paddingLeft: 2,
-                          fontSize: 13,
-                          fontWeight: 750,
-                          border: "none",
-                          background: "transparent",
-                          height: 48,
-                          textOverflow: "ellipsis",
-                        }}
+                        onChange={function (e) { upd(r._id, "catId", e.target.value); }}
+                        style={{ ...mobileInp, padding: "8px 3px 8px 2px", paddingLeft: 2, paddingRight: 3, fontSize: "clamp(13.2px,4.05vw,14.8px)", fontWeight: 750, border: "none", background: "transparent", height: 39, appearance: "none", WebkitAppearance: "none" }}
                       >
-                      {sCats.map(function (c) {
-                        return (
-                          <option key={c.id} value={c.id}>
-                            {iconTextValue(c.icon)} {c.name}
-                          </option>
-                        );
-                      })}
+                        {sCats.map(function (c) {
+                          return <option key={c.id} value={c.id}>{iconTextValue(c.icon)} {c.name}</option>;
+                        })}
                       </select>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          right: 1,
-                          top: -8,
-                          fontSize: 17,
-                          lineHeight: 1,
-                          color: "#7F77DD",
-                          fontWeight: 950,
-                          pointerEvents: "none",
-                        }}
-                      >
-                        ▾
-                      </span>
+                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: mainButtonC, fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
                     </div>
                   </div>
-                  <div style={fieldCard}>
-                    <label
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: tc,
-                        display: "block",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {L("Metodo")}
-                    </label>
+                  <div style={{ ...mobileFieldCard, padding: "4px clamp(5px,1.9vw,7px)" }}>
+                    <label style={mobileLabel}>{L("Pagamento")}</label>
                     <div style={{ position: "relative", minWidth: 0 }}>
                       <select
                         value={r.methodId}
-                        onChange={function (e) {
-                          upd(r._id, "methodId", e.target.value);
-                        }}
-                        style={{
-                          ...inp,
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          padding: "10px 18px 10px 2px",
-                          paddingLeft: 2,
-                          fontSize: 13,
-                          fontWeight: 750,
-                          border: "none",
-                          background: "transparent",
-                          height: 48,
-                          textOverflow: "ellipsis",
-                        }}
+                        onChange={function (e) { upd(r._id, "methodId", e.target.value); }}
+                        style={{ ...mobileInp, padding: "8px 3px 8px 2px", paddingLeft: 2, paddingRight: 3, fontSize: "clamp(13.2px,4.05vw,14.8px)", fontWeight: 750, border: "none", background: "transparent", height: 39, appearance: "none", WebkitAppearance: "none" }}
                       >
-                      {sMethods.map(function (m) {
-                        return (
-                          <option key={m.id} value={m.id}>
-                            {iconTextValue(m.icon)} {m.name}
-                          </option>
-                        );
-                      })}
+                        {sMethods.map(function (m) {
+                          return <option key={m.id} value={m.id}>{iconTextValue(m.icon)} {m.name}</option>;
+                        })}
                       </select>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          right: 1,
-                          top: -8,
-                          fontSize: 17,
-                          lineHeight: 1,
-                          color: "#7F77DD",
-                          fontWeight: 950,
-                          pointerEvents: "none",
-                        }}
-                      >
-                        ▾
-                      </span>
+                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: mainButtonC, fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div style={{ ...fieldCard, marginBottom: 10 }}>
-                  <label
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 800,
-                      color: tc,
-                      display: "block",
-                      marginBottom: 6,
-                    }}
-                  >
-                    {L("Tipo")}
-                  </label>
+                <div style={mobileFieldCard}>
+                  <label style={mobileLabel}>{L("Tipo")}</label>
                   <select
                     value={r.itype}
-                    onChange={function (e) {
-                      upd(r._id, "itype", e.target.value);
-                    }}
-                    style={{
-                      ...inp,
-                      padding: "10px 10px 10px 2px",
-                      paddingLeft: 2,
-                      fontSize: 13,
-                      fontWeight: 750,
-                      border: "none",
-                      background: "transparent",
-                      height: 48,
-                    }}
+                    onChange={function (e) { upd(r._id, "itype", e.target.value); }}
+                    style={{ ...mobileInp, padding: "10px 10px 10px 2px", paddingLeft: 2, fontSize: 13.7, fontWeight: 750, border: "none", background: "transparent", height: 48 }}
                   >
-                    {sIncomeTypes.map(function (it) {
-                      return (
-                        <option key={it.id} value={it.id}>
-                          {it.icon} {it.name}
-                        </option>
-                      );
-                    })}
+                    {sIncomeTypes.map(function (it) { return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>; })}
                   </select>
                 </div>
               )}
-              <div style={{ ...fieldCard, marginBottom: 10 }}>
-                <label
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: tc,
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  {L("Descrizione")}
-                </label>
+
+              <div style={{ ...mobileFieldCard, padding: 8 }}>
+                <label style={mobileLabel}>{L("Descrizione")}</label>
                 <textarea
                   value={r.desc}
-                  onChange={function (e) {
-                    upd(r._id, "desc", e.target.value);
-                  }}
-                  style={{
-                    ...inp,
-                    minHeight: 72,
-                    height: 72,
-                    resize: "none",
-                    padding: "11px 12px",
-                    lineHeight: 1.25,
-                    fontFamily: "inherit",
-                  }}
-                  placeholder={L("Inserisci una descrizione...")}
+                  onChange={function (e) { upd(r._id, "desc", e.target.value); }}
+                  style={{ ...mobileInp, minHeight: 56, height: 56, resize: "none", padding: "7px 12px", lineHeight: 1.25, fontFamily: "inherit" }}
+                  placeholder={L("Aggiungi una descrizione (opzionale)")}
                 />
               </div>
-              <div style={fieldCard}>
-                <label
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: tc,
-                    display: "block",
-                    marginBottom: 8,
-                  }}
-                >
-                  {L("Data")}
-                </label>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: ".58fr .62fr 1.12fr 2.04fr",
-                    gap: 5,
-                    alignItems: "center",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "date", todayStr());
-                    }}
-                    style={dateBtnStyle(r.date === todayStr())}
-                  >
-                    {ctx.t.today}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "date", dateOffset(1));
-                    }}
-                    style={dateBtnStyle(r.date === dateOffset(1))}
-                  >
-                    {ctx.t.yesterday}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "date", dateOffset(2));
-                    }}
-                    style={{
-                      ...dateBtnStyle(r.date === dateOffset(2)),
-                      fontSize: 9.5,
-                      lineHeight: 1.05,
-                      whiteSpace: "normal",
-                      padding: "0 2px",
-                      textAlign: "center",
-                    }}
-                  >
-                    {ctx.t.twoDaysAgo}
-                  </button>
-                  <label
-                    style={{
-                      ...dateBtnStyle(false),
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      position: "relative",
-                      overflow: "hidden",
-                      padding: "0 5px",
-                      gap: 4,
-                    }}
-                  >
-                    <span style={{ pointerEvents: "none", fontWeight: 850 }}>
-                      {fmtDate(r.date, ctx.dateFmt || "dd/mm/yyyy")}
-                    </span>
-                    <span style={{ pointerEvents: "none", fontSize: 17 }}>
-                      📅
-                    </span>
-                    <input
-                      type="date"
-                      value={r.date}
-                      onChange={function (e) {
-                        upd(r._id, "date", e.target.value);
-                      }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        opacity: 0,
-                        cursor: "pointer",
-                      }}
-                    />
+
+              <div style={{ ...mobileFieldCard, padding: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: ".58fr .62fr 1.12fr 2.04fr", gap: 5, alignItems: "center" }}>
+                  <button type="button" onClick={function () { upd(r._id, "date", todayStr()); }} style={mobileDateBtnStyle(r.date === todayStr())}>{ctx.t.today}</button>
+                  <button type="button" onClick={function () { upd(r._id, "date", dateOffset(1)); }} style={mobileDateBtnStyle(r.date === dateOffset(1))}>{ctx.t.yesterday}</button>
+                  <button type="button" onClick={function () { upd(r._id, "date", dateOffset(2)); }} style={{ ...mobileDateBtnStyle(r.date === dateOffset(2)), fontSize: 10.6, lineHeight: 1.05, whiteSpace: "normal", padding: "0 2px", textAlign: "center" }}>{ctx.t.twoDaysAgo}</button>
+                  <label style={{ ...mobileDateBtnStyle(false), display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: "0 5px", gap: 4 }}>
+                    <span style={{ pointerEvents: "none", fontWeight: 850 }}>{fmtDate(r.date, ctx.dateFmt || "dd/mm/yyyy")}</span>
+                    <span style={{ pointerEvents: "none", fontSize: 17 }}>📅</span>
+                    <input type="date" value={r.date} onChange={function (e) { upd(r._id, "date", e.target.value); }} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
                   </label>
                 </div>
               </div>
             </div>
           );
         })}
-        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: rowLimitReached ? "1fr" : "1fr 1fr", gap: 10, marginTop: 4 }}>
           {rowLimitReached ? (
             limitBox
           ) : (
             <Btn
-              onClick={function () {
-                setRows(function (p) {
-                  return rowLimitReached ? p : [...p, blank()];
-                });
-              }}
+              onClick={function () { setRows(function (p) { return rowLimitReached ? p : [...p, blank()]; }); }}
               bg={dark ? "#333" : "#f0f0f0"}
               color={dark ? "#eee" : "#444"}
+              style={{ width: "100%", padding: 13, fontWeight: 900 }}
             >
               {L(t.addRow)}
             </Btn>
@@ -7088,13 +6909,8 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
           <Btn
             onClick={saveAll}
             disabled={!bulkHasValidRows}
-            bg={
-              bulkHasValidRows
-                ? type === "expense"
-                  ? "#E24B4A"
-                  : "#1D9E75"
-                : "#A8A8A8"
-            }
+            bg={bulkHasValidRows ? mainButtonC : "#A8A8A8"}
+            style={{ width: "100%", padding: 13, fontWeight: 950 }}
           >
             {L(t.saveAll)} ({rows.length})
           </Btn>
@@ -8604,6 +8420,7 @@ export function GoalsPanel() {
     lang = ctx.lang;
   var [showAdd, setShowAdd] = useState(false);
   var [editingGoalId, setEditingGoalId] = useState(null);
+  useAnalyticsFlow(showAdd, "goal", "manual", editingGoalId ? "update" : "create");
   var [addAmt, setAddAmt] = useState({});
   var [linkEditingGoalId, setLinkEditingGoalId] = useState(null);
   var [linkBucketId, setLinkBucketId] = useState("");
@@ -8647,6 +8464,7 @@ export function GoalsPanel() {
     return !canAddPlanItem || canAddPlanItem("goals", (goals || []).length, 1);
   }
   function showGoalLimit() {
+    finishAnalyticsFlow("goal", "failed", { reason: "plan_limit" });
     if (setToast)
       setToast({
         text: "Hai raggiunto il limite di obiettivi del piano attuale.\nElimina un obiettivo oppure fai l’upgrade",
@@ -8664,7 +8482,8 @@ export function GoalsPanel() {
     Number(form.target) > 0 &&
     Number(form.saved || 0) >= 0;
   function addGoal() {
-    if (!goalFormValid) return;
+    startAnalyticsFlow("goal", { method: "manual", operation: editingGoalId ? "update" : "create" });
+    if (!goalFormValid) { finishAnalyticsFlow("goal", "failed", { reason: "validation" }); return; }
     if (editingGoalId) {
       setGoals(function (p) {
         return p.map(function (g) {
@@ -8680,6 +8499,7 @@ export function GoalsPanel() {
             : g;
         });
       });
+      finishAnalyticsFlow("goal", "completed", { operation: "update" });
       setEditingGoalId(null);
       setForm(blank);
       setShowAdd(false);
@@ -8702,6 +8522,7 @@ export function GoalsPanel() {
         },
       ];
     });
+    finishAnalyticsFlow("goal", "completed", { operation: "create" });
     setForm(blank);
     setShowAdd(false);
     if (setToast) setToast(L("Obiettivo creato correttamente"));
@@ -8718,6 +8539,7 @@ export function GoalsPanel() {
     setShowAdd(true);
   }
   function cancelGoalForm() {
+    finishAnalyticsFlow("goal", "cancelled", { reason: "user_cancel" });
     setEditingGoalId(null);
     setForm(blank);
     setShowAdd(false);
@@ -10902,6 +10724,7 @@ export function BudgetPlanPanel() {
   var [savingToast, setSavingToast] = useState("");
   var [showInfoTooltip, setShowInfoTooltip] = useState(false);
   var [budgetPopup, setBudgetPopup] = useState(null);
+  useAnalyticsFlow(!!budgetPopup, "budget", "manual", "update");
 
   useEffect(
     function () {
@@ -11010,11 +10833,13 @@ export function BudgetPlanPanel() {
     setBudgetPopup(kind);
   }
   function closeBudgetPopup() {
+    finishAnalyticsFlow("budget", "cancelled", { reason: "user_cancel" });
     restoreSavedBudgetDraft();
     setShowInfoTooltip(false);
     setBudgetPopup(null);
   }
   function save() {
+    startAnalyticsFlow("budget", { method: "manual", operation: "update" });
     var savedPopup = budgetPopup;
     setBudgetPlan({
       ...budgetPlan,
@@ -11029,6 +10854,7 @@ export function BudgetPlanPanel() {
         };
       })),
     });
+    finishAnalyticsFlow("budget", "completed");
     setSavingToast(
       L(
         savedPopup === "income"

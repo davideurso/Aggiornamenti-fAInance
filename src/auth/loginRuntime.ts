@@ -1,6 +1,8 @@
 import type { User } from "firebase/auth";
+import { trackAnalyticsEvent } from '../analytics/firebaseAnalytics';
 import {
   GoogleAuthProvider,
+  getAdditionalUserInfo,
   OAuthProvider,
   sendPasswordResetEmail,
   signInWithCredential,
@@ -94,12 +96,14 @@ export async function performGoogleAccountLogin(): Promise<User> {
 
     const credential = GoogleAuthProvider.credential(idToken || null, accessToken || null);
     const signed = await signInWithCredentialAndQuotaRecovery(credential);
+    if (getAdditionalUserInfo(signed)?.isNewUser) trackAnalyticsEvent('fainance_account_created', { method: 'google' });
     return signed.user;
   }
 
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
   const signed = await signInWithPopup(fbAuth, provider);
+  if (getAdditionalUserInfo(signed)?.isNewUser) trackAnalyticsEvent('fainance_account_created', { method: 'google' });
   return signed.user;
 }
 
@@ -159,6 +163,7 @@ export async function performAppleAccountLogin(language: string): Promise<User> 
     );
     const signed = await signInWithCredentialAndQuotaRecovery(credential);
     user = signed.user;
+    if (getAdditionalUserInfo(signed)?.isNewUser) trackAnalyticsEvent('fainance_account_created', { method: 'apple' });
   } else {
     const provider = new OAuthProvider("apple.com");
     provider.addScope("email");
@@ -166,6 +171,7 @@ export async function performAppleAccountLogin(language: string): Promise<User> 
     provider.setCustomParameters({ locale: language });
     const signed = await signInWithPopup(fbAuth, provider);
     user = signed.user;
+    if (getAdditionalUserInfo(signed)?.isNewUser) trackAnalyticsEvent('fainance_account_created', { method: 'apple' });
   }
 
   try { await ensureAppleBaseProfile(user); } catch { /* keep login successful */ }
