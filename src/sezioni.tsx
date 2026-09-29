@@ -6480,8 +6480,14 @@ export function HomePanel() {
       {pendingCount > 0 && (
         <div
           onClick={function () {
-            setTab("spese");
-            setSpeseSubTab("ricorrenti");
+            setTab("tools");
+            window.setTimeout(function () {
+              window.dispatchEvent(
+                new CustomEvent("fainance:open-tool", {
+                  detail: { page: "recurring" },
+                })
+              );
+            }, 0);
           }}
           style={{
             background: "#fff3cd",
@@ -6498,15 +6504,8 @@ export function HomePanel() {
             🔄{" "}
             {String(
               (t && t.recurringPendingHome) ||
-                L("{count} ricorrenti da confermare per {month}")
-            )
-              .replace("{count}", String(pendingCount))
-              .replace(
-                "{month}",
-                monthFullName
-                  ? monthFullName(Number(curMonthKey.slice(5))-1)
-                  : MONTHS_FULL[Number(curMonthKey.slice(5))-1]
-              )}
+                L("{count} transazioni ricorrenti da confermare")
+            ).replace("{count}", String(pendingCount))}
           </span>
           <span style={{ color: "#856404" }}>›</span>
         </div>

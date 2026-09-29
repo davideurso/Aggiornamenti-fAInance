@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../core";
 import { PopupCloseButton } from "../widget";
-import { recurringOccurrencesInPeriod } from "../finance/recurringOccurrences";
+import { recurringDueOccurrences } from "../finance/recurringOccurrences";
 import {
   isMundelyBridgeEnabled,
   pullMundelyBridge,
@@ -100,8 +100,8 @@ function useRecurringNotificationItems(userId: string): AppNotificationRecord[] 
   return useMemo(() => {
     if (!userId || !ctx?.notifPrefs?.spesaRicorrente) return [];
     const rules = Array.isArray(ctx.recurring) ? ctx.recurring : [];
-    const periodKey = String(ctx.curMonthKey || "");
-    if (!periodKey) return [];
+    const today = String(ctx.accountingDate || "").slice(0, 10);
+    if (!today) return [];
     const settings = ctx.accountingPeriod?.settings;
     const locale = String(ctx.lang || "it");
     const formatter = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -114,7 +114,7 @@ function useRecurringNotificationItems(userId: string): AppNotificationRecord[] 
     const rows: AppNotificationRecord[] = [];
     rules.forEach((rule: any) => {
       const generated = rule?.rtype === "expense" ? (ctx.expenses || []) : (ctx.incomes || []);
-      const occurrences = recurringOccurrencesInPeriod(rule, periodKey, settings, generated);
+      const occurrences = recurringDueOccurrences(rule, today, settings, generated);
       occurrences.forEach((occurrence: any) => {
         const rawDate = String(occurrence?._occurrenceDate || "");
         let dueDate = rawDate;
@@ -146,7 +146,7 @@ function useRecurringNotificationItems(userId: string): AppNotificationRecord[] 
     ctx?.recurring,
     ctx?.expenses,
     ctx?.incomes,
-    ctx?.curMonthKey,
+    ctx?.accountingDate,
     ctx?.accountingPeriod?.settings,
     ctx?.lang,
     ctx?.fmt,

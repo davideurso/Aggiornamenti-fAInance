@@ -288,7 +288,7 @@ import {
   nextBulkMovementAllowedAt,
   isBulkMovementLocked,
 } from "./finance/bulkMovementPolicy";
-import { recurringOccurrencesInPeriod } from './finance/recurringOccurrences';
+import { recurringDueOccurrences, recurringOccurrenceForDate } from './finance/recurringOccurrences';
 import { sortFinancialHistoryItems } from "./finance/historySorting";
 import { debtCreditBalance } from "./finance/debtCredit";
 import { maskPaymentCardNumber } from "./finance/paymentCards";
@@ -3263,6 +3263,27 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     document.addEventListener('visibilitychange', refresh);
     return () => { clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
   }, []);
+  // fAInance 2.1.5: migrazione prudente delle ricorrenze legacy.
+  // effectiveFrom diventa il punto stabile da cui cercare occorrenze aperte.
+  // Per le regole gia' esistenti partiamo dall'inizio del periodo corrente,
+  // cosi' non vengono creati arretrati storici mai realmente richiesti.
+  useEffect(function () {
+    if (!Array.isArray(recurring) || recurring.length === 0) return;
+    var baseline = accountingPeriod.forDate(accountingDate).start;
+    var changed = false;
+    var migrated = recurring.map(function (rule) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(rule && rule.effectiveFrom || ""))) return rule;
+      changed = true;
+      return { ...rule, effectiveFrom: baseline };
+    });
+    if (changed) setRecurring(migrated);
+  }, [
+    userId,
+    accountingDate,
+    financeEvolution.period.mode,
+    financeEvolution.period.startDay,
+    recurring,
+  ]);
   var [toolShareDraft,setToolShareDraft]=useState<any>(null);
   useEffect(()=>{setToolShareDraft(null);},[userId]);
   var financeEvolutionRef = useRef(financeEvolution);
@@ -20291,17 +20312,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       return;
     }
     var generatedRecurringMovements = r.rtype === "expense" ? expenses : incomes;
-    const occurrence = recurringOccurrencesInPeriod(
-      r,
-      curMonthKey,
-      accountingPeriod.settings,
-      generatedRecurringMovements
-    ).find(value =>
-      r._occurrenceDate
-        ? value._occurrenceDate === r._occurrenceDate
-        : value._occurrenceKey === (r._occurrenceKey || mk)
-    );
-    if (!occurrence) return;
+    var requestedDate = String(r && r._occurrenceDate || "").slice(0, 10);
+    var occurrence = requestedDate
+      ? recurringOccurrenceForDate(
+          r,
+          requestedDate,
+          accountingDate,
+          accountingPeriod.settings,
+          generatedRecurringMovements
+        )
+      : recurringDueOccurrences(
+          r,
+          accountingDate,
+          accountingPeriod.settings,
+          generatedRecurringMovements
+        ).find(function (value) {
+          return value._occurrenceKey === (r._occurrenceKey || mk);
+        });
+    if (!occurrence) return false;
     mk = occurrence._occurrenceKey;
     var ds = occurrence._occurrenceDate;
     let prepared;
@@ -20397,7 +20425,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
   var pendingCount = recurring.reduce(function (count, r) {
     var generated = r.rtype === "expense" ? expenses : incomes;
-    return count + recurringOccurrencesInPeriod(r, curMonthKey, accountingPeriod.settings, generated).length;
+    return count + recurringDueOccurrences(
+      r,
+      accountingDate,
+      accountingPeriod.settings,
+      generated
+    ).length;
   }, 0);
 
   // compute triggered alerts
@@ -23754,13 +23787,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
   function allNavDefs() {
     return {
-      tools:{id:"tools",icon:"🧰",label:toolsText(lang,"title")},
+      tools:{id:"tools",icon:"🧰",label:toolsText(lang,"title"),badge:pendingCount},
       home: { id: "home", icon: "🏠", label: sectionLabel("home") },
       spese: {
         id: "spese",
         icon: "💸",
         label: sectionLabel("spese"),
-        badge: pendingCount,
       },
       history: { id: "history", icon: "📋", label: sectionLabel("history") },
       stats: { id: "stats", icon: "📊", label: sectionLabel("stats") },
@@ -25137,6 +25169,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     requestShareProjectDeletion,
     deleteShareProject,
     // ── Valori calcolati ────────────────────────────────────────────────────
+    accountingDate,
     pendingCount,
     alertTriggered,
     getCat,
@@ -25981,11 +26014,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       </div>
                     );
                   })}
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontSize: 11, color: subC }}>
-                    {curYear}: {fmt(yearExp)} / {fmt(yearInc)}
-                  </span>
                 </div>
               </div>
             )}

@@ -406,3 +406,61 @@
   .fainance-rules .rule-editor-tabs { width:calc(100% - 18px) !important; margin:22px auto 12px !important; }
   .fainance-rules .rule-editor-tab { min-height:34px !important; padding:6px 7px !important; gap:8px !important; }
 }
+
+
+/* 2.1.5 - automatic rules test UX: dedicated probe, stable mobile layout, semantic results */
+.fainance-rules .rule-test-card {
+  grid-template-columns:minmax(0,1fr) !important;
+  width:100%;
+  min-width:0;
+  overflow:hidden;
+}
+.fainance-rules .rule-test-card > label:not(.rule-check) {
+  width:100% !important;
+  min-width:0 !important;
+}
+.fainance-rules .rule-test-card .rule-check {
+  display:grid !important;
+  grid-template-columns:20px minmax(0,1fr) !important;
+  align-items:start !important;
+  gap:10px !important;
+  width:100% !important;
+  min-width:0 !important;
+  font-size:12px;
+  font-weight:500;
+  line-height:1.4;
+}
+.fainance-rules .rule-test-card .rule-check input {
+  width:18px !important;
+  height:18px !important;
+  margin:1px 0 0 !important;
+  flex:none !important;
+}
+.fainance-rules .rule-test-card .rule-check span {
+  display:block;
+  min-width:0;
+  white-space:normal;
+  word-break:normal;
+  overflow-wrap:break-word;
+}
+.fainance-rules .rule-result {
+  border:1px solid transparent;
+  box-shadow:none;
+}
+.fainance-rules .rule-result.rule-result-success {
+  background:#ecfdf3 !important;
+  border-color:#a7e3bd !important;
+  color:#234c36 !important;
+}
+.fainance-rules .rule-result.rule-result-failure {
+  background:#fff1f2 !important;
+  border-color:#f4b8bf !important;
+  color:#6f2f36 !important;
+}
+.fainance-rules .rule-probe-footer {
+  grid-template-columns:1fr !important;
+}
+.fainance-rules .rule-probe-footer > button {
+  grid-column:1 !important;
+  width:100% !important;
+}

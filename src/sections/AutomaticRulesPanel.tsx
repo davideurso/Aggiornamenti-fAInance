@@ -11,7 +11,7 @@ import './automaticRules.css';
 const editableActions=['category','payment','description','alert'];
 export function AutomaticRulesPanel(){
   const ctx:any=useApp();
-  const [draft,setDraft]=useState<any>(null),[error,setError]=useState(false),[test,setTest]=useState<any>(null),[result,setResult]=useState<any>(null),[editorTab,setEditorTab]=useState<'when'|'if'|'then'>('when');
+  const [draft,setDraft]=useState<any>(null),[error,setError]=useState(false),[test,setTest]=useState<any>(null),[result,setResult]=useState<any>(null),[editorTab,setEditorTab]=useState<'when'|'if'|'then'>('when'),[probeOnly,setProbeOnly]=useState(false);
   const drag=useRef<any>(null);
   const T=(key:any)=>key==='recurring'?translateFainanceText('Ricorrente',ctx.lang||'it'):rulesText(ctx.lang||'it',key);
   const D=(key:any)=>ruleDiagnosticText(ctx.lang||'it',key);
@@ -26,7 +26,8 @@ export function AutomaticRulesPanel(){
   function apply(fn){try{ctx.setFinanceEvolution(fn);setError(false);return true;}catch(e){if(e.message==='RULE_LIMIT')limitNotice();else setError(true);return false;}}
   function open(rule?,duplicate=false,probe=false){
     if((!rule||duplicate)&&rules.length>=limit){limitNotice();return;}
-    setEditorTab('when');
+    setEditorTab(probe?'then':'when');
+    setProbeOnly(!!probe);
     setDraft(rule?{...automaticRuleForEditor(rule),id:duplicate?crypto.randomUUID():rule.id,expectedRevision:duplicate?undefined:rule.revision}:{id:crypto.randomUUID(),kind:'automatic-v1',name:'',enabled:true,revision:0,priority:rules.length,trigger:'expense',categoryFilter:null,match:'all',conditions:[{field:'description',operator:'contains',value:''}],actions:[{field:'category',value:''}],alert:null});
     setTest(probe?{desc:'',amount:'',direction:rule.categoryFilter?.direction||(rule.trigger==='income'?'income':'expense'),source:'manual',transactionType:'single',category:rule.categoryFilter?.value||'',payment:'',defaults:true}:null);setResult(null);setError(false);
   }
@@ -55,7 +56,7 @@ export function AutomaticRulesPanel(){
   function showTest(){setTest({desc:'',amount:'',direction:draft.categoryFilter?.direction||(draft.trigger==='income'?'income':'expense'),source:'manual',transactionType:'single',category:draft.categoryFilter?.value||'',payment:'',defaults:true});setResult(null);}
   const probeLabel=U('testRule');
   function runTest(){try{validateAutomaticRule(draft);if(!String(test.amount).trim()||!Number.isFinite(Number(test.amount))||Number(test.amount)<0)throw new Error('INVALID_AMOUNT');setResult(evaluateAutomaticRules([{...draft,enabled:true}],{desc:test.desc,amount:Number(test.amount),catId:test.category,type:test.category,methodId:test.payment,rateizzato:test.transactionType==='installment',receipt:test.transactionType==='receipt',_ruleDefaultFields:test.defaults?['catId','type','methodId']:[]},test.direction,test.source,{plan:'premium',cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes}));setError(false);}catch{setError(true);}}
-  function closeEditor(){setDraft(null);setEditorTab('when');setError(false);setTest(null);setResult(null);}
+  function closeEditor(){setDraft(null);setEditorTab('when');setProbeOnly(false);setError(false);setTest(null);setResult(null);}
   return <section aria-label={T('title')} className="fainance-rules" style={theme}>
     <div className="rule-screen">
     {rules.length>limit&&<p role="note" className="rule-notice">{T('limit')}</p>}
@@ -81,18 +82,18 @@ export function AutomaticRulesPanel(){
             <button type="button" className="rule-icon-button" title={L('Duplica')} aria-label={L('Duplica')} onClick={()=>open(r,true)}><span aria-hidden="true">⧉</span></button>
             <button type="button" className="rule-icon-button" title={L(r.enabled?'Disattiva':'Attiva')} aria-label={L(r.enabled?'Disattiva':'Attiva')} onClick={()=>apply(p=>saveAutomaticRule(p,{...r,enabled:!r.enabled,expectedRevision:r.revision},ctx.currentPlan))}><span aria-hidden="true">{r.enabled?'⏸️':'▶️'}</span></button>
             <button type="button" className="rule-icon-button" title={L('Elimina')} aria-label={L('Elimina')} onClick={()=>{if(window.confirm(L('Elimina')+' '+r.name+'?'))apply(p=>deleteAutomaticRule(p,r.id,r.revision));}}><span aria-hidden="true">🗑️</span></button>
-            <button type="button" className="rule-icon-button" title="Su" aria-label="Su" disabled={index===0} onClick={()=>order(r.id,rules[index-1].id)}><span aria-hidden="true">↑</span></button>
-            <button type="button" className="rule-icon-button" title="Giù" aria-label="Giù" disabled={index===rules.length-1} onClick={()=>order(r.id,rules[index+1].id)}><span aria-hidden="true">↓</span></button>
+            <button type="button" className="rule-icon-button" title={T('up')} aria-label={T('up')} disabled={index===0} onClick={()=>order(r.id,rules[index-1].id)}><span aria-hidden="true">↑</span></button>
+            <button type="button" className="rule-icon-button" title={T('down')} aria-label={T('down')} disabled={index===rules.length-1} onClick={()=>order(r.id,rules[index+1].id)}><span aria-hidden="true">↓</span></button>
           </div>
         </div>
       </article>)}
     </>}
-    {draft&&<div className="rule-editor-overlay" role="dialog" aria-modal="true" onMouseDown={e=>{if(e.target===e.currentTarget){closeEditor()}}}><form className="rule-editor-shell rule-goal-like" onMouseDown={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();if(apply(p=>saveAutomaticRule(p,draft,ctx.currentPlan))){closeEditor();}}}>
-      <div className="rule-editor-header"><div className="rule-editor-title">{draft.expectedRevision!==undefined?L('Modifica')+' · '+U('ruleSingular'):U('createRule')}</div><button type="button" className="rule-editor-close" aria-label={L('Chiudi')} onClick={()=>{closeEditor()}}>×</button></div>
-      <div className="rule-editor-tabs"><button type="button" className={"rule-editor-tab"+(editorTab==='when'?' active':'')} onClick={()=>setEditorTab('when')}><span aria-hidden="true">📅</span><b>{T('when')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='if'?' active':'')} onClick={()=>setEditorTab('if')}><span aria-hidden="true">🔎</span><b>{T('if')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='then'?' active':'')} onClick={()=>setEditorTab('then')}><span aria-hidden="true">⚡</span><b>{T('then')}</b></button></div>
+    {draft&&<div className="rule-editor-overlay" role="dialog" aria-modal="true" onMouseDown={e=>{if(e.target===e.currentTarget){closeEditor()}}}><form className="rule-editor-shell rule-goal-like" onMouseDown={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();if(probeOnly){runTest();return;}if(apply(p=>saveAutomaticRule(p,draft,ctx.currentPlan))){closeEditor();}}}>
+      <div className="rule-editor-header"><div className="rule-editor-title">{probeOnly?probeLabel:(draft.expectedRevision!==undefined?L('Modifica')+' · '+U('ruleSingular'):U('createRule'))}</div><button type="button" className="rule-editor-close" aria-label={L('Chiudi')} onClick={()=>{closeEditor()}}>×</button></div>
+      {!probeOnly&&<div className="rule-editor-tabs"><button type="button" className={"rule-editor-tab"+(editorTab==='when'?' active':'')} onClick={()=>setEditorTab('when')}><span aria-hidden="true">📅</span><b>{T('when')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='if'?' active':'')} onClick={()=>setEditorTab('if')}><span aria-hidden="true">🔎</span><b>{T('if')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='then'?' active':'')} onClick={()=>setEditorTab('then')}><span aria-hidden="true">⚡</span><b>{T('then')}</b></button></div>}
       <div className="rule-editor-body">
-      {conflictNotice(draft)}
-      {editorTab==='when'&&<section className="rule-card" aria-label={T('when')}>
+      {!probeOnly&&conflictNotice(draft)}
+      {!probeOnly&&editorTab==='when'&&<section className="rule-card" aria-label={T('when')}>
         <div className="rule-name-card"><label>{L('Nome')}<input required maxLength={120} value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label></div>
         <div className="rule-grid"><div><div className="rule-field-label">{T('direction')}</div><div className="rule-toggle-row" role="tablist" aria-label={T('direction')}>{directionOptions.map(opt=><button key={opt.id} type="button" className={'rule-toggle-button'+(draft.trigger===opt.id?' active ':' ')+(opt.id==='expense'?' expense':' income')} onClick={()=>{setDraft({...draft,trigger:opt.id,categoryFilter:null,conditions:draft.conditions.map(c=>c.field==='category'?{...c,value:''}:c),actions:draft.actions.map(a=>a.field==='category'?{...a,value:''}:a)});setTest(null);setResult(null);}}>{opt.label}</button>)}</div></div>
           <label>{categoryLabel(draft.trigger)}<select aria-label={E('appliesTo')} value={draft.categoryFilter?JSON.stringify([draft.categoryFilter.direction,String(draft.categoryFilter.value)]):''} onChange={e=>{const selected=e.target.value?JSON.parse(e.target.value):null;setDraft({...draft,categoryFilter:selected?{direction:selected[0],value:selected[1]}:null});setTest(null);setResult(null);}}>
@@ -100,7 +101,7 @@ export function AutomaticRulesPanel(){
           </select></label><p className="rule-caption">{E('scopeHint')}</p>
         </div>
       </section>}
-      {editorTab==='if'&&<section className="rule-card" aria-label={T('if')}>
+      {!probeOnly&&editorTab==='if'&&<section className="rule-card" aria-label={T('if')}>
         <div className="rule-grid">
         {draft.conditions.map((c,i)=><div key={i} className="rule-grid">{i>0&&<div className="rule-join">{E(draft.match==='all'?'and':'or')}</div>}<fieldset className="rule-row"><legend>{T('if')} {i+1}</legend>
           <select aria-label={T('if')+' '+(i+1)} value={c.field} onChange={e=>patchCondition(i,{field:e.target.value,operator:operatorsFor(e.target.value)[0],value:''})}>{ruleFields.filter(f=>f!=='category'||c.field==='category').map(f=><option key={f} value={f}>{f==='category'?categoryLabel(draft.categoryFilter?.direction||draft.trigger):T(f)}</option>)}</select>
@@ -112,7 +113,7 @@ export function AutomaticRulesPanel(){
         {draft.conditions.length>1&&<><div className="rule-match-buttons">{['all','any'].map(v=><button key={v} type="button" className={'rule-toggle-button rule-match-button'+(draft.match===v?' active':'')} onClick={()=>{setDraft({...draft,match:v});setResult(null);}}>{E(v==='all'?'allConditions':'anyCondition')}</button>)}</div><p className="rule-caption">{E('conditionsHint')}</p></>}
         </div>
       </section>}
-      {editorTab==='then'&&<section className="rule-card" aria-label={T('then')}>
+      {!probeOnly&&editorTab==='then'&&<section className="rule-card" aria-label={T('then')}>
         <div className="rule-grid">{draft.actions.map((a,i)=><fieldset key={i} className="rule-row"><legend>{T('then')} {i+1}</legend>
           <select aria-label={T('then')+' '+(i+1)} value={a.field==='alert'?a.kind:a.field} onChange={e=>{const field=['information','confirmation'].includes(e.target.value)?'alert':e.target.value;setDraft({...draft,actions:draft.actions.map((v,j)=>j===i?(field==='alert'?{field,kind:e.target.value,text:v.text||''}:{field,value:''}):v)});setResult(null);}}>
             {['category','payment','description',...(a.field==='tags'?['tags']:[]),'information','confirmation'].map(f=><option key={f} value={f} disabled={draft.actions.some((other,j)=>j!==i&&other.field===(['information','confirmation'].includes(f)?'alert':f))}>{f==='information'?E('informationAction'):f==='confirmation'?E('confirmationAction'):T(f)}</option>)}
@@ -122,18 +123,18 @@ export function AutomaticRulesPanel(){
         </fieldset>)}
         <button type="button" className="rule-secondary" disabled={editableActions.every(f=>draft.actions.some(a=>a.field===f))} onClick={()=>{const field=editableActions.find(f=>!draft.actions.some(a=>a.field===f));setDraft({...draft,actions:[...draft.actions,field==='alert'?{field,kind:'confirmation',text:''}:{field,value:''}]});setResult(null);}}>＋ {T('action')}</button></div>
       </section>}
-      {editorTab==='then'&&test&&<fieldset className="rule-card rule-grid rule-test-card"><legend>{T('probe')}</legend><p className="rule-caption">{T('testHint')}</p>
+      {(probeOnly||editorTab==='then')&&test&&<fieldset className="rule-card rule-grid rule-test-card"><legend>{T('probe')}</legend><p className="rule-caption">{T('testHint')}</p>
         {['description','amount','direction','source','transactionType','category','payment'].filter(f=>test.direction!=='income'||f!=='payment').map(field=><label key={field}>{T(field)}{valueInput(field,test[field==='description'?'desc':field],value=>{setTest({...test,[field==='description'?'desc':field]:value,...(field==='direction'?{category:'',payment:''}:{})});setResult(null);},test.direction)}</label>)}
-        <label className="rule-check"><input type="checkbox" checked={test.defaults} onChange={e=>{setTest({...test,defaults:e.target.checked});setResult(null);}}/>{T('defaultFields')}</label>
+        <label className="rule-check"><input type="checkbox" checked={test.defaults} onChange={e=>{setTest({...test,defaults:e.target.checked});setResult(null);}}/><span>{T('defaultFields')}</span></label>
         <button type="button" className="rule-secondary" onClick={runTest}>{probeLabel}</button>
-        {result&&<output className="rule-result"><div className="rule-flow-label">{D('result')}</div><strong>{T(result.matched.length?'matched':'unmatched')}</strong><p>{T('category')}: {choices('category',test.direction)?.find(c=>String(c.id)===String(test.direction==='income'?result.item.type:result.item.catId))?.name||'—'}</p>{test.direction!=='income'&&<p>{T('payment')}: {choices('payment')?.find(c=>String(c.id)===String(result.item.methodId))?.name||'—'}</p>}<p>{T('description')}: {result.item.desc}</p>{result.changed.map(field=><p key={field}>✓ {T(field==='methodId'?'payment':field==='catId'||field==='type'?'category':field==='desc'?'description':field)}: {D('applied')}</p>)}{result.skipped?.map((item,i)=><p key={i}>{T(item.field==='methodId'?'payment':item.field==='catId'||item.field==='type'?'category':item.field==='desc'?'description':item.field)}: {D(item.reason)}</p>)}{result.alerts.map(a=><p key={a.ruleId}>{actionName({field:'alert',...a})}: {a.text}</p>)}</output>}
+        {result&&<output className={'rule-result '+(result.matched.length?'rule-result-success':'rule-result-failure')}><div className="rule-flow-label">{D('result')}</div><strong>{T(result.matched.length?'matched':'unmatched')}</strong><p>{T('category')}: {choices('category',test.direction)?.find(c=>String(c.id)===String(test.direction==='income'?result.item.type:result.item.catId))?.name||'—'}</p>{test.direction!=='income'&&<p>{T('payment')}: {choices('payment')?.find(c=>String(c.id)===String(result.item.methodId))?.name||'—'}</p>}<p>{T('description')}: {result.item.desc}</p>{result.changed.map(field=><p key={field}>✓ {T(field==='methodId'?'payment':field==='catId'||field==='type'?'category':field==='desc'?'description':field)}: {D('applied')}</p>)}{result.skipped?.map((item,i)=><p key={i}>{T(item.field==='methodId'?'payment':item.field==='catId'||item.field==='type'?'category':item.field==='desc'?'description':item.field)}: {D(item.reason)}</p>)}{result.alerts.map(a=><p key={a.ruleId}>{actionName({field:'alert',...a})}: {a.text}</p>)}</output>}
       </fieldset>}
       </div>
-      <div className={"rule-editor-footer tab-"+editorTab}>
+      {probeOnly?<div className="rule-editor-footer rule-probe-footer"><button type="button" className="rule-secondary" onClick={closeEditor}>{L('Chiudi')}</button></div>:<div className={"rule-editor-footer tab-"+editorTab}>
         {editorTab==='when'&&<><span className="rule-footer-spacer" aria-hidden="true"/><button type="button" className="rule-primary" onClick={()=>setEditorTab('if')}>{L('Avanti')}</button></>}
         {editorTab==='if'&&<><button type="button" className="rule-secondary" onClick={()=>setEditorTab('when')}>{L('Indietro')}</button><button type="button" className="rule-primary" onClick={()=>setEditorTab('then')}>{L('Avanti')}</button></>}
         {editorTab==='then'&&<><button type="button" className="rule-secondary rule-test-footer" onClick={()=>{if(!test)showTest();else runTest();}}>{probeLabel}</button><button type="submit" className="rule-primary rule-save-footer" disabled={automaticRuleCategoryConflict(draft)}>{L('Salva')}</button><button type="button" className="rule-secondary rule-back-footer" onClick={()=>setEditorTab('if')}>{L('Indietro')}</button><span className="rule-footer-spacer" aria-hidden="true"/></>}
-      </div>
+      </div>}
     </form></div>}
     </div>
   </section>;

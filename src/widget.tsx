@@ -9,7 +9,7 @@ import { goalSavedAmount, goalSavingsMinor, linkSavingsGoal } from './finance/sa
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from "react";
-import { recurringOccurrencesInPeriod } from './finance/recurringOccurrences';
+import { recurringDueOccurrences } from './finance/recurringOccurrences';
 import { SavingsClosurePanel, SavingsDeficitsPanel } from './sections/SavingsClosurePanel';
 import { BudgetPeriodControls } from './sections/BudgetPeriodControls';
 import { SavingsBucketsPanel } from './sections/SavingsBucketsPanel';
@@ -7356,7 +7356,12 @@ export function RecurringManager() {
     return n;
   }
   var recurringGeneratedMovements = ([] as any[]).concat(ctx.expenses || [], ctx.incomes || []);
-  var pending = recurring.flatMap(r => recurringOccurrencesInPeriod(r, curMonthKey, (ctx as any).accountingPeriod.settings, recurringGeneratedMovements));
+  var recurringToday = String((ctx as any).accountingDate || "").slice(0, 10);
+  var pending = recurring
+    .flatMap(r => recurringDueOccurrences(r, recurringToday, (ctx as any).accountingPeriod.settings, recurringGeneratedMovements))
+    .sort(function (a, b) {
+      return String(a._occurrenceDate || "").localeCompare(String(b._occurrenceDate || ""));
+    });
   if (ctx.planLimits && ctx.planLimits.recurringMovements === 0) {
     return (
       <div
@@ -7420,6 +7425,13 @@ export function RecurringManager() {
       rate: Number(form.rate || 12),
       rateizzato: !!form.rateizzato,
       frequency: form.frequency || "monthly",
+      effectiveFrom:
+        String(form.effectiveFrom || recurringToday || "").slice(0, 10) ||
+        [
+          String(new Date().getFullYear()).padStart(4, "0"),
+          String(new Date().getMonth() + 1).padStart(2, "0"),
+          String(new Date().getDate()).padStart(2, "0"),
+        ].join("-"),
     };
   }
   function startCreate() {
@@ -7513,7 +7525,7 @@ export function RecurringManager() {
           : x;
       });
     });
-    showToast("Ricorrente saltata per questo mese.", "#1D9E75");
+    showToast(L("Ricorrente saltata per questa occorrenza."), "#1D9E75");
   }
   function confirmOne(r) {
     if (confirmRecurring) confirmRecurring(r, r._occurrenceKey);
@@ -7576,6 +7588,19 @@ export function RecurringManager() {
     return (
       L("Mensile") + " · " + L("giorno") + " " + (d === 0 ? L("ultimo") : d)
     );
+  }
+  function occurrenceDateText(r) {
+    var raw = String(r && r._occurrenceDate || "").slice(0, 10);
+    if (!raw) return dateText(r);
+    try {
+      return new Intl.DateTimeFormat(String(ctx.lang || "it"), {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(new Date(raw + "T12:00:00"));
+    } catch (_error) {
+      return raw;
+    }
   }
   function chip(icon, text, bg, color) {
     return (
@@ -8313,17 +8338,13 @@ export function RecurringManager() {
               marginBottom: 10,
             }}
           >
-            {L("Da confermare per")}{" "}
-            {ctx.monthFullName
-              ? ctx.monthFullName(Number(curMonthKey.slice(5))-1)
-              : L(MONTHS_FULL[Number(curMonthKey.slice(5))-1])}
-            :
+            {L("Da confermare")}:
           </div>
           {pending.map(function (r) {
             var cat = catObj(r);
             return (
               <div
-                key={String(r.id) + ':' + r._occurrenceKey}
+                key={String(r.id) + ':' + String(r._occurrenceDate || r._occurrenceKey)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -8357,7 +8378,7 @@ export function RecurringManager() {
                   </div>
                   <div style={{ fontSize: 12, color: sc }}>
                     {fmtAmt(r.amount, sym)} · {cat.icon} {L(cat.name)} ·{" "}
-                    {dateText(r)}
+                    {occurrenceDateText(r)}
                   </div>
                 </div>
                 <Btn

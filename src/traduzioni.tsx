@@ -11573,3 +11573,67 @@ Object.assign(TRANSLATIONS.el,{
   add('Impossibile recuperare la foto della ricevuta',{it:'Impossibile recuperare la foto della ricevuta',en:'Unable to recover the receipt photo',es:'No se puede recuperar la foto del recibo',fr:'Impossible de récupérer la photo du reçu',de:'Das Belegfoto konnte nicht wiederhergestellt werden',pt:'Não foi possível recuperar a foto do recibo',pl:'Nie udało się odzyskać zdjęcia paragonu',nl:'De foto van de bon kon niet worden hersteld',ro:'Fotografia bonului nu a putut fi recuperată',el:'Δεν ήταν δυνατή η ανάκτηση της φωτογραφίας της απόδειξης'});
   try{fainanceTranslationCache={};}catch(e){}
 })();
+
+
+// fAInance 2.1.5 - ricorrenze: arretrati reali, banner senza mese e messaggi coerenti.
+(function(){
+  function put(code, rows){
+    try{ if(!TRANSLATIONS[code]) TRANSLATIONS[code]={}; Object.assign(TRANSLATIONS[code],rows); }catch(e){}
+    try{ if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){ if(!FAINANCE_UI_TRANSLATIONS[code]) FAINANCE_UI_TRANSLATIONS[code]={}; Object.assign(FAINANCE_UI_TRANSLATIONS[code],rows); } }catch(e){}
+    try{ if(typeof FAINANCE_I18N_PHRASES!=='undefined'){ if(!FAINANCE_I18N_PHRASES[code]) FAINANCE_I18N_PHRASES[code]={}; Object.assign(FAINANCE_I18N_PHRASES[code],rows); } }catch(e){}
+  }
+  var rows={
+    it:{
+      recurringPendingHome:"{count} transazioni ricorrenti da confermare",
+      "Da confermare":"Da confermare",
+      "Ricorrente saltata per questa occorrenza.":"Ricorrente saltata per questa occorrenza."
+    },
+    en:{
+      recurringPendingHome:"{count} recurring transactions to confirm",
+      "Da confermare":"To confirm",
+      "Ricorrente saltata per questa occorrenza.":"Recurring transaction skipped for this occurrence."
+    },
+    es:{
+      recurringPendingHome:"{count} transacciones recurrentes por confirmar",
+      "Da confermare":"Por confirmar",
+      "Ricorrente saltata per questa occorrenza.":"Transacción recurrente omitida para esta ocurrencia."
+    },
+    fr:{
+      recurringPendingHome:"{count} transactions récurrentes à confirmer",
+      "Da confermare":"À confirmer",
+      "Ricorrente saltata per questa occorrenza.":"Transaction récurrente ignorée pour cette occurrence."
+    },
+    de:{
+      recurringPendingHome:"{count} wiederkehrende Transaktionen zu bestätigen",
+      "Da confermare":"Zu bestätigen",
+      "Ricorrente saltata per questa occorrenza.":"Wiederkehrende Transaktion für diesen Termin übersprungen."
+    },
+    pt:{
+      recurringPendingHome:"{count} transações recorrentes por confirmar",
+      "Da confermare":"Por confirmar",
+      "Ricorrente saltata per questa occorrenza.":"Transação recorrente ignorada para esta ocorrência."
+    },
+    pl:{
+      recurringPendingHome:"{count} transakcji cyklicznych do potwierdzenia",
+      "Da confermare":"Do potwierdzenia",
+      "Ricorrente saltata per questa occorrenza.":"Transakcja cykliczna pominięta dla tego wystąpienia."
+    },
+    nl:{
+      recurringPendingHome:"{count} terugkerende transacties te bevestigen",
+      "Da confermare":"Te bevestigen",
+      "Ricorrente saltata per questa occorrenza.":"Terugkerende transactie voor deze keer overgeslagen."
+    },
+    ro:{
+      recurringPendingHome:"{count} tranzacții recurente de confirmat",
+      "Da confermare":"De confirmat",
+      "Ricorrente saltata per questa occorrenza.":"Tranzacție recurentă omisă pentru această apariție."
+    },
+    el:{
+      recurringPendingHome:"{count} επαναλαμβανόμενες συναλλαγές προς επιβεβαίωση",
+      "Da confermare":"Προς επιβεβαίωση",
+      "Ricorrente saltata per questa occorrenza.":"Η επαναλαμβανόμενη συναλλαγή παραλείφθηκε για αυτή την εμφάνιση."
+    }
+  };
+  Object.keys(rows).forEach(function(code){put(code,rows[code]);});
+  try{ fainanceTranslationCache={}; }catch(e){}
+})();
