@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
-import {
+import { formatNumber,
   useApp,
   fbAuth,
   PLAN_LIMITS,
@@ -5350,7 +5350,7 @@ export function SharePanel() {
                             )}
                             {String(shareFx.currency || _c.currency) !== String(_c.currency) && Number(shareFx.baseAmount) > 0 && (
                               <div style={{ fontSize: 10, color: "rgba(255,255,255,.70)", marginTop: 3 }}>
-                                ≈ {Number(shareFx.baseAmount).toFixed(2)} {String(_c.currency || "EUR")}
+                                ≈ {formatNumber(shareFx.baseAmount, lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(_c.currency || "EUR")}
                               </div>
                             )}
                           </div>

@@ -84,13 +84,17 @@ export function buildSessionUserData(user: User, profile: any = {}): FainanceSes
 
 export async function resolveAccountSession(user: User): Promise<FainanceSessionUserData> {
   try {
-    const [profileResult, accountResult]: any[] = await Promise.all([
-      measureStartup('profile', fainancePromiseTimeout(loadUserProfile(user.uid),7000,"Timeout profilo utente.").catch(error => { throw sessionReadFailure('S1',error); })),
-      measureStartup('account', fainancePromiseTimeout(getDoc(doc(fbDb, "userData", user.uid)),9000,"Timeout dati account.").catch(error => { throw sessionReadFailure('S2',error); })),
-    ]);
-    let profile: any = profileResult;
-    const accountData = accountResult?.exists?.() ? await fainanceExpandAccountCloudDataV5(accountResult.data() || {}) : {};
-    const legal: any = fainanceResolveLegalAcceptance(profile, accountData);
+    let profile: any = await measureStartup('profile',
+      fainancePromiseTimeout(loadUserProfile(user.uid),7000,"Timeout profilo utente.")
+        .catch(error => { throw sessionReadFailure('S1',error); }));
+    let legal: any = fainanceResolveLegalAcceptance(profile);
+    if (!legal) {
+      const accountResult: any = await measureStartup('account',
+        fainancePromiseTimeout(getDoc(doc(fbDb, "userData", user.uid)),9000,"Timeout dati account.")
+          .catch(error => { throw sessionReadFailure('S2',error); }));
+      const accountData = accountResult?.exists?.() ? await fainanceExpandAccountCloudDataV5(accountResult.data() || {}) : {};
+      legal = fainanceResolveLegalAcceptance(profile, accountData);
+    }
     const split = splitDisplayName(profile.name || user.displayName || "Utente");
     const firstName = String(profile.firstName || split.firstName || "");
     const lastName = String(profile.lastName || split.lastName || "");

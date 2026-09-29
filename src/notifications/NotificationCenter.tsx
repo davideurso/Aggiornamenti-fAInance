@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../core";
 import { PopupCloseButton } from "../widget";
+import { recurringOccurrencesInPeriod } from "../finance/recurringOccurrences";
 import {
   isMundelyBridgeEnabled,
   pullMundelyBridge,
@@ -23,6 +24,7 @@ function notificationIcon(item: AppNotificationRecord): string {
   if (item.type === "share_invite") return "🤝";
   if (item.type === "share_invite_accepted") return "✅";
   if (item.type === "share_project_deleted") return "🗂️";
+  if (item.type === "recurring_confirmation") return "🔁";
   if (item.severity === "critical") return "🚨";
   if (item.severity === "warning") return "⚠️";
   if (item.severity === "success") return "✅";
@@ -73,6 +75,12 @@ function notificationDisplayText(
       ),
     };
   }
+  if (item.type === "recurring_confirmation") {
+    return {
+      title: L("Transazioni ricorrenti"),
+      message: String(item.message || ""),
+    };
+  }
   return {
     title: item.title ? L(String(item.title)) : L("Notifica"),
     message: item.message ? L(String(item.message)) : "",
@@ -85,6 +93,64 @@ function useNotificationItems(userId: string) {
     return watchAppNotifications(String(userId || ""), setItems, () => undefined);
   }, [userId]);
   return [items, setItems] as const;
+}
+
+function useRecurringNotificationItems(userId: string): AppNotificationRecord[] {
+  const ctx: any = useApp();
+  return useMemo(() => {
+    if (!userId || !ctx?.notifPrefs?.spesaRicorrente) return [];
+    const rules = Array.isArray(ctx.recurring) ? ctx.recurring : [];
+    const periodKey = String(ctx.curMonthKey || "");
+    if (!periodKey) return [];
+    const settings = ctx.accountingPeriod?.settings;
+    const locale = String(ctx.lang || "it");
+    const formatter = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "2-digit", year: "numeric" });
+    const amountText = (value: any) => {
+      try {
+        if (typeof ctx.fmt === "function") return String(ctx.fmt(Number(value) || 0));
+      } catch (_formatError) {}
+      return String(value ?? "");
+    };
+    const rows: AppNotificationRecord[] = [];
+    rules.forEach((rule: any) => {
+      const generated = rule?.rtype === "expense" ? (ctx.expenses || []) : (ctx.incomes || []);
+      const occurrences = recurringOccurrencesInPeriod(rule, periodKey, settings, generated);
+      occurrences.forEach((occurrence: any) => {
+        const rawDate = String(occurrence?._occurrenceDate || "");
+        let dueDate = rawDate;
+        try { dueDate = formatter.format(new Date(rawDate + "T12:00:00")); } catch (_dateError) {}
+        rows.push({
+          id: `virtual_recurring_${String(rule?.id ?? "")}_${rawDate}`,
+          targetUid: String(userId),
+          type: "recurring_confirmation",
+          title: "Transazioni ricorrenti",
+          message: `${String(rule?.name || "")} · ${amountText(rule?.amount)} · ${dueDate}`,
+          severity: "warning",
+          actionType: "open_recurring",
+          actionValue: String(rule?.id ?? ""),
+          recurringRuleId: String(rule?.id ?? ""),
+          recurringOccurrenceKey: String(occurrence?._occurrenceKey || ""),
+          recurringOccurrenceDate: rawDate,
+          createdAt: rawDate ? rawDate + "T08:00:00" : new Date().toISOString(),
+          createdAtMs: rawDate ? new Date(rawDate + "T08:00:00").getTime() : Date.now(),
+          read: false,
+          status: "active",
+          virtual: true,
+        });
+      });
+    });
+    return rows.sort((a, b) => Number(a.createdAtMs || 0) - Number(b.createdAtMs || 0));
+  }, [
+    userId,
+    ctx?.notifPrefs?.spesaRicorrente,
+    ctx?.recurring,
+    ctx?.expenses,
+    ctx?.incomes,
+    ctx?.curMonthKey,
+    ctx?.accountingPeriod?.settings,
+    ctx?.lang,
+    ctx?.fmt,
+  ]);
 }
 
 function EmployeeProfileIcon() {
@@ -119,6 +185,7 @@ function NotificationRows({
   const primary = ctx.confirmButtonColor || "#378ADD";
   const [deletingId, setDeletingId] = useState("");
   const [deleteError, setDeleteError] = useState("");
+  const [confirmingId, setConfirmingId] = useState("");
 
   if (items.length === 0) {
     return (
@@ -140,6 +207,29 @@ function NotificationRows({
       setDeleteError(L("Eliminazione notifica non riuscita."));
     } finally {
       setDeletingId("");
+    }
+  }
+
+  async function confirmRecurringNotification(item: AppNotificationRecord) {
+    if (confirmingId || item.type !== "recurring_confirmation") return;
+    const rule = (Array.isArray(ctx.recurring) ? ctx.recurring : []).find(
+      (row: any) => String(row?.id ?? "") === String(item.recurringRuleId || item.actionValue || ""),
+    );
+    if (!rule || typeof ctx.confirmRecurring !== "function") return;
+    setConfirmingId(item.id);
+    try {
+      await Promise.resolve(
+        ctx.confirmRecurring(
+          {
+            ...rule,
+            _occurrenceKey: String(item.recurringOccurrenceKey || ""),
+            _occurrenceDate: String(item.recurringOccurrenceDate || ""),
+          },
+          String(item.recurringOccurrenceKey || ""),
+        ),
+      );
+    } finally {
+      setConfirmingId("");
     }
   }
 
@@ -171,7 +261,7 @@ function NotificationRows({
             <button
               type="button"
               onClick={async () => {
-                if (!item.read) await markAppNotificationRead(userId, item.id, true).catch(() => undefined);
+                if (!item.read && !item.virtual) await markAppNotificationRead(userId, item.id, true).catch(() => undefined);
                 onOpen?.(item);
               }}
               style={{
@@ -197,6 +287,31 @@ function NotificationRows({
               </span>
               {!item.read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: primary, marginTop: 5, flexShrink: 0 }} />}
             </button>
+            {item.type === "recurring_confirmation" ? (
+              <button
+                type="button"
+                disabled={confirmingId === item.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void confirmRecurringNotification(item);
+                }}
+                style={{
+                  minHeight: 32,
+                  borderRadius: 10,
+                  border: 0,
+                  background: "#1D9E75",
+                  color: "#fff",
+                  padding: "0 10px",
+                  flexShrink: 0,
+                  fontSize: 11,
+                  fontWeight: 900,
+                  cursor: confirmingId === item.id ? "default" : "pointer",
+                  opacity: confirmingId === item.id ? 0.6 : 1,
+                }}
+              >
+                ✅ {L("Conferma")}
+              </button>
+            ) : (
             <button
               type="button"
               aria-label={L("Elimina notifica")}
@@ -226,6 +341,7 @@ function NotificationRows({
             >
               ×
             </button>
+            )}
           </div>
         );
       })}
@@ -344,7 +460,12 @@ export function NotificationCenter({
   onProfile?: () => void;
 }) {
   const ctx: any = useApp();
-  const [items, setItems] = useNotificationItems(userId);
+  const [storedItems, setStoredItems] = useNotificationItems(userId);
+  const recurringItems = useRecurringNotificationItems(userId);
+  const items = useMemo(
+    () => [...recurringItems, ...storedItems].sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)),
+    [recurringItems, storedItems],
+  );
   const [open, setOpen] = useState(false);
   const [mundelyRequests, setMundelyRequests] = useState<MundelyLinkRequest[]>([]);
   const [mundelyBusyId, setMundelyBusyId] = useState("");
@@ -357,6 +478,7 @@ export function NotificationCenter({
   const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
   const primary = ctx.confirmButtonColor || "#378ADD";
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
+  const unreadStored = useMemo(() => storedItems.filter((item) => !item.read), [storedItems]);
   const notificationCount = unread.length + mundelyRequests.length;
   useEffect(() => {
     if (!userId || !isMundelyBridgeEnabled()) {
@@ -430,8 +552,8 @@ export function NotificationCenter({
   if (!userId) return null;
 
   async function openItem(item: AppNotificationRecord) {
-    if (!item.read) {
-      setItems((current) => current.map((row) => (row.id === item.id ? { ...row, read: true } : row)) as AppNotificationRecord[]);
+    if (!item.read && !item.virtual) {
+      setStoredItems((current) => current.map((row) => (row.id === item.id ? { ...row, read: true } : row)) as AppNotificationRecord[]);
       await markAppNotificationRead(userId, item.id, true).catch(() => undefined);
     }
     if (item.actionType || item.type === "share_invite") {
@@ -460,8 +582,8 @@ export function NotificationCenter({
   }
 
   async function markAllRead() {
-    const pending = unread.slice();
-    setItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
+    const pending = unreadStored.slice();
+    setStoredItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
     await Promise.all(pending.map((item) => markAppNotificationRead(userId, item.id, true).catch(() => undefined)));
   }
 
@@ -517,7 +639,7 @@ export function NotificationCenter({
                 <div style={{ color: textC, fontSize: 18, fontWeight: 950 }}>{L("Notifiche")}</div>
                 <div style={{ color: subC, fontSize: 11 }}>{L("Inviti Share e comunicazioni importanti")}</div>
               </div>
-              {unread.length > 0 && (
+              {unreadStored.length > 0 && (
                 <button type="button" onClick={markAllRead} style={{ border: 0, background: "transparent", color: primary, fontWeight: 850, cursor: "pointer", fontSize: 11 }}>
                   {L("Segna tutte come lette")}
                 </button>

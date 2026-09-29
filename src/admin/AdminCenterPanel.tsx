@@ -324,7 +324,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
         </div>
       )}
 
-      {!loading && tab === "notifications" && <AdminNotificationPanel session={session} />}
+      {!loading && tab === "notifications" && <AdminNotificationPanel session={session} users={users} />}
 
       {!loading && tab === "config" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>

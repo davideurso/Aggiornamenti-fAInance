@@ -1,3 +1,5 @@
+import { getDocFromCache } from "firebase/firestore";
+import { readExistingCachedDocument, serializeSnapshotHandler, restoreResumeTab, needsCategoryRecovery, hasResumeCheckpoint, writeResumeCheckpoint } from "./utils/resumeCache";
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import {ToolsPanel} from './sections/ToolsPanel';
@@ -90,6 +92,7 @@ import {
   clearFainanceLocalAccountData,
   fmtDate,
   fmtAmt,
+  formatNumber,
   rateMonth,
   balancePeriodRangeForDate,
   amountForBalancePeriodMonth,
@@ -1558,6 +1561,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     applyingFirestoreRef.current = remoteApplyDepthRef.current > 0;
   }
   var accountRecoveryTimerRef = useRef<any>(null);
+  var accountRecoveryPendingRef = useRef(false);
   var ACCOUNT_RECOVERY_KEYS = [
     "exp_v10",
     "inc_v10",
@@ -1621,22 +1625,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           raw = localStorage.getItem(storageKey);
         if (raw !== null) values[key] = raw;
       });
-      var snapshot = JSON.stringify({
+      var snapshotValue = {
         schema: 1,
         userId: String(userId),
         savedAt: new Date().toISOString(),
         reason: String(reason || "change"),
         values: values,
-      });
+      };
+      var snapshot = JSON.stringify(snapshotValue);
       var currentKey = userKey("account_recovery_complete_v1"),
         previousKey = userKey("account_recovery_complete_previous_v1");
       var previous = localStorage.getItem(currentKey);
       if (previous) localStorage.setItem(previousKey, previous);
       localStorage.setItem(currentKey, snapshot);
+      accountRecoveryPendingRef.current = false;
       try {
         createAutomaticAccountBackup({
           uid: String(userId),
-          snapshot: JSON.parse(snapshot),
+          snapshot: snapshotValue,
           reason: String(reason || "change"),
           appVersion: String(FAINANCE_CURRENT_VERSION || "2.0 Test"),
         }).catch(function () {});
@@ -1646,6 +1652,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
   }
   function scheduleCompleteAccountRecoverySnapshot(reason?: string) {
+    accountRecoveryPendingRef.current = true;
     try {
       if (accountRecoveryTimerRef.current)
         clearTimeout(accountRecoveryTimerRef.current);
@@ -1653,7 +1660,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     accountRecoveryTimerRef.current = setTimeout(function () {
       accountRecoveryTimerRef.current = null;
       var run = function () {
-        persistCompleteAccountRecoverySnapshot(reason || "change");
+        if (accountRecoveryPendingRef.current)
+          persistCompleteAccountRecoverySnapshot(reason || "change");
       };
       try {
         var idle = (window as any).requestIdleCallback;
@@ -2677,11 +2685,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       categoryPreferences: section("categoryPreferences"),
     };
   }
-  async function readCatalogAnchorV1() {
+  async function readCatalogAnchorV1(preferCache = false) {
     var ref: any = catalogAnchorDocRefV1();
     if (!ref) return null;
     try {
-      var snap: any = await getDoc(ref);
+      var snap: any = preferCache
+        ? await readExistingCachedDocument(() => getDocFromCache(ref), () => getDoc(ref))
+        : await getDoc(ref);
       if (!snap.exists()) return null;
       var value: any = snap.data() || {};
       if (
@@ -3659,14 +3669,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   function fmtSec(val) {
     if (!secRate || !secondaryCurrency) return null;
     var conv = val * secRate;
-    // Same format as fmt() - no K/M abbreviations
-    return (
-      secSym +
-      conv
-        .toFixed(2)
-        .replace(".", ",")
-        .replace(/\B(?=(\d{3})+(?!\d))/g, ".")
-    );
+    return String(secSym || "") + "\u00A0" + formatNumber(conv, lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   var [dateFmt, setDateFmtRaw] = useStorage(
     userKey("pref_datefmt"),
@@ -4224,7 +4227,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [widgetDebtCreditsAutoUpdate, setWidgetDebtCreditsAutoUpdate] =
     useStorage(userKey("widget_debt_credits_auto_update_v1"), true);
 
-  var [tab, setTabRaw] = useState("home");
+  var [tab, setTabRaw] = useState(() => restoreResumeTab(localStorage, userKey("resume_tab_v1")));
+  useEffect(() => {
+    try { localStorage.setItem(userKey("resume_tab_v1"), String(tab)); } catch (_) {}
+  }, [userId, tab]);
   useEffect(() => { trackAnalyticsSection(tab); }, [tab]);
   function setTab(nextTab) {
     var requestedTab = String(nextTab || "");
@@ -5361,6 +5367,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // come sorgente condivisa. Le sezioni con contenuti modificabili da più dispositivi
   // (in particolare Spesa) vengono unite per elemento tramite timestamp e cancellazioni.
   var [firestoreReady, setFirestoreReady] = useState(false);
+  var [accountCacheReady, setAccountCacheReady] = useState(false);
+  var accountUiReady = firestoreReady || accountCacheReady;
   var [isOffline, setIsOffline] = useState(!navigator.onLine);
   useEffect(function () {
     function goOnline() {
@@ -5694,12 +5702,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         return;
       }
       if (!sensitiveStorageReady) {
+        setAccountCacheReady(false);
         setFirestoreReady(false);
         return;
       }
       // Un pending reale della sessione precedente deve essere noto PRIMA
       // del primo snapshot. In questo modo un cambio offline non viene perso,
       // mentre le normali inizializzazioni della sessione corrente restano escluse.
+      var canResumeLocalAccount = hasResumeCheckpoint(localStorage, userId);
+      setAccountCacheReady(false);
       restoreAccountSyncPendingFromDevice();
       financeSchemaCompatibleRef.current = false;
       firestoreHydratedRef.current = false;
@@ -6239,10 +6250,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setLegalAcceptanceDate(String(localSnap.legalAcceptanceDate || ""));
       }
       endRemoteApply();
+      if (canResumeLocalAccount) {
+        // Local state is now restored. User edits must be tracked immediately,
+        // while remote writes remain blocked by financeSchemaCompatibleRef until
+        // the incoming account has been validated and merged.
+        firestoreHydratedRef.current = true;
+        setAccountCacheReady(true);
+      }
 
       var docRef = doc(fbDb, "userData", userId);
       var cancelled = false;
       var firstSnapshot = true;
+      var catalogReadFromCache = false;
       var readyFallback = setTimeout(function () {
         if (!cancelled) {
           console.warn("Firestore load timeout", userId);
@@ -6254,7 +6273,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       try {
         unsubData = onSnapshot(
           docRef,
-          async function (snap: any) {
+          { includeMetadataChanges: true },
+          serializeSnapshotHandler(async function (snap: any) {
             if (cancelled) return;
             clearTimeout(readyFallback);
             beginRemoteApply();
@@ -6275,7 +6295,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }
               } catch (error) {
                 financeSchemaCompatibleRef.current = false;
-                
+                setAccountCacheReady(false);
+                try { localStorage.removeItem(userKey("resume_checkpoint_v1")); } catch (_) {}
                 setFirestoreReady(false);
                 setToast({ text: financeMessage(lang, 'sync'), type: 'error' });
                 return;
@@ -6283,9 +6304,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               lastCloudExpandedDataRef.current = d;
               var isFirstSnapshot = firstSnapshot;
               firstSnapshot = false;
-              if (!catalogAnchorLoadedRef.current) {
-
-                catalogAnchorV1Ref.current = await readCatalogAnchorV1();
+              if (!catalogAnchorLoadedRef.current || (catalogReadFromCache && !snap.metadata.fromCache)) {
+                catalogReadFromCache = !!snap.metadata.fromCache;
+                catalogAnchorV1Ref.current = await readCatalogAnchorV1(catalogReadFromCache);
 
                 if (cancelled) return;
                 catalogAnchorLoadedRef.current = true;
@@ -6868,10 +6889,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 !legacyOwnerForCats || legacyOwnerForCats === String(userId)
                   ? parseCatalogStorageValue("cats_v10")
                   : undefined;
-              var cloudBackupCategoryCandidates = isFirstSnapshot
-                ? await readCloudExpenseCategoryBackupCandidates()
-                : [];
-              if (cancelled) return;
               var categoryRecoveryCandidates = [
                 latestLocalCats,
                 cloudExpenseCatalog.categories,
@@ -6880,7 +6897,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 catalogValueFromSnapshot(previousRecoveryValues, "cats_v10"),
                 parseCatalogStorageValue(userKey("recovery_legacy_cats_v10")),
                 legacyUnscopedCats,
-              ].concat(cloudBackupCategoryCandidates);
+              ];
               var repairedCategoryResult = repairRecoveredExpenseCategories(
                 mergedCats,
                 categoryRecoveryCandidates
@@ -6895,6 +6912,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var repairedExpenseCategories = !!(
                 repairedCategoryResult.repaired || referencedCategoryResult.repaired
               );
+              // Backups are a recovery source, not a prerequisite for opening
+              // an already complete account. Try every local/cloud catalog first.
+              if (isFirstSnapshot && needsCategoryRecovery(mergedCats, mergedExpenses, isRecoveredExpenseCategory)) {
+                var cloudBackupCategoryCandidates = await readCloudExpenseCategoryBackupCandidates();
+                if (cancelled) return;
+                var backupRepair = repairRecoveredExpenseCategories(mergedCats, cloudBackupCategoryCandidates);
+                var backupReferences = restoreReferencedExpenseCategories(backupRepair.categories, cloudBackupCategoryCandidates, mergedExpenses);
+                mergedCats = backupReferences.categories;
+                repairedExpenseCategories = repairedExpenseCategories || backupRepair.repaired || backupReferences.repaired;
+              }
               var mergedExpenseGroups =
                 Array.isArray(expenseChoice.value.groups) &&
                 expenseChoice.value.groups.length
@@ -8723,7 +8750,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             }
             firestoreHydratedRef.current = true;
             setFirestoreReady(true);
-            
+            writeResumeCheckpoint(localStorage, userId, ACCOUNT_RECOVERY_KEYS);
+            scheduleCompleteAccountRecoverySnapshot("account-hydrated");
+
             if (postHydrationSyncRequestedRef.current) {
               setTimeout(function () {
                 if (cancelled) return;
@@ -8737,6 +8766,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } catch (error) {
               if (!cancelled) {
                 persistAccountSyncError("firestore-apply", error, false);
+                setAccountCacheReady(false);
                 setFirestoreReady(false);
               }
             } finally {
@@ -8748,7 +8778,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 setAccountSyncRetryPulse(function (v) { return v + 1; });
               }
             }
-          },
+          }),
           function (err) {
             if (cancelled) return;
             clearTimeout(readyFallback);
@@ -9752,9 +9782,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   useEffect(
     function () {
       function deferCriticalAccountData() {
-        persistCompleteAccountRecoverySnapshot("app-background");
-        if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-          markPendingAccountSync();
+        if (accountRecoveryPendingRef.current)
+          persistCompleteAccountRecoverySnapshot("app-background");
       }
       function requestForegroundSync() {
         if (
@@ -17639,7 +17668,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setBiometricLockMessage("");
         return;
       }
-      if (!firestoreReady || biometricInitialCheckRef.current) return;
+      if (!accountUiReady || biometricInitialCheckRef.current) return;
       biometricInitialCheckRef.current = true;
       if (Date.now() < Number(biometricSkipAutoLockUntilRef.current || 0))
         return;
@@ -17651,7 +17680,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           "Sblocca fAInance per visualizzare i tuoi dati finanziari"
         );
     },
-    [biometricLockEnabled, firestoreReady, localLockMethod, localLockPin]
+    [biometricLockEnabled, accountUiReady, localLockMethod, localLockPin]
   );
   useEffect(
     function () {
@@ -17968,9 +17997,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }) || { symbol: "€" }
   ).symbol;
   var fmt = function (n) {
-    return fmtAmt(n, sym);
+    return fmtAmt(n, sym, lang);
   };
-  var fmtHeader = function (n) { return sym + "\u00A0" + Number(n).toFixed(0); };
+  var fmtHeader = function (n) { return String(sym || "") + "\u00A0" + formatNumber(n, lang, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); };
   var now = new Date();
   var curMonthKey = accountingPeriod.keyForDate(accountingDate);
   var curYear = Number(curMonthKey.slice(0,4));
@@ -23488,7 +23517,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       label: translateUiRuntimeText("Sezioni"),
       desc: translateUiRuntimeText("Entrate, uscite, patrimonio e storico"),
     },
-    {id:"automatic_rules",icon:"⚙️",label:rulesText(lang,"title"),desc:rulesText(lang,"intro")},
     {
       id: "notifications",
       icon: "🔔",
@@ -25474,11 +25502,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               setTab("share");
               setShareProjectTab("riassunto");
               loadShareCollaboration();
+            } else if (notification.type === "recurring_confirmation" || notification.actionType === "open_recurring") {
+              setTab("tools");
+              setMobileMenu(false);
+              window.setTimeout(function () {
+                window.dispatchEvent(new CustomEvent("fainance:open-tool", { detail: { page: "recurring" } }));
+              }, 0);
             }
           }}
         />
       )}
-      {!firestoreReady ? (
+      {!accountUiReady ? (
         <div
           style={{
             position: "fixed",
@@ -25499,7 +25533,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             Caricamento dati account...
           </div>
         </div>
-      ) : appLocked ? (
+      ) : appLocked || (biometricLockEnabled && !biometricInitialCheckRef.current &&
+          (localLockMethod !== "pin" || validateLocalPin(localLockPin))) ? (
         BiometricLockScreen()
       ) : isMobile ? (
         <div

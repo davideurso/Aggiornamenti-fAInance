@@ -330,7 +330,30 @@ export function parseMoney(value){
   var n=parseFloat(raw);
   return isNaN(n)?0:n;
 }
-export function fmtAmt(n,sym){return sym+"\u00A0"+Number(n).toFixed(2).replace(".",",");}
+export function numberLocale(lang){
+  var code=String(lang||"").trim().toLowerCase();
+  if(!code){
+    try{code=String(localStorage.getItem("pref_lang_v2")||"").trim().toLowerCase();}catch(e){}
+  }
+  var map={it:"it-IT",en:"en-US",es:"es-ES",fr:"fr-FR",de:"de-DE",pt:"pt-PT",pl:"pl-PL",nl:"nl-NL",ro:"ro-RO",el:"el-GR"};
+  var base=code.split(/[-_]/)[0];
+  return map[base]||code||"it-IT";
+}
+export function formatNumber(value,lang,options){
+  var n=Number(value);
+  if(!isFinite(n))n=0;
+  var opts=Object.assign({useGrouping:true},options||{});
+  try{return new Intl.NumberFormat(numberLocale(lang),opts).format(n);}catch(e){
+    var max=typeof opts.maximumFractionDigits==="number"?opts.maximumFractionDigits:2;
+    var min=typeof opts.minimumFractionDigits==="number"?opts.minimumFractionDigits:0;
+    var fixed=n.toFixed(Math.max(min,max));
+    var parts=fixed.split(".");
+    parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,".");
+    if(max===0)return parts[0];
+    return parts[0]+","+(parts[1]||"").slice(0,max);
+  }
+}
+export function fmtAmt(n,sym,lang){return String(sym||"")+"\u00A0"+formatNumber(n,lang,{minimumFractionDigits:2,maximumFractionDigits:2});}
 export function rateMonth(item,mk){
   return itemAmountForMonth(item,mk);
 }

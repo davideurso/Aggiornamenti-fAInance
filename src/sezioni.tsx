@@ -27,6 +27,7 @@ import {
   balancePeriodRangeForKey,
   fmtDate,
   fmtAmt,
+  formatNumber,
   parseMoney,
   todayStr,
   dateOffset,
@@ -105,7 +106,6 @@ import {
   ExpenseForm,
   BulkEntry,
   ReceiptScanPanel,
-  RecurringManager,
   PopupCloseButton,
 } from "./widget";
 
@@ -6873,7 +6873,7 @@ export function HomePanel() {
 export function SpesePanel() {
   // ── Destructure completo dal context ─────────────────────────────────────
   var _c: any = useApp();
-  useAnalyticsFlow(_c.speseSubTab === "add", "movement", _c.addSubTab === "bulk" ? "bulk" : _c.addSubTab === "receipt" ? "receipt" : "manual");
+  useAnalyticsFlow(true, "movement", _c.addSubTab === "bulk" ? "bulk" : _c.addSubTab === "receipt" ? "receipt" : "manual");
   var {
     lang,
     cats,
@@ -7377,57 +7377,7 @@ export function SpesePanel() {
           💰 {L(t.incomes)}
         </button>
       </div>
-      <div
-        style={{
-          display: "flex",
-          gap: 6,
-          marginBottom: 8,
-          background: dark ? "#252535" : "#f5f5f5",
-          borderRadius: 12,
-          padding: 4,
-        }}
-      >
-        <button
-          onClick={function () {
-            setSpeseSubTab("add");
-          }}
-          style={segBtnStyle(speseSubTab === "add", secondaryC)}
-        >
-          ⚡ {L("Semplice")}
-        </button>
-        <button
-          onClick={function () {
-            setSpeseSubTab("recurring");
-          }}
-          style={segBtnStyle(speseSubTab === "recurring", secondaryC, {
-            position: "relative",
-          })}
-        >
-          🔁 {L("Ricorrente")}
-          {pendingCount > 0 && (
-            <span
-              style={{
-                position: "absolute",
-                top: 4,
-                right: 10,
-                background: expenseColor,
-                color: "#fff",
-                borderRadius: "50%",
-                width: 16,
-                height: 16,
-                fontSize: 10,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {pendingCount}
-            </span>
-          )}
-        </button>
-      </div>
-      {speseSubTab === "add" && (
-        <div>
+      <div>
           <div
             style={{
               display: "flex",
@@ -7540,8 +7490,6 @@ export function SpesePanel() {
             )}
           </div>
         </div>
-      )}
-      {speseSubTab === "recurring" && <RecurringManager />}
     </div>
   );
 }
@@ -9784,11 +9732,11 @@ export function HistoryPanel() {
           ? L("Sincronizzazione in corso...")
           : L("Mostrate") +
             " " +
-            visibleRows.length +
+            formatNumber(visibleRows.length, lang, { maximumFractionDigits: 0 }) +
             " " +
             L("di") +
             " " +
-            historyRows.length +
+            formatNumber(historyRows.length, lang, { maximumFractionDigits: 0 }) +
             " " +
             L("voci")}
         {historyTab !== "incomes" &&
@@ -14189,6 +14137,10 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   var speechAbortRef = useRef<any>(null);
   var assistantRequestAbortRef = useRef<any>(null);
   var speechCycleRef = useRef(0);
+  var assistantTurnRef = useRef(0);
+  var realtimeAudioGenerationRef = useRef(0);
+  var realtimeResponseTurnsRef = useRef(new Map<string, number>());
+  var realtimeOutputBlockedRef = useRef(true);
   var realtimePeerRef = useRef<any>(null);
   var realtimeChannelRef = useRef<any>(null);
   var realtimeStreamRef = useRef<any>(null);
@@ -14197,6 +14149,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   var realtimeAudioSourceRef = useRef<any>(null);
   var realtimeGainRef = useRef<any>(null);
   var assistantVolumeRef = useRef<number>(1);
+  var nativeRealtimeCommunicationRef = useRef(true);
   var volumeNoticeTimerRef = useRef<any>(null);
   var voiceErrorTimerRef = useRef<any>(null);
   var cameraInputRef = useRef<any>(null);
@@ -14296,24 +14249,35 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   function nativePlatform(){try{var cap:any=(window as any).Capacitor;return !!(cap&&((typeof cap.isNativePlatform==="function"&&cap.isNativePlatform())||["android","ios"].indexOf(nativePlatformName())>=0));}catch(e){return false;}}
   function clampAssistantVolume(value:any){var parsed=Number(value);return Math.max(0,Math.min(1,Number.isFinite(parsed)?parsed:1));}
   function applyAssistantSystemVolume(value:any,muted?:any){
+    // Media volume is the single user control. WebRTC communication audio needs
+    // an explicit gain/mute because Android call volume may never reach zero.
+    // Local media already has system attenuation, so never scale it twice.
+    var android=nativePlatformName()==="android";
     var ratio=muted===true?0:clampAssistantVolume(value);
     assistantVolumeRef.current=ratio;
     systemMediaMutedRef.current=ratio<=0;
     try{var gain=realtimeGainRef.current,ctx=realtimeAudioContextRef.current;if(gain&&gain.gain){var now=ctx&&Number.isFinite(ctx.currentTime)?ctx.currentTime:0;gain.gain.cancelScheduledValues(now);gain.gain.setValueAtTime(ratio,now);}}catch(e){try{if(realtimeGainRef.current)realtimeGainRef.current.gain.value=ratio;}catch(e2){}}
-    try{var audio=realtimeAudioRef.current;if(audio){audio.volume=ratio;audio.muted=ratio<=0;}}catch(e){}
-    try{var fallback=nativeAudioRef.current;if(fallback){fallback.volume=ratio;fallback.muted=ratio<=0;}}catch(e){}
+    try{var audio=realtimeAudioRef.current;if(audio){audio.volume=android&&!nativeRealtimeCommunicationRef.current?1:ratio;audio.muted=realtimeOutputBlockedRef.current||ratio<=0;}}catch(e){}
+    try{var fallback=nativeAudioRef.current;if(fallback){fallback.volume=android?1:ratio;fallback.muted=ratio<=0;}}catch(e){}
   }
   async function syncSystemMediaVolume(){
     if(!nativePlatform()){applyAssistantSystemVolume(1,false);return 1;}
     try{
       var result:any=FainanceAudioNative&&FainanceAudioNative.getMediaVolume?await FainanceAudioNative.getMediaVolume():null;
+      if(result&&typeof result.communication==="boolean")nativeRealtimeCommunicationRef.current=result.communication;
       var current=Number(result&&result.current),maximum=Math.max(1,Number(result&&result.max)||1),ratio=Number(result&&result.ratio);
       if(!Number.isFinite(ratio))ratio=Number.isFinite(current)?current/maximum:1;
       applyAssistantSystemVolume(ratio,(result&&result.muted===true)||current<=0);
       return assistantVolumeRef.current;
     }catch(e){applyAssistantSystemVolume(1,false);return 1;}
   }
-  function setNativeAssistantAudio(active){if(!nativePlatform())return;try{var fn=active?FainanceAudioNative.activateAssistantAudio:FainanceAudioNative.releaseAssistantAudio;if(fn)Promise.resolve(fn.call(FainanceAudioNative)).then(function(){if(active)syncSystemMediaVolume();}).catch(function(){});return;}catch(e){}try{var cap:any=(window as any).Capacitor,plugin=cap&&cap.Plugins&&cap.Plugins.FainanceAudio,legacyFn=active&&plugin?plugin.activateAssistantAudio:(plugin&&plugin.releaseAssistantAudio);if(legacyFn)Promise.resolve(legacyFn.call(plugin)).then(function(){if(active)syncSystemMediaVolume();}).catch(function(){});}catch(e){}}
+  async function setNativeAssistantAudio(active, output="realtime"){
+    if(!nativePlatform())return;
+    try{
+      if(active)await FainanceAudioNative.activateAssistantAudio({output:output});
+      else await FainanceAudioNative.releaseAssistantAudio();
+    }catch(e){}
+  }
   async function attachRealtimeAudioStream(remoteStream:any){
     // Riproduzione stabile tramite elemento audio nativo della WebView.
     // Il volume viene applicato direttamente all'elemento ad ogni singola
@@ -14345,7 +14309,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     audio.style.display="none";
     audio.srcObject=remoteStream;
     audio.volume=assistantVolumeRef.current;
-    audio.muted=assistantVolumeRef.current<=0;
+    audio.muted=realtimeOutputBlockedRef.current||assistantVolumeRef.current<=0;
     document.body.appendChild(audio);
     realtimeAudioRef.current=audio;
 
@@ -14400,7 +14364,8 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     var directive=realtimeTurnDirective(resolution,extraInstruction);
     var systemSent=sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"system",content:[{type:"input_text",text:directive}]}});
     if(!systemSent)return false;
-    return sendRealtimeEvent({type:"response.create",response:{}});
+    stopSpeaking();
+    return sendRealtimeEvent({type:"response.create",response:{metadata:{client_turn:String(assistantTurnRef.current),client_audio:String(realtimeAudioGenerationRef.current)}}});
   }
   function looksLikeDirectAppAction(text:any){
     var n=normalized(text);
@@ -14411,7 +14376,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   }
   function realtimeActionsFrom(value:any){var allowed=["open_section","create_expense","create_income","create_recurring","create_goal","update_goal_saved","create_alert","set_category_budget","create_debt_credit","update_debt_credit","delete_debt_credit","set_patrimonio_value","create_note","add_shopping_items","create_shopping_list","create_shopping_unit","create_share_project","create_share_expense","create_share_settlement","create_expense_category","create_payment_method","set_setting"];return (Array.isArray(value)?value:[]).map(function(raw){var a={...(raw||{})},signal=[lastVoiceUserRequestRef.current,a.summary,a.description,a.projectName,a.holder,a.entityName].join(" ").toLowerCase();if(a.action==="create_expense"&&/(spesa condivisa|spesa share|share expense|shared expense|split expense|divid|nel progetto|progetto share)/i.test(signal))a.action="create_share_expense";if(a.action==="update_debt_credit"&&/(elimina|cancella|rimuovi|chiudi definitivamente|delete|remove|erase)/i.test(signal)){a.action="delete_debt_credit";a.amount=null;a.initialAmount=null;}return a;}).filter(function(a){return a&&allowed.indexOf(String(a.action||""))>=0;}).slice(0,16).map(function(a){return {...a,action:String(a.action||""),summary:String(a.summary||"").slice(0,500),items:Array.isArray(a.items)?a.items.slice(0,100):[],shareParticipants:Array.isArray(a.shareParticipants)?a.shareParticipants.slice(0,50):[]};});}
   function updatePendingActions(next:any[]){pendingActionsRef.current=Array.isArray(next)?next.map(a=>({...a,_ruleOriginRequest:a._ruleOriginRequest??lastVoiceUserRequestRef.current})):[];setPendingActions(pendingActionsRef.current);}
-  function sendRealtimeToolResult(callId:string,payload:any,createResponse?:boolean){var sent=sendRealtimeEvent({type:"conversation.item.create",item:{type:"function_call_output",call_id:callId,output:JSON.stringify(payload||{})}});if(sent&&createResponse!==false)setTimeout(function(){sendRealtimeModelResponse(currentVoiceLanguageResolution());},20);}
+  function sendRealtimeToolResult(callId:string,payload:any,createResponse?:boolean){var sent=sendRealtimeEvent({type:"conversation.item.create",item:{type:"function_call_output",call_id:callId,output:JSON.stringify(payload||{})}});if(sent&&createResponse!==false){var turn=assistantTurnRef.current;setTimeout(function(){if(isCurrentAssistantTurn(turn))sendRealtimeModelResponse(currentVoiceLanguageResolution());},20);}}
   async function handleRealtimeFunctionCall(event:any){var callId=String(event&&event.call_id||"");if(!callId||realtimeHandledCallsRef.current.has(callId))return;realtimeHandledCallsRef.current.add(callId);var args:any={};try{args=JSON.parse(String(event.arguments||"{}"));}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"invalidArguments")});return;}var name=String(event.name||"");
     if(name==="propose_fainance_actions"){var actions=realtimeActionsFrom(args.actions),opens=actions.filter(function(a){return a.action==="open_section";}),writes=actions.filter(function(a){return a.action!=="open_section";});if(writes.length){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});var preamble=lastRealtimeAssistantTranscriptRef.current;lastRealtimeAssistantTranscriptRef.current="";if(preamble)setAiChat(function(p){var list=[...(p||[])];var last=list[list.length-1];if(last&&last.role==="assistant"&&last.source==="voice-assistant"&&String(last.text||"").trim()===preamble)list.pop();return list;});realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");setSpeaking(false);setBusy(false);updatePendingActions(writes);sendRealtimeToolResult(callId,{status:"confirmation_required",summaries:writes.map(actionSummary),uiConfirmation:true},false);return;}if(opens.length){sendRealtimeToolResult(callId,{status:"completed",result:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"sectionOpened")},false);setTimeout(function(){openSection(opens[0]);},80);return;}sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"noValidAction")});return;}
     if(name==="confirm_pending_actions"){var pending=pendingActionsRef.current.slice();if(!pending.length){sendRealtimeToolResult(callId,{status:"nothing_to_confirm"});return;}var results:any[]=[];try{pending.forEach(function(a){var r=executeAction(a);if(r)results.push(r);});updatePendingActions([]);sendRealtimeToolResult(callId,{status:"completed",results:results});}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error")});}return;}
@@ -14419,17 +14384,38 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"toolUnavailable")});
   }
   function handleRealtimeEvent(raw:any){var event:any=raw;try{if(typeof raw==="string")event=JSON.parse(raw);}catch(e){return;}if(!event||!event.type)return;var type=String(event.type);
+    if(type==="response.created"){
+      var response=event.response||{},responseId=String(response.id||"");
+      var turn=Number(response.metadata&&response.metadata.client_turn);
+      if(!responseId||!Number.isFinite(turn)||!isCurrentAssistantTurn(turn)||Number(response.metadata&&response.metadata.client_audio)!==realtimeAudioGenerationRef.current){
+        if(responseId)sendRealtimeEvent({type:"response.cancel",response_id:responseId,event_id:"fainance_interrupt_stale_"+Date.now()});
+        return;
+      }
+      var turns=realtimeResponseTurnsRef.current;
+      if(turns.size>=64)turns.delete(turns.keys().next().value);
+      turns.set(responseId,turn);
+      startAnalyticsFlow("ai_request", {method:"realtime"});clearVoiceNotice();setBusy(true);return;
+    }
+    var eventResponseId=String(event.response_id||(event.response&&event.response.id)||"");
+    if(eventResponseId&&realtimeResponseTurnsRef.current.get(eventResponseId)!==assistantTurnRef.current)return;
+    if(type==="error"&&String(event.error&&event.error.event_id||"").startsWith("fainance_interrupt_")&&
+      ["response_cancel_not_active","output_audio_buffer_clear_failed"].includes(String(event.error&&event.error.code||"")))return;
     if(type==="session.created"){setRealtimeStatus("connected");clearVoiceNotice();if(!realtimeManualResponseConfiguredRef.current){realtimeManualResponseConfiguredRef.current=true;sendRealtimeEvent(buildRealtimeManualResponseSessionUpdate());}return;}
     if(type==="session.updated"){setRealtimeStatus("connected");clearVoiceNotice();return;}
-    if(type==="input_audio_buffer.speech_started"){clearVoiceNotice();realtimeUserDraftRef.current="";setRealtimeUserDraft("");setVoiceListening(true);setSpeaking(false);setBusy(false);return;}
+    if(type==="input_audio_buffer.speech_started"){interruptAssistantTurn();clearVoiceNotice();realtimeUserDraftRef.current="";setRealtimeUserDraft("");setVoiceListening(true);setSpeaking(false);setBusy(false);return;}
     if(type==="input_audio_buffer.speech_stopped"){setVoiceListening(false);setBusy(true);return;}
     if(type==="conversation.item.input_audio_transcription.delta"){var ud=String(event.delta||"");realtimeUserDraftRef.current+=ud;return;}
     if(type==="conversation.item.input_audio_transcription.completed"){var ut=String(event.transcript||realtimeUserDraftRef.current||"").trim();realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();if(ut){var probs=Array.isArray(event.logprobs)?event.logprobs:[];var avgLogProb=probs.length?probs.reduce(function(sum,p){var lp=Number(p&&p.logprob);return sum+(Number.isFinite(lp)?lp:-4);},0)/probs.length:null;var confidence=avgLogProb===null?null:Math.exp(Math.max(-12,Math.min(0,avgLogProb)));var turnResolution:any=resolveVoiceAssistantTurn(ut);var turnLanguage=turnResolution.language;lastVoiceUserRequestRef.current=ut;appendVoiceMessage(ut,confidence);if(pendingActionsRef.current.length&&isYes(ut)){confirmPending("");return;}if(pendingActionsRef.current.length&&isNo(ut)){cancelPending("");return;}var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(ut,turnLanguage);var check=normalized(ut);var hearingCheck=/^(mi senti|mi stai sentendo|riesci a sentirmi|mi ascolti|ci sei|can you hear me|do you hear me|tu m'entends|vous m'entendez|me escuchas|puedes oirme|kannst du mich horen|consegues ouvir-me|slyszysz mnie|hoor je mij|ma auzi|με ακους)[?.! ]*$/.test(check);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else if(localHelpAnswer)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with the following verified fAInance help text, without adding anything:\n"+localHelpAnswer);else{if(consumePlanFeature)consumePlanFeature("aiReply",1);if(hearingCheck)sendRealtimeModelResponse(turnResolution,"Reply exactly and only: "+assistantHearingReply(turnLanguage));else if(activeAttachmentRef.current||looksLikeDirectAppAction(ut)){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});callAssistant(ut,turnResolution);}else sendRealtimeModelResponse(turnResolution);}}return;}
     if(type==="response.output_audio_transcript.delta"){var ad=String(event.delta||"");realtimeAssistantDraftRef.current+=ad;setRealtimeAssistantDraft(realtimeAssistantDraftRef.current);return;}
     if(type==="response.output_audio_transcript.done"){clearVoiceNotice();var at=String(event.transcript||realtimeAssistantDraftRef.current||"").trim();realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");if(at){lastRealtimeAssistantTranscriptRef.current=at;appendMessage("assistant",at);}return;}
-    if(type==="output_audio_buffer.started"){setSpeaking(true);setBusy(false);return;}
+    if(type==="output_audio_buffer.started"){
+      if(!eventResponseId)return;
+      stopLocalSpeech();
+      realtimeOutputBlockedRef.current=false;
+      applyAssistantSystemVolume(assistantVolumeRef.current,systemMediaMutedRef.current);
+      setNativeAssistantAudio(true,"realtime");setSpeaking(true);setBusy(false);return;
+    }
     if(type==="output_audio_buffer.stopped"||type==="output_audio_buffer.cleared"){setSpeaking(false);setBusy(false);return;}
-    if(type==="response.created"){startAnalyticsFlow("ai_request", { method: "realtime" });clearVoiceNotice();setBusy(true);return;}
     if(type==="response.function_call_arguments.done"){handleRealtimeFunctionCall(event);return;}
     if(type==="response.done"){finishAnalyticsFlow("ai_request", event.response && event.response.status === "failed" ? "failed" : event.response && event.response.status === "cancelled" ? "cancelled" : "completed");setBusy(false);clearVoiceNotice();return;}
     if(type==="error"){finishAnalyticsFlow("ai_request", "failed", { reason: "service" });setBusy(false);var realtimeMessage=realtimeServerFailure(event.error||{});if(realtimeMessage)showTemporaryVoiceNotice(realtimeMessage,/^Non ho capito bene/i.test(realtimeMessage)?4200:6200);return;}
@@ -14438,6 +14424,9 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   async function ensureRealtimeMicrophonePermission(){if(!nativePlatform())return true;var mod:any=await import("@capgo/capacitor-speech-recognition");var speech:any=mod.SpeechRecognition||mod.default||mod;if(!speech)throw new Error(realtimePermissionDeniedMessage());var permission:any=speech.checkPermissions?await speech.checkPermissions():{};function granted(p:any){var speechState=String((p&&p.speechRecognition)||"").toLowerCase(),micState=String((p&&p.microphone)||"").toLowerCase();if(nativePlatformName()==="ios")return micState==="granted"||(micState===""&&speechState==="granted");return micState==="granted"||speechState==="granted";}if(!granted(permission)&&speech.requestPermissions)permission=await speech.requestPermissions();if(!granted(permission))throw new Error(realtimePermissionDeniedMessage());return true;}
   function disconnectRealtime(nextStatus?:string){
     finishAnalyticsFlow("ai_request", "abandoned", { reason: "navigation" });
+    assistantTurnRef.current+=1;
+    realtimeResponseTurnsRef.current.clear();
+    realtimeOutputBlockedRef.current=true;
     setNativeAssistantAudio(false);
     try{if(realtimeConnectionAbortRef.current)realtimeConnectionAbortRef.current.abort();}catch(e){}
     realtimeConnectionAbortRef.current=null;
@@ -14486,7 +14475,27 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   }
   function toggleRealtimeMicrophone(){var stream=realtimeStreamRef.current;if(!stream)return;var next=!realtimeMicEnabled;stream.getAudioTracks().forEach(function(t){t.enabled=next;});try{var processed=microphoneProcessedStreamRef.current;if(processed)processed.getAudioTracks().forEach(function(t){t.enabled=next;});}catch(e){}setRealtimeMicEnabled(next);setVoiceListening(false);}
   function sendRealtimeText(q:string,providedResolution?:any){var clean=String(q||"");var turnResolution:any=providedResolution||resolveVoiceAssistantTurn(clean);lastVoiceUserRequestRef.current=clean;if(looksLikeDirectAppAction(clean)){callAssistant(clean,turnResolution);return true;}if(!sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:clean}]}}))return false;var languageControlReply=assistantLanguageControlReply(turnResolution);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else sendRealtimeModelResponse(turnResolution);setBusy(true);return true;}
+  function isCurrentAssistantTurn(turn){return mountedRef.current&&turn===assistantTurnRef.current;}
+  function interruptAssistantTurn(){
+    assistantTurnRef.current+=1;
+    try{if(assistantRequestAbortRef.current)assistantRequestAbortRef.current.abort();}catch(e){}
+    assistantRequestAbortRef.current=null;
+    stopSpeaking();
+    realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");
+    if(mountedRef.current){setBusy(false);setAiLoading(false);}
+  }
   function stopSpeaking(){
+    stopLocalSpeech();
+    realtimeAudioGenerationRef.current+=1;
+    realtimeResponseTurnsRef.current.clear();
+    realtimeOutputBlockedRef.current=true;
+    try{if(realtimeAudioRef.current)realtimeAudioRef.current.muted=true;}catch(e){}
+    // Cancel generation AND the WebRTC playout buffer; neither stops local TTS.
+    var id="fainance_interrupt_"+Date.now()+"_"+speechCycleRef.current;
+    sendRealtimeEvent({type:"response.cancel",event_id:id+"_cancel"});
+    sendRealtimeEvent({type:"output_audio_buffer.clear",event_id:id+"_clear"});
+  }
+  function stopLocalSpeech(){
     speechCycleRef.current+=1;
     try{if(speechAbortRef.current)speechAbortRef.current.abort();}catch(e){}speechAbortRef.current=null;
     try{var audio=nativeAudioRef.current;if(audio){audio.onended=null;audio.onerror=null;audio.pause();if(audio.src&&String(audio.src).startsWith("blob:"))URL.revokeObjectURL(audio.src);}}catch(e){}nativeAudioRef.current=null;
@@ -14494,7 +14503,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     try{if(typeof window!=="undefined"&&window.speechSynthesis)window.speechSynthesis.cancel();}catch(e){}
     if(mountedRef.current)setSpeaking(false);
   }
-  function resumeListeningAfterSpeech(resume,cycle){if(resume&&continuous&&voiceModal&&mountedRef.current&&cycle===speechCycleRef.current)setTimeout(function(){if(cycle===speechCycleRef.current)startListening();},280);}
+  function resumeListeningAfterSpeech(resume,cycle){if(realtimeChannelRef.current&&realtimeChannelRef.current.readyState==="open")return;if(resume&&continuous&&voiceModal&&mountedRef.current&&cycle===speechCycleRef.current)setTimeout(function(){if(cycle===speechCycleRef.current)startListening();},280);}
   async function speakFallback(clean,resume,cycle){
     if(!mountedRef.current||cycle!==speechCycleRef.current)return;
     setSpeaking(false);
@@ -14503,6 +14512,9 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   async function speak(text,resume){
     var clean=cleanSpeechText(text);if(!clean)return;
     stopSpeaking();var cycle=++speechCycleRef.current;
+    await setNativeAssistantAudio(true,"media");
+    await syncSystemMediaVolume();
+    if(!mountedRef.current||cycle!==speechCycleRef.current)return;
     try{
       if(cycle!==speechCycleRef.current)return;
       var ctrl=new AbortController();speechAbortRef.current=ctrl;if(mountedRef.current)setSpeaking(true);
@@ -14510,7 +14522,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       var res=await authenticatedAiFetch(AI_VOICE_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},signal:ctrl.signal,body:JSON.stringify({text:clean,language:lastAssistantUserLanguageRef.current||String(lang||"it")})}).finally(function(){clearTimeout(timer);});
       if(cycle!==speechCycleRef.current)return;if(!res.ok)throw new Error("Natural voice unavailable");
       var blob=await res.blob();if(cycle!==speechCycleRef.current)return;if(!blob||!blob.size)throw new Error("Empty voice response");
-      var url=URL.createObjectURL(blob);var audio=new Audio(url);nativeAudioRef.current=audio;audio.preload="auto";audio.volume=assistantVolumeRef.current;audio.muted=assistantVolumeRef.current<=0;
+      var url=URL.createObjectURL(blob);var audio=new Audio(url);nativeAudioRef.current=audio;audio.preload="auto";audio.volume=nativePlatformName()==="android"?1:assistantVolumeRef.current;audio.muted=assistantVolumeRef.current<=0;
       audio.onended=function(){try{URL.revokeObjectURL(url);}catch(e){}if(nativeAudioRef.current===audio)nativeAudioRef.current=null;if(!mountedRef.current||cycle!==speechCycleRef.current)return;setSpeaking(false);resumeListeningAfterSpeech(resume,cycle);};
       audio.onerror=function(){try{URL.revokeObjectURL(url);}catch(e){}if(nativeAudioRef.current===audio)nativeAudioRef.current=null;if(!mountedRef.current||cycle!==speechCycleRef.current)return;setSpeaking(false);speakFallback(clean,resume,cycle);};
       await audio.play();
@@ -14562,6 +14574,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     if(documentLoading||busy||aiLoading)return;
     if(!aiExternalConsent){setVoiceError(V.consentTitle);return;}
     if(canUsePlanFeature&&!canUsePlanFeature("receiptScan",1)){setVoiceError(upgradeMessage?upgradeMessage("receiptScan"):"Hai raggiunto il limite di scansione documenti.");return;}
+    interruptAssistantTurn();var turn=assistantTurnRef.current;
     activeAttachmentRef.current={dataUrl:fileDataUrl,name:fileName||"documento",mimeType:fileMimeType||(isImage!==false?"image/jpeg":"application/octet-stream"),isImage:isImage!==false,createdAt:Date.now()};
     var wasMicEnabled=realtimeMicEnabled,stream=realtimeStreamRef.current;
     if(stream&&wasMicEnabled)try{stream.getAudioTracks().forEach(function(t){t.enabled=false;});setRealtimeMicEnabled(false);}catch(e){}
@@ -14579,6 +14592,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       else{payload.fileDataUrl=fileDataUrl;payload.fileName=fileName||"documento";payload.fileMimeType=fileMimeType||"application/octet-stream";}
       var res=await fetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(payload)}).finally(function(){clearTimeout(timer);if(assistantRequestAbortRef.current===ctrl)assistantRequestAbortRef.current=null;});
       var data:any={};try{data=await res.json();}catch(e){}
+      if(!isCurrentAssistantTurn(turn))return;
       if(!res.ok)throw Object.assign(new Error((data&&data.error)||("Errore "+res.status)),{httpStatus:res.status});
       var answer=String((data&&data.answer)||"").trim(),actions=realtimeActionsFrom((data&&data.actions)||[]),opens=actions.filter(function(a){return a.action==="open_section";}),writes=actions.filter(function(a){return a.action!=="open_section";}).map(function(a){if(a.action==="create_expense"||a.action==="create_income"){return {...a,note:""};}return a;});
       if(consumePlanFeature){consumePlanFeature("receiptScan",1);consumePlanFeature("aiReply",1);}
@@ -14588,9 +14602,11 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
         if(opens.length)setTimeout(function(){openSection(opens[0]);},80);
       }
     }catch(e){
+      if(!isCurrentAssistantTurn(turn))return;
       var msg=realtimeFailureMessage(e,"document",Number((e&&e.httpStatus)||0));setVoiceError(msg);appendMessage("assistant",msg);
     }finally{
-      setDocumentLoading(false);setBusy(false);setAiLoading(false);
+      if(mountedRef.current)setDocumentLoading(false);
+      if(isCurrentAssistantTurn(turn)){setBusy(false);setAiLoading(false);}
       if(stream&&wasMicEnabled)try{stream.getAudioTracks().forEach(function(t){t.enabled=true;});setRealtimeMicEnabled(true);}catch(e){}
     }
   }
@@ -15112,19 +15128,23 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       else throw new Error("Questa impostazione è sensibile o non è modificabile dall’assistente.");return actionSummary(a);}
     return "";
   }
-  function openSection(a){var sec=normalized(a.section||"").replace(/ /g,"");var map:any={home:"home",expenses:"spese",expense:"spese",uscite:"spese",incomes:"spese",income:"spese",entrate:"spese",recurring:"spese",ricorrenti:"spese",history:"history",storico:"history",statistics:"stats",statistiche:"stats",budget:"budget",goals:"goals",obiettivi:"goals",alerts:"alerts",alert:"alerts",patrimonio:"patrimonio",assets:"patrimonio",debtcredits:"debtCredits",debiti:"debtCredits",crediti:"debtCredits",shopping:"shopping",spesa:"shopping",share:"share",appunti:"appunti",notes:"appunti",settings:"settings",impostazioni:"settings",ai:"consulenteAI",assistant:"voice"};var target=map[sec]||"home";if(target==="voice")return;setTab(target);setSettingsPage(null);setMobileMenu(false);if(target==="spese"){setSpeseSubTab(sec==="recurring"||sec==="ricorrenti"?"recurring":"add");setAddType(sec==="incomes"||sec==="income"||sec==="entrate"?"income":"expense");setAddSubTab("single");}if(target==="history")setHistoryTab("expenses");setVoiceModal(false);}
+  function openSection(a){var sec=normalized(a.section||"").replace(/ /g,"");var map:any={home:"home",expenses:"spese",expense:"spese",uscite:"spese",incomes:"spese",income:"spese",entrate:"spese",recurring:"tools",ricorrenti:"tools",automaticrules:"tools",regoleautomatiche:"tools",history:"history",storico:"history",statistics:"stats",statistiche:"stats",budget:"budget",goals:"goals",obiettivi:"goals",alerts:"alerts",alert:"alerts",patrimonio:"patrimonio",assets:"patrimonio",debtcredits:"debtCredits",debiti:"debtCredits",crediti:"debtCredits",shopping:"shopping",spesa:"shopping",share:"share",appunti:"appunti",notes:"appunti",settings:"settings",impostazioni:"settings",ai:"consulenteAI",assistant:"voice"};var target=map[sec]||"home";if(target==="voice")return;setTab(target);setSettingsPage(null);setMobileMenu(false);if(target==="spese"){setSpeseSubTab("add");setAddType(sec==="incomes"||sec==="income"||sec==="entrate"?"income":"expense");setAddSubTab("single");}if(target==="tools"&&(sec==="recurring"||sec==="ricorrenti"||sec==="automaticrules"||sec==="regoleautomatiche")){setTimeout(function(){window.dispatchEvent(new CustomEvent("fainance:open-tool",{detail:{page:(sec==="automaticrules"||sec==="regoleautomatiche")?"automaticRules":"recurring"}}));},0);}if(target==="history")setHistoryTab("expenses");setVoiceModal(false);}
   function isYes(q){return /^(si|sì|ok|okay|confermo|conferma|vai|procedi|yes|confirm|dale|vale|oui|ja|sim|tak|da|ναι)\b/i.test(String(q||"").trim());}
   function isNo(q){return /^(no|annulla|annullo|cancel|cancelar|non|nein|não|nie|nu|όχι)\b/i.test(String(q||"").trim());}
   function confirmPending(userText){if(String(userText||"").trim())appendMessage("user",userText);try{pendingActions.forEach(function(a){executeAction(a);});updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");appendMessage("assistant",msg);speak(msg,true);}catch(e){var msg2=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error");appendMessage("assistant",msg2);speak(msg2,true);}}
   function cancelPending(userText){appendMessage("user",userText||V.cancel);updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"cancelled");appendMessage("assistant",msg);speak(msg,true);}
   async function callAssistant(q,providedResolution?:any){
+    var turn=assistantTurnRef.current;
+    var ctrl=new AbortController();assistantRequestAbortRef.current=ctrl;
+    var timer=setTimeout(function(){ctrl.abort();},70000);
+    stopSpeaking();
     startAnalyticsFlow("ai_request", { method: "assistant" });
     lastVoiceUserRequestRef.current=String(q||"");
     setBusy(true);setAiLoading(true);setVoiceError("");
     try{
       var token="";if(fbAuth.currentUser)token=await fbAuth.currentUser.getIdToken();
+      if(!isCurrentAssistantTurn(turn))return;
       var headers:any={"Content-Type":"application/json"};if(token)headers.Authorization="Bearer "+token;
-      var ctrl=new AbortController();assistantRequestAbortRef.current=ctrl;var timer=setTimeout(function(){ctrl.abort();},70000);
       var assistantRequest=buildAssistantRequestPayload({question:q,languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(),chatHistory:(aiChat||[]).filter(function(m){return m&&(m.role==="user"||m.role==="assistant");}).slice(-16).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
       var attachment=activeAttachmentRef.current;
       if(attachment){
@@ -15132,11 +15152,13 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
         else{requestPayload.fileDataUrl=attachment.dataUrl;requestPayload.fileName=attachment.name||"documento";requestPayload.fileMimeType=attachment.mimeType||"application/octet-stream";}
         requestPayload.question="[TURN_LANGUAGE="+assistantLang+"] The following user request also refers to the attached file, which must be read directly. User request: "+q;
       }
-      var res=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(requestPayload)}).finally(function(){clearTimeout(timer);if(assistantRequestAbortRef.current===ctrl)assistantRequestAbortRef.current=null;});
+      var res=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(requestPayload)});
       var data:any=null;try{data=await res.json();}catch(e){}
+      if(!isCurrentAssistantTurn(turn))return;
       if(!res.ok){var assistantHttpError:any=new Error((data&&data.error)||("Il servizio AI ha restituito l’errore "+res.status+"."));assistantHttpError.httpStatus=res.status;throw assistantHttpError;}
       var answer=String((data&&data.answer)||"").trim()||assistantRuntimeText(assistantLang,"noAnswer");
-      if(assistantAnswerNeedsTranslation(answer,assistantLang)){try{var translateResponse=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,body:JSON.stringify(buildAssistantTranslationPayload(answer,assistantLang))});var translateData:any=await translateResponse.json();var corrected=String((translateData&&translateData.answer)||"").trim();if(corrected)answer=corrected;}catch(e){}}answer=compactAssistantAnswer(answer,assistantLang,1400);
+      if(assistantAnswerNeedsTranslation(answer,assistantLang)){try{var translateResponse=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(buildAssistantTranslationPayload(answer,assistantLang))});var translateData:any=await translateResponse.json();var corrected=String((translateData&&translateData.answer)||"").trim();if(corrected)answer=corrected;}catch(e){}}answer=compactAssistantAnswer(answer,assistantLang,1400);
+      if(!isCurrentAssistantTurn(turn))return;
       var actions=realtimeActionsFrom(data&&data.actions).filter(function(a){return a&&a.action&&a.action!=="none";}),openActions=actions.filter(function(a){return a.action==="open_section";}),writeActions=actions.filter(function(a){return a.action!=="open_section";});
       finishAnalyticsFlow("ai_request", "completed");
       if(writeActions.length){updatePendingActions(writeActions);return;}
@@ -15144,12 +15166,13 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       if(openActions.length){setToast({text:answer,type:"success",icon:"✨"});openSection(openActions[0]);return;}
       speak(answer,true);
     }catch(e){
+      if(!isCurrentAssistantTurn(turn))return;
       finishAnalyticsFlow("ai_request", "failed", { reason: "service" });
       if(e&&e.name==="AbortError"&&!mountedRef.current)return;
       var msg=realtimeFailureMessage(e,"assistant",Number((e&&e.httpStatus)||0));setVoiceError(msg);appendMessage("assistant",msg);
-    }finally{if(mountedRef.current){setBusy(false);setAiLoading(false);}}
+    }finally{clearTimeout(timer);if(assistantRequestAbortRef.current===ctrl)assistantRequestAbortRef.current=null;if(isCurrentAssistantTurn(turn)){setBusy(false);setAiLoading(false);}}
   }
-  function sendMessage(forced){var q=String(forced!==undefined?forced:input||"").trim();if(!q||busy||aiLoading)return;setInput("");stopListening(false);if(pendingActions.length&&isYes(q)){confirmPending(q);return;}if(pendingActions.length&&isNo(q)){cancelPending(q);return;}var turnResolution:any=resolveVoiceAssistantTurn(q);var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(q,turnResolution.language);if(localHelpAnswer){appendMessage("user",q);appendMessage("assistant",localHelpAnswer);speak(localHelpAnswer,true);return;}if(realtimeStatus==="connected"){appendMessage("user",q);if(!languageControlReply&&consumePlanFeature)consumePlanFeature("aiReply",1);if(!sendRealtimeText(q,turnResolution))setVoiceError(assistantRuntimeText(turnResolution.language,"notReady"));return;}if(languageControlReply){appendMessage("user",q);appendMessage("assistant",languageControlReply);speak(languageControlReply,true);return;}if(!aiExternalConsent){setVoiceError(V.consentTitle);return;}function run(){appendMessage("user",q);if(consumePlanFeature)consumePlanFeature("aiReply",1);callAssistant(q,turnResolution);}if(activeAttachmentRef.current){if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();return;}if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();}
+  function sendMessage(forced){var q=String(forced!==undefined?forced:input||"").trim();if(!q||documentLoading||realtimeStatus==="connecting")return;interruptAssistantTurn();setInput("");stopListening(false);if(pendingActions.length&&isYes(q)){confirmPending(q);return;}if(pendingActions.length&&isNo(q)){cancelPending(q);return;}var turnResolution:any=resolveVoiceAssistantTurn(q);var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(q,turnResolution.language);if(localHelpAnswer){appendMessage("user",q);appendMessage("assistant",localHelpAnswer);speak(localHelpAnswer,true);return;}if(realtimeStatus==="connected"){appendMessage("user",q);if(!languageControlReply&&consumePlanFeature)consumePlanFeature("aiReply",1);if(!sendRealtimeText(q,turnResolution))setVoiceError(assistantRuntimeText(turnResolution.language,"notReady"));return;}if(languageControlReply){appendMessage("user",q);appendMessage("assistant",languageControlReply);speak(languageControlReply,true);return;}if(!aiExternalConsent){setVoiceError(V.consentTitle);return;}function run(){appendMessage("user",q);if(consumePlanFeature)consumePlanFeature("aiReply",1);callAssistant(q,turnResolution);}if(activeAttachmentRef.current){if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();return;}if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();}
   useEffect(function () {
     mountedRef.current = true;
     return function () {
@@ -15176,7 +15199,10 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   );
   useEffect(function () {
     function onSystemVolume(event: any) {
-      var detail = (event && event.detail) || {};
+      // Capacitor triggerEvent assigns payload fields directly to Event;
+      // CustomEvent-based hosts put the same payload in detail.
+      var detail = (event && (event.detail || event)) || {};
+      if(typeof detail.communication==="boolean")nativeRealtimeCommunicationRef.current=detail.communication;
       var current = Number(detail.current),
         maximum = Math.max(1, Number(detail.max) || 1),
         ratio = Number(detail.ratio);
@@ -16081,8 +16107,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                 }}
                 disabled={
                   !input.trim() ||
-                  busy ||
-                  aiLoading ||
+                  documentLoading ||
                   realtimeStatus === "connecting"
                 }
                 style={{
@@ -16090,10 +16115,10 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                   border: "none",
                   borderRadius: 10,
                   padding: "0 12px",
-                  background: input.trim() && !busy ? "#7F77DD" : "#A8A8A8",
+                  background: input.trim() && !documentLoading ? "#7F77DD" : "#A8A8A8",
                   color: "#fff",
                   fontWeight: 900,
-                  cursor: input.trim() && !busy ? "pointer" : "not-allowed",
+                  cursor: input.trim() && !documentLoading ? "pointer" : "not-allowed",
                 }}
               >
                 {V.send}

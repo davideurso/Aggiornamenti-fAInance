@@ -45,6 +45,7 @@ import {
   sortedMethods,
   fmtDate,
   fmtAmt,
+  formatNumber,
   parseMoney,
   todayStr,
   dateOffset,
@@ -711,6 +712,11 @@ export function Toggle({ label, checked, onChange, color }) {
   var ctx = useApp();
   var dark = ctx.dark;
   var c = color || ctx.secondaryButtonColor || "#5FAFE5";
+  var translateUiRuntimeText = ctx.translateUiRuntimeText;
+  var displayLabel =
+    typeof label === "string" && label
+      ? (translateUiRuntimeText ? translateUiRuntimeText(label) : label)
+      : label;
   return (
     <button
       type="button"
@@ -719,7 +725,7 @@ export function Toggle({ label, checked, onChange, color }) {
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: label ? "space-between" : "center",
+        justifyContent: displayLabel ? "space-between" : "center",
         gap: 10,
         minWidth: 56,
         minHeight: 40,
@@ -757,7 +763,7 @@ export function Toggle({ label, checked, onChange, color }) {
           }}
         />
       </div>
-      {label && (
+      {displayLabel && (
         <span
           style={{
             fontSize: 13,
@@ -765,7 +771,7 @@ export function Toggle({ label, checked, onChange, color }) {
             fontWeight: checked ? 500 : 400,
           }}
         >
-          {label}
+          {displayLabel}
         </span>
       )}
     </button>
@@ -1300,6 +1306,11 @@ export function FainanceInfoPopover({
           style={{
             width: buttonSize,
             height: buttonSize,
+            minWidth: buttonSize,
+            minHeight: buttonSize,
+            flex: "0 0 auto",
+            boxSizing: "border-box",
+            lineHeight: 1,
             borderRadius: "50%",
             border: "1px solid " + theme.buttonBorder,
             background: theme.buttonBg,
@@ -3628,7 +3639,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         <div style={{ fontSize: 11, color: sc, marginTop: 8 }}>
           {L("Equivalente nella valuta principale")}:{" "}
           <strong style={{ color: tc }}>
-            {Number(value.baseAmount).toFixed(2)} {base}
+            {formatNumber(value.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {base}
           </strong>{" "}
           · 1 {selected} = {Number(value.exchangeRate).toFixed(6)} {base}
         </div>
@@ -4288,7 +4299,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           )}
           {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
             <div style={{ fontSize: isMobile ? 11.6 : 12, color: whiteSoft, marginTop: 3 }}>
-              ≈ {Number(f.baseAmount).toFixed(2)} {String(ctx.currency || "EUR")}
+              ≈ {formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(ctx.currency || "EUR")}
             </div>
           )}
         </div>
@@ -6796,7 +6807,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                   )}
                   {String(r.currency || ctx.currency) !== String(ctx.currency) && Number(r.baseAmount) > 0 && (
                     <div style={{ fontSize: 11.6, color: whiteSoftMobile, marginTop: 3 }}>
-                      ≈ {Number(r.baseAmount).toFixed(2)} {String(ctx.currency || "EUR")}
+                      ≈ {formatNumber(r.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(ctx.currency || "EUR")}
                     </div>
                   )}
                 </div>

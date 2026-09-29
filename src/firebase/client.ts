@@ -8,7 +8,7 @@ import {
   initializeAuth,
   setPersistence,
 } from "firebase/auth";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { firebaseConfig } from "../config/env";
 
@@ -54,7 +54,9 @@ export const fbAuth = createFainanceAuth();
 // app/browser restarts without a custom movement outbox.
 export const fbDb = initializeFirestore(firebaseApp, {
   localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
+    tabManager: nativeRuntime
+      ? persistentSingleTabManager({ forceOwnership: true })
+      : persistentMultipleTabManager(),
   }),
   // Let Firestore detect whether this network needs long polling. Forcing it
   // delays every server read on otherwise compatible connections.

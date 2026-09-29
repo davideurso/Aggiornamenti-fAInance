@@ -33,6 +33,10 @@ export interface AppNotificationRecord {
   read?: boolean;
   readAt?: string;
   status?: string;
+  recurringRuleId?: string;
+  recurringOccurrenceKey?: string;
+  recurringOccurrenceDate?: string;
+  virtual?: boolean;
 }
 
 export function watchAppNotifications(

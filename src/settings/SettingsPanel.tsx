@@ -6854,10 +6854,18 @@ export function SettingsPanel() {
                 <span>{L("Tipo di periodo")}</span>
                 <SettingInfo
                   id="general_balance_period_type"
-                  text={`- **Il mese solare** va dal primo all’ultimo giorno del mese.
-- **Il mese finanziario** parte invece dal giorno scelto da te e termina il giorno precedente del mese successivo.
-
-Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggiate.`}
+                  body={renderInfoBody(
+                    "- " +
+                      L("Il mese solare va dal primo all’ultimo giorno del mese.") +
+                      "\n- " +
+                      L(
+                        "Il mese finanziario parte invece dal giorno scelto da te e termina il giorno precedente del mese successivo."
+                      ) +
+                      "\n\n" +
+                      L(
+                        "Le transazioni non cambiano: cambia solo il periodo in cui vengono conteggiate."
+                      )
+                  )}
                 />
               </div>
               <select
@@ -9132,7 +9140,30 @@ Le transazioni **non cambiano**: cambia solo il periodo in cui vengono conteggia
       yearly: "Ogni anno",
       once: "Una tantum",
     };
-    var DOW = ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"];
+    var DOW = (function () {
+      var localeByLang: any = {
+        it: "it-IT",
+        en: "en-US",
+        es: "es-ES",
+        fr: "fr-FR",
+        de: "de-DE",
+        pt: "pt-PT",
+        pl: "pl-PL",
+        nl: "nl-NL",
+        ro: "ro-RO",
+        el: "el-GR",
+      };
+      var locale = localeByLang[String(lang || "it")] || String(lang || "it");
+      try {
+        var formatter = new Intl.DateTimeFormat(locale, { weekday: "short" });
+        return Array.from({ length: 7 }, function (_, i) {
+          var value = formatter.format(new Date(2024, 0, 7 + i)).replace(/\.$/, "");
+          return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
+        });
+      } catch (e) {
+        return ["Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab"].map(L);
+      }
+    })();
     return (
       <div>
         <PageHeader title="Notifiche & Promemoria" />

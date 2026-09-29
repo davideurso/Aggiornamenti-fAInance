@@ -39,3 +39,297 @@
 .fainance-tools .tool-currency-list button { display:flex; width:100%; justify-content:space-between; gap:12px; text-align:left; margin-bottom:5px; border:0; }
 .fainance-tools .tool-currency-list span { color:var(--tool-sub); font-size:12px; }
 @media(max-width:380px) { .fainance-tools .tool-card { padding:12px; } .fainance-tools .tool-currency { grid-template-columns:1fr auto; padding:9px; } .fainance-tools .tool-currency label { grid-column:1/-1; } .fainance-tools .tool-currency input { font-size:21px; } }
+.fainance-tools .tool-main-tabs { overflow-x:auto; scrollbar-width:none; justify-content:flex-start; }
+.fainance-tools .tool-main-tabs::-webkit-scrollbar { display:none; }
+.fainance-tools .tool-main-tabs button { flex:0 0 auto; min-width:126px; white-space:nowrap; }
+.fainance-tools .tool-simulator-title { display:flex; align-items:flex-start; gap:11px; margin-bottom:15px; }
+.fainance-tools .tool-simulator-title>span { width:38px; height:38px; flex:0 0 38px; display:flex; align-items:center; justify-content:center; border-radius:13px; background:var(--tool-soft); font-size:20px; }
+.fainance-tools .tool-simulator-title h3 { margin:0; }
+.fainance-tools .tool-simulator-title p { margin:4px 0 0; }
+.fainance-tools .tool-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+.fainance-tools .tool-input-money { display:flex; align-items:center; gap:8px; border:1px solid var(--tool-border); border-radius:11px; background:var(--tool-card); padding-right:11px; }
+.fainance-tools .tool-input-money input { border:0; background:transparent; }
+.fainance-tools .tool-input-money span { color:var(--tool-sub); font-weight:800; font-size:12px; }
+.fainance-tools .tool-metric-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:16px; }
+.fainance-tools .tool-metric { border:1px solid var(--tool-border); border-radius:14px; padding:12px; background:var(--tool-soft); display:flex; flex-direction:column; gap:5px; min-width:0; }
+.fainance-tools .tool-metric span { color:var(--tool-sub); font-size:11px; line-height:1.25; }
+.fainance-tools .tool-metric strong { color:var(--tool-text); font-size:18px; overflow-wrap:anywhere; }
+.fainance-tools .tool-metric-accent { border-color:color-mix(in srgb,var(--tool-primary) 38%,var(--tool-border)); }
+.fainance-tools .tool-metric-accent strong { color:var(--tool-primary); }
+.fainance-tools .tool-formula { color:var(--tool-sub); font-size:10px; line-height:1.45; margin:13px 0 0; }
+@media(max-width:520px){.fainance-tools .tool-form-grid,.fainance-tools .tool-metric-grid{grid-template-columns:1fr}.fainance-tools .tool-main-tabs button{min-width:142px}}
+
+/* Tool 2.1.4 - navigation and simulator guidance */
+.fainance-tools .tool-main-tabs {
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:6px;
+  overflow:visible;
+  padding:6px;
+  align-items:stretch;
+}
+.fainance-tools .tool-main-tabs button {
+  min-width:0;
+  width:100%;
+  min-height:48px;
+  padding:7px 5px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  white-space:normal;
+  line-height:1.15;
+  border-radius:12px;
+  font-size:11px;
+  font-weight:650;
+}
+.fainance-tools .tool-main-tabs button:nth-child(-n+3){grid-column:span 2;}
+.fainance-tools .tool-main-tabs button:nth-child(n+4){grid-column:span 3;}
+.fainance-tools .tool-main-tabs button[aria-pressed=true]{
+  box-shadow:0 3px 12px #00000010;
+  transform:translateY(-1px);
+}
+.fainance-tools .tool-tab-icon{font-size:16px;line-height:1;flex:0 0 auto;}
+
+.fainance-tools .tool-field{display:grid;gap:6px;min-width:0;position:relative;align-content:start;}
+.fainance-tools .tool-field-label{display:flex;align-items:center;gap:6px;min-height:22px;color:var(--tool-sub);font-size:12px;line-height:1.2;}
+
+.fainance-tools .tool-progress-wrap{margin-top:17px;padding:12px 13px;border:1px solid var(--tool-border);border-radius:14px;background:var(--tool-soft);}
+.fainance-tools .tool-progress-label{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:11px;color:var(--tool-sub);}
+.fainance-tools .tool-progress-label strong{font-size:12px;color:var(--tool-text);}
+.fainance-tools .tool-progress{height:8px;border-radius:999px;background:color-mix(in srgb,var(--tool-border) 70%,transparent);overflow:hidden;}
+.fainance-tools .tool-progress span{display:block;height:100%;border-radius:inherit;background:var(--tool-primary);transition:width .2s ease;}
+
+.fainance-tools .tool-result-hero{
+  margin-top:15px;
+  padding:15px 16px;
+  border:1px solid color-mix(in srgb,var(--tool-primary) 32%,var(--tool-border));
+  border-radius:16px;
+  background:color-mix(in srgb,var(--tool-primary) 7%,var(--tool-card));
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  gap:4px;
+}
+.fainance-tools .tool-result-hero>span{font-size:11px;color:var(--tool-sub);font-weight:700;}
+.fainance-tools .tool-result-hero>strong{font-size:24px;line-height:1.15;color:var(--tool-primary);overflow-wrap:anywhere;}
+.fainance-tools .tool-result-hero>small{font-size:10px;color:var(--tool-sub);line-height:1.4;}
+.fainance-tools .tool-result-warning{border-color:#e2bb69;background:#fff8e6;}
+.fainance-tools .tool-result-warning>strong{color:#8a6417;font-size:18px;}
+
+.fainance-tools .tool-scenario-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:10px;}
+.fainance-tools .tool-scenario{padding:12px;border:1px solid var(--tool-border);border-radius:14px;background:var(--tool-soft);display:grid;gap:4px;min-width:0;}
+.fainance-tools .tool-scenario span,.fainance-tools .tool-scenario small{font-size:10px;color:var(--tool-sub);}
+.fainance-tools .tool-scenario strong{font-size:15px;color:var(--tool-text);overflow-wrap:anywhere;}
+
+.fainance-tools .tool-inflation-flow{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);gap:6px;align-items:center;margin-top:10px;}
+.fainance-tools .tool-inflation-flow>div{min-width:0;padding:10px 7px;border:1px solid var(--tool-border);border-radius:13px;background:var(--tool-soft);text-align:center;display:grid;gap:4px;}
+.fainance-tools .tool-inflation-flow span{font-size:9px;color:var(--tool-sub);line-height:1.2;}
+.fainance-tools .tool-inflation-flow strong{font-size:12px;color:var(--tool-text);overflow-wrap:anywhere;}
+.fainance-tools .tool-inflation-flow b{font-size:13px;color:var(--tool-sub);}
+
+@media(max-width:520px){
+  .fainance-tools .tool-main-tabs button{min-width:0;font-size:10.5px;padding:7px 3px;}
+  .fainance-tools .tool-tab-icon{font-size:15px;}
+  .fainance-tools .tool-form-grid{grid-template-columns:1fr;}
+  .fainance-tools .tool-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .fainance-tools .tool-inflation-flow{gap:4px;}
+  .fainance-tools .tool-inflation-flow>div{padding:9px 4px;}
+  .fainance-tools .tool-inflation-flow strong{font-size:11px;}
+}
+
+/* fAInance 2.1.4 - Tool polish 27/09: canonical info popovers + richer simulator visuals */
+.fainance-tools .tool-main-tabs{
+  gap:8px;
+  padding:8px;
+  border:1px solid color-mix(in srgb,var(--tool-primary) 8%,var(--tool-border));
+  border-radius:18px;
+  background:color-mix(in srgb,var(--tool-primary) 5%,var(--tool-card));
+}
+.fainance-tools .tool-main-tabs button{
+  min-height:46px;
+  padding:7px 8px;
+  border:1px solid transparent;
+  background:color-mix(in srgb,var(--tool-card) 72%,transparent);
+  box-shadow:none;
+  transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease,background .15s ease;
+}
+.fainance-tools .tool-main-tabs button[aria-pressed=true]{
+  background:var(--tool-card);
+  border-color:color-mix(in srgb,var(--tool-primary) 25%,var(--tool-border));
+  box-shadow:0 6px 18px #00000012;
+  color:var(--tool-primary);
+}
+.fainance-tools .tool-main-tabs button:not([aria-pressed=true]){opacity:.92;}
+.fainance-tools .tool-main-tabs button:not([aria-pressed=true]):active{transform:scale(.985);}
+.fainance-tools .tool-tab-icon{font-size:17px;}
+
+/* The information control intentionally inherits FainanceInfoPopover's canonical
+   yellow styling. Do not restyle it locally: all fAInance informative i must match. */
+.fainance-tools .tool-field-label{gap:7px;min-height:24px;}
+
+.fainance-tools .tool-progress-rich{display:flex;align-items:center;gap:13px;}
+.fainance-tools .tool-progress-copy{flex:1;min-width:0;}
+.fainance-tools .tool-progress-orbit{
+  --tool-progress-pct:0%;
+  width:62px;height:62px;flex:0 0 62px;border-radius:50%;
+  display:grid;place-items:center;
+  background:conic-gradient(var(--tool-primary) var(--tool-progress-pct),color-mix(in srgb,var(--tool-border) 72%,transparent) 0);
+  position:relative;
+}
+.fainance-tools .tool-progress-orbit::after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--tool-card);}
+.fainance-tools .tool-progress-orbit strong{position:relative;z-index:1;font-size:13px;color:var(--tool-primary);}
+
+.fainance-tools .tool-timeline-compare,.fainance-tools .tool-inflation-bars{display:grid;gap:11px;margin-top:13px;padding:12px 13px;border:1px solid var(--tool-border);border-radius:15px;background:var(--tool-soft);}
+.fainance-tools .tool-timeline-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:10px;color:var(--tool-sub);margin-bottom:6px;}
+.fainance-tools .tool-timeline-head strong{color:var(--tool-text);font-size:11px;text-align:right;}
+.fainance-tools .tool-timeline,.fainance-tools .tool-value-bar{height:8px;border-radius:999px;background:color-mix(in srgb,var(--tool-border) 72%,transparent);overflow:hidden;}
+.fainance-tools .tool-timeline span,.fainance-tools .tool-value-bar span{display:block;height:100%;border-radius:inherit;background:var(--tool-primary);}
+.fainance-tools .tool-timeline-warning span{background:#D5A43A;}
+.fainance-tools .tool-value-bar-loss span{background:#7F77DD;}
+
+.fainance-tools .tool-result-hero{box-shadow:0 7px 22px #0000000c;}
+.fainance-tools .tool-simulator{overflow:visible;}
+
+@media(max-width:520px){
+  .fainance-tools .tool-main-tabs{gap:6px;padding:6px;border-radius:16px;}
+  .fainance-tools .tool-main-tabs button{min-height:44px;padding:6px 5px;font-size:10.5px;}
+  .fainance-tools .tool-progress-orbit{width:56px;height:56px;flex-basis:56px;}
+}
+
+/* fAInance 2.1.4 - simulator redesign 28/09 */
+.fainance-tools .tool-main-navigation{
+  display:grid;
+  gap:8px;
+  margin-bottom:16px;
+  padding:8px;
+  border:1px solid color-mix(in srgb,var(--tool-primary) 10%,var(--tool-border));
+  border-radius:19px;
+  background:color-mix(in srgb,var(--tool-primary) 4%,var(--tool-card));
+}
+.fainance-tools .tool-nav-group{display:grid;gap:5px;}
+.fainance-tools .tool-nav-label{
+  padding:0 7px;
+  color:var(--tool-sub);
+  font-size:9px;
+  font-weight:850;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.fainance-tools .tool-main-navigation .tool-main-tabs{margin:0;padding:0;border:0;background:transparent;box-shadow:none;}
+.fainance-tools .tool-main-tabs-utilities{grid-template-columns:repeat(2,minmax(0,1fr));}
+.fainance-tools .tool-main-tabs-simulators{grid-template-columns:repeat(3,minmax(0,1fr));}
+.fainance-tools .tool-main-tabs-automations{grid-template-columns:repeat(2,minmax(0,1fr));}
+.fainance-tools .tool-main-navigation .tool-main-tabs button{grid-column:auto!important;min-height:44px;border-radius:13px;}
+
+.fainance-tools .tool-simulator-page{display:grid;gap:10px;}
+.fainance-tools .tool-simulator-page>.tool-card{margin-bottom:0;}
+.fainance-tools .tool-simulator-intro{
+  padding-bottom:15px;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--tool-primary) 6%,var(--tool-card)),var(--tool-card) 62%);
+}
+.fainance-tools .tool-simulator-intro .tool-simulator-title{margin-bottom:12px;}
+.fainance-tools .tool-question{display:grid;gap:7px;}
+.fainance-tools .tool-question>span,.fainance-tools .tool-section-kicker{
+  color:var(--tool-sub);
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.035em;
+  text-transform:uppercase;
+}
+.fainance-tools .tool-mode-switch{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:6px;
+  padding:5px;
+  border-radius:14px;
+  background:var(--tool-soft);
+}
+.fainance-tools .tool-mode-switch button{
+  min-height:42px;
+  border:1px solid transparent;
+  background:transparent;
+  padding:8px 9px;
+  font-size:11px;
+  font-weight:750;
+  line-height:1.25;
+}
+.fainance-tools .tool-mode-switch button[aria-pressed=true]{
+  border-color:color-mix(in srgb,var(--tool-primary) 25%,var(--tool-border));
+  background:var(--tool-card);
+  color:var(--tool-primary);
+  box-shadow:0 4px 12px #0000000b;
+}
+.fainance-tools .tool-input-panel{padding-top:15px;}
+.fainance-tools .tool-input-panel .tool-section-kicker{margin-bottom:12px;}
+.fainance-tools .tool-result-panel{
+  padding-top:15px;
+  border-color:color-mix(in srgb,var(--tool-primary) 22%,var(--tool-border));
+  box-shadow:0 10px 26px #0000000b;
+}
+.fainance-tools .tool-result-panel>.tool-section-kicker{color:var(--tool-primary);margin-bottom:2px;}
+.fainance-tools .tool-result-panel .tool-result-hero{margin-top:10px;}
+
+.fainance-tools .tool-quick-scenarios{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--tool-border);
+  display:grid;
+  gap:8px;
+}
+.fainance-tools .tool-quick-scenarios>span{font-size:10px;color:var(--tool-sub);font-weight:800;}
+.fainance-tools .tool-quick-scenarios>div{display:grid;grid-template-columns:1fr 1.3fr;gap:8px;}
+.fainance-tools .tool-quick-row{display:flex;gap:5px;min-width:0;}
+.fainance-tools .tool-quick-row button{
+  flex:1;
+  min-width:0;
+  min-height:34px;
+  padding:6px 7px;
+  border-radius:10px;
+  background:var(--tool-soft);
+  font-size:10px;
+  font-weight:750;
+}
+.fainance-tools .tool-quick-row button[aria-pressed=true]{background:var(--tool-primary);border-color:var(--tool-primary);color:#fff;}
+
+.fainance-tools .tool-three-point-flow{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr) auto minmax(0,1fr);
+  gap:5px;
+  align-items:center;
+  margin-top:12px;
+}
+.fainance-tools .tool-three-point-flow>div{
+  min-width:0;
+  min-height:78px;
+  padding:10px 6px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  gap:4px;
+  text-align:center;
+  border:1px solid var(--tool-border);
+  border-radius:14px;
+  background:var(--tool-soft);
+}
+.fainance-tools .tool-three-point-flow span,.fainance-tools .tool-three-point-flow small{font-size:9px;color:var(--tool-sub);line-height:1.2;}
+.fainance-tools .tool-three-point-flow strong{font-size:12px;color:var(--tool-text);overflow-wrap:anywhere;}
+.fainance-tools .tool-three-point-flow b{font-size:13px;color:var(--tool-sub);}
+
+@media(max-width:520px){
+  .fainance-tools .tool-main-navigation{padding:7px;gap:7px;}
+  .fainance-tools .tool-main-tabs-simulators button{font-size:10px;padding:6px 4px;}
+  .fainance-tools .tool-simulator-page{gap:8px;}
+  .fainance-tools .tool-mode-switch button{font-size:10.5px;}
+  .fainance-tools .tool-quick-scenarios>div{grid-template-columns:1fr;}
+  .fainance-tools .tool-three-point-flow>div{min-height:72px;padding:8px 3px;}
+  .fainance-tools .tool-three-point-flow strong{font-size:11px;}
+}
+
+.fainance-tools .tool-embedded-page{display:grid;gap:10px;}
+.fainance-tools .tool-embedded-heading{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid var(--tool-border);border-radius:16px;background:var(--tool-card);}
+.fainance-tools .tool-embedded-heading>span{font-size:24px;line-height:1;}
+.fainance-tools .tool-embedded-heading h3{margin:0;color:var(--tool-text);font-size:16px;font-weight:900;}
+.fainance-tools .tool-embedded-heading p{margin:4px 0 0;color:var(--tool-sub);font-size:12px;line-height:1.4;}
+.fainance-tools .tool-embedded-page .fainance-rules{margin:0;}
