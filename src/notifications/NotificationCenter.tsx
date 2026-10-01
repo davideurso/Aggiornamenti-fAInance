@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../core";
 import { PopupCloseButton } from "../widget";
@@ -236,7 +237,7 @@ function NotificationRows({
   return (
     <>
       {deleteError && (
-        <div style={{ marginBottom: 8, borderRadius: 10, padding: "8px 10px", background: dark ? "#3a2020" : "#FFF0F0", color: "#E24B4A", fontSize: 10 }}>
+        <div style={{ marginBottom: 8, borderRadius: 10, padding: "8px 10px", background: dark ? "#3a2020" : "#FFF0F0", color: readableDarkText("#E24B4A", dark, dark ? "#3a2020" : "#FFF0F0"), fontSize: 10 }}>
           {deleteError}
         </div>
       )}
@@ -273,15 +274,15 @@ function NotificationRows({
                 padding: compact ? 3 : 4,
                 border: 0,
                 background: "transparent",
-                color: textC,
+                color: readableDarkText(textC, dark, "transparent"),
                 cursor: "pointer",
               }}
             >
               <span style={{ fontSize: compact ? 20 : 23 }}>{notificationIcon(item)}</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: 13, fontWeight: item.read ? 750 : 950 }}>{display.title}</span>
-                <span style={{ display: "block", fontSize: 12, lineHeight: 1.42, color: subC, marginTop: 3 }}>{display.message}</span>
-                <span style={{ display: "block", fontSize: 10, color: subC, marginTop: 6 }}>
+                <span style={{ display: "block", fontSize: 12, lineHeight: 1.42, color: readableDarkText(subC, dark, "transparent"), marginTop: 3 }}>{display.message}</span>
+                <span style={{ display: "block", fontSize: 10, color: readableDarkText(subC, dark, "transparent"), marginTop: 6 }}>
                   {item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}
                 </span>
               </span>
@@ -300,7 +301,7 @@ function NotificationRows({
                   borderRadius: 10,
                   border: 0,
                   background: "#1D9E75",
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, "#1D9E75"),
                   padding: "0 10px",
                   flexShrink: 0,
                   fontSize: 11,
@@ -327,7 +328,7 @@ function NotificationRows({
                 borderRadius: 10,
                 border: "1px solid #FCA5A5",
                 background: "#FEE2E2",
-                color: "#E24B4A",
+                color: readableDarkText("#E24B4A", dark, "#FEE2E2"),
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -380,7 +381,7 @@ export function NotificationInboxSettingsCard({ userId }: { userId: string }) {
           <div style={{ color: subC, fontSize: 11, marginTop: 2 }}>{L("Le comunicazioni ricevute restano disponibili anche qui.")}</div>
         </div>
         {unread.length > 0 && (
-          <button type="button" onClick={markAllRead} style={{ border: 0, background: "transparent", color: primary, fontWeight: 850, cursor: "pointer", fontSize: 11 }}>
+          <button type="button" onClick={markAllRead} style={{ border: 0, background: "transparent", color: readableDarkText(primary, dark, "transparent"), fontWeight: 850, cursor: "pointer", fontSize: 11 }}>
             {L("Segna tutte come lette")}
           </button>
         )}
@@ -437,7 +438,7 @@ function MundelyLinkRequestRows({
                   type="button"
                   disabled={busyId === request.id}
                   onClick={() => void onDecision(request, "approve")}
-                  style={{ flex: 1, minHeight: 34, borderRadius: 10, border: 0, background: primary, color: "#fff", fontWeight: 900, cursor: "pointer" }}
+                  style={{ flex: 1, minHeight: 34, borderRadius: 10, border: 0, background: primary, color: readableDarkText("#fff", dark, primary), fontWeight: 900, cursor: "pointer" }}
                 >
                   {busyId === request.id ? L("Attendi...") : L("Collega")}
                 </button>
@@ -623,7 +624,7 @@ export function NotificationCenter({
         <button type="button" aria-label={L("Apri centro notifiche")} onClick={() => setOpen(true)} style={{ ...actionButton, fontSize: 17 }}>
           🔔
           {notificationCount > 0 && (
-            <span style={{ position: "absolute", right: -5, top: -6, minWidth: 19, height: 19, padding: "0 4px", borderRadius: 999, background: "#E24B4A", color: "#fff", border: "2px solid " + cardBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 950, boxSizing: "border-box" }}>
+            <span style={{ position: "absolute", right: -5, top: -6, minWidth: 19, height: 19, padding: "0 4px", borderRadius: 999, background: "#E24B4A", color: readableDarkText("#fff", dark, "#E24B4A"), border: "2px solid " + cardBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 950, boxSizing: "border-box" }}>
               {notificationCount > 99 ? "99+" : notificationCount}
             </span>
           )}
@@ -640,7 +641,7 @@ export function NotificationCenter({
                 <div style={{ color: subC, fontSize: 11 }}>{L("Inviti Share e comunicazioni importanti")}</div>
               </div>
               {unreadStored.length > 0 && (
-                <button type="button" onClick={markAllRead} style={{ border: 0, background: "transparent", color: primary, fontWeight: 850, cursor: "pointer", fontSize: 11 }}>
+                <button type="button" onClick={markAllRead} style={{ border: 0, background: "transparent", color: readableDarkText(primary, dark, "transparent"), fontWeight: 850, cursor: "pointer", fontSize: 11 }}>
                   {L("Segna tutte come lette")}
                 </button>
               )}

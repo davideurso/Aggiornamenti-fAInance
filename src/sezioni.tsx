@@ -1,3 +1,4 @@
+import { readableDarkText } from './ui/textContrast';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import { assistantUsesDefaultPayment } from './finance/assistantRuleDefaults';
@@ -2106,7 +2107,7 @@ export function HomePanel() {
                   style={{
                     fontSize: compact ? 12 : 13,
                     fontWeight: 700,
-                    color: isExp ? expenseColor : incomeColor,
+                    color: readableDarkText(isExp ? expenseColor : incomeColor, dark, "#35354a"),
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -3046,7 +3047,7 @@ export function HomePanel() {
                 padding: avOne ? "3px 7px" : avTall ? "6px 9px" : "4px 8px",
                 borderRadius: 999,
                 background: "#7F77DD",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, "#7F77DD"),
                 fontSize: avOne ? 9 : avTall ? 11 : 10,
                 fontWeight: 900,
                 whiteSpace: "nowrap",
@@ -3079,7 +3080,7 @@ export function HomePanel() {
             border: "none",
             borderRadius: 14,
             background: secondaryC,
-            color: "#fff",
+            color: readableDarkText("#fff", dark, secondaryC),
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -3290,7 +3291,7 @@ export function HomePanel() {
                   height: 24,
                   borderRadius: 999,
                   background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.62)",
-                  color: accent,
+                  color: readableDarkText(accent, dark, dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.62)"),
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -3305,7 +3306,7 @@ export function HomePanel() {
                 <div
                   style={{
                     fontSize: 9,
-                    color: "#64748b",
+                    color: readableDarkText("#64748b", dark, dark ? "rgba(255,255,255,.045)" : soft),
                     fontWeight: 750,
                     lineHeight: 1.05,
                     overflow: "hidden",
@@ -3320,7 +3321,7 @@ export function HomePanel() {
                     fontSize: 13,
                     lineHeight: 1.1,
                     fontWeight: 900,
-                    color: accent,
+                    color: readableDarkText(accent, dark, dark ? "rgba(255,255,255,.045)" : soft),
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -3335,7 +3336,7 @@ export function HomePanel() {
                     borderRadius: 999,
                     padding: "3px 5px",
                     background: pillColor + "18",
-                    color: pillColor,
+                    color: readableDarkText(pillColor, dark, pillColor + "18"),
                     fontSize: 8,
                     fontWeight: 850,
                     lineHeight: 1,
@@ -3367,13 +3368,13 @@ export function HomePanel() {
                 background: dark ? "rgba(255,255,255,.035)" : soft,
               }}
             >
-              <div style={{ width: 26, height: 26, borderRadius: 999, background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.62)", color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900 }}>
+              <div style={{ width: 26, height: 26, borderRadius: 999, background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.62)", color: readableDarkText(accent, dark, dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.62)"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 900 }}>
                 {props.icon}
               </div>
-              <div style={{ fontSize: 10, color: "#64748b", lineHeight: 1.05, fontWeight: 750, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.title}</div>
+              <div style={{ fontSize: 10, color: readableDarkText("#64748b", dark, dark ? "rgba(255,255,255,.035)" : soft), lineHeight: 1.05, fontWeight: 750, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.title}</div>
               <div style={{ gridColumn: "1 / span 2", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 5, minWidth: 0 }}>
-                <div style={{ fontSize: 16, lineHeight: 1, fontWeight: 900, color: accent, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.value}</div>
-                {props.pctText ? <div style={{ borderRadius: 999, padding: "3px 6px", background: pillColor + "18", color: pillColor, fontSize: 8, fontWeight: 850, lineHeight: 1, whiteSpace: "nowrap" }}>{props.arrow} {props.pctText}</div> : null}
+                <div style={{ fontSize: 16, lineHeight: 1, fontWeight: 900, color: readableDarkText(accent, dark, dark ? "rgba(255,255,255,.035)" : soft), minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.value}</div>
+                {props.pctText ? <div style={{ borderRadius: 999, padding: "3px 6px", background: pillColor + "18", color: readableDarkText(pillColor, dark, pillColor + "18"), fontSize: 8, fontWeight: 850, lineHeight: 1, whiteSpace: "nowrap" }}>{props.arrow} {props.pctText}</div> : null}
               </div>
             </div>
           );
@@ -3394,11 +3395,11 @@ export function HomePanel() {
               background: dark ? "rgba(255,255,255,.035)" : soft,
             }}
           >
-            <div style={{ width: 36, height: 36, borderRadius: 999, background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.60)", color: accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: props.title === L("Saldo ultimi 12 mesi") ? 19 : 21, fontWeight: 900 }}>{props.icon}</div>
-            <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.12, fontWeight: 750 }}>{props.title}</div>
-            <div style={{ fontSize: isMobile ? 17 : 18, lineHeight: 1.06, fontWeight: 900, color: accent, minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}>{props.value}</div>
-            {props.pctText ? <div style={{ display: "inline-flex", alignItems: "center", gap: 4, alignSelf: "flex-start", borderRadius: 999, padding: "4px 8px", background: pillColor + "18", color: pillColor, fontSize: 10, fontWeight: 850, lineHeight: 1, whiteSpace: "nowrap" }}><span>{props.arrow}</span><span>{props.pctText}</span></div> : null}
-            <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.15 }}>{props.caption}</div>
+            <div style={{ width: 36, height: 36, borderRadius: 999, background: dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.60)", color: readableDarkText(accent, dark, dark ? "rgba(255,255,255,.08)" : "rgba(255,255,255,.60)"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: props.title === L("Saldo ultimi 12 mesi") ? 19 : 21, fontWeight: 900 }}>{props.icon}</div>
+            <div style={{ fontSize: 12, color: readableDarkText("#64748b", dark, dark ? "rgba(255,255,255,.035)" : soft), lineHeight: 1.12, fontWeight: 750 }}>{props.title}</div>
+            <div style={{ fontSize: isMobile ? 17 : 18, lineHeight: 1.06, fontWeight: 900, color: readableDarkText(accent, dark, dark ? "rgba(255,255,255,.035)" : soft), minWidth: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}>{props.value}</div>
+            {props.pctText ? <div style={{ display: "inline-flex", alignItems: "center", gap: 4, alignSelf: "flex-start", borderRadius: 999, padding: "4px 8px", background: pillColor + "18", color: readableDarkText(pillColor, dark, pillColor + "18"), fontSize: 10, fontWeight: 850, lineHeight: 1, whiteSpace: "nowrap" }}><span>{props.arrow}</span><span>{props.pctText}</span></div> : null}
+            <div style={{ fontSize: 9, color: readableDarkText("#94a3b8", dark, dark ? "rgba(255,255,255,.035)" : soft), lineHeight: 1.15 }}>{props.caption}</div>
           </div>
         );
       }
@@ -3452,7 +3453,7 @@ export function HomePanel() {
           value: summaryAmountNode(fmt(last12Balance)),
           accent: BALANCE_COLOR,
           icon: (
-            <span style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, height: 16, color: "currentColor" }}>
+            <span style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, height: 16, color: readableDarkText("currentColor", dark, "#35354a") }}>
               <span style={{ width: 3, height: 7, borderRadius: 3, background: "currentColor" }} />
               <span style={{ width: 3, height: 11, borderRadius: 3, background: "currentColor" }} />
               <span style={{ width: 3, height: 16, borderRadius: 3, background: "currentColor" }} />
@@ -3573,7 +3574,7 @@ export function HomePanel() {
             textAlign: "center",
           }}
         >
-          <div style={{ fontSize: compact ? 21 : doubleSize ? 34 : 27, fontWeight: 950, color: expenseColor }}>
+          <div style={{ fontSize: compact ? 21 : doubleSize ? 34 : 27, fontWeight: 950, color: readableDarkText(expenseColor, dark, "#35354a") }}>
             {fmt(monthlyExpenseAverage)}
           </div>
           <div style={{ fontSize: compact ? 10 : 11, color: subC }}>
@@ -3744,7 +3745,7 @@ export function HomePanel() {
                     style={{
                       fontSize: compact ? 11 : 13,
                       fontWeight: 900,
-                      color: expenseColor,
+                      color: readableDarkText(expenseColor, dark, "#35354a"),
                       whiteSpace: "nowrap",
                       flexShrink: 0,
                     }}
@@ -3843,7 +3844,7 @@ export function HomePanel() {
                     style={{
                       fontSize: compact ? 12 : 13,
                       fontWeight: 900,
-                      color: expenseColor,
+                      color: readableDarkText(expenseColor, dark, "#35354a"),
                       whiteSpace: "nowrap",
                     }}
                   >
@@ -3876,7 +3877,7 @@ export function HomePanel() {
                   fontSize: compact ? 20 : 26,
                   fontWeight: 950,
                   lineHeight: 1.05,
-                  color: bal > 0.009 ? incomeColor : bal < -0.009 ? expenseColor : textC,
+                  color: readableDarkText(bal > 0.009 ? incomeColor : bal < -0.009 ? expenseColor : textC, dark, "#35354a"),
                   whiteSpace: "nowrap",
                 }}
               >
@@ -3930,7 +3931,7 @@ export function HomePanel() {
                           </div>
                           <strong
                             style={{
-                              color: owe ? expenseColor : incomeColor,
+                              color: readableDarkText(owe ? expenseColor : incomeColor, dark, "#35354a"),
                               whiteSpace: "nowrap",
                               fontSize: compact ? 10 : 11,
                               alignSelf: "center",
@@ -4014,7 +4015,7 @@ export function HomePanel() {
                 <div style={{ fontSize: 8, lineHeight: 1, color: subC, fontWeight: 850, marginBottom: 3, whiteSpace: "nowrap" }}>
                   {L("Pianificato")}
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.05, color: "#1D9E75", fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 13, lineHeight: 1.05, color: readableDarkText("#1D9E75", dark, "#35354a"), fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {fmt(b.saving)}
                 </div>
               </div>
@@ -4022,7 +4023,7 @@ export function HomePanel() {
                 <div style={{ fontSize: 8, lineHeight: 1, color: subC, fontWeight: 850, marginBottom: 3, whiteSpace: "nowrap" }}>
                   {L("Reale")}
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.05, color: realPositive ? "#1D9E75" : "#E24B4A", fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 13, lineHeight: 1.05, color: readableDarkText(realPositive ? "#1D9E75" : "#E24B4A", dark, "#35354a"), fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {fmt(b.real)}
                 </div>
               </div>
@@ -4112,7 +4113,7 @@ export function HomePanel() {
                 style={{
                   fontSize: compact ? 13 : 18,
                   fontWeight: 950,
-                  color: "#1D9E75",
+                  color: readableDarkText("#1D9E75", dark, savingSurface),
                   lineHeight: 1.05,
                   whiteSpace: "nowrap",
                   overflow: "hidden",
@@ -4162,7 +4163,7 @@ export function HomePanel() {
                 style={{
                   fontSize: compact ? 13 : 18,
                   fontWeight: 950,
-                  color: realPositive ? "#1D9E75" : "#E24B4A",
+                  color: readableDarkText(realPositive ? "#1D9E75" : "#E24B4A", dark, savingSurface),
                   lineHeight: 1.05,
                   whiteSpace: "nowrap",
                   overflow: "hidden",
@@ -4204,7 +4205,7 @@ export function HomePanel() {
                 style={{
                   fontSize: compact ? 11 : 12,
                   fontWeight: 950,
-                  color: diffPositive ? incomeColor : expenseColor,
+                  color: readableDarkText(diffPositive ? incomeColor : expenseColor, dark, savingSurface),
                   whiteSpace: "nowrap",
                 }}
               >
@@ -4259,7 +4260,7 @@ export function HomePanel() {
           />
           <div style={{ gridColumn: "1/-1", fontSize: 12, color: subC }}>
             {L("Scostamento")}:{" "}
-            <b style={{ color: b2.diff >= 0 ? incomeColor : expenseColor }}>
+            <b style={{ color: readableDarkText(b2.diff >= 0 ? incomeColor : expenseColor, dark, "#35354a") }}>
               {b2.diff >= 0 ? "+" : ""}
               {fmt(b2.diff)}
             </b>
@@ -4601,7 +4602,9 @@ export function HomePanel() {
                     gap: 7,
                     minWidth: 0,
                     fontSize: compact ? 12 : 13,
-                    color: bought ? subC : textC,
+                    color: readableDarkText(bought ? subC : textC, dark, bought
+                      ? ctx.shoppingBoughtColor || "#EAF7EE"
+                      : "transparent"),
                     padding: "6px 4px",
                     borderBottom: "1px solid " + borderC,
                     cursor: "pointer",
@@ -4759,7 +4762,7 @@ export function HomePanel() {
         id: draft.id || "home_" + draft.type + "_" + Date.now(),
         type: draft.type,
         size: draft.size || defaultSize(draft.type),
-        color: draft.color || "#FFFFFF",
+        color: readableDarkText(draft.color || "#FFFFFF", dark, "#35354a"),
         params: draft.params || {},
       };
       saveWorklets(activeWorklets.concat([w]));
@@ -5374,7 +5377,7 @@ export function HomePanel() {
         : dark
         ? "none"
         : "0 4px 18px rgba(0,0,0,0.04)",
-      color: fg,
+      color: readableDarkText(fg, dark, bg),
       opacity: available ? (assistantType ? 0.96 : 0.52) : 1,
       position: "relative",
       cursor: isEditing ? (homeDragging ? "grabbing" : "grab") : "default",
@@ -5406,7 +5409,7 @@ export function HomePanel() {
     var titleStyle: any = {
       fontSize: compact ? 11 : 13,
       fontWeight: 950,
-      color: available ? fg : textC,
+      color: readableDarkText(available ? fg : textC, dark, "#35354a"),
       lineHeight: 1.15,
       minWidth: 0,
       overflow: "hidden",
@@ -5470,7 +5473,7 @@ export function HomePanel() {
       borderRadius: 999,
       border: "1px solid #ef4444",
       background: "#E24B4A",
-      color: "#fff",
+      color: readableDarkText("#fff", dark, "#E24B4A"),
       cursor: "pointer",
       fontSize: compact ? 16 : 18,
       fontWeight: 950,
@@ -5528,7 +5531,7 @@ export function HomePanel() {
             <div
               style={{
                 fontSize: 10,
-                color: "#7F77DD",
+                color: readableDarkText("#7F77DD", dark, "#35354a"),
                 fontWeight: 950,
                 whiteSpace: "nowrap",
                 flexShrink: 0,
@@ -5541,7 +5544,7 @@ export function HomePanel() {
             <div
               style={{
                 fontSize: 11,
-                color: available ? fg : subC,
+                color: readableDarkText(available ? fg : subC, dark, "#35354a"),
                 fontWeight: 800,
                 opacity: available ? 0.8 : 1,
                 whiteSpace: "nowrap",
@@ -5639,7 +5642,7 @@ export function HomePanel() {
               style={{
                 border: "none",
                 background: secondaryC,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, secondaryC),
                 borderRadius: 12,
                 padding: "9px 12px",
                 fontSize: 12,
@@ -5711,7 +5714,7 @@ export function HomePanel() {
               style={{
                 border: "1px solid " + (active ? "#7F77DD" : borderC),
                 background: active ? (dark ? "#24213a" : "#F0EDFF") : cardBg,
-                color: active ? "#7F77DD" : textC,
+                color: readableDarkText(active ? "#7F77DD" : textC, dark, active ? (dark ? "#24213a" : "#F0EDFF") : cardBg),
                 borderRadius: 12,
                 padding: "8px 10px",
                 fontSize: 12,
@@ -6094,7 +6097,7 @@ export function HomePanel() {
             style={{
               fontSize: 15,
               fontWeight: 950,
-              color: dark ? "#BEB8FF" : "#534AB7",
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
             }}
           >
             🧩 {L("Modifica Home")}
@@ -6119,7 +6122,7 @@ export function HomePanel() {
           style={{
             border: "none",
             background: "#7F77DD",
-            color: "#fff",
+            color: readableDarkText("#fff", dark, "#7F77DD"),
             borderRadius: 12,
             padding: "10px 14px",
             fontSize: 13,
@@ -6204,7 +6207,7 @@ export function HomePanel() {
           zIndex: 9998,
           border: "none",
           background: "#7F77DD",
-          color: "#fff",
+          color: readableDarkText("#fff", dark, "#7F77DD"),
           borderRadius: 999,
           padding: "12px 16px",
           fontSize: 13,
@@ -6368,7 +6371,7 @@ export function HomePanel() {
                   style={{
                     border: "1px solid #fecaca",
                     background: "#FFF0F0",
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                     borderRadius: 12,
                     padding: "10px 14px",
                     fontSize: 13,
@@ -6406,7 +6409,7 @@ export function HomePanel() {
                   style={{
                     border: "none",
                     background: "#7F77DD",
-                    color: "#fff",
+                    color: readableDarkText("#fff", dark, "#7F77DD"),
                     borderRadius: 12,
                     padding: "10px 14px",
                     fontSize: 13,
@@ -6500,14 +6503,14 @@ export function HomePanel() {
             alignItems: "center",
           }}
         >
-          <span style={{ fontSize: 13, color: "#856404" }}>
+          <span style={{ fontSize: 13, color: readableDarkText("#856404", dark, "#fff3cd") }}>
             🔄{" "}
             {String(
               (t && t.recurringPendingHome) ||
                 L("{count} transazioni ricorrenti da confermare")
             ).replace("{count}", String(pendingCount))}
           </span>
-          <span style={{ color: "#856404" }}>›</span>
+          <span style={{ color: readableDarkText("#856404", dark, "#fff3cd") }}>›</span>
         </div>
       )}
       {alertTriggered > 0 && (
@@ -6527,10 +6530,10 @@ export function HomePanel() {
             alignItems: "center",
           }}
         >
-          <span style={{ fontSize: 13, color: expenseColor }}>
+          <span style={{ fontSize: 13, color: readableDarkText(expenseColor, dark, "#fff0f0") }}>
             🔔 {alertTriggered} {L("alert di spesa superati")}
           </span>
-          <span style={{ color: expenseColor }}>›</span>
+          <span style={{ color: readableDarkText(expenseColor, dark, "#fff0f0") }}>›</span>
         </div>
       )}
       {quickCards.length > 0 && !homeEditMode && (
@@ -6606,7 +6609,7 @@ export function HomePanel() {
                     border: 0,
                     padding: 0,
                     background: "#FEE2E2",
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", dark, "#FEE2E2"),
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -6634,7 +6637,7 @@ export function HomePanel() {
             padding: "8px 14px",
             border: "1px solid " + (dark ? "#334" : "#c8e0ff"),
             fontSize: 12,
-            color: dark ? "#8bf" : "#1a5fa8",
+            color: readableDarkText(dark ? "#8bf" : "#1a5fa8", dark, dark ? "#252535" : "#f0f8ff"),
           }}
         >
           💱 {L("Conversione")} {currency} → {secondaryCurrency}: 1 {sym} ={" "}
@@ -6650,7 +6653,7 @@ export function HomePanel() {
             padding: "8px 14px",
             border: "1px solid #FFD54F",
             fontSize: 12,
-            color: "#856404",
+            color: readableDarkText("#856404", dark, "#FFF8E1"),
           }}
         >
           ⚠️ {L("Impossibile recuperare il tasso")} {currency}/
@@ -6753,7 +6756,7 @@ export function HomePanel() {
           <span
             style={{
               background: "#7F77DD",
-              color: "#fff",
+              color: readableDarkText("#fff", dark, "#7F77DD"),
               borderRadius: 999,
               padding: "8px 11px",
               fontSize: 12,
@@ -6805,7 +6808,7 @@ export function HomePanel() {
                 id: "available_" + item.type,
                 type: item.type,
                 size: defaultSize(item.type),
-                color: "#FFFFFF",
+                color: readableDarkText("#FFFFFF", dark, "#35354a"),
                 params: defaultParams(item.type),
               };
               return workletCard(w, -1, true);
@@ -6844,13 +6847,19 @@ export function HomePanel() {
               : dark
               ? "#2d2514"
               : "#FFF8E1",
-            color: premiumHome
+            color: readableDarkText(premiumHome
               ? dark
                 ? "#BEB8FF"
                 : "#534AB7"
               : dark
               ? "#ffd58a"
-              : "#856404",
+              : "#856404", dark, premiumHome
+              ? dark
+                ? "#24213a"
+                : "#F0EDFF"
+              : dark
+              ? "#2d2514"
+              : "#FFF8E1"),
             borderRadius: 16,
             padding: "14px 16px",
             fontSize: 14,
@@ -7276,7 +7285,7 @@ export function SpesePanel() {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   function handleAddType(tp) {
@@ -8236,7 +8245,7 @@ export function HistoryPanel() {
             top: "50%",
             transform: "translateY(-50%)",
             fontSize: 14,
-            color: "#aaa",
+            color: readableDarkText("#aaa", dark, "#35354a"),
           }}
         >
           🔍
@@ -8272,7 +8281,7 @@ export function HistoryPanel() {
               background: "none",
               border: "none",
               cursor: "pointer",
-              color: confirmC,
+              color: readableDarkText(confirmC, dark, "none"),
               fontSize: 16,
               fontWeight: 950,
             }}
@@ -8415,7 +8424,7 @@ export function HistoryPanel() {
                     "1px solid " +
                     (active ? col : dark ? "#46465d" : "#D7DEEA"),
                   background: active ? col : dark ? "#242438" : "#FFFFFF",
-                  color: active ? "#fff" : textC,
+                  color: readableDarkText(active ? "#fff" : textC, dark, active ? col : dark ? "#242438" : "#FFFFFF"),
                   fontSize: 12,
                   fontWeight: 900,
                   cursor: "pointer",
@@ -8932,7 +8941,7 @@ export function HistoryPanel() {
                     gap: 7,
                     fontSize: 13,
                     fontWeight: 950,
-                    color: expenseColor,
+                    color: readableDarkText(expenseColor, dark, dark ? "#2B2024" : "#FFF7F7"),
                     marginBottom: 9,
                   }}
                 >
@@ -8959,7 +8968,7 @@ export function HistoryPanel() {
                     gap: 7,
                     fontSize: 13,
                     fontWeight: 950,
-                    color: incomeColor,
+                    color: readableDarkText(incomeColor, dark, dark ? "#172D28" : "#F1FCF8"),
                     marginBottom: 9,
                   }}
                 >
@@ -8984,7 +8993,7 @@ export function HistoryPanel() {
                     style={{
                       fontSize: 13,
                       fontWeight: 950,
-                      color: confirmC,
+                      color: readableDarkText(confirmC, dark, dark ? "#252239" : "#F5F3FF"),
                       marginBottom: 8,
                     }}
                   >
@@ -9016,9 +9025,13 @@ export function HistoryPanel() {
                         : dark
                         ? "#242438"
                         : "#fff",
-                      color: (filterCats || []).includes("share")
+                      color: readableDarkText((filterCats || []).includes("share")
                         ? "#fff"
-                        : textC,
+                        : textC, dark, (filterCats || []).includes("share")
+                        ? confirmC
+                        : dark
+                        ? "#242438"
+                        : "#fff"),
                       fontSize: 12,
                       fontWeight: 900,
                       cursor: "pointer",
@@ -9058,7 +9071,7 @@ export function HistoryPanel() {
                 style={{
                   border: "none",
                   background: "transparent",
-                  color: confirmC,
+                  color: readableDarkText(confirmC, dark, "transparent"),
                   cursor: "pointer",
                   fontSize: 12,
                   fontWeight: 900,
@@ -9075,7 +9088,7 @@ export function HistoryPanel() {
                 style={{
                   border: "none",
                   background: "transparent",
-                  color: subC,
+                  color: readableDarkText(subC, dark, "transparent"),
                   cursor: "pointer",
                   fontSize: 12,
                   fontWeight: 900,
@@ -9124,7 +9137,11 @@ export function HistoryPanel() {
                           : dark
                           ? "#242438"
                           : "#fff",
-                        color: active ? "#fff" : textC,
+                        color: readableDarkText(active ? "#fff" : textC, dark, active
+                          ? m.color || confirmC
+                          : dark
+                          ? "#242438"
+                          : "#fff"),
                         fontSize: 12,
                         fontWeight: 900,
                         cursor: "pointer",
@@ -9148,7 +9165,7 @@ export function HistoryPanel() {
                   style={{
                     border: "none",
                     background: "transparent",
-                    color: subC,
+                    color: readableDarkText(subC, dark, "transparent"),
                     cursor: "pointer",
                     fontSize: 12,
                     fontWeight: 900,
@@ -9400,7 +9417,7 @@ export function HistoryPanel() {
               gap: 4,
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 850, color: expenseColor }}>
+            <div style={{ fontSize: 15, fontWeight: 850, color: readableDarkText(expenseColor, dark, e._share ? shareColor + "18" : cardBg) }}>
               {historyFxView(e).main}
               {historyFxView(e).sub ? (
                 <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
@@ -9423,7 +9440,7 @@ export function HistoryPanel() {
                     background: "#EEF4FF",
                     border: "1px solid #BFD7FF",
                     cursor: "pointer",
-                    color: "#378ADD",
+                    color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                     fontSize: 14,
                     padding: "5px 8px",
                     borderRadius: 8,
@@ -9441,7 +9458,7 @@ export function HistoryPanel() {
                     background: "#FFF0F0",
                     border: "1px solid #FFD0D0",
                     cursor: "pointer",
-                    color: expenseColor,
+                    color: readableDarkText(expenseColor, dark, "#FFF0F0"),
                     fontSize: 14,
                     padding: "5px 8px",
                     borderRadius: 8,
@@ -9467,7 +9484,7 @@ export function HistoryPanel() {
               gap: 10,
             }}
           >
-            <span style={{ fontSize: 13, color: expenseColor }}>
+            <span style={{ fontSize: 13, color: readableDarkText(expenseColor, dark, "#fff0f0") }}>
               {L("Eliminare?")}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
@@ -9571,7 +9588,7 @@ export function HistoryPanel() {
               gap: 4,
             }}
           >
-            <div style={{ fontSize: 15, fontWeight: 850, color: incomeColor }}>
+            <div style={{ fontSize: 15, fontWeight: 850, color: readableDarkText(incomeColor, dark, cardBg) }}>
               +{historyFxView(inc).main}
               {historyFxView(inc).sub ? (
                 <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
@@ -9593,7 +9610,7 @@ export function HistoryPanel() {
                   background: "#EEF4FF",
                   border: "1px solid #BFD7FF",
                   cursor: "pointer",
-                  color: "#378ADD",
+                  color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                   fontSize: 14,
                   padding: "5px 8px",
                   borderRadius: 8,
@@ -9611,7 +9628,7 @@ export function HistoryPanel() {
                   background: "#FFF0F0",
                   border: "1px solid #FFD0D0",
                   cursor: "pointer",
-                  color: expenseColor,
+                  color: readableDarkText(expenseColor, dark, "#FFF0F0"),
                   fontSize: 14,
                   padding: "5px 8px",
                   borderRadius: 8,
@@ -9636,7 +9653,7 @@ export function HistoryPanel() {
               gap: 10,
             }}
           >
-            <span style={{ fontSize: 13, color: expenseColor }}>
+            <span style={{ fontSize: 13, color: readableDarkText(expenseColor, dark, "#fff0f0") }}>
               {L("Eliminare?")}
             </span>
             <div style={{ display: "flex", gap: 8 }}>
@@ -9744,7 +9761,7 @@ export function HistoryPanel() {
           " · " + L("Entrate") + ": " + fmt(totalIncomes)}
       </div>
       {historyRows.length === 0 && (
-        <div style={{ textAlign: "center", color: "#ccc", padding: "32px 0" }}>
+        <div style={{ textAlign: "center", color: readableDarkText("#ccc", dark, "#35354a"), padding: "32px 0" }}>
           {historyTab === "incomes" ? t.noIncomes : t.noExpenses}
         </div>
       )}
@@ -10196,7 +10213,7 @@ export function ConsulenteAIPanel() {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var aiChatSectionRef = useRef(null);
@@ -11356,7 +11373,7 @@ export function ConsulenteAIPanel() {
     padding: "9px 11px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: textC2,
+    color: readableDarkText(textC2, dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var aiAccessLabel =
@@ -11412,7 +11429,7 @@ export function ConsulenteAIPanel() {
             border: "none",
             borderRadius: 12,
             background: dark ? "#2A2A3E" : "#F5F6FB",
-            color: textC2,
+            color: readableDarkText(textC2, dark, dark ? "#2A2A3E" : "#F5F6FB"),
             fontSize: 18,
             cursor: "pointer",
             display: "flex",
@@ -11435,7 +11452,7 @@ export function ConsulenteAIPanel() {
             border: "none",
             borderRadius: 12,
             background: dark ? "#2A2A3E" : "#F5F6FB",
-            color: textC2,
+            color: readableDarkText(textC2, dark, dark ? "#2A2A3E" : "#F5F6FB"),
             fontSize: 18,
             cursor: "pointer",
             display: "flex",
@@ -11491,7 +11508,7 @@ export function ConsulenteAIPanel() {
               }}
               style={{
                 background: secondaryButtonColor || "#5FAFE5",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, secondaryButtonColor || "#5FAFE5"),
                 border: "1px solid " + (secondaryButtonColor || "#5FAFE5"),
                 borderRadius: btnRadius,
                 padding: "10px 14px",
@@ -11624,10 +11641,10 @@ export function ConsulenteAIPanel() {
           📌
         </span>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 850, color: textC2 }}>
+          <div style={{ fontSize: 13, fontWeight: 850, color: readableDarkText(textC2, dark, dark ? "#252535" : "#fff") }}>
             {L("Consigli e metriche")}
           </div>
-          <div style={{ fontSize: 11, color: subC2, marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: readableDarkText(subC2, dark, dark ? "#252535" : "#fff"), marginTop: 2 }}>
             {L("Analisi automatiche")}
           </div>
         </div>
@@ -11665,7 +11682,7 @@ export function ConsulenteAIPanel() {
                     borderRadius: 10,
                     border: "1px solid #FECACA",
                     background: "#FFF0F0",
-                    color: "#F87171",
+                    color: readableDarkText("#F87171", dark, "#FFF0F0"),
                     fontSize: 20,
                     fontWeight: 900,
                     lineHeight: 1,
@@ -11702,7 +11719,7 @@ export function ConsulenteAIPanel() {
                     }}
                   >
                     <div
-                      style={{ fontSize: 15, fontWeight: 800, color: textC2 }}
+                      style={{ fontSize: 15, fontWeight: 800, color: readableDarkText(textC2, dark, cardBg2) }}
                     >
                       {a.title}
                     </div>
@@ -11710,7 +11727,7 @@ export function ConsulenteAIPanel() {
                       style={{
                         fontSize: 10,
                         fontWeight: 700,
-                        color: pc,
+                        color: readableDarkText(pc, dark, pc + "22"),
                         background: pc + "22",
                         borderRadius: 10,
                         padding: "2px 7px",
@@ -11723,7 +11740,7 @@ export function ConsulenteAIPanel() {
                         style={{
                           fontSize: 10,
                           fontWeight: 700,
-                          color: "#1D9E75",
+                          color: readableDarkText("#1D9E75", dark, "#1D9E7522"),
                           background: "#1D9E7522",
                           borderRadius: 10,
                           padding: "2px 7px",
@@ -11736,7 +11753,7 @@ export function ConsulenteAIPanel() {
                   <div
                     style={{
                       fontSize: 13,
-                      color: subC2,
+                      color: readableDarkText(subC2, dark, cardBg2),
                       lineHeight: 1.5,
                       whiteSpace: "pre-line",
                     }}
@@ -11746,7 +11763,7 @@ export function ConsulenteAIPanel() {
                   <div
                     style={{
                       fontSize: 13,
-                      color: textC2,
+                      color: readableDarkText(textC2, dark, cardBg2),
                       fontWeight: 600,
                       marginTop: 8,
                     }}
@@ -11814,10 +11831,10 @@ export function ConsulenteAIPanel() {
             >
               <AIGrilloIcon size={42} />
               <div>
-                <div style={{ fontSize: 17, fontWeight: 950, color: textC2 }}>
+                <div style={{ fontSize: 17, fontWeight: 950, color: readableDarkText(textC2, dark, cardBg2) }}>
                   {L("Consenso per l’uso dell’Agente AI esterno")}
                 </div>
-                <div style={{ fontSize: 12, color: subC2, marginTop: 3 }}>
+                <div style={{ fontSize: 12, color: readableDarkText(subC2, dark, cardBg2), marginTop: 3 }}>
                   {L(
                     "Prima di inviare dati al servizio AI esterno devi autorizzare il trattamento."
                   )}
@@ -11827,7 +11844,7 @@ export function ConsulenteAIPanel() {
             <div
               style={{
                 fontSize: 13,
-                color: textC2,
+                color: readableDarkText(textC2, dark, cardBg2),
                 lineHeight: 1.5,
                 display: "flex",
                 flexDirection: "column",
@@ -11862,7 +11879,7 @@ export function ConsulenteAIPanel() {
                 <br />• {L("backend sicuro fAInance")}
                 <br />• OpenAI
               </div>
-              <div style={{ color: subC2 }}>
+              <div style={{ color: readableDarkText(subC2, dark, cardBg2) }}>
                 {L(
                   "Non vengono inviati CVV, dati biometrici, password, documenti caricati, immagini, fidelity card, dati completi delle carte di credito, email, numero di telefono o indirizzo completo."
                 )}
@@ -11906,7 +11923,7 @@ export function ConsulenteAIPanel() {
                   borderRadius: btnRadius,
                   padding: "12px 14px",
                   background: dark ? "#252535" : "#fff",
-                  color: subC2,
+                  color: readableDarkText(subC2, dark, dark ? "#252535" : "#fff"),
                   fontSize: 14,
                   fontWeight: 900,
                   cursor: "pointer",
@@ -15649,7 +15666,11 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                           ? "rgba(127,119,221,.24)"
                           : "#ECE9FF"
                         : cardBg,
-                      color: mine ? (dark ? "#E7E2FF" : "#514B8F") : textC,
+                      color: readableDarkText(mine ? (dark ? "#E7E2FF" : "#514B8F") : textC, dark, mine
+                        ? dark
+                          ? "rgba(127,119,221,.24)"
+                          : "#ECE9FF"
+                        : cardBg),
                       border: mine
                         ? "1px solid " +
                           (dark ? "rgba(151,142,235,.38)" : "#D8D2FF")
@@ -15733,7 +15754,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                         alignItems: "center",
                         justifyContent: "center",
                         background: "#1D9E75",
-                        color: "#fff",
+                        color: readableDarkText("#fff", dark, "#1D9E75"),
                         fontWeight: 950,
                       }}
                     >
@@ -15781,7 +15802,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                         borderRadius: 11,
                         padding: "12px",
                         background: "#1D9E75",
-                        color: "#fff",
+                        color: readableDarkText("#fff", dark, "#1D9E75"),
                         fontWeight: 950,
                         cursor: "pointer",
                         fontSize: 13,
@@ -15821,7 +15842,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                   borderRadius: 12,
                   padding: "10px 12px",
                   fontSize: 12,
-                  color: "#E24B4A",
+                  color: readableDarkText("#E24B4A", dark, dark ? "#3A1F25" : "#FFF0F0"),
                   lineHeight: 1.45,
                   fontWeight: 700,
                 }}
@@ -15877,7 +15898,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                     width: "100%",
                     border: "none",
                     background: "transparent",
-                    color: textC,
+                    color: readableDarkText(textC, dark, "transparent"),
                     textAlign: "left",
                     padding: "10px 12px",
                     borderRadius: 10,
@@ -15908,7 +15929,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                     width: "100%",
                     border: "none",
                     background: "transparent",
-                    color: textC,
+                    color: readableDarkText(textC, dark, "transparent"),
                     textAlign: "left",
                     padding: "10px 12px",
                     borderRadius: 10,
@@ -15926,7 +15947,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                     width: "100%",
                     border: "none",
                     background: "transparent",
-                    color: textC,
+                    color: readableDarkText(textC, dark, "transparent"),
                     textAlign: "left",
                     padding: "10px 12px",
                     borderRadius: 10,
@@ -15943,7 +15964,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                     width: "100%",
                     border: "none",
                     background: "transparent",
-                    color: textC,
+                    color: readableDarkText(textC, dark, "transparent"),
                     textAlign: "left",
                     padding: "10px 12px",
                     borderRadius: 10,
@@ -15960,7 +15981,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                     width: "100%",
                     border: "none",
                     background: "transparent",
-                    color: textC,
+                    color: readableDarkText(textC, dark, "transparent"),
                     textAlign: "left",
                     padding: "10px 12px",
                     borderRadius: 10,
@@ -16115,7 +16136,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                   borderRadius: 10,
                   padding: "0 12px",
                   background: input.trim() && !documentLoading ? "#7F77DD" : "#A8A8A8",
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, input.trim() && !documentLoading ? "#7F77DD" : "#A8A8A8"),
                   fontWeight: 900,
                   cursor: input.trim() && !documentLoading ? "pointer" : "not-allowed",
                 }}
@@ -16531,7 +16552,7 @@ function QuickVoiceEntryModal() {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
 
@@ -17469,7 +17490,7 @@ function QuickVoiceEntryModal() {
             disabled={voiceListening}
             style={{
               background: voiceListening ? "#EF9F27" : "#7F77DD",
-              color: "#fff",
+              color: readableDarkText("#fff", dark, voiceListening ? "#EF9F27" : "#7F77DD"),
               border: "none",
               borderRadius: btnRadius,
               padding: "13px 14px",
@@ -17528,7 +17549,7 @@ function QuickVoiceEntryModal() {
                 borderRadius: 12,
                 padding: "10px 12px",
                 fontSize: 12,
-                color: "#E24B4A",
+                color: readableDarkText("#E24B4A", dark, dark ? "#3a1d1d" : "#fff0f0"),
               }}
             >
               ⚠️ {voiceError}
@@ -17550,7 +17571,7 @@ function QuickVoiceEntryModal() {
                 style={{
                   fontSize: 13,
                   fontWeight: 900,
-                  color: parsed.type === "expense" ? expenseColor : incomeColor,
+                  color: readableDarkText(parsed.type === "expense" ? expenseColor : incomeColor, dark, dark ? "#1e1e30" : "#f7f6ff"),
                   marginBottom: 8,
                 }}
               >
@@ -18182,7 +18203,7 @@ export function FloatingAIButton({ desktop }) {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var buttonWidth = desktop ? 82 : 78;
@@ -18315,7 +18336,7 @@ export function FloatingAIButton({ desktop }) {
           borderRadius: "50%",
           border: "1px solid rgba(0,0,0,0.12)",
           background: "rgba(255,255,255,0.92)",
-          color: "#555",
+          color: readableDarkText("#555", dark, "rgba(255,255,255,0.92)"),
           fontSize: 14,
           fontWeight: 900,
           lineHeight: "18px",
@@ -18338,7 +18359,7 @@ export function FloatingAIButton({ desktop }) {
           border: "none",
           background: "transparent",
           padding: 0,
-          color: "#fff",
+          color: readableDarkText("#fff", dark, "transparent"),
           boxShadow: "none",
           fontSize: desktop ? 27 : 25,
           cursor: dragState ? "grabbing" : "grab",
@@ -18439,7 +18460,7 @@ export function ConfirmDialog() {
             style={{
               flex: 1,
               background: "#E24B4A",
-              color: "#fff",
+              color: readableDarkText("#fff", dark, "#E24B4A"),
               border: "none",
               borderRadius: btnRadius || 12,
               padding: "10px",
@@ -18457,7 +18478,7 @@ export function ConfirmDialog() {
             style={{
               flex: 1,
               background: dark ? "#333" : "#f0f0f0",
-              color: dark ? "#eee" : "#555",
+              color: readableDarkText(dark ? "#eee" : "#555", dark, dark ? "#333" : "#f0f0f0"),
               border: "none",
               borderRadius: btnRadius || 12,
               padding: "10px",

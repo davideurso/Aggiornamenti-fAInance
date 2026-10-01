@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from '../analytics/useAnalyticsFlow';
 import { useState, useEffect, useMemo } from "react";
@@ -1411,7 +1412,7 @@ export function ContactForm({ currentUser }) {
               borderRadius: 10,
               padding: "10px 12px",
               background: status.type === "ok" ? "#e8f8f0" : "#fff0f0",
-              color: status.type === "ok" ? "#1D9E75" : "#E24B4A",
+              color: readableDarkText(status.type === "ok" ? "#1D9E75" : "#E24B4A", dark, status.type === "ok" ? "#e8f8f0" : "#fff0f0"),
               border:
                 "1px solid " + (status.type === "ok" ? "#a8e6c8" : "#fcc"),
             }}
@@ -1620,7 +1621,7 @@ export function ChangePwdSection({
                     border: "none",
                     padding: "9px 11px",
                     fontSize: 12,
-                    color: textC,
+                    color: readableDarkText(textC, dark, "transparent"),
                     cursor: "pointer",
                   }}
                 >
@@ -1705,7 +1706,7 @@ export function ChangePwdSection({
           border: "1px solid " + secondaryC,
           borderRadius: btnRadius,
           cursor: "pointer",
-          color: dark ? "#E5ECFF" : secondaryC,
+          color: readableDarkText(dark ? "#E5ECFF" : secondaryC, dark, dark ? "#292940" : secondaryC + "18"),
           fontSize: 13,
           fontWeight: 800,
           padding: "10px 12px",
@@ -1773,7 +1774,7 @@ export function ChangePwdSection({
             <div
               style={{
                 fontSize: 12,
-                color: "#E24B4A",
+                color: readableDarkText("#E24B4A", dark, "#fff0f0"),
                 background: "#fff0f0",
                 borderRadius: 8,
                 padding: "8px 10px",
@@ -1787,7 +1788,7 @@ export function ChangePwdSection({
             disabled={loading}
             style={{
               background: primaryC,
-              color: "#fff",
+              color: readableDarkText("#fff", dark, primaryC),
               border: "none",
               borderRadius: btnRadius,
               padding: "10px",
@@ -1893,7 +1894,7 @@ export function AccountAccessSecurityCard({
         <div style={{ fontSize: 12, color: subC, lineHeight: 1.45, marginBottom: 12 }}>{T("Gestisci password ed email usate per accedere a fAInance.")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10 }}>
           <button type="button" onClick={function(){ setEmailOpen(!emailOpen); setEmailError(""); setNewEmail(String(currentUser.email || "")); }} style={{
-            background: dark ? "#292940" : secondaryC + "18", color: dark ? "#E5ECFF" : secondaryC, border: "1px solid " + secondaryC,
+            background: dark ? "#292940" : secondaryC + "18", color: readableDarkText(dark ? "#E5ECFF" : secondaryC, dark, dark ? "#292940" : secondaryC + "18"), border: "1px solid " + secondaryC,
             borderRadius: btnRadius, padding: "10px 12px", fontSize: 13, fontWeight: 800, cursor: "pointer"
           }}>📧 {T("Cambia Email")}</button>
           <ChangePwdSection dark={dark} textC={textC} subC={subC} borderC={borderC} btnRadius={btnRadius} setToast={setToast} confirmButtonColor={primaryC} secondaryButtonColor={secondaryC} inActionGrid />
@@ -1902,9 +1903,9 @@ export function AccountAccessSecurityCard({
           <div style={{ fontSize: 14, fontWeight: 800, color: textC }}>{T("Aggiorna email di accesso")}</div>
           <input type="email" value={newEmail} onChange={function(e){ setNewEmail(e.target.value); }} placeholder="nome@email.com" style={inputStyle} />
           <div style={{ fontSize: 11, color: subC, lineHeight: 1.35 }}>{T("La nuova email diventerà l’indirizzo usato per accedere all’app.")}</div>
-          {emailError && <div style={{ fontSize: 12, color: "#E24B4A", background: dark ? "#3a1d1d" : "#fff0f0", borderRadius: 8, padding: "8px 10px" }}>{emailError}</div>}
+          {emailError && <div style={{ fontSize: 12, color: readableDarkText("#E24B4A", dark, dark ? "#3a1d1d" : "#fff0f0"), background: dark ? "#3a1d1d" : "#fff0f0", borderRadius: 8, padding: "8px 10px" }}>{emailError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={saveEmailChange} disabled={emailLoading} style={{ flex: 1, background: primaryC, color: "#fff", border: "none", borderRadius: btnRadius, padding: 10, fontSize: 13, fontWeight: 800, cursor: emailLoading ? "not-allowed" : "pointer", opacity: emailLoading ? .65 : 1 }}>{emailLoading ? T("Salvataggio...") : T("Salva")}</button>
+            <button type="button" onClick={saveEmailChange} disabled={emailLoading} style={{ flex: 1, background: primaryC, color: readableDarkText("#fff", dark, primaryC), border: "none", borderRadius: btnRadius, padding: 10, fontSize: 13, fontWeight: 800, cursor: emailLoading ? "not-allowed" : "pointer", opacity: emailLoading ? .65 : 1 }}>{emailLoading ? T("Salvataggio...") : T("Salva")}</button>
             <button type="button" onClick={function(){ setEmailOpen(false); setEmailError(""); }} disabled={emailLoading} style={{ background: dark ? "#333" : "#f0f0f0", color: textC, border: "none", borderRadius: btnRadius, padding: "10px 12px", cursor: "pointer" }}>{T("Annulla")}</button>
           </div>
         </div>}
@@ -2034,7 +2035,7 @@ export function ProfilePlacePromptField({
                   border: "none",
                   padding: "9px 11px",
                   fontSize: 12,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   cursor: "pointer",
                 }}
               >
@@ -2108,7 +2109,7 @@ export function ProfileLocalPromptField({
       >
         <span
           style={{
-            color: value ? textC : subC,
+            color: readableDarkText(value ? textC : subC, dark, dark ? "#2a2a3e" : "#fff"),
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -2221,7 +2222,11 @@ export function ProfileLocalPromptField({
                         borderRadius: 10,
                         padding: "11px 12px",
                         fontSize: 14,
-                        color: value === x ? "#7F77DD" : textC,
+                        color: readableDarkText(value === x ? "#7F77DD" : textC, dark, value === x
+                            ? dark
+                              ? "#343050"
+                              : "#EEEDFE"
+                            : "transparent"),
                         cursor: "pointer",
                         fontWeight: value === x ? 700 : 500,
                       }}
@@ -3174,7 +3179,7 @@ export function ProfileCard({
                 <div
                   style={{
                     fontSize: 12,
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", dark, dark ? "#3a1d1d" : "#fff0f0"),
                     background: dark ? "#3a1d1d" : "#fff0f0",
                     borderRadius: 8,
                     padding: "8px 10px",
@@ -3211,7 +3216,7 @@ export function ProfileCard({
                   disabled={emailLoading}
                   style={{
                     background: dark ? "#333" : "#f0f0f0",
-                    color: dark ? "#eee" : "#555",
+                    color: readableDarkText(dark ? "#eee" : "#555", dark, dark ? "#333" : "#f0f0f0"),
                     border: "none",
                     borderRadius: btnRadius,
                     padding: "10px 12px",
@@ -3466,7 +3471,7 @@ export function ProfileCard({
                   "2px solid " +
                   (pNewsletter ? primaryC : dark ? "#8693A8" : "#8A98AB"),
                 background: pNewsletter ? primaryC : dark ? "#232338" : "#fff",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, pNewsletter ? primaryC : dark ? "#232338" : "#fff"),
                 fontSize: 18,
                 fontWeight: 950,
                 lineHeight: 1,
@@ -3782,7 +3787,7 @@ export function ProfileCard({
               style={{
                 flex: 1,
                 background: primaryC,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, primaryC),
                 border: "none",
                 borderRadius: btnRadius,
                 padding: "11px",
@@ -3815,7 +3820,7 @@ export function ProfileCard({
               style={{
                 padding: "10px 14px",
                 background: dark ? "#333" : "#f0f0f0",
-                color: dark ? "#eee" : "#555",
+                color: readableDarkText(dark ? "#eee" : "#555", dark, dark ? "#333" : "#f0f0f0"),
                 border: "none",
                 borderRadius: btnRadius,
                 cursor: "pointer",
@@ -3887,7 +3892,7 @@ export function ProfileCard({
                       border: "none",
                       borderRadius: 10,
                       background: primaryC,
-                      color: "#fff",
+                      color: readableDarkText("#fff", dark, primaryC),
                       fontWeight: 900,
                       cursor:
                         !photoEditorCrop || photoBusy

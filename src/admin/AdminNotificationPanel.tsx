@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useMemo, useState } from "react";
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
@@ -149,7 +150,7 @@ export function AdminNotificationPanel({ session, users = [] }: { session: Admin
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 8 }}>
           {targetOptions.map((option) => {
             const active = audienceMode === option.id;
-            return <button key={option.id} type="button" onClick={() => setAudienceMode(option.id)} style={{ border: "1px solid " + (active ? primary : borderC), borderRadius: 12, background: active ? primary + "18" : dark ? "#29293a" : "#F8FAFC", color: active ? primary : textC, padding: "10px 11px", fontSize: 11, fontWeight: 900, textAlign: "left", cursor: "pointer" }}>{option.icon} {option.label}</button>;
+            return <button key={option.id} type="button" onClick={() => setAudienceMode(option.id)} style={{ border: "1px solid " + (active ? primary : borderC), borderRadius: 12, background: active ? primary + "18" : dark ? "#29293a" : "#F8FAFC", color: readableDarkText(active ? primary : textC, dark, active ? primary + "18" : dark ? "#29293a" : "#F8FAFC"), padding: "10px 11px", fontSize: 11, fontWeight: 900, textAlign: "left", cursor: "pointer" }}>{option.icon} {option.label}</button>;
           })}
         </div>
 
@@ -162,7 +163,7 @@ export function AdminNotificationPanel({ session, users = [] }: { session: Admin
                 const selected = selectedUids.includes(row.uid);
                 const title = String(row.displayName || row.username || row.email || row.uid);
                 const detail = [row.email, row.username ? "@" + row.username : "", row.platform].filter(Boolean).join(" · ");
-                return <button key={row.uid} type="button" onClick={() => toggleUid(row.uid)} style={{ display: "flex", alignItems: "center", gap: 9, border: "1px solid " + (selected ? primary : borderC), borderRadius: 11, background: selected ? primary + "12" : dark ? "#29293a" : "#fff", color: textC, padding: "9px 10px", textAlign: "left", cursor: "pointer" }}><span style={{ width: 18, height: 18, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: selected ? primary : "transparent", border: "1px solid " + (selected ? primary : borderC), color: "#fff", fontSize: 11 }}>{selected ? "✓" : ""}</span><span style={{ minWidth: 0, flex: 1 }}><strong style={{ display: "block", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis" }}>{title}</strong><span style={{ display: "block", color: subC, fontSize: 9, overflow: "hidden", textOverflow: "ellipsis" }}>{detail}</span></span></button>;
+                return <button key={row.uid} type="button" onClick={() => toggleUid(row.uid)} style={{ display: "flex", alignItems: "center", gap: 9, border: "1px solid " + (selected ? primary : borderC), borderRadius: 11, background: selected ? primary + "12" : dark ? "#29293a" : "#fff", color: textC, padding: "9px 10px", textAlign: "left", cursor: "pointer" }}><span style={{ width: 18, height: 18, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", background: selected ? primary : "transparent", border: "1px solid " + (selected ? primary : borderC), color: readableDarkText("#fff", dark, selected ? primary : "transparent"), fontSize: 11 }}>{selected ? "✓" : ""}</span><span style={{ minWidth: 0, flex: 1 }}><strong style={{ display: "block", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis" }}>{title}</strong><span style={{ display: "block", color: subC, fontSize: 9, overflow: "hidden", textOverflow: "ellipsis" }}>{detail}</span></span></button>;
               })}
               {filteredUsers.length === 0 && <div style={{ color: subC, fontSize: 11 }}>{L("Nessun utente trovato")}</div>}
             </div>
@@ -175,7 +176,7 @@ export function AdminNotificationPanel({ session, users = [] }: { session: Admin
           {LANGUAGE_OPTIONS.map((item) => {
             const active = activeLanguage === item.code;
             const complete = completeLanguages.includes(item.code);
-            return <button key={item.code} type="button" onClick={() => setActiveLanguage(item.code)} style={{ flexShrink: 0, borderRadius: 10, border: "1px solid " + (active ? primary : borderC), background: active ? primary + "18" : dark ? "#29293a" : "#F8FAFC", color: active ? primary : textC, padding: "7px 9px", fontSize: 11, fontWeight: 850, cursor: "pointer" }}>{item.code.toUpperCase()} {complete ? "✓" : ""}</button>;
+            return <button key={item.code} type="button" onClick={() => setActiveLanguage(item.code)} style={{ flexShrink: 0, borderRadius: 10, border: "1px solid " + (active ? primary : borderC), background: active ? primary + "18" : dark ? "#29293a" : "#F8FAFC", color: readableDarkText(active ? primary : textC, dark, active ? primary + "18" : dark ? "#29293a" : "#F8FAFC"), padding: "7px 9px", fontSize: 11, fontWeight: 850, cursor: "pointer" }}>{item.code.toUpperCase()} {complete ? "✓" : ""}</button>;
           })}
         </div>
 
@@ -191,10 +192,10 @@ export function AdminNotificationPanel({ session, users = [] }: { session: Admin
             <option value="info">{L("Informativa")}</option><option value="success">{L("Positiva")}</option><option value="warning">{L("Importante")}</option><option value="critical">{L("Critica")}</option>
           </select>
           <div style={{ flex: 1 }} />
-          <button type="button" onClick={sendCampaign} disabled={sending} style={{ border: 0, borderRadius: 12, background: primary, color: "#fff", padding: "10px 15px", fontSize: 12, fontWeight: 900, cursor: sending ? "default" : "pointer", opacity: sending ? 0.6 : 1 }}>{sending ? L("Invio in corso...") : L("Invia notifica")}</button>
+          <button type="button" onClick={sendCampaign} disabled={sending} style={{ border: 0, borderRadius: 12, background: primary, color: readableDarkText("#fff", dark, primary), padding: "10px 15px", fontSize: 12, fontWeight: 900, cursor: sending ? "default" : "pointer", opacity: sending ? 0.6 : 1 }}>{sending ? L("Invio in corso...") : L("Invia notifica")}</button>
         </div>
 
-        {status && <div style={{ marginTop: 12, borderRadius: 11, background: dark ? "#24213a" : "#F0EDFF", color: dark ? "#D9D5FF" : "#534AB7", padding: "9px 10px", fontSize: 11, lineHeight: 1.4 }}>{status}</div>}
+        {status && <div style={{ marginTop: 12, borderRadius: 11, background: dark ? "#24213a" : "#F0EDFF", color: readableDarkText(dark ? "#D9D5FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"), padding: "9px 10px", fontSize: 11, lineHeight: 1.4 }}>{status}</div>}
       </div>
     </div>
   );

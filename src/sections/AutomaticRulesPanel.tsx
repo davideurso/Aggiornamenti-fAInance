@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import {useRef,useState} from 'react';
 import {useApp} from '../core';
 import {rulesText,rulesExtraText,rulesUiText} from '../i18n/automaticRulesTranslations';
@@ -21,7 +22,7 @@ export function AutomaticRulesPanel(){
   const directionOptions=[{id:'expense',label:T('expense')},{id:'income',label:T('income')}];
   const rules=ctx.financeEvolution.rules.filter(r=>r.kind==='automatic-v1').slice().sort((a,b)=>a.priority-b.priority||a.id.localeCompare(b.id));
   const limit=ruleLimit(ctx.currentPlan);
-  const theme:any={'--rule-text':ctx.textC,'--rule-sub':ctx.subC||(ctx.dark?'#b8bdc8':'#69727c'),'--rule-card':ctx.cardBg,'--rule-border':ctx.borderC,'--rule-primary':ctx.confirmButtonColor||'#378ADD','--rule-soft':ctx.dark?'#263444':'#edf5fc','--rule-input':ctx.inp?.background||ctx.cardBg,'--rule-radius':`${ctx.btnRadius??12}px`,'--rule-expense':ctx.expenseColor||'#E35B5B','--rule-income':ctx.incomeColor||'#2FA66A'};
+  const theme:any={'--rule-text':ctx.textC,'--rule-sub':ctx.subC||(ctx.dark?'#b8bdc8':'#69727c'),'--rule-card':ctx.cardBg,'--rule-border':ctx.borderC,'--rule-primary':ctx.confirmButtonColor||'#378ADD','--rule-link':readableDarkText(ctx.confirmButtonColor||'#378ADD',ctx.dark),'--rule-on-primary':readableDarkText('#fff',ctx.dark,ctx.confirmButtonColor||'#378ADD'),'--rule-on-expense':readableDarkText('#fff',ctx.dark,ctx.expenseColor||'#E35B5B'),'--rule-on-income':readableDarkText('#fff',ctx.dark,ctx.incomeColor||'#2FA66A'),'--rule-soft':ctx.dark?'#263444':'#edf5fc','--rule-input':ctx.inp?.background||ctx.cardBg,'--rule-radius':`${ctx.btnRadius??12}px`,'--rule-expense':ctx.expenseColor||'#E35B5B','--rule-income':ctx.incomeColor||'#2FA66A'};
   function limitNotice(){ctx.setToast({text:T('limit'),type:'warning',color:'#FFF8E1',textColor:'#856404',icon:'🔒',actionLabel:L('Piani'),actionPage:'plans_settings',duration:7000});}
   function apply(fn){try{ctx.setFinanceEvolution(fn);setError(false);return true;}catch(e){if(e.message==='RULE_LIMIT')limitNotice();else setError(true);return false;}}
   function open(rule?,duplicate=false,probe=false){
@@ -57,7 +58,7 @@ export function AutomaticRulesPanel(){
   const probeLabel=U('testRule');
   function runTest(){try{validateAutomaticRule(draft);if(!String(test.amount).trim()||!Number.isFinite(Number(test.amount))||Number(test.amount)<0)throw new Error('INVALID_AMOUNT');setResult(evaluateAutomaticRules([{...draft,enabled:true}],{desc:test.desc,amount:Number(test.amount),catId:test.category,type:test.category,methodId:test.payment,rateizzato:test.transactionType==='installment',receipt:test.transactionType==='receipt',_ruleDefaultFields:test.defaults?['catId','type','methodId']:[]},test.direction,test.source,{plan:'premium',cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes}));setError(false);}catch{setError(true);}}
   function closeEditor(){setDraft(null);setEditorTab('when');setProbeOnly(false);setError(false);setTest(null);setResult(null);}
-  return <section aria-label={T('title')} className="fainance-rules" style={theme}>
+  return <section aria-label={T('title')} className="fainance-rules" data-dark={ctx.dark ? "true" : "false"} style={theme}>
     <div className="rule-screen">
     {rules.length>limit&&<p role="note" className="rule-notice">{T('limit')}</p>}
     {error&&<p role="alert" className="rule-notice">{T('error')}</p>}

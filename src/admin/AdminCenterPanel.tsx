@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { useApp } from "../core";
@@ -227,7 +228,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
               {L("Dashboard, utenti, notifiche, configurazione, diagnostica e audit nel centro di amministrazione.")}
             </div>
           </div>
-          <span style={{ borderRadius: 999, padding: "5px 9px", background: primary + "18", color: primary, fontSize: 10, fontWeight: 900 }}>
+          <span style={{ borderRadius: 999, padding: "5px 9px", background: primary + "18", color: readableDarkText(primary, dark, primary + "18"), fontSize: 10, fontWeight: 900 }}>
             {String(session.role || "").toUpperCase()}
           </span>
           <button type="button" onClick={() => void loadAdminData()} style={{ border: "1px solid " + borderC, background: dark ? "#29293a" : "#fff", color: textC, borderRadius: 10, padding: "7px 10px", fontSize: 11, fontWeight: 850, cursor: "pointer" }}>
@@ -240,7 +241,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
         {tabs.map((item) => {
           const active = tab === item.id;
           return (
-            <button key={item.id} type="button" onClick={() => setTab(item.id)} style={{ flexShrink: 0, border: "1px solid " + (active ? primary : borderC), background: active ? primary + "18" : cardBg, color: active ? primary : textC, borderRadius: 11, padding: "8px 10px", fontSize: 11, fontWeight: 900, cursor: "pointer" }}>
+            <button key={item.id} type="button" onClick={() => setTab(item.id)} style={{ flexShrink: 0, border: "1px solid " + (active ? primary : borderC), background: active ? primary + "18" : cardBg, color: readableDarkText(active ? primary : textC, dark, active ? primary + "18" : cardBg), borderRadius: 11, padding: "8px 10px", fontSize: 11, fontWeight: 900, cursor: "pointer" }}>
               {item.icon} {L(item.label)}
             </button>
           );
@@ -248,7 +249,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
       </div>
 
       {loading && <div style={{ ...panelStyle, color: subC, fontSize: 12 }}>{L("Caricamento dati Admin...")}</div>}
-      {error && <div style={{ ...panelStyle, borderColor: "#E24B4A66", color: "#E24B4A", fontSize: 12 }}>{error}</div>}
+      {error && <div style={{ ...panelStyle, borderColor: "#E24B4A66", color: readableDarkText("#E24B4A", dark, "#35354a"), fontSize: 12 }}>{error}</div>}
 
       {!loading && tab === "dashboard" && (
         <>
@@ -339,7 +340,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
               <label style={{ display: "flex", alignItems: "center", gap: 9, color: textC, fontSize: 12 }}><input type="checkbox" checked={!!config.announcementsEnabled} onChange={(event) => setConfig((current) => ({ ...current, announcementsEnabled: event.target.checked }))} disabled={!canWrite} />{L("Annunci abilitati")}</label>
             </div>
             {canWrite ? (
-              <button type="button" onClick={saveConfig} disabled={configSaving} style={{ marginTop: 14, border: 0, borderRadius: 11, background: primary, color: "#fff", padding: "10px 13px", fontSize: 11, fontWeight: 900, cursor: configSaving ? "default" : "pointer", opacity: configSaving ? 0.6 : 1 }}>
+              <button type="button" onClick={saveConfig} disabled={configSaving} style={{ marginTop: 14, border: 0, borderRadius: 11, background: primary, color: readableDarkText("#fff", dark, primary), padding: "10px 13px", fontSize: 11, fontWeight: 900, cursor: configSaving ? "default" : "pointer", opacity: configSaving ? 0.6 : 1 }}>
                 {configSaving ? L("Salvataggio...") : L("Salva configurazione")}
               </button>
             ) : <div style={{ color: subC, fontSize: 11, marginTop: 12 }}>{L("Il tuo ruolo consente solo la consultazione di questa configurazione.")}</div>}
@@ -364,7 +365,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 12, borderRadius: 12, padding: 11, background: dark ? "#22352f" : "#ECFDF5", color: dark ? "#9DE7C7" : "#0F7A55", fontSize: 11, lineHeight: 1.45 }}>
+          <div style={{ marginTop: 12, borderRadius: 12, padding: 11, background: dark ? "#22352f" : "#ECFDF5", color: readableDarkText(dark ? "#9DE7C7" : "#0F7A55", dark, dark ? "#22352f" : "#ECFDF5"), fontSize: 11, lineHeight: 1.45 }}>
             {L("L'accesso Admin non abilita la lettura dei dati finanziari privati degli utenti.")}
           </div>
         </div>

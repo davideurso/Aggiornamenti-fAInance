@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { closureText } from '../i18n/savingsClosureTranslations';
 import { savingsGoalText } from '../i18n/savingsGoalsTranslations';
 import { useState } from 'react';
@@ -35,7 +36,7 @@ export function SavingsLedgerPanel({bucketId}:{bucketId:string}) {
     <details style={{marginTop:10}}>
       <summary style={{cursor:'pointer',fontWeight:700}}>{T('title')}</summary>
       <p style={{fontSize:12,color:ctx.subC,lineHeight:1.5}}>{T('hint')}</p>
-      {bucket.active !== false && !draft && <button type="button" style={{...button,background:ctx.confirmButtonColor || '#6555BA',color:'#fff'}} onClick={()=>edit()}>{T('add')}</button>}
+      {bucket.active !== false && !draft && <button type="button" style={{...button,background:ctx.confirmButtonColor || '#6555BA',color:readableDarkText('#fff', ctx.dark, ctx.confirmButtonColor || '#6555BA')}} onClick={()=>edit()}>{T('add')}</button>}
       {draft && <form style={{display:'grid',gap:10,marginTop:10}} onSubmit={event=>{event.preventDefault();apply(previous=>{if(draft.expectedRevision==null && bucket.goalId && !(draft.source==='extra' && draft.includeGoal===false)){const goal=(ctx.goals || []).find(item=>String(item.id)===bucket.goalId);if(!goal || (goal.currency || ctx.currency)!==bucket.currency)throw new Error('SAVINGS_ENTRY_UNAVAILABLE');}return saveSavingsEntry(previous,{...draft,bucketId,currency:bucket.currency,amountMinor:savingsAmountMinor(draft.amount)});});}}>
         <label>{T('date')}<input required type="date" value={draft.date} onChange={event=>setDraft({...draft,date:event.target.value})} style={{...ctx.inp,display:'block',width:'100%',boxSizing:'border-box'}}/></label>
         <label>{T('amount')} ({bucket.currency})<input required type="text" inputMode="decimal" value={draft.amount} onChange={event=>setDraft({...draft,amount:event.target.value})} style={{...ctx.inp,display:'block',width:'100%',boxSizing:'border-box'}}/></label>
@@ -43,7 +44,7 @@ export function SavingsLedgerPanel({bucketId}:{bucketId:string}) {
         {draft.expectedRevision==null && bucket.goalId && draft.source==='extra' && <label><input type="checkbox" checked={draft.includeGoal!==false} onChange={event=>setDraft({...draft,includeGoal:event.target.checked})}/> {G('extra')}</label>}
         <div style={{display:'flex',flexWrap:'wrap',gap:8}}><button type="submit" style={button}>{S('save')}</button><button type="button" style={button} onClick={()=>{setDraft(null);setError('');}}>{S('cancel')}</button></div>
       </form>}
-      {error && <p role="alert" style={{color:ctx.expColor || '#B42318'}}>{error}</p>}
+      {error && <p role="alert" style={{color:readableDarkText(ctx.expColor || '#B42318', ctx.dark, "#35354a")}}>{error}</p>}
       {saved && <p role="status">{T('saved')}</p>}
       <h4 style={{margin:'14px 0 8px'}}>{T('history')}</h4>
       {!entries.length && <p style={{fontSize:12,color:ctx.subC}}>{T('empty')}</p>}

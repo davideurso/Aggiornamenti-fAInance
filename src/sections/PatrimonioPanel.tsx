@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp, DEFAULT_PATRIMONIO_AREAS, DEFAULT_PATRIMONIO_ENTRIES, parseMoney } from '../core';
 import { Btn, EmojiPicker, PopupCloseButton } from '../widget';
@@ -37,7 +38,7 @@ export function PatrimonioPanel(){
     function patrimonioAreasForEntries(entriesForMonth){return allPatrimonioAreas.filter(function(area){if(!area||area.deleted)return false;return (entriesForMonth||[]).some(function(entry){return String(entry.areaId)===String(area.id);});});}
     var patrimonioEntryAllowed=settingAllowed("base");
     function lockedPatrimonioEntry(){setToast({text:L("Aggiungi voce patrimonio disponibile dal piano Base."),type:"warning",color:"#EF9F27",icon:"⚠️"});}
-    var sinp={width:"100%",borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"7px 10px",fontSize:14,background:dark?"#2a2a3e":"#fff",color:dark?"#eee":"#333"};
+    var sinp={width:"100%",borderRadius:8,border:"1px solid "+(dark?"#444":"#ddd"),padding:"7px 10px",fontSize:14,background:dark?"#2a2a3e":"#fff",color:readableDarkText(dark?"#eee":"#333", dark, dark?"#2a2a3e":"#fff")};
     function fmtWhole(value){var n=Math.round(Number(value)||0);try{return String(sym||"€")+" "+new Intl.NumberFormat(lang||"it-IT",{minimumFractionDigits:0,maximumFractionDigits:0}).format(n);}catch(e){return (fmt?String(fmt(n)):String(n)).replace(/([.,]\d{1,2})$/,"").trim();}}
     function PatrimonioAmount({value,forcePlus=false}){
       var n=Number(value)||0;
@@ -235,7 +236,7 @@ export function PatrimonioPanel(){
               <Btn onClick={saveNote} bg="#7F77DD" style={{flex:1,padding:"10px",fontWeight:600}}>{"💾 "+L("Salva nota")}</Btn>
               <Btn onClick={function(){setNoteEntryId(null);}} bg={dark?"#333":"#f0f0f0"} color={dark?"#eee":"#666"} style={{padding:"10px 14px"}}>{L("Annulla")}</Btn>
             </div>
-            {pNotes[noteEntryId]&&<button onClick={function(){if(!window.confirm(L("Eliminare questa nota?")))return;setPatrimonioNotes(function(n){var q={...n};delete q[noteEntryId];return q;});setNoteEntryId(null);setToast(L("Nota eliminata"));}} style={{marginTop:8,background:"none",border:"none",cursor:"pointer",color:"#aaa",fontSize:12,width:"100%"}}>{"🗑 "+L("Elimina nota")}</button>}
+            {pNotes[noteEntryId]&&<button onClick={function(){if(!window.confirm(L("Eliminare questa nota?")))return;setPatrimonioNotes(function(n){var q={...n};delete q[noteEntryId];return q;});setNoteEntryId(null);setToast(L("Nota eliminata"));}} style={{marginTop:8,background:"none",border:"none",cursor:"pointer",color:readableDarkText("#aaa", dark, "none"),fontSize:12,width:"100%"}}>{"🗑 "+L("Elimina nota")}</button>}
           </div>
         </div>;
       })()}
@@ -247,14 +248,14 @@ export function PatrimonioPanel(){
           <div style={{fontSize:12,color:subC,marginTop:5,lineHeight:1.45}}>{L("Gestisci i valori mensili, confronta i mesi e consulta lo storico.")}</div>
           <div style={{fontSize:11,color:subC,marginTop:5}}>{L("Modalità")}: {L(patrimonioMode==="manuale"?"Manuale":"Semi-automatica")} {patrimonioMode==="semi"?"⚠️":""}</div>
         </div>
-        <button type="button" onClick={openPatrimonioStatistics} style={{background:confirmButtonColor||"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"10px 14px",fontSize:13,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",alignSelf:isMobile?"stretch":"center"}}>📊 {L("Statistiche Patrimonio")}</button>
+        <button type="button" onClick={openPatrimonioStatistics} style={{background:confirmButtonColor||"#7F77DD",color:readableDarkText("#fff", dark, confirmButtonColor||"#7F77DD"),border:"none",borderRadius:btnRadius,padding:"10px 14px",fontSize:13,fontWeight:800,cursor:"pointer",whiteSpace:"nowrap",alignSelf:isMobile?"stretch":"center"}}>📊 {L("Statistiche Patrimonio")}</button>
       </div>
 
       {/* ── Tab ── */}
       <div style={{display:"flex",gap:0,background:dark?"#252535":"#f5f5f5",borderRadius:12,padding:3}}>
-        <button onClick={function(){setPatTab("inserimento");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:patTab==="inserimento"?(dark?"#444":"#fff"):"transparent",color:patTab==="inserimento"?textC:subC,fontSize:14,cursor:"pointer",fontWeight:patTab==="inserimento"?500:400}}>✏️ {L("Inserimento")}</button>
-        <button onClick={function(){setPatTab("storico");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:patTab==="storico"?(dark?"#444":"#fff"):"transparent",color:patTab==="storico"?textC:subC,fontSize:14,cursor:"pointer",fontWeight:patTab==="storico"?500:400}}>
-          📅 {L("Storico")} {histMonths.length>0&&<span style={{fontSize:11,background:"#7F77DD",color:"#fff",borderRadius:10,padding:"1px 6px",marginLeft:4}}>{histMonths.length}</span>}
+        <button onClick={function(){setPatTab("inserimento");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:patTab==="inserimento"?(dark?"#444":"#fff"):"transparent",color:readableDarkText(patTab==="inserimento"?textC:subC, dark, patTab==="inserimento"?(dark?"#444":"#fff"):"transparent"),fontSize:14,cursor:"pointer",fontWeight:patTab==="inserimento"?500:400}}>✏️ {L("Inserimento")}</button>
+        <button onClick={function(){setPatTab("storico");}} style={{flex:1,padding:"9px",border:"none",borderRadius:10,background:patTab==="storico"?(dark?"#444":"#fff"):"transparent",color:readableDarkText(patTab==="storico"?textC:subC, dark, patTab==="storico"?(dark?"#444":"#fff"):"transparent"),fontSize:14,cursor:"pointer",fontWeight:patTab==="storico"?500:400}}>
+          📅 {L("Storico")} {histMonths.length>0&&<span style={{fontSize:11,background:"#7F77DD",color:readableDarkText("#fff", dark, "#7F77DD"),borderRadius:10,padding:"1px 6px",marginLeft:4}}>{histMonths.length}</span>}
         </button>
       </div>
 
@@ -263,25 +264,25 @@ export function PatrimonioPanel(){
 
         {/* Selettore mese */}
         <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <button onClick={function(){goMonth(-1);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,color:subC,padding:"4px 8px",borderRadius:8}}>‹</button>
+          <button onClick={function(){goMonth(-1);}} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,color:readableDarkText(subC, dark, "none"),padding:"4px 8px",borderRadius:8}}>‹</button>
           <div style={{textAlign:"center"}}>
             <div style={{fontSize:16,fontWeight:700,color:textC}}>{monthFullName(selMonth-1)} {selYear}</div>
             <div style={{fontSize:11,color:subC,marginTop:2}}>
               {existingSnap?("✅ "+L("Dati già salvati")):(isCurrentMonth?L("Mese corrente — non ancora salvato"):("⚠️ "+L("Nessun dato per questo mese")))}
             </div>
           </div>
-          <button onClick={function(){goMonth(1);}} disabled={selMonthKey>=curMonthKey} style={{background:"none",border:"none",cursor:selMonthKey>=curMonthKey?"not-allowed":"pointer",fontSize:20,color:selMonthKey>=curMonthKey?"#ccc":subC,padding:"4px 8px",borderRadius:8}}>›</button>
+          <button onClick={function(){goMonth(1);}} disabled={selMonthKey>=curMonthKey} style={{background:"none",border:"none",cursor:selMonthKey>=curMonthKey?"not-allowed":"pointer",fontSize:20,color:readableDarkText(selMonthKey>=curMonthKey?"#ccc":subC, dark, "none"),padding:"4px 8px",borderRadius:8}}>›</button>
         </div>
 
         {/* Totale mese selezionato + delta */}
         <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"minmax(0,1fr) auto",gap:12,alignItems:"center",padding:"14px 16px",background:dark?"#252535":"#f9f9f9",borderRadius:14,border:"1px solid "+borderC}}>
           <div style={{minWidth:0}}>
             <div style={{fontSize:11,color:subC}}>{L("Totale")} {monthShortName(selMonth-1)} {selYear}</div>
-            <div style={{fontSize:isMobile?24:26,fontWeight:900,color:draftTotal>=0?"#1D9E75":"#E24B4A",lineHeight:1.1,wordBreak:"break-word"}}><PatrimonioAmount value={draftTotal}/></div>
+            <div style={{fontSize:isMobile?24:26,fontWeight:900,color:readableDarkText(draftTotal>=0?"#1D9E75":"#E24B4A", dark, dark?"#252535":"#f9f9f9"),lineHeight:1.1,wordBreak:"break-word"}}><PatrimonioAmount value={draftTotal}/></div>
             {secRate&&showSecInPatrimonio&&fmtSec(draftTotal)&&<div style={{fontSize:12,color:subC,fontWeight:500,marginTop:2}}>{fmtSec(draftTotal)}</div>}
-            {totalDelta!==null&&<div style={{fontSize:13,fontWeight:800,color:totalDelta>=0?"#1D9E75":"#E24B4A",marginTop:5}}>{L("vs")} {monthShortName(parseInt(prevKey.split("-")[1])-1)}: <PatrimonioAmount value={totalDelta} forcePlus/></div>}
+            {totalDelta!==null&&<div style={{fontSize:13,fontWeight:800,color:readableDarkText(totalDelta>=0?"#1D9E75":"#E24B4A", dark, dark?"#252535":"#f9f9f9"),marginTop:5}}>{L("vs")} {monthShortName(parseInt(prevKey.split("-")[1])-1)}: <PatrimonioAmount value={totalDelta} forcePlus/></div>}
           </div>
-          <button onClick={saveMonthSnap} style={{background:"#7F77DD",color:"#fff",border:"none",borderRadius:btnRadius,padding:"12px 18px",fontSize:14,cursor:"pointer",fontWeight:900,width:isMobile?"100%":"auto",minWidth:isMobile?0:118,boxShadow:dark?"none":"0 6px 18px rgba(127,119,221,0.28)"}}>
+          <button onClick={saveMonthSnap} style={{background:"#7F77DD",color:readableDarkText("#fff", dark, "#7F77DD"),border:"none",borderRadius:btnRadius,padding:"12px 18px",fontSize:14,cursor:"pointer",fontWeight:900,width:isMobile?"100%":"auto",minWidth:isMobile?0:118,boxShadow:dark?"none":"0 6px 18px rgba(127,119,221,0.28)"}}>
             {existingSnap?("🔄 "+L("Aggiorna")):("💾 "+L("Salva"))}
           </button>
         </div>
@@ -315,8 +316,8 @@ export function PatrimonioPanel(){
                 <span style={{fontSize:15.5,fontWeight:600,color:textC,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{L(area.name)}</span>
               </div>
               <div style={{textAlign:"right"}}>
-                <div style={{fontSize:15.8,fontWeight:600,color:aTotal>=0?"#1D9E75":"#E24B4A"}}><PatrimonioAmount value={aTotal}/></div>
-                {aDelta!==null&&aDelta!==0&&<div style={{fontSize:11.5,color:aDelta>0?"#1D9E75":"#E24B4A"}}><PatrimonioAmount value={aDelta} forcePlus/></div>}
+                <div style={{fontSize:15.8,fontWeight:600,color:readableDarkText(aTotal>=0?"#1D9E75":"#E24B4A", dark, cardBg)}}><PatrimonioAmount value={aTotal}/></div>
+                {aDelta!==null&&aDelta!==0&&<div style={{fontSize:11.5,color:readableDarkText(aDelta>0?"#1D9E75":"#E24B4A", dark, cardBg)}}><PatrimonioAmount value={aDelta} forcePlus/></div>}
               </div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -335,25 +336,25 @@ export function PatrimonioPanel(){
                         onChange={function(e){var v=e.target.value;setDraft(function(d){return{...d,[entry.id]:v};});}}
                         onKeyDown={function(e){if(e.key==="Enter"||e.key==="Tab")setEditingId(null);}}
                         style={{...sinp,width:isMobile?"clamp(68px,24vw,92px)":110,padding:isMobile?"4px 5px":"4px 8px",fontSize:isMobile?13.6:13}} autoFocus/>
-                      <button onClick={function(){setEditingId(null);}} style={{background:"#7F77DD",color:"#fff",border:"none",borderRadius:7,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:500,flexShrink:0}}>✓</button>
+                      <button onClick={function(){setEditingId(null);}} style={{background:"#7F77DD",color:readableDarkText("#fff", dark, "#7F77DD"),border:"none",borderRadius:7,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:500,flexShrink:0}}>✓</button>
                     </div>
                     :<div style={{display:"flex",alignItems:"center",gap:isMobile?3:6,flexShrink:0,minWidth:0}}>
-                      {entryDelta!==null&&entryDelta!==0&&<span style={{fontSize:isMobile?11.9:11,fontWeight:500,color:entryDelta>0?"#1D9E75":"#E24B4A",minWidth:isMobile?34:56,maxWidth:isMobile?46:70,textAlign:"right",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><PatrimonioAmount value={entryDelta} forcePlus/></span>}
-                      <span onClick={function(){setEditingId(entry.id);}} style={{fontSize:isMobile?"clamp(12.6px,3.9vw,14.1px)":14,fontWeight:500,color:numVal>0?"#1D9E75":numVal<0?"#E24B4A":subC,minWidth:isMobile?50:80,maxWidth:isMobile?60:110,textAlign:"right",cursor:"pointer",borderBottom:"1px dashed "+(dark?"#555":"#ddd"),padding:"1px 0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{rawVal===""?"—":<PatrimonioAmount value={numVal}/>}</span>
-                      <button title={L("Modifica")} onClick={function(){setEditingId(entry.id);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",cursor:"pointer",color:"#378ADD",fontSize:isMobile?12:14,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"5px 8px",borderRadius:8,fontWeight:700,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
-                      <button onClick={function(){openNote(entry.id);}} title={L("Nota")} style={{background:pNotes[entry.id]?"#EEEDFE":"transparent",border:"1px solid "+(pNotes[entry.id]?"#AFA9EC":(dark?"#444":"#E5E7EB")),borderRadius:8,cursor:"pointer",color:pNotes[entry.id]?"#534AB7":"#aaa",fontSize:isMobile?12:13,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"1px 5px",flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>📝</button>
-                      <button title={L("Elimina")} onClick={function(){if(!window.confirm(L("Eliminare questa voce dal Patrimonio?")))return;delEntry(entry.id);}} style={{background:"#FFF0F0",border:"1px solid #FFD0D0",cursor:"pointer",color:"#E24B4A",fontSize:isMobile?12:14,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"5px 8px",borderRadius:8,fontWeight:700,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>
+                      {entryDelta!==null&&entryDelta!==0&&<span style={{fontSize:isMobile?11.9:11,fontWeight:500,color:readableDarkText(entryDelta>0?"#1D9E75":"#E24B4A", dark, dark?"#252535":"#f9f9f9"),minWidth:isMobile?34:56,maxWidth:isMobile?46:70,textAlign:"right",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}><PatrimonioAmount value={entryDelta} forcePlus/></span>}
+                      <span onClick={function(){setEditingId(entry.id);}} style={{fontSize:isMobile?"clamp(12.6px,3.9vw,14.1px)":14,fontWeight:500,color:readableDarkText(numVal>0?"#1D9E75":numVal<0?"#E24B4A":subC, dark, dark?"#252535":"#f9f9f9"),minWidth:isMobile?50:80,maxWidth:isMobile?60:110,textAlign:"right",cursor:"pointer",borderBottom:"1px dashed "+(dark?"#555":"#ddd"),padding:"1px 0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{rawVal===""?"—":<PatrimonioAmount value={numVal}/>}</span>
+                      <button title={L("Modifica")} onClick={function(){setEditingId(entry.id);}} style={{background:"#EEF4FF",border:"1px solid #BFD7FF",cursor:"pointer",color:readableDarkText("#378ADD", dark, "#EEF4FF"),fontSize:isMobile?12:14,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"5px 8px",borderRadius:8,fontWeight:700,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>✏️</button>
+                      <button onClick={function(){openNote(entry.id);}} title={L("Nota")} style={{background:pNotes[entry.id]?"#EEEDFE":"transparent",border:"1px solid "+(pNotes[entry.id]?"#AFA9EC":(dark?"#444":"#E5E7EB")),borderRadius:8,cursor:"pointer",color:readableDarkText(pNotes[entry.id]?"#534AB7":"#aaa", dark, pNotes[entry.id]?"#EEEDFE":"transparent"),fontSize:isMobile?12:13,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"1px 5px",flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>📝</button>
+                      <button title={L("Elimina")} onClick={function(){if(!window.confirm(L("Eliminare questa voce dal Patrimonio?")))return;delEntry(entry.id);}} style={{background:"#FFF0F0",border:"1px solid #FFD0D0",cursor:"pointer",color:readableDarkText("#E24B4A", dark, "#FFF0F0"),fontSize:isMobile?12:14,width:isMobile?28:"auto",height:isMobile?28:"auto",padding:isMobile?0:"5px 8px",borderRadius:8,fontWeight:700,flexShrink:0,display:"inline-flex",alignItems:"center",justifyContent:"center"}}>🗑️</button>
                     </div>
                   }
                   </div>
-                  {pNotes[entry.id]&&<div onClick={function(){openNote(entry.id);}} style={{padding:"6px 12px",background:dark?"#1e1e30":"#f5f4ff",border:"1px solid "+(dark?"#3a3a5a":"#c8c0f8"),borderTop:"none",borderRadius:"0 0 10px 10px",fontSize:11.5,color:dark?"#aac":"#534AB7",cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📝 {pNotes[entry.id]}</div>}
+                  {pNotes[entry.id]&&<div onClick={function(){openNote(entry.id);}} style={{padding:"6px 12px",background:dark?"#1e1e30":"#f5f4ff",border:"1px solid "+(dark?"#3a3a5a":"#c8c0f8"),borderTop:"none",borderRadius:"0 0 10px 10px",fontSize:11.5,color:readableDarkText(dark?"#aac":"#534AB7", dark, dark?"#1e1e30":"#f5f4ff"),cursor:"pointer",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📝 {pNotes[entry.id]}</div>}
                 </div>;
               })}
             </div>
             {false&&addingEntry===area.id&&null}
           </div>;
         })}
-        {patrimonioMode==="semi"&&<div style={{background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:12,padding:"12px 16px"}}><span style={{fontSize:13,color:"#856404"}}>⚠️ {L("Modalità semi-automatica in beta.")}</span></div>}
+        {patrimonioMode==="semi"&&<div style={{background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:12,padding:"12px 16px"}}><span style={{fontSize:13,color:readableDarkText("#856404", dark, "#FFF8E1")}}>⚠️ {L("Modalità semi-automatica in beta.")}</span></div>}
       </>}
 
       {/* ══════════════════════ TAB STORICO ══════════════════════ */}
@@ -364,7 +365,7 @@ export function PatrimonioPanel(){
 
         {histMonths.length>0&&<>
           {histYears.length>1&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-            {histYears.map(function(y){return <button key={y} onClick={function(){setHistViewYear(y);}} style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+(histViewYear===y?"#7F77DD":borderC),background:histViewYear===y?"#EEEDFE":(dark?"#252535":"#f5f5f5"),color:histViewYear===y?"#534AB7":textC,fontSize:13,cursor:"pointer",fontWeight:histViewYear===y?600:400}}>{y}</button>;})}
+            {histYears.map(function(y){return <button key={y} onClick={function(){setHistViewYear(y);}} style={{padding:"6px 14px",borderRadius:8,border:"1px solid "+(histViewYear===y?"#7F77DD":borderC),background:histViewYear===y?"#EEEDFE":(dark?"#252535":"#f5f5f5"),color:readableDarkText(histViewYear===y?"#534AB7":textC, dark, histViewYear===y?"#EEEDFE":(dark?"#252535":"#f5f5f5")),fontSize:13,cursor:"pointer",fontWeight:histViewYear===y?600:400}}>{y}</button>;})}
           </div>}
 
           {filteredHist.length>1&&<div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:16}}>
@@ -405,17 +406,17 @@ export function PatrimonioPanel(){
                     var lbl=monthShortName(parseInt(m.mk.split("-")[1])-1)+" "+m.mk.slice(0,4);
                     return <tr key={m.mk} style={{borderBottom:"1px solid "+(dark?"#333":"#f0f0f0")}}>
                       <td style={{padding:"8px 10px",color:textC,fontWeight:500}}>
-                        <button onClick={function(){setSelYear(parseInt(m.mk.slice(0,4)));setSelMonth(parseInt(m.mk.split("-")[1]));setPatTab("inserimento");}} style={{background:"none",border:"none",cursor:"pointer",color:"#7F77DD",fontSize:12,fontWeight:600,padding:0,textDecoration:"underline"}}>{lbl}</button>
+                        <button onClick={function(){setSelYear(parseInt(m.mk.slice(0,4)));setSelMonth(parseInt(m.mk.split("-")[1]));setPatTab("inserimento");}} style={{background:"none",border:"none",cursor:"pointer",color:readableDarkText("#7F77DD", dark, "none"),fontSize:12,fontWeight:600,padding:0,textDecoration:"underline"}}>{lbl}</button>
                       </td>
-                      <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:m.total>=0?"#1D9E75":"#E24B4A"}}><PatrimonioAmount value={m.total}/></td>
-                      <td style={{padding:"8px 10px",textAlign:"right",fontWeight:500,color:m.delta===null?subC:m.delta>=0?"#1D9E75":"#E24B4A"}}>{m.delta===null?"—":<PatrimonioAmount value={m.delta} forcePlus/>}</td>
+                      <td style={{padding:"8px 10px",textAlign:"right",fontWeight:700,color:readableDarkText(m.total>=0?"#1D9E75":"#E24B4A", dark, "#35354a")}}><PatrimonioAmount value={m.total}/></td>
+                      <td style={{padding:"8px 10px",textAlign:"right",fontWeight:500,color:readableDarkText(m.delta===null?subC:m.delta>=0?"#1D9E75":"#E24B4A", dark, "#35354a")}}>{m.delta===null?"—":<PatrimonioAmount value={m.delta} forcePlus/>}</td>
                       {historyAreas.slice(0,isMobile?2:4).map(function(a){
                         var aEnts=patrimonioEntriesForMonth(m.mk).filter(function(e){return e.areaId===a.id;});
                         var aT=aEnts.reduce(function(acc,e){return acc+(parseFloat(m.snap[e.id])||0);},0);
                         return <td key={a.id} style={{padding:"8px 10px",textAlign:"right",color:subC,fontSize:11}}><PatrimonioAmount value={aT}/></td>;
                       })}
                       <td style={{padding:"8px 10px",textAlign:"center"}}>
-                        <button onClick={function(){if(window.confirm(L("Eliminare snapshot ")+m.mk+"?")){delMonthSnap(m.mk);}}} style={{background:"none",border:"none",cursor:"pointer",color:"#ccc",fontSize:13}}>×</button>
+                        <button onClick={function(){if(window.confirm(L("Eliminare snapshot ")+m.mk+"?")){delMonthSnap(m.mk);}}} style={{background:"none",border:"none",cursor:"pointer",color:readableDarkText("#ccc", dark, "none"),fontSize:13}}>×</button>
                       </td>
                     </tr>;
                   })}
@@ -436,8 +437,8 @@ export function PatrimonioPanel(){
                 return <div key={entry.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:dark?"#252535":"#f9f9f9",borderRadius:8}}>
                   <span style={{fontSize:14,flexShrink:0}}>{entry.icon}</span>
                   <span style={{flex:1,fontSize:12,color:textC}}>{L(entry.name)}</span>
-                  <span style={{fontSize:13,fontWeight:500,color:cur>=0?"#1D9E75":"#E24B4A",minWidth:70,textAlign:"right"}}><PatrimonioAmount value={cur}/></span>
-                  {d2!==null&&<span style={{fontSize:11,fontWeight:500,color:d2===0?subC:d2>0?"#1D9E75":"#E24B4A",minWidth:60,textAlign:"right"}}>{d2===0?"—":<PatrimonioAmount value={d2} forcePlus/>}</span>}
+                  <span style={{fontSize:13,fontWeight:500,color:readableDarkText(cur>=0?"#1D9E75":"#E24B4A", dark, dark?"#252535":"#f9f9f9"),minWidth:70,textAlign:"right"}}><PatrimonioAmount value={cur}/></span>
+                  {d2!==null&&<span style={{fontSize:11,fontWeight:500,color:readableDarkText(d2===0?subC:d2>0?"#1D9E75":"#E24B4A", dark, dark?"#252535":"#f9f9f9"),minWidth:60,textAlign:"right"}}>{d2===0?"—":<PatrimonioAmount value={d2} forcePlus/>}</span>}
                 </div>;
               }).filter(Boolean)}
             </div>}

@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useEffect, useId, useRef, useState } from 'react';
 import { useApp } from '../core';
 import { periodForDate, periodLabel, type PeriodSettings } from '../finance/periodEngine';
@@ -50,8 +51,8 @@ export function PeriodPreferences({ introduction = false, embedded = false }: { 
       </select>
     </>}
     <div style={{marginTop:10,marginBottom:10,padding:'9px 11px',borderRadius:10,background:ctx.dark?'#252535':'#F7F7FA',border:`1px solid ${ctx.borderC}`}}><strong style={{fontSize:12,textTransform:'capitalize'}}>{periodLabel(preview.key, ctx.lang || 'it')}</strong><div style={{fontSize:11,color:ctx.subC,marginTop:2}}>{preview.start} → {preview.end}</div></div>
-    <button type="button" onClick={() => save(draft)} style={{ width: '100%', padding: 12, border: 0, borderRadius: ctx.btnRadius || 12, color: '#fff', background: color, cursor: 'pointer', fontWeight: 700 }}>{T('save')}</button>
-    {introduction && <button type="button" onClick={() => save(current)} style={{ width: '100%', marginTop: 8, padding: 12, borderRadius: ctx.btnRadius || 12, border: `1px solid ${ctx.borderC}`, background: 'transparent', color: ctx.textC, cursor: 'pointer' }}>{T('keep')}</button>}
+    <button type="button" onClick={() => save(draft)} style={{ width: '100%', padding: 12, border: 0, borderRadius: ctx.btnRadius || 12, color: readableDarkText('#fff', ctx.dark, color), background: color, cursor: 'pointer', fontWeight: 700 }}>{T('save')}</button>
+    {introduction && <button type="button" onClick={() => save(current)} style={{ width: '100%', marginTop: 8, padding: 12, borderRadius: ctx.btnRadius || 12, border: `1px solid ${ctx.borderC}`, background: 'transparent', color: readableDarkText(ctx.textC, ctx.dark, 'transparent'), cursor: 'pointer' }}>{T('keep')}</button>}
     {saved && <p role="status" style={{ marginBottom: 0 }}>{T('saved')}</p>}
   </section>;
   return introduction ? <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby={id} onKeyDown={event => {

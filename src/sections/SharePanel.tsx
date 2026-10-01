@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useState, useEffect, useRef } from "react";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
@@ -3925,7 +3926,7 @@ export function SharePanel() {
               🤝
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 900, color: confirmButtonColor }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: readableDarkText(confirmButtonColor, dark, dark ? "#28253A" : "#F8F5FF") }}>
                 {L("Invito Share")}
               </div>
               <div style={{ fontSize: 16, fontWeight: 950, color: textC, overflowWrap: "anywhere" }}>
@@ -4285,7 +4286,7 @@ export function SharePanel() {
                   border: "1px solid " + (dark ? "#6a5520" : "#FFD54F"),
                   borderRadius: 14,
                   padding: 12,
-                  color: dark ? "#FFE5A6" : "#856404",
+                  color: readableDarkText(dark ? "#FFE5A6" : "#856404", dark, dark ? "#342b16" : "#FFF8E1"),
                   fontSize: 12,
                   fontWeight: 800,
                   lineHeight: 1.4,
@@ -4349,7 +4350,7 @@ export function SharePanel() {
                         height: 40,
                         borderRadius: 12,
                         background: theme.color,
-                        color: "#fff",
+                        color: readableDarkText("#fff", dark, theme.color),
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -4429,7 +4430,7 @@ export function SharePanel() {
                 border: "1px solid " + borderC,
                 borderRadius: 10,
                 padding: "6px 9px",
-                color: subC,
+                color: readableDarkText(subC, dark, "transparent"),
                 cursor: "pointer",
               }}
             >
@@ -4579,7 +4580,7 @@ export function SharePanel() {
                       height: 44,
                       borderRadius: 14,
                       background: theme.color,
-                      color: "#fff",
+                      color: readableDarkText("#fff", dark, theme.color),
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -4692,7 +4693,7 @@ export function SharePanel() {
                           style={{
                             background: "#EEF4FF",
                             border: "1px solid #BFD7FF",
-                            color: confirmButtonColor,
+                            color: readableDarkText(confirmButtonColor, dark, "#EEF4FF"),
                             borderRadius: 8,
                             width: 24,
                             height: 24,
@@ -4728,7 +4729,7 @@ export function SharePanel() {
                           style={{
                             background: "#fff0f0",
                             border: "1px solid #ffd0d0",
-                            color: expenseColor,
+                            color: readableDarkText(expenseColor, dark, "#fff0f0"),
                             borderRadius: 8,
                             width: 24,
                             height: 24,
@@ -4806,7 +4807,7 @@ export function SharePanel() {
                     style={{
                       border: 0,
                       background: confirmButtonColor,
-                      color: "#fff",
+                      color: readableDarkText("#fff", dark, confirmButtonColor),
                       borderRadius: 13,
                       padding: "11px 10px",
                       fontSize: 12,
@@ -5010,7 +5011,7 @@ export function SharePanel() {
                     padding: "9px 11px",
                     fontSize: 11.5,
                     lineHeight: 1.45,
-                    color: dark ? "#FFF2BB" : "#6B5900",
+                    color: readableDarkText(dark ? "#FFF2BB" : "#6B5900", dark, dark ? "#3B3014" : "#FFF8D8"),
                   }}
                 >
                   {L("Il progetto è archiviato. Ripristinalo per aggiungere nuove spese.")}
@@ -5099,7 +5100,7 @@ export function SharePanel() {
                               borderRadius: 9,
                               padding: "6px 8px",
                               fontSize: 12,
-                              color: subC,
+                              color: readableDarkText(subC, dark, "transparent"),
                               cursor: "pointer",
                             }}
                           >
@@ -5150,7 +5151,11 @@ export function SharePanel() {
                                 : dark
                                 ? "#333"
                                 : "#f0f0f0",
-                              color: active ? "#fff" : textC,
+                              color: readableDarkText(active ? "#fff" : textC, dark, active
+                                ? secondaryButtonColor
+                                : dark
+                                ? "#333"
+                                : "#f0f0f0"),
                               borderRadius: btnRadius,
                               padding: "10px 6px",
                               fontSize: 11,
@@ -5319,7 +5324,7 @@ export function SharePanel() {
                                     textAlign: "center",
                                     fontSize: 32,
                                     fontWeight: 950,
-                                    color: "#fff",
+                                    color: readableDarkText("#fff", dark, "transparent"),
                                     WebkitTextFillColor: "#fff",
                                     outline: "none",
                                     lineHeight: 1,
@@ -5493,7 +5498,13 @@ export function SharePanel() {
                                     ? "#252535"
                                     : "#fff",
                                 color:
-                                  shareDate === todayStr() ? "#7F77DD" : textC,
+                                  readableDarkText(shareDate === todayStr() ? "#7F77DD" : textC, dark, shareDate === todayStr()
+                                    ? dark
+                                      ? "#7F77DD44"
+                                      : "#7F77DD14"
+                                    : dark
+                                    ? "#252535"
+                                    : "#fff"),
                                 fontSize: 9.8,
                                 fontWeight: 850,
                                 cursor: "pointer",
@@ -5529,9 +5540,15 @@ export function SharePanel() {
                                     ? "#252535"
                                     : "#fff",
                                 color:
-                                  shareDate === dateOffset(1)
+                                  readableDarkText(shareDate === dateOffset(1)
                                     ? "#7F77DD"
-                                    : textC,
+                                    : textC, dark, shareDate === dateOffset(1)
+                                    ? dark
+                                      ? "#7F77DD44"
+                                      : "#7F77DD14"
+                                    : dark
+                                    ? "#252535"
+                                    : "#fff"),
                                 fontSize: 9.2,
                                 fontWeight: 850,
                                 cursor: "pointer",
@@ -5567,9 +5584,15 @@ export function SharePanel() {
                                     ? "#252535"
                                     : "#fff",
                                 color:
-                                  shareDate === dateOffset(2)
+                                  readableDarkText(shareDate === dateOffset(2)
                                     ? "#7F77DD"
-                                    : textC,
+                                    : textC, dark, shareDate === dateOffset(2)
+                                    ? dark
+                                      ? "#7F77DD44"
+                                      : "#7F77DD14"
+                                    : dark
+                                    ? "#252535"
+                                    : "#fff"),
                                 fontSize: 8.3,
                                 fontWeight: 850,
                                 cursor: "pointer",
@@ -5682,7 +5705,9 @@ export function SharePanel() {
                                       splitMode === m.id
                                         ? confirmButtonColor
                                         : "transparent",
-                                    color: splitMode === m.id ? "#fff" : textC,
+                                    color: readableDarkText(splitMode === m.id ? "#fff" : textC, dark, splitMode === m.id
+                                        ? confirmButtonColor
+                                        : "transparent"),
                                     borderRadius: 10,
                                     padding: "8px 6px",
                                     fontSize: 12,
@@ -5781,7 +5806,9 @@ export function SharePanel() {
                                     borderRadius: 20,
                                     padding: "5px 9px",
                                     fontSize: 12,
-                                    color: checked ? confirmButtonColor : textC,
+                                    color: readableDarkText(checked ? confirmButtonColor : textC, dark, checked
+                                      ? confirmButtonColor + "22"
+                                      : "transparent"),
                                     cursor: "pointer",
                                   }}
                                 >
@@ -5862,7 +5889,7 @@ export function SharePanel() {
                               borderRadius: 12,
                               padding: "9px 10px",
                               fontSize: 12,
-                              color: dark ? "#F2C94C" : "#8A6500",
+                              color: readableDarkText(dark ? "#F2C94C" : "#8A6500", dark, dark ? "#2f2a1e" : "#fff8e6"),
                               fontWeight: 600,
                             }}
                           >
@@ -5911,14 +5938,14 @@ export function SharePanel() {
                               <button
                                 type="button"
                                 onClick={function () { setShareReceiptPreview(sharePendingReceipt); }}
-                                style={{ border: "none", background: "transparent", color: confirmButtonColor, fontSize: 11, fontWeight: 750, cursor: "pointer", padding: 0, marginRight: 12 }}
+                                style={{ border: "none", background: "transparent", color: readableDarkText(confirmButtonColor, dark, "transparent"), fontSize: 11, fontWeight: 750, cursor: "pointer", padding: 0, marginRight: 12 }}
                               >
                                 {L("Apri ricevuta")}
                               </button>
                               <button
                                 type="button"
                                 onClick={function () { setSharePendingReceipt(null); }}
-                                style={{ border: "none", background: "transparent", color: expenseColor, fontSize: 11, fontWeight: 750, cursor: "pointer", padding: 0 }}
+                                style={{ border: "none", background: "transparent", color: readableDarkText(expenseColor, dark, "transparent"), fontSize: 11, fontWeight: 750, cursor: "pointer", padding: 0 }}
                               >
                                 {L("Rimuovi ricevuta")}
                               </button>
@@ -6079,7 +6106,7 @@ export function SharePanel() {
                               style={{
                                 background: "transparent",
                                 border: "none",
-                                color: subC,
+                                color: readableDarkText(subC, dark, "transparent"),
                                 cursor: "pointer",
                                 fontSize: 18,
                               }}
@@ -6270,9 +6297,11 @@ export function SharePanel() {
                                 fontSize: 16,
                                 fontWeight: 900,
                                 color:
-                                  a.kind === "settlement"
+                                  readableDarkText(a.kind === "settlement"
                                     ? confirmButtonColor
-                                    : expenseColor,
+                                    : expenseColor, dark, a.kind !== "settlement" && activityShareCategoryColor
+                            ? activityShareCategoryColor + (dark ? "26" : "18")
+                            : "transparent"),
                                 textAlign: "right",
                               }}
                             >
@@ -6307,7 +6336,7 @@ export function SharePanel() {
                                   onClick={function () {
                                     openStoredShareReceipt(activeShareReceiptForActivity(a.id));
                                   }}
-                                  style={{ border: "1px solid #D6D1F7", background: dark ? "#2D2948" : "#F5F1FF", color: secondaryButtonColor, borderRadius: 8, width: 26, height: 26, cursor: "pointer", fontSize: 11, padding: 0 }}
+                                  style={{ border: "1px solid #D6D1F7", background: dark ? "#2D2948" : "#F5F1FF", color: readableDarkText(secondaryButtonColor, dark, dark ? "#2D2948" : "#F5F1FF"), borderRadius: 8, width: 26, height: 26, cursor: "pointer", fontSize: 11, padding: 0 }}
                                 >
                                   🧾
                                 </button>
@@ -6318,7 +6347,7 @@ export function SharePanel() {
                                   else startEditSharedActivity(a);
                                 }}
                                 title={L("Modifica")}
-                                style={{ background: "#EEF4FF", border: "1px solid #BFD7FF", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: confirmButtonColor, fontSize: 11, padding: 0 }}
+                                style={{ background: "#EEF4FF", border: "1px solid #BFD7FF", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: readableDarkText(confirmButtonColor, dark, "#EEF4FF"), fontSize: 11, padding: 0 }}
                               >
                                 ✏️
                               </button>
@@ -6327,7 +6356,7 @@ export function SharePanel() {
                                   deleteActivity(a.id);
                                 }}
                                 title={L("Elimina")}
-                                style={{ background: "#FFF0F0", border: "1px solid #FFD0D0", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: expenseColor, fontSize: 11, padding: 0 }}
+                                style={{ background: "#FFF0F0", border: "1px solid #FFD0D0", borderRadius: 8, width: 26, height: 26, cursor: "pointer", color: readableDarkText(expenseColor, dark, "#FFF0F0"), fontSize: 11, padding: 0 }}
                               >
                                 🗑️
                               </button>
@@ -6681,8 +6710,8 @@ export function SharePanel() {
                             <button type="button" title={L("Sposta su")} disabled={categoryIndex === 0} onClick={function () { moveShareProjectCategory(category.id, "up"); }} style={{ border: "1px solid #D7DDEA", background: categoryIndex === 0 ? (dark ? "#2A2A3D" : "#F5F7FB") : "#F5F7FB", opacity: categoryIndex === 0 ? .45 : 1, color: textC, borderRadius: 8, width: 28, height: 24, cursor: categoryIndex === 0 ? "default" : "pointer", padding: 0 }}>▴</button>
                             <button type="button" title={L("Sposta giù")} disabled={categoryIndex === projectShareCategories.length - 1} onClick={function () { moveShareProjectCategory(category.id, "down"); }} style={{ border: "1px solid #D7DDEA", background: categoryIndex === projectShareCategories.length - 1 ? (dark ? "#2A2A3D" : "#F5F7FB") : "#F5F7FB", opacity: categoryIndex === projectShareCategories.length - 1 ? .45 : 1, color: textC, borderRadius: 8, width: 28, height: 24, cursor: categoryIndex === projectShareCategories.length - 1 ? "default" : "pointer", padding: 0 }}>▾</button>
                           </div>}
-                          <button type="button" title={L("Modifica")} onClick={function () { openEditShareCategoryPopup(category); }} style={{ border: "1px solid #BFD7FF", background: "#EEF4FF", color: confirmButtonColor, borderRadius: 9, padding: "5px 8px", cursor: "pointer" }}>✏️</button>
-                          {canManageShareCategories && <button type="button" title={L("Elimina")} onClick={function () { deleteShareProjectCategory(category.id); }} style={{ border: "1px solid #FFD0D0", background: "#FFF0F0", color: expenseColor, borderRadius: 9, padding: "5px 8px", cursor: "pointer" }}>🗑️</button>}
+                          <button type="button" title={L("Modifica")} onClick={function () { openEditShareCategoryPopup(category); }} style={{ border: "1px solid #BFD7FF", background: "#EEF4FF", color: readableDarkText(confirmButtonColor, dark, "#EEF4FF"), borderRadius: 9, padding: "5px 8px", cursor: "pointer" }}>✏️</button>
+                          {canManageShareCategories && <button type="button" title={L("Elimina")} onClick={function () { deleteShareProjectCategory(category.id); }} style={{ border: "1px solid #FFD0D0", background: "#FFF0F0", color: readableDarkText(expenseColor, dark, "#FFF0F0"), borderRadius: 9, padding: "5px 8px", cursor: "pointer" }}>🗑️</button>}
                         </div>
                       </div>
                     );
@@ -6775,11 +6804,15 @@ export function SharePanel() {
                             alignItems: "center",
                             justifyContent: "center",
                             fontWeight: 950,
-                            color: pending
+                            color: readableDarkText(pending
                               ? "#A46D00"
                               : p.kind === "fake"
                               ? secondaryButtonColor
-                              : confirmButtonColor,
+                              : confirmButtonColor, dark, pending
+                              ? dark ? "#4A3B18" : "#FFF0BF"
+                              : (p.kind === "fake"
+                                  ? secondaryButtonColor
+                                  : confirmButtonColor) + "22"),
                             flexShrink: 0,
                           }}
                         >
@@ -6817,7 +6850,7 @@ export function SharePanel() {
                                 borderRadius: 999,
                                 background: statusBg,
                                 border: "1px solid " + statusBorder,
-                                color: statusColor,
+                                color: readableDarkText(statusColor, dark, statusBg),
                                 fontSize: 10,
                                 fontWeight: 900,
                                 lineHeight: 1.1,
@@ -6864,7 +6897,7 @@ export function SharePanel() {
                                   background: "#eef8f4",
                                   border: "1px solid #bdebdc",
                                   borderRadius: 9,
-                                  color: incomeColor,
+                                  color: readableDarkText(incomeColor, dark, "#eef8f4"),
                                   padding: "6px 8px",
                                   fontSize: 11,
                                   fontWeight: 850,
@@ -6879,7 +6912,7 @@ export function SharePanel() {
                                   background: "#fff8e1",
                                   border: "1px solid #ffe29a",
                                   borderRadius: 9,
-                                  color: "#9a6a00",
+                                  color: readableDarkText("#9a6a00", dark, "#fff8e1"),
                                   padding: "6px 8px",
                                   fontSize: 11,
                                   fontWeight: 850,
@@ -6894,7 +6927,7 @@ export function SharePanel() {
                                 background: "#fff0f0",
                                 border: "1px solid #ffd0d0",
                                 borderRadius: 9,
-                                color: expenseColor,
+                                color: readableDarkText(expenseColor, dark, "#fff0f0"),
                                 padding: "6px 8px",
                                 fontSize: 11,
                                 fontWeight: 850,
@@ -6986,7 +7019,11 @@ export function SharePanel() {
                                 : dark
                                 ? "#252535"
                                 : "#fff",
-                            color: personMode === "user" ? "#fff" : textC,
+                            color: readableDarkText(personMode === "user" ? "#fff" : textC, dark, personMode === "user"
+                                ? secondaryButtonColor
+                                : dark
+                                ? "#252535"
+                                : "#fff"),
                             borderRadius: btnRadius,
                             padding: "9px 8px",
                             fontSize: 12,
@@ -7011,7 +7048,11 @@ export function SharePanel() {
                               : dark
                               ? "#252535"
                               : "#fff",
-                            color: participantBusy ? "#fff" : textC,
+                            color: readableDarkText(participantBusy ? "#fff" : textC, dark, participantBusy
+                              ? secondaryButtonColor
+                              : dark
+                              ? "#252535"
+                              : "#fff"),
                             borderRadius: btnRadius,
                             padding: "9px 8px",
                             fontSize: 12,
@@ -7039,7 +7080,11 @@ export function SharePanel() {
                                 : dark
                                 ? "#252535"
                                 : "#fff",
-                            color: personMode === "fake" ? "#fff" : textC,
+                            color: readableDarkText(personMode === "fake" ? "#fff" : textC, dark, personMode === "fake"
+                                ? secondaryButtonColor
+                                : dark
+                                ? "#252535"
+                                : "#fff"),
                             borderRadius: btnRadius,
                             padding: "9px 8px",
                             fontSize: 12,
@@ -7223,7 +7268,7 @@ export function SharePanel() {
                         style={{
                           fontSize: 14,
                           fontWeight: 900,
-                          color: confirmButtonColor,
+                          color: readableDarkText(confirmButtonColor, dark, "#35354a"),
                         }}
                       >
                         {fmt(d.amount)}
@@ -7382,7 +7427,7 @@ export function SharePanel() {
                       borderRadius: 999,
                       border: "1px solid " + (secondaryButtonColor || confirmButtonColor),
                       background: dark ? "#252535" : "#F0F7FF",
-                      color: secondaryButtonColor || confirmButtonColor,
+                      color: readableDarkText(secondaryButtonColor || confirmButtonColor, dark, dark ? "#252535" : "#F0F7FF"),
                       fontSize: 20,
                       fontWeight: 950,
                       cursor: "pointer",
@@ -7585,7 +7630,7 @@ export function SharePanel() {
                       <div style={{ fontSize: 12, fontWeight: 900, color: textC }}>{L("Ricevuta caricata")}</div>
                       <div style={{ fontSize: 11, color: subC, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sharePendingReceipt.name || L("Apri ricevuta")}</div>
                     </div>
-                    <button type="button" onClick={function () { setSharePendingReceipt(null); }} style={{ border: "1px solid #FFD0D0", background: "#FFF0F0", color: expenseColor, borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>🗑️</button>
+                    <button type="button" onClick={function () { setSharePendingReceipt(null); }} style={{ border: "1px solid #FFD0D0", background: "#FFF0F0", color: readableDarkText(expenseColor, dark, "#FFF0F0"), borderRadius: 9, padding: "7px 9px", cursor: "pointer" }}>🗑️</button>
                   </div>
                 )}
                 <div style={{ display: "flex", gap: 10, marginBottom: 12 }}>
@@ -7672,7 +7717,7 @@ export function SharePanel() {
                         style={{
                           fontSize: 14,
                           fontWeight: 900,
-                          color: confirmButtonColor,
+                          color: readableDarkText(confirmButtonColor, dark, "#35354a"),
                         }}
                       >
                         {fmt(d.amount)}

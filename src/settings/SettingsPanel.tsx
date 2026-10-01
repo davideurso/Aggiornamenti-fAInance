@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from '../analytics/useAnalyticsFlow';
 import { AutomaticRulesPanel } from '../sections/AutomaticRulesPanel';
@@ -2511,7 +2512,7 @@ export function SettingsPanel() {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
   };
   var baseSettingsAllowed = settingAllowed("base");
   function baseDisabledStyle() {
@@ -2635,7 +2636,7 @@ export function SettingsPanel() {
             minWidth: 74, height: 32, padding: "0 10px", borderRadius: 10,
             border: "1px solid " + (dark ? "#4a4865" : "#d8d2ff"),
             background: dark ? "#24213a" : "#F0EDFF", cursor: "pointer",
-            color: dark ? "#BEB8FF" : "#534AB7", fontSize: 12, fontWeight: 800,
+            color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"), fontSize: 12, fontWeight: 800,
             display: "flex", alignItems: "center", justifyContent: "center", whiteSpace: "nowrap",
             flexShrink: 0, boxShadow: dark ? "none" : "0 3px 12px rgba(83,74,183,0.10)",
           }}
@@ -2651,7 +2652,7 @@ export function SettingsPanel() {
       <div
         style={{
           fontSize: 12,
-          color: dark ? "#BEB8FF" : "#534AB7",
+          color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
           background: dark ? "#24213a" : "#F0EDFF",
           border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
           borderRadius: 10,
@@ -2933,13 +2934,13 @@ export function SettingsPanel() {
                 border: "none",
                 borderRadius: 10,
                 background: active ? activeC : "transparent",
-                color: active
+                color: readableDarkText(active
                   ? "#fff"
                   : disabled
                   ? dark
                     ? "#555"
                     : "#aaa"
-                  : subC,
+                  : subC, dark, active ? activeC : "transparent"),
                 fontSize: isMobile ? 11 : 13,
                 lineHeight: 1.18,
                 whiteSpace: "normal",
@@ -3106,20 +3107,20 @@ export function SettingsPanel() {
 
       <div style={{ background: cardBg, border: "1px solid " + borderC, borderRadius: 16, padding: 14 }}>
         <div style={{ fontSize: 12, fontWeight: 800, color: subC, marginBottom: 8 }}>{L("Anteprima")}</div>
-        <div style={{ background: rgba(draft.bgColor, draft.bgAlpha), borderRadius: 18, padding: 14, minHeight: isAi ? 150 : 220, border: "1px solid rgba(127,119,221,.22)", color: draft.textColor || draft.titleColor || "#fff" }}>
+        <div style={{ background: rgba(draft.bgColor, draft.bgAlpha), borderRadius: 18, padding: 14, minHeight: isAi ? 150 : 220, border: "1px solid rgba(127,119,221,.22)", color: readableDarkText(draft.textColor || draft.titleColor || "#fff", dark, rgba(draft.bgColor, draft.bgAlpha)) }}>
           {(draft.showTitle !== false) && <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:12 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, fontWeight:900, color:draft.titleColor || "#fff" }}>{isAi ? <AIGrilloIcon size={28} /> : <FAInanceLogo size={26} />}<span>{L(draft.titleText || initialTitle)}</span></div>
-            {!isAi && <span style={{ color:draft.accentColor, fontWeight:900 }}>⚙</span>}
+            <div style={{ display:"flex", alignItems:"center", gap:8, fontWeight:900, color:readableDarkText(draft.titleColor || "#fff", dark, rgba(draft.bgColor, draft.bgAlpha)) }}>{isAi ? <AIGrilloIcon size={28} /> : <FAInanceLogo size={26} />}<span>{L(draft.titleText || initialTitle)}</span></div>
+            {!isAi && <span style={{ color:readableDarkText(draft.accentColor, dark, rgba(draft.bgColor, draft.bgAlpha)), fontWeight:900 }}>⚙</span>}
           </div>}
           {isAi ? <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:92 }}><AIGrilloIcon size={88} /></div> : kind === "calculator" ? <>
-            <div style={{ background: dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)", border:"1px solid rgba(127,119,221,.18)", borderRadius:14, padding:"10px 12px", marginBottom:10 }}><div style={{ textAlign:"right", fontSize:12, color:draft.titleColor }}>125 × 4</div><div style={{ textAlign:"right", fontSize:30, fontWeight:900, color:draft.textColor }}>500</div></div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:8 }}>{["7","8","9","÷","4","5","6","×"].map(function(x,i){var accent=i===3||i===7;return <div key={i} style={{ textAlign:"center", padding:"10px 4px", borderRadius:radiusFor(draft.buttonStyle), background:accent?draft.accentColor:draft.buttonColor, color:draft.textColor, fontWeight:900 }}>{x}</div>;})}</div>
-            {(draft.showTransaction !== false) && <div style={{ textAlign:"center", padding:"10px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>{L("Crea transazione")}</div>}
+            <div style={{ background: dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)", border:"1px solid rgba(127,119,221,.18)", borderRadius:14, padding:"10px 12px", marginBottom:10 }}><div style={{ textAlign:"right", fontSize:12, color:readableDarkText(draft.titleColor, dark, dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)") }}>125 × 4</div><div style={{ textAlign:"right", fontSize:30, fontWeight:900, color:readableDarkText(draft.textColor, dark, dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)") }}>500</div></div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:8 }}>{["7","8","9","÷","4","5","6","×"].map(function(x,i){var accent=i===3||i===7;return <div key={i} style={{ textAlign:"center", padding:"10px 4px", borderRadius:radiusFor(draft.buttonStyle), background:accent?draft.accentColor:draft.buttonColor, color:readableDarkText(draft.textColor, dark, accent?draft.accentColor:draft.buttonColor), fontWeight:900 }}>{x}</div>;})}</div>
+            {(draft.showTransaction !== false) && <div style={{ textAlign:"center", padding:"10px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:readableDarkText(draft.textColor, dark, draft.secondaryButtonColor), fontWeight:900 }}>{L("Crea transazione")}</div>}
           </> : <>
-            <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:10 }}><div style={{ flex:1, textAlign:"center", padding:"8px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>CHF</div><div style={{ color:draft.accentColor, fontWeight:900 }}>⇄</div><div style={{ flex:1, textAlign:"center", padding:"8px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>EUR</div></div>
-            <div style={{ background: dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)", border:"1px solid rgba(127,119,221,.18)", borderRadius:14, padding:"10px 12px", marginBottom:10 }}><div style={{ textAlign:"right", fontSize:15, color:draft.titleColor }}>77 CHF</div><div style={{ textAlign:"right", fontSize:28, fontWeight:900, color:draft.textColor }}>81,62 EUR</div><div style={{ textAlign:"right", fontSize:11, color:draft.titleColor, marginTop:6 }}>Offline · 1 CHF = 1,06 EUR</div></div>
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:8 }}>{["7","8","9","⌫","4","5","6","C"].map(function(x,i){return <div key={i} style={{ textAlign:"center", padding:"10px 4px", borderRadius:radiusFor(draft.buttonStyle), background:i===3||i===7?draft.secondaryButtonColor:draft.buttonColor, color:draft.textColor, fontWeight:900 }}>{x}</div>;})}</div>
-            {(draft.showTransaction !== false) && <div style={{ textAlign:"center", padding:"10px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:draft.textColor, fontWeight:900 }}>{L("Crea transazione")}</div>}
+            <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:10 }}><div style={{ flex:1, textAlign:"center", padding:"8px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:readableDarkText(draft.textColor, dark, draft.secondaryButtonColor), fontWeight:900 }}>CHF</div><div style={{ color:readableDarkText(draft.accentColor, dark, rgba(draft.bgColor, draft.bgAlpha)), fontWeight:900 }}>⇄</div><div style={{ flex:1, textAlign:"center", padding:"8px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:readableDarkText(draft.textColor, dark, draft.secondaryButtonColor), fontWeight:900 }}>EUR</div></div>
+            <div style={{ background: dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)", border:"1px solid rgba(127,119,221,.18)", borderRadius:14, padding:"10px 12px", marginBottom:10 }}><div style={{ textAlign:"right", fontSize:15, color:readableDarkText(draft.titleColor, dark, dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)") }}>77 CHF</div><div style={{ textAlign:"right", fontSize:28, fontWeight:900, color:readableDarkText(draft.textColor, dark, dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)") }}>81,62 EUR</div><div style={{ textAlign:"right", fontSize:11, color:readableDarkText(draft.titleColor, dark, dark ? "rgba(255,255,255,.06)" : "rgba(255,255,255,.65)"), marginTop:6 }}>Offline · 1 CHF = 1,06 EUR</div></div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:7, marginBottom:8 }}>{["7","8","9","⌫","4","5","6","C"].map(function(x,i){return <div key={i} style={{ textAlign:"center", padding:"10px 4px", borderRadius:radiusFor(draft.buttonStyle), background:i===3||i===7?draft.secondaryButtonColor:draft.buttonColor, color:readableDarkText(draft.textColor, dark, i===3||i===7?draft.secondaryButtonColor:draft.buttonColor), fontWeight:900 }}>{x}</div>;})}</div>
+            {(draft.showTransaction !== false) && <div style={{ textAlign:"center", padding:"10px", borderRadius:radiusFor(draft.buttonStyle), background:draft.secondaryButtonColor, color:readableDarkText(draft.textColor, dark, draft.secondaryButtonColor), fontWeight:900 }}>{L("Crea transazione")}</div>}
           </>}
         </div>
       </div>
@@ -3142,9 +3143,9 @@ export function SettingsPanel() {
         { key:"accentColor", label:"Operazioni", value:draft.accentColor || defaults.accentColor, onChange:function(v){dset("accentColor",v);} },
       ]} />}
 
-      <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}><div style={{ display:"flex", justifyContent:"space-between", gap:10, marginBottom:8 }}><div><div style={{ fontSize:13, fontWeight:900, color:textC }}>{L("Trasparenza sfondo")}</div><div style={{ fontSize:12, color:subC }}>{L("0% = pieno · 100% = trasparente")}</div></div><div style={{ fontWeight:900, color:"#7F77DD" }}>{draft.bgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draft.bgAlpha} onChange={function(e){dset("bgAlpha",Number(e.target.value));}} style={{ width:"100%" }} /></div>
+      <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}><div style={{ display:"flex", justifyContent:"space-between", gap:10, marginBottom:8 }}><div><div style={{ fontSize:13, fontWeight:900, color:textC }}>{L("Trasparenza sfondo")}</div><div style={{ fontSize:12, color:subC }}>{L("0% = pieno · 100% = trasparente")}</div></div><div style={{ fontWeight:900, color:readableDarkText("#7F77DD", dark, cardBg) }}>{draft.bgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draft.bgAlpha} onChange={function(e){dset("bgAlpha",Number(e.target.value));}} style={{ width:"100%" }} /></div>
 
-      {!isAi && <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}><div style={{ fontSize:13, fontWeight:900, color:textC, marginBottom:8 }}>{L("Bordi dei tasti")}</div><div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:8 }}>{BUTTON_STYLES.map(function(bs){var active=draft.buttonStyle===bs.id;return <button type="button" key={bs.id} onClick={function(){dset("buttonStyle",bs.id);}} style={{ padding:"10px", border:"2px solid "+(active?"#7F77DD":borderC), borderRadius:Math.max(5,Math.round(bs.r*.7)), background:active?(dark?"#2a2a3e":"#EEEDFE"):(dark?"#1e1e30":"#fff"), color:active?"#7F77DD":textC, fontWeight:active?900:600 }}>{L(bs.label)}</button>;})}</div></div>}
+      {!isAi && <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}><div style={{ fontSize:13, fontWeight:900, color:textC, marginBottom:8 }}>{L("Bordi dei tasti")}</div><div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:8 }}>{BUTTON_STYLES.map(function(bs){var active=draft.buttonStyle===bs.id;return <button type="button" key={bs.id} onClick={function(){dset("buttonStyle",bs.id);}} style={{ padding:"10px", border:"2px solid "+(active?"#7F77DD":borderC), borderRadius:Math.max(5,Math.round(bs.r*.7)), background:active?(dark?"#2a2a3e":"#EEEDFE"):(dark?"#1e1e30":"#fff"), color:readableDarkText(active?"#7F77DD":textC, dark, active?(dark?"#2a2a3e":"#EEEDFE"):(dark?"#1e1e30":"#fff")), fontWeight:active?900:600 }}>{L(bs.label)}</button>;})}</div></div>}
 
       {kind === "converter" && <div style={{ background:cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14, color:textC }}><div style={{ fontSize:13, fontWeight:900, marginBottom:4 }}>{L("Uso offline")}</div><div style={{ fontSize:12, color:subC }}>{L("Il widget usa l’ultimo tasso registrato dal Convertitore dell’app.")}</div></div>}
 
@@ -3437,7 +3438,7 @@ export function SettingsPanel() {
                   alignItems: "center",
                   justifyContent: "center",
                   fontSize: 18,
-                  color: previewText,
+                  color: readableDarkText(previewText, dark, "rgba(255,255,255,.18)"),
                 }}
               >
                 🎙️
@@ -3447,7 +3448,7 @@ export function SettingsPanel() {
               style={{
                 flex: 1,
                 background: draft.expenseColor,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, draft.expenseColor),
                 borderRadius: radiusFor(draft.buttonStyle),
                 padding: "10px 8px",
                 display: "flex",
@@ -3465,7 +3466,7 @@ export function SettingsPanel() {
               style={{
                 flex: 1,
                 background: draft.incomeColor,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, draft.incomeColor),
                 borderRadius: radiusFor(draft.buttonStyle),
                 padding: "10px 8px",
                 display: "flex",
@@ -3488,7 +3489,7 @@ export function SettingsPanel() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: previewText,
+                color: readableDarkText(previewText, dark, cardAlpha),
               }}
             >
               ⚙
@@ -3518,16 +3519,16 @@ export function SettingsPanel() {
                     style={{
                       fontSize: 16,
                       fontWeight: 900,
-                      color: previewText,
+                      color: readableDarkText(previewText, dark, cardAlpha),
                     }}
                   >
                     {draft.title || "fAInance"}
                   </div>
-                  <div style={{ fontSize: 12, color: previewSub }}>
+                  <div style={{ fontSize: 12, color: readableDarkText(previewSub, dark, cardAlpha) }}>
                     {draft.subtitle || "Aggiunta rapida movimenti"}
                   </div>
                 </div>
-                <div style={{ color: previewText }}>⚙</div>
+                <div style={{ color: readableDarkText(previewText, dark, cardAlpha) }}>⚙</div>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 {draft.voiceEnabled && (
@@ -3535,7 +3536,7 @@ export function SettingsPanel() {
                     style={{
                       width: 44,
                       background: "rgba(255,255,255,.18)",
-                      color: previewText,
+                      color: readableDarkText(previewText, dark, "rgba(255,255,255,.18)"),
                       border: "1px solid rgba(255,255,255,.25)",
                       borderRadius: radiusFor(draft.buttonStyle),
                       padding: "10px 10px",
@@ -3550,7 +3551,7 @@ export function SettingsPanel() {
                   style={{
                     flex: 1,
                     background: draft.expenseColor,
-                    color: "#fff",
+                    color: readableDarkText("#fff", dark, draft.expenseColor),
                     borderRadius: radiusFor(draft.buttonStyle),
                     padding: "10px 10px",
                     textAlign: "center",
@@ -3563,7 +3564,7 @@ export function SettingsPanel() {
                   style={{
                     flex: 1,
                     background: draft.incomeColor,
-                    color: "#fff",
+                    color: readableDarkText("#fff", dark, draft.incomeColor),
                     borderRadius: radiusFor(draft.buttonStyle),
                     padding: "10px 10px",
                     textAlign: "center",
@@ -3615,7 +3616,7 @@ export function SettingsPanel() {
                 {L("100% = completamente trasparente. 0% = sfondo pieno.")}
               </div>
             </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#7F77DD" }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: readableDarkText("#7F77DD", dark, cardBg) }}>
               {draft.bgAlpha}%
             </div>
           </div>
@@ -3674,7 +3675,13 @@ export function SettingsPanel() {
                       : "#f9f9f9",
                     cursor: "pointer",
                     fontSize: 13,
-                    color: active ? "#7F77DD" : textC,
+                    color: readableDarkText(active ? "#7F77DD" : textC, dark, active
+                      ? dark
+                        ? "#2a2a3e"
+                        : "#EEEDFE"
+                      : dark
+                      ? "#1e1e30"
+                      : "#f9f9f9"),
                     fontWeight: active ? 800 : 500,
                   }}
                 >
@@ -3857,7 +3864,7 @@ export function SettingsPanel() {
           { key:"note_text", label:"Colore testo", value:draftBodyColor, onChange:function(v){setDraftBodyColor(v);} },
         ]} />
         <div style={{ background: cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:8 }}><div><div style={{ fontSize:13, fontWeight:900, color:textC }}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:"#7F77DD"}}>{draftBgAlpha}%</div></div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:8 }}><div><div style={{ fontSize:13, fontWeight:900, color:textC }}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:readableDarkText("#7F77DD", dark, cardBg)}}>{draftBgAlpha}%</div></div>
           <input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}} />
         </div>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, background:cardBg, border:"1px solid "+borderC, borderRadius:12, padding:"12px 14px" }}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Aggiornamento automatico")}</div><div style={{fontSize:12,color:subC}}>{L("Aggiorna i widget già installati quando cambi contenuti o impostazioni.")}</div></div><Toggle label="" checked={!!widget2AutoUpdate} onChange={function(){setWidget2AutoUpdate(!widget2AutoUpdate);}}/></div>
@@ -3904,11 +3911,11 @@ export function SettingsPanel() {
         <WidgetIntroCard icon="🎯" title="Obiettivo">{"Scegli il contenuto dal widget; qui personalizzi l’aspetto."}</WidgetIntroCard>
         <div style={{ background:cardBg, border:"1px solid "+borderC, borderRadius:14, padding:14 }}>
           <div style={{ background:dark?"#111827":"#F8FAFC", border:"1px solid "+borderC, borderRadius:14, padding:12, display:"flex", alignItems:"center", gap:12 }}>
-            <div style={{ width:48, height:48, borderRadius:24, background:gColor, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff" }}><FainanceIcon value={selectedGoal ? selectedGoal.icon || "🎯" : "🎯"} size={28}/></div>
+            <div style={{ width:48, height:48, borderRadius:24, background:gColor, display:"flex", alignItems:"center", justifyContent:"center", color:readableDarkText("#fff", dark, gColor) }}><FainanceIcon value={selectedGoal ? selectedGoal.icon || "🎯" : "🎯"} size={28}/></div>
             <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div style={{fontSize:16,fontWeight:900,color:draftTextColor,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedGoal ? selectedGoal.name || "Obiettivo" : "Anteprima obiettivo"}</div>{widget3ShowPercent&&<div style={{fontSize:16,fontWeight:900,color:draftPercentColor}}>{pct}%</div>}</div>
+              <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div style={{fontSize:16,fontWeight:900,color:readableDarkText(draftTextColor, dark, dark?"#111827":"#F8FAFC"),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedGoal ? selectedGoal.name || "Obiettivo" : "Anteprima obiettivo"}</div>{widget3ShowPercent&&<div style={{fontSize:16,fontWeight:900,color:readableDarkText(draftPercentColor, dark, dark?"#111827":"#F8FAFC")}}>{pct}%</div>}</div>
               <div style={{height:8,borderRadius:8,background:dark?"#273244":"#E5E7EB",overflow:"hidden",marginTop:8}}><div style={{width:pct+"%",height:"100%",background:gColor,borderRadius:8}}/></div>
-              {widget3ShowAmounts&&<div style={{fontSize:12,color:draftTextColor,marginTop:5,opacity:.82}}><span style={{color:draftPercentColor,fontWeight:800}}>{fmt(saved)}</span> / {fmt(target)}</div>}
+              {widget3ShowAmounts&&<div style={{fontSize:12,color:readableDarkText(draftTextColor, dark, dark?"#111827":"#F8FAFC"),marginTop:5,opacity:.82}}><span style={{color:readableDarkText(draftPercentColor, dark, dark?"#111827":"#F8FAFC"),fontWeight:800}}>{fmt(saved)}</span> / {fmt(target)}</div>}
             </div>
           </div>
         </div>
@@ -3922,7 +3929,7 @@ export function SettingsPanel() {
           { key:"goal_text", label:"Colore testo", value:draftTextColor, onChange:function(v){setDraftTextColor(v);} },
           { key:"goal_pct", label:"Colore percentuale", value:draftPercentColor, onChange:function(v){setDraftPercentColor(v);} },
         ]}/>
-        <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:8}}><div><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:"#7F77DD"}}>{draftBgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}}/></div>
+        <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:8}}><div><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:readableDarkText("#7F77DD", dark, cardBg)}}>{draftBgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}}/></div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Aggiornamento automatico")}</div><div style={{fontSize:12,color:subC}}>{L("Aggiorna il widget quando cambia l’obiettivo.")}</div></div><Toggle label="" checked={!!widget3AutoUpdate} onChange={function(){setWidget3AutoUpdate(!widget3AutoUpdate);}}/></div>
         <Btn onClick={save} bg="#7F77DD" style={{width:"100%",padding:12,fontWeight:800}}>{L("Salva e aggiorna widget")}</Btn>
       </div>
@@ -3971,7 +3978,7 @@ export function SettingsPanel() {
           { key:kind+"_title", label:"Colore titolo", value:draftTitleColor, onChange:function(v){setDraftTitleColor(v);} },
           { key:kind+"_text", label:"Colore testo", value:draftTextColor, onChange:function(v){setDraftTextColor(v);} },
         ]}/>
-        <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:8}}><div><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:"#7F77DD"}}>{draftBgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}}/></div>
+        <div style={{background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,marginBottom:8}}><div><div style={{fontSize:13,fontWeight:900,color:textC}}>{L("Trasparenza sfondo widget")}</div><div style={{fontSize:12,color:subC}}>{L("100% = completamente trasparente. 0% = sfondo pieno.")}</div></div><div style={{fontSize:16,fontWeight:900,color:readableDarkText("#7F77DD", dark, cardBg)}}>{draftBgAlpha}%</div></div><input type="range" min="0" max="100" step="1" value={draftBgAlpha} onChange={function(e){setDraftBgAlpha(Number(e.target.value));}} style={{width:"100%"}}/></div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,background:cardBg,border:"1px solid "+borderC,borderRadius:14,padding:14}}><div><div style={{fontSize:13,fontWeight:800,color:textC}}>{L("Aggiornamento automatico")}</div><div style={{fontSize:12,color:subC}}>{L("Aggiorna i widget già installati quando cambi contenuti o impostazioni.")}</div></div><Toggle label="" checked={!!values.autoUpdate} onChange={function(){setters.setAutoUpdate(!values.autoUpdate);}}/></div>
         <Btn onClick={save} bg="#7F77DD" style={{width:"100%",padding:12,fontWeight:800}}>{L("Salva e aggiorna widget")}</Btn>
       </div>
@@ -4271,7 +4278,7 @@ export function SettingsPanel() {
                   style={{
                     fontSize: 14,
                     fontWeight: 900,
-                    color: draftTitleColor,
+                    color: readableDarkText(draftTitleColor, dark, draftBgColor),
                   }}
                 >
                   Share
@@ -4279,7 +4286,7 @@ export function SettingsPanel() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: draftBodyColor,
+                    color: readableDarkText(draftBodyColor, dark, draftBgColor),
                     whiteSpace: "nowrap",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
@@ -4306,14 +4313,14 @@ export function SettingsPanel() {
                   textAlign: "center",
                 }}
               >
-                <div style={{ fontSize: 10, color: draftBodyColor }}>
+                <div style={{ fontSize: 10, color: readableDarkText(draftBodyColor, dark, "rgba(255,255,255,.13)") }}>
                   {L("Saldo")}
                 </div>
                 <div
                   style={{
                     fontSize: 17,
                     fontWeight: 900,
-                    color: draftTitleColor,
+                    color: readableDarkText(draftTitleColor, dark, "rgba(255,255,255,.13)"),
                   }}
                 >
                   {fmt(preview.net)}
@@ -4322,19 +4329,19 @@ export function SettingsPanel() {
               <div
                 style={{
                   fontSize: 11,
-                  color: draftBodyColor,
+                  color: readableDarkText(draftBodyColor, dark, draftBgColor),
                   lineHeight: 1.8,
                 }}
               >
                 <div>
                   {L("Ti devono")}:{" "}
-                  <strong style={{ color: draftTitleColor }}>
+                  <strong style={{ color: readableDarkText(draftTitleColor, dark, draftBgColor) }}>
                     {fmt(preview.owed)}
                   </strong>
                 </div>
                 <div>
                   {L("Devi")}:{" "}
-                  <strong style={{ color: draftTitleColor }}>
+                  <strong style={{ color: readableDarkText(draftTitleColor, dark, draftBgColor) }}>
                     {fmt(preview.owe)}
                   </strong>
                 </div>
@@ -4360,7 +4367,7 @@ export function SettingsPanel() {
               <div
                 style={{
                   background: draftAccentColor,
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, draftAccentColor),
                   borderRadius: shareButtonRadius(),
                   padding: "9px 5px",
                   textAlign: "center",
@@ -4373,7 +4380,7 @@ export function SettingsPanel() {
               <div
                 style={{
                   background: draftActivityColor,
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, draftActivityColor),
                   borderRadius: shareButtonRadius(),
                   padding: "9px 5px",
                   textAlign: "center",
@@ -4386,7 +4393,7 @@ export function SettingsPanel() {
               <div
                 style={{
                   background: "#F29F3D",
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, "#F29F3D"),
                   borderRadius: shareButtonRadius(),
                   padding: "9px 5px",
                   textAlign: "center",
@@ -4399,7 +4406,7 @@ export function SettingsPanel() {
               <div
                 style={{
                   background: "#7F77DD",
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, "#7F77DD"),
                   borderRadius: shareButtonRadius(),
                   padding: "9px 5px",
                   textAlign: "center",
@@ -4462,7 +4469,13 @@ export function SettingsPanel() {
                       : "#f9f9f9",
                     cursor: "pointer",
                     fontSize: 13,
-                    color: active ? "#7F77DD" : textC,
+                    color: readableDarkText(active ? "#7F77DD" : textC, dark, active
+                      ? dark
+                        ? "#2a2a3e"
+                        : "#EEEDFE"
+                      : dark
+                      ? "#1e1e30"
+                      : "#f9f9f9"),
                     fontWeight: active ? 800 : 500,
                   }}
                 >
@@ -4497,7 +4510,7 @@ export function SettingsPanel() {
                 {L("100% = completamente trasparente. 0% = sfondo pieno.")}
               </div>
             </div>
-            <div style={{ fontSize: 16, fontWeight: 900, color: "#7F77DD" }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: readableDarkText("#7F77DD", dark, cardBg) }}>
               {draftBgAlpha}%
             </div>
           </div>
@@ -4944,7 +4957,7 @@ export function SettingsPanel() {
                         borderRadius: 8,
                         cursor: "pointer",
                         fontSize: 14,
-                        color: baseSettingsAllowed ? "#378ADD" : (dark ? "#8F8F9B" : "#9CA3AF"),
+                        color: readableDarkText(baseSettingsAllowed ? "#378ADD" : (dark ? "#8F8F9B" : "#9CA3AF"), dark, baseSettingsAllowed ? "#EEF4FF" : (dark ? "#34343F" : "#E5E7EB")),
                         padding: "5px 8px",
                         fontWeight: 700,
                       }}
@@ -4961,7 +4974,7 @@ export function SettingsPanel() {
                         border: baseSettingsAllowed ? "none" : "1px solid " + (dark ? "#4B4B58" : "#D1D5DB"),
                         borderRadius: 8, cursor: "pointer", padding: "5px 8px",
                         fontSize: 16,
-                        color: baseSettingsAllowed ? subC : (dark ? "#8F8F9B" : "#9CA3AF"),
+                        color: readableDarkText(baseSettingsAllowed ? subC : (dark ? "#8F8F9B" : "#9CA3AF"), dark, baseSettingsAllowed ? "none" : (dark ? "#34343F" : "#E5E7EB")),
                       }}
                     >
                       {a.archived ? "📂" : "🗂"}
@@ -4977,7 +4990,7 @@ export function SettingsPanel() {
                         borderRadius: 8,
                         cursor: "pointer",
                         fontSize: 14,
-                        color: baseSettingsAllowed ? "#E24B4A" : (dark ? "#8F8F9B" : "#9CA3AF"),
+                        color: readableDarkText(baseSettingsAllowed ? "#E24B4A" : (dark ? "#8F8F9B" : "#9CA3AF"), dark, baseSettingsAllowed ? "#FFF0F0" : (dark ? "#34343F" : "#E5E7EB")),
                         padding: "5px 8px",
                         fontWeight: 700,
                       }}
@@ -5002,7 +5015,9 @@ export function SettingsPanel() {
                   background: baseSettingsAllowed
                     ? confirmButtonColor || "#7F77DD"
                     : dark ? "#3A3A46" : "#E5E7EB",
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, baseSettingsAllowed
+                    ? confirmButtonColor || "#7F77DD"
+                    : dark ? "#3A3A46" : "#E5E7EB"),
                   border: "none",
                   borderRadius: btnRadius,
                   padding: "13px 16px",
@@ -6035,7 +6050,7 @@ export function SettingsPanel() {
             onClick={function () { if (window.confirm(L("Uscire dall'app?"))) onLogout(); }}
             style={{ minHeight: 46, marginTop: 18,
               width: "100%", border: "1px solid #E24B4A", borderRadius: 14, padding: 11,
-              background: dark ? "#351f24" : "#FFF0F0", color: "#E24B4A",
+              background: dark ? "#351f24" : "#FFF0F0", color: readableDarkText("#E24B4A", dark, dark ? "#351f24" : "#FFF0F0"),
               fontSize: 13, fontWeight: 900, cursor: "pointer",
             }}
            data-fainance-logout-v23="true">
@@ -6058,7 +6073,7 @@ export function SettingsPanel() {
           <div style={{ background: dark ? "linear-gradient(145deg,#27253D,#313050)" : "linear-gradient(145deg,#FFFFFF,#F3F0FF)", border: "1px solid " + (dark ? "#4C496A" : "#D9D5FF"), borderRadius: 18, padding: 16 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
               <div><div style={{ fontSize: 12, color: subC, marginBottom: 4 }}>{L("Piano Attuale")}</div><div style={{ fontSize: 18, fontWeight: 900, color: textC }}>💎 {planLabel(currentPlan, lang)}</div></div>
-              <span style={{ minHeight: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontSize: 11, fontWeight: 900, borderRadius: 999, padding: "0 10px", background: dark ? "#393552" : "#EEEBFF", color: dark ? "#D9D5FF" : "#534AB7" }}>{planLabel(currentPlan, lang)}</span>
+              <span style={{ minHeight: 24, display: "inline-flex", alignItems: "center", justifyContent: "center", lineHeight: 1, fontSize: 11, fontWeight: 900, borderRadius: 999, padding: "0 10px", background: dark ? "#393552" : "#EEEBFF", color: readableDarkText(dark ? "#D9D5FF" : "#534AB7", dark, dark ? "#393552" : "#EEEBFF") }}>{planLabel(currentPlan, lang)}</span>
             </div>
             <div style={{ fontSize: 12, color: subC, lineHeight: 1.45, margin: "10px 0 12px" }}>{L("Consulta il tuo piano, confronta le funzionalità disponibili ed esegui l’upgrade quando vuoi.")}</div>
             <Btn onClick={function(){ setSettingsPage("plans_settings"); }} style={{ width: "100%", padding: 11 }}>{L("Gestisci piano e upgrade")}</Btn>
@@ -6081,7 +6096,7 @@ export function SettingsPanel() {
               <div style={{ minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 900, color: textC }}>🤖 {L("Consenso AI esterno")}</div><div style={{ fontSize: 12, color: subC, lineHeight: 1.45, marginTop: 4 }}>{L("Autorizza l’invio al provider AI esterno dei soli dati necessari a generare le risposte del Consulente AI.")}</div></div>
               <Toggle label="" checked={!!aiExternalConsent} onChange={function(){ setAiExternalConsent(!aiExternalConsent, !aiExternalConsent ? new Date().toISOString() : ""); setToast({ text: L(!aiExternalConsent ? "Consenso AI esterno attivato" : "Consenso AI esterno revocato"), type: "success", icon: "✅" }); }} />
             </div>
-            <div style={{ marginTop: 12, borderRadius: 12, padding: "10px 12px", background: aiExternalConsent ? (dark ? "#17352D" : "#EAF8F2") : (dark ? "#31252A" : "#FFF1F1"), color: aiExternalConsent ? "#1D9E75" : "#C84949", fontSize: 12, fontWeight: 800 }}>
+            <div style={{ marginTop: 12, borderRadius: 12, padding: "10px 12px", background: aiExternalConsent ? (dark ? "#17352D" : "#EAF8F2") : (dark ? "#31252A" : "#FFF1F1"), color: readableDarkText(aiExternalConsent ? "#1D9E75" : "#C84949", dark, aiExternalConsent ? (dark ? "#17352D" : "#EAF8F2") : (dark ? "#31252A" : "#FFF1F1")), fontSize: 12, fontWeight: 800 }}>
               {aiExternalConsent ? L("Consenso attivo") : L("Consenso non attivo")}
             </div>
           </div>
@@ -6350,7 +6365,7 @@ export function SettingsPanel() {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "#1D9E75",
+                    color: readableDarkText("#1D9E75", dark, dark ? "#1e1e30" : "#F8FAFF"),
                     fontWeight: 800,
                     marginTop: 7,
                   }}
@@ -6382,7 +6397,7 @@ export function SettingsPanel() {
               <div
                 style={{
                   fontSize: 12,
-                  color: "#E24B4A",
+                  color: readableDarkText("#E24B4A", dark, cardBg),
                   marginTop: 10,
                   lineHeight: 1.35,
                 }}
@@ -6438,7 +6453,7 @@ export function SettingsPanel() {
               borderRadius: 14,
               padding: 14,
               fontSize: 12,
-              color: dark ? "#D8D2FF" : "#534AB7",
+              color: readableDarkText(dark ? "#D8D2FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
               lineHeight: 1.45,
             }}
           >
@@ -6793,7 +6808,7 @@ export function SettingsPanel() {
                       <span
                         style={{
                           fontSize: 13,
-                          color: item.always ? subC : textC,
+                          color: readableDarkText(item.always ? subC : textC, dark, "#35354a"),
                         }}
                       >
                         {L(item.label)}
@@ -6803,7 +6818,7 @@ export function SettingsPanel() {
                           style={{
                             fontSize: 11,
                             background: dark ? "#333" : "#f0f0f0",
-                            color: "#aaa",
+                            color: readableDarkText("#aaa", dark, dark ? "#333" : "#f0f0f0"),
                             borderRadius: 8,
                             padding: "2px 8px",
                           }}
@@ -7761,7 +7776,7 @@ export function SettingsPanel() {
                 onClick={createSettingsShoppingList}
                 style={{
                   background: confirmButtonColor,
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, confirmButtonColor),
                   border: "none",
                   borderRadius: btnRadius,
                   padding: "10px 12px",
@@ -7826,7 +7841,7 @@ export function SettingsPanel() {
                         <div
                           style={{
                             fontSize: 11,
-                            color: incomeColor,
+                            color: readableDarkText(incomeColor, dark, dark ? "#252535" : "#f9f9f9"),
                             fontWeight: 800,
                           }}
                         >
@@ -7841,7 +7856,7 @@ export function SettingsPanel() {
                       style={{
                         border: "none",
                         background: dark ? "#2b2b3a" : "#EEF1FF",
-                        color: confirmButtonColor,
+                        color: readableDarkText(confirmButtonColor, dark, dark ? "#2b2b3a" : "#EEF1FF"),
                         borderRadius: 8,
                         padding: "6px 8px",
                         cursor: "pointer",
@@ -7856,7 +7871,7 @@ export function SettingsPanel() {
                       style={{
                         border: "none",
                         background: "#FFF0F0",
-                        color: "#E24B4A",
+                        color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                         borderRadius: 8,
                         padding: "6px 8px",
                         cursor: "pointer",
@@ -8232,7 +8247,7 @@ export function SettingsPanel() {
                 style={{
                   alignSelf: "flex-start",
                   background: confirmButtonColor,
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, confirmButtonColor),
                   border: "none",
                   borderRadius: btnRadius,
                   padding: "10px 12px",
@@ -8275,7 +8290,7 @@ export function SettingsPanel() {
                         <div
                           style={{
                             fontSize: 11,
-                            color: incomeColor,
+                            color: readableDarkText(incomeColor, dark, cardBg),
                             fontWeight: 800,
                           }}
                         >
@@ -8294,7 +8309,7 @@ export function SettingsPanel() {
                         borderRadius: 8,
                         cursor: "pointer",
                         fontSize: 14,
-                        color: "#378ADD",
+                        color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                         padding: "5px 8px",
                         fontWeight: 700,
                       }}
@@ -8312,7 +8327,7 @@ export function SettingsPanel() {
                         borderRadius: 8,
                         cursor: "pointer",
                         fontSize: 14,
-                        color: "#E24B4A",
+                        color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                         padding: "5px 8px",
                         fontWeight: 700,
                       }}
@@ -8771,14 +8786,14 @@ export function SettingsPanel() {
               <div
                 style={{
                   fontSize: 12,
-                  color: dark ? "#7ec" : "#1D9E75",
+                  color: readableDarkText(dark ? "#7ec" : "#1D9E75", dark, dark ? "#1e2a1e" : "#f0faf5"),
                   fontWeight: 600,
                   marginBottom: 2,
                 }}
               >
                 💰 Tipi di entrata
               </div>
-              <div style={{ fontSize: 12, color: dark ? "#aaa" : "#555" }}>
+              <div style={{ fontSize: 12, color: readableDarkText(dark ? "#aaa" : "#555", dark, dark ? "#1e2a1e" : "#f0faf5") }}>
                 I tipi di entrata sono predefiniti dal sistema (Busta paga,
                 Bonus, Azioni, ecc.). Puoi modificarne nome e icona.
               </div>
@@ -8896,7 +8911,7 @@ export function SettingsPanel() {
               }}
             >
               <span style={{ fontSize: 16, flexShrink: 0 }}>ℹ️</span>
-              <span style={{ fontSize: 12, color: dark ? "#aac" : "#446" }}>
+              <span style={{ fontSize: 12, color: readableDarkText(dark ? "#aac" : "#446", dark, dark ? "#252535" : "#f0f4ff") }}>
                 Questa impostazione definisce solo la{" "}
                 <strong>visualizzazione predefinita</strong>: la categoria
                 preselezionata all'apertura del form. Se selezioni manualmente
@@ -9236,7 +9251,11 @@ export function SettingsPanel() {
                                 : dark
                                 ? "#252535"
                                 : "#f5f5f5",
-                            color: np.remindFreq === f.id ? "#534AB7" : textC,
+                            color: readableDarkText(np.remindFreq === f.id ? "#534AB7" : textC, dark, np.remindFreq === f.id
+                                ? "#EEEDFE"
+                                : dark
+                                ? "#252535"
+                                : "#f5f5f5"),
                             fontSize: 12,
                             cursor: "pointer",
                             fontWeight: np.remindFreq === f.id ? 600 : 400,
@@ -9269,7 +9288,7 @@ export function SettingsPanel() {
                     padding: "10px 12px",
                   }}
                 >
-                  <span style={{ fontSize: 12, color: "#856404" }}>
+                  <span style={{ fontSize: 12, color: readableDarkText("#856404", dark, "#FFF8E1") }}>
                     {"ℹ️ " +
                       L(
                         'I promemoria richiedono i permessi di notifica del browser. Clicca "Attiva" per abilitarli.'
@@ -9453,7 +9472,11 @@ export function SettingsPanel() {
                       : dark
                       ? "#333"
                       : "#e5e5e5",
-                    color: notifBaseAllowed ? "#fff" : subC,
+                    color: readableDarkText(notifBaseAllowed ? "#fff" : subC, dark, notifBaseAllowed
+                      ? "#7F77DD"
+                      : dark
+                      ? "#333"
+                      : "#e5e5e5"),
                     border: "none",
                     borderRadius: btnRadius,
                     padding: "7px 14px",
@@ -9482,7 +9505,7 @@ export function SettingsPanel() {
                   style={{
                     fontSize: 13,
                     fontWeight: 600,
-                    color: "#534AB7",
+                    color: readableDarkText("#534AB7", dark, dark ? "#1e1e30" : "#f5f5ff"),
                     marginBottom: 12,
                   }}
                 >
@@ -9635,7 +9658,11 @@ export function SettingsPanel() {
                                     ? "#252535"
                                     : "#f5f5f5",
                                 color:
-                                  newNotif.dayOfWeek === i ? "#534AB7" : textC,
+                                  readableDarkText(newNotif.dayOfWeek === i ? "#534AB7" : textC, dark, newNotif.dayOfWeek === i
+                                    ? "#EEEDFE"
+                                    : dark
+                                    ? "#252535"
+                                    : "#f5f5f5"),
                                 fontSize: 12,
                                 cursor: "pointer",
                               }}
@@ -9837,7 +9864,7 @@ export function SettingsPanel() {
                             style={{
                               fontSize: 11,
                               background: "#EEEDFE",
-                              color: "#534AB7",
+                              color: readableDarkText("#534AB7", dark, "#EEEDFE"),
                               borderRadius: 6,
                               padding: "2px 8px",
                             }}
@@ -9893,7 +9920,7 @@ export function SettingsPanel() {
                             cursor: notifBaseAllowed
                               ? "pointer"
                               : "not-allowed",
-                            color: "#378ADD",
+                            color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                             fontSize: 14,
                             padding: "5px 8px",
                             borderRadius: 8,
@@ -9915,7 +9942,7 @@ export function SettingsPanel() {
                             cursor: notifBaseAllowed
                               ? "pointer"
                               : "not-allowed",
-                            color: "#E24B4A",
+                            color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                             fontSize: 14,
                             padding: "5px 8px",
                             borderRadius: 8,
@@ -10066,7 +10093,7 @@ export function SettingsPanel() {
               borderRadius: 12,
               border: "1px dashed " + (secondaryButtonColor || "#5FAFE5"),
               background: (secondaryButtonColor || "#5FAFE5") + "12",
-              color: secondaryButtonColor || "#378ADD",
+              color: readableDarkText(secondaryButtonColor || "#378ADD", dark, (secondaryButtonColor || "#5FAFE5") + "12"),
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -10108,7 +10135,7 @@ export function SettingsPanel() {
                 marginTop: 10,
                 border: "1px solid #F3A9A9",
                 background: dark ? "#3A2020" : "#FFF2F2",
-                color: "#E24B4A",
+                color: readableDarkText("#E24B4A", dark, dark ? "#3A2020" : "#FFF2F2"),
                 borderRadius: 10,
                 padding: "9px 11px",
                 fontSize: 12,
@@ -10198,7 +10225,7 @@ export function SettingsPanel() {
                         width: "100%",
                         border: "1px solid #FCA5A5",
                         background: dark ? "#3A2228" : "#FFF5F5",
-                        color: "#E24B4A",
+                        color: readableDarkText("#E24B4A", dark, dark ? "#3A2228" : "#FFF5F5"),
                         borderRadius: 9,
                         padding: "6px 7px",
                         fontSize: 11,
@@ -10535,7 +10562,7 @@ export function SettingsPanel() {
                             display: "block",
                             fontSize: 10,
                             fontWeight: 700,
-                            color: bottomMap[id] ? "#1D9E75" : subC,
+                            color: readableDarkText(bottomMap[id] ? "#1D9E75" : subC, dark, dark ? "#252535" : "#f9f9f9"),
                             marginTop: 2,
                           }}
                         >
@@ -10696,7 +10723,7 @@ export function SettingsPanel() {
                       background: th.bg,
                       cursor: "pointer",
                       fontSize: 11,
-                      color: th.dark ? "#eee" : "#333",
+                      color: readableDarkText(th.dark ? "#eee" : "#333", th.dark, th.bg),
                       fontWeight: bgTheme === th.id ? 600 : 400,
                       display: "flex",
                       flexDirection: "column",
@@ -10716,7 +10743,7 @@ export function SettingsPanel() {
                       }}
                     />
                     {bgTheme === th.id && (
-                      <span style={{ fontSize: 9, color: "#7F77DD" }}>✓</span>
+                      <span style={{ fontSize: 9, color: readableDarkText("#7F77DD", th.dark, th.bg) }}>✓</span>
                     )}
                     <span
                       style={{
@@ -10800,7 +10827,13 @@ export function SettingsPanel() {
                           : "#f9f9f9",
                       cursor: "pointer",
                       fontSize: 13,
-                      color: btnStyle === bs.id ? "#7F77DD" : textC,
+                      color: readableDarkText(btnStyle === bs.id ? "#7F77DD" : textC, dark, btnStyle === bs.id
+                          ? dark
+                            ? "#2a2a3e"
+                            : "#EEEDFE"
+                          : dark
+                          ? "#1e1e30"
+                          : "#f9f9f9"),
                       fontWeight: btnStyle === bs.id ? 600 : 400,
                     }}
                   >
@@ -10876,7 +10909,7 @@ export function SettingsPanel() {
               <div
                 style={{
                   background: expenseColor,
-                  color: baseSettingsAllowed ? "#fff" : subC,
+                  color: readableDarkText(baseSettingsAllowed ? "#fff" : subC, dark, expenseColor),
                   borderRadius: btnRadius,
                   padding: "8px 16px",
                   fontSize: 13,
@@ -10947,7 +10980,7 @@ export function SettingsPanel() {
               <div
                 style={{
                   background: incomeColor,
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, incomeColor),
                   borderRadius: btnRadius,
                   padding: "8px 16px",
                   fontSize: 13,
@@ -11040,7 +11073,9 @@ export function SettingsPanel() {
                   background: baseSettingsAllowed
                     ? confirmButtonColor
                     : dark ? "#3A3A46" : "#E5E7EB",
-                  color: baseSettingsAllowed ? "#fff" : subC,
+                  color: readableDarkText(baseSettingsAllowed ? "#fff" : subC, dark, baseSettingsAllowed
+                    ? confirmButtonColor
+                    : dark ? "#3A3A46" : "#E5E7EB"),
                   borderRadius: btnRadius,
                   padding: "8px 16px",
                   fontSize: 13,
@@ -11135,7 +11170,9 @@ export function SettingsPanel() {
                   background: baseSettingsAllowed
                     ? (secondaryButtonColor || "#378ADD") + "22"
                     : dark ? "#3A3A46" : "#E5E7EB",
-                  color: baseSettingsAllowed ? secondaryButtonColor || "#378ADD" : subC,
+                  color: readableDarkText(baseSettingsAllowed ? secondaryButtonColor || "#378ADD" : subC, dark, baseSettingsAllowed
+                    ? (secondaryButtonColor || "#378ADD") + "22"
+                    : dark ? "#3A3A46" : "#E5E7EB"),
                   borderRadius: btnRadius,
                   padding: "8px 16px",
                   fontSize: 13,
@@ -12170,13 +12207,13 @@ export function SettingsPanel() {
                 style={{
                   fontSize: 16,
                   fontWeight: 900,
-                  color: props.danger ? "#E24B4A" : textC,
+                  color: readableDarkText(props.danger ? "#E24B4A" : textC, dark, "transparent"),
                 }}
               >
                 {dataTitle(props.title)}
               </div>
               {props.desc && (
-                <div style={{ fontSize: 12, color: subC, marginTop: 4 }}>
+                <div style={{ fontSize: 12, color: readableDarkText(subC, dark, "transparent"), marginTop: 4 }}>
                   {L(props.desc)}
                 </div>
               )}
@@ -12185,7 +12222,7 @@ export function SettingsPanel() {
           <span
             style={{
               fontSize: 22,
-              color: subC,
+              color: readableDarkText(subC, dark, "transparent"),
               transform: props.open ? "rotate(180deg)" : "rotate(0deg)",
               transition: "transform .18s",
               flexShrink: 0,
@@ -12760,7 +12797,7 @@ export function SettingsPanel() {
                 marginTop: 5,
                 fontSize: 12,
                 fontWeight: 800,
-                color: movementSyncV2Active ? "#1D9E75" : movementSyncV2Mode === "checking" ? "#EF9F27" : subC,
+                color: readableDarkText(movementSyncV2Active ? "#1D9E75" : movementSyncV2Mode === "checking" ? "#EF9F27" : subC, dark, cardBg),
               }}
             >
               {movementSyncV2Active
@@ -12852,7 +12889,7 @@ export function SettingsPanel() {
                     justifyContent: "center",
                     border: "none",
                     background: confirmButtonColor,
-                    color: "#fff",
+                    color: readableDarkText("#fff", dark, confirmButtonColor),
                     borderRadius: btnRadius,
                     padding: "10px 16px",
                     fontSize: 13,
@@ -12954,7 +12991,7 @@ export function SettingsPanel() {
                         minHeight: 46,
                         borderRadius: btnRadius,
                         background: confirmButtonColor,
-                        color: "#fff",
+                        color: readableDarkText("#fff", dark, confirmButtonColor),
                         fontWeight: 900,
                         cursor: "pointer",
                       }}
@@ -12969,7 +13006,7 @@ export function SettingsPanel() {
                         minHeight: 46,
                         borderRadius: btnRadius,
                         background: dark ? "#3a2020" : "#FFF0F0",
-                        color: "#E24B4A",
+                        color: readableDarkText("#E24B4A", dark, dark ? "#3a2020" : "#FFF0F0"),
                         fontWeight: 900,
                         cursor: "pointer",
                       }}
@@ -13083,11 +13120,15 @@ export function SettingsPanel() {
                                 ? "#383354"
                                 : "#EEEDFE"
                               : "transparent",
-                            color: selected
+                            color: readableDarkText(selected
                               ? dark
                                 ? "#DCD7FF"
                                 : "#534AB7"
-                              : textC,
+                              : textC, dark, selected
+                              ? dark
+                                ? "#383354"
+                                : "#EEEDFE"
+                              : "transparent"),
                             textAlign: "left",
                             fontSize: 13,
                             fontWeight: selected ? 850 : 650,
@@ -13187,7 +13228,17 @@ export function SettingsPanel() {
                           display: "block",
                           fontSize: 13,
                           fontWeight: 900,
-                          color: isAll ? "#E24B4A" : textC,
+                          color: readableDarkText(isAll ? "#E24B4A" : textC, dark, checked
+                        ? isAll
+                          ? dark
+                            ? "#381c1c"
+                            : "#FFF0F0"
+                          : dark
+                          ? "#24213a"
+                          : "#F0EDFF"
+                        : dark
+                        ? "#1e1e30"
+                        : "#f9f9f9"),
                         }}
                       >
                         {o.label}
@@ -13365,7 +13416,9 @@ export function SettingsPanel() {
                   style={{
                     fontSize: 19,
                     fontWeight: 950,
-                    color: confirmButtonColor,
+                    color: readableDarkText(confirmButtonColor, dark, dark
+                    ? "rgba(255,255,255,0.09)"
+                    : "rgba(255,255,255,0.88)"),
                   }}
                 >
                   {planLabel(currentPlan, lang)}
@@ -13396,7 +13449,9 @@ export function SettingsPanel() {
                   {L("Rinnovo")}
                 </div>
                 <div
-                  style={{ fontSize: 19, fontWeight: 950, color: "#EF9F27" }}
+                  style={{ fontSize: 19, fontWeight: 950, color: readableDarkText("#EF9F27", dark, dark
+                    ? "rgba(255,255,255,0.09)"
+                    : "rgba(255,255,255,0.88)") }}
                 >
                   {L(planBillingPeriod === "yearly" ? "Annuale" : "Mensile")}
                 </div>
@@ -13436,7 +13491,9 @@ export function SettingsPanel() {
                       background: selected
                         ? secondaryButtonColor || "#7F77DD"
                         : "transparent",
-                      color: selected ? "#fff" : textC,
+                      color: readableDarkText(selected ? "#fff" : textC, dark, selected
+                        ? secondaryButtonColor || "#7F77DD"
+                        : "transparent"),
                       fontSize: 13,
                       fontWeight: 900,
                       cursor: "pointer",
@@ -13649,7 +13706,13 @@ export function SettingsPanel() {
                           style={{
                             fontSize: 18,
                             fontWeight: 900,
-                            color: active ? "#1D9E75" : textC,
+                            color: readableDarkText(active ? "#1D9E75" : textC, dark, active
+                        ? dark
+                          ? "#1a2a1e"
+                          : "#edfaf3"
+                        : dark
+                        ? "#252535"
+                        : "#fff"),
                           }}
                         >
                           {planLabel(pid, lang)}
@@ -13662,7 +13725,13 @@ export function SettingsPanel() {
                         <div
                           style={{
                             fontSize: 12,
-                            color: pid === "free" ? subC : "#7F77DD",
+                            color: readableDarkText(pid === "free" ? subC : "#7F77DD", dark, active
+                        ? dark
+                          ? "#1a2a1e"
+                          : "#edfaf3"
+                        : dark
+                        ? "#252535"
+                        : "#fff"),
                             fontWeight: 800,
                             marginTop: 5,
                           }}
@@ -13679,7 +13748,7 @@ export function SettingsPanel() {
                           style={{
                             fontSize: 11,
                             fontWeight: 900,
-                            color: "#1D9E75",
+                            color: readableDarkText("#1D9E75", dark, "#1D9E7522"),
                             background: "#1D9E7522",
                             borderRadius: 12,
                             padding: "3px 8px",
@@ -13739,7 +13808,7 @@ export function SettingsPanel() {
                         width: "100%",
                         marginTop: 12,
                         background: active ? "#1D9E75" : "#7F77DD",
-                        color: "#fff",
+                        color: readableDarkText("#fff", dark, active ? "#1D9E75" : "#7F77DD"),
                         border: "none",
                         borderRadius: btnRadius,
                         padding: "11px",
@@ -13791,7 +13860,7 @@ export function SettingsPanel() {
               style={{
                 marginTop: 10,
                 background: dark ? "#252535" : "#F3F4FF",
-                color: dark ? "#D6D1FF" : "#5A52B8",
+                color: readableDarkText(dark ? "#D6D1FF" : "#5A52B8", dark, dark ? "#252535" : "#F3F4FF"),
                 border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
                 borderRadius: btnRadius,
                 padding: "9px 12px",
@@ -13864,14 +13933,14 @@ export function SettingsPanel() {
               >
                 <span style={{ fontSize: 24 }}>🌐</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 900, color: textC }}>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: readableDarkText(textC, dark, "none") }}>
                     {L("Scopri il dettaglio dei piani")}
                   </div>
-                  <div style={{ fontSize: 12, color: subC, marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: readableDarkText(subC, dark, "none"), marginTop: 2 }}>
                     {L("Apri dettaglio piani sul sito")}
                   </div>
                 </div>
-                <span style={{ fontSize: 18, color: subC }}>›</span>
+                <span style={{ fontSize: 18, color: readableDarkText(subC, dark, "none") }}>›</span>
               </button>
             </div>
           )}
@@ -14013,7 +14082,7 @@ export function SettingsPanel() {
                     style={{
                       fontSize: 12,
                       background: "#e8f4ff",
-                      color: "#1a5fa8",
+                      color: readableDarkText("#1a5fa8", dark, "#e8f4ff"),
                       borderRadius: 20,
                       padding: "3px 10px",
                       fontWeight: 500,
@@ -14252,15 +14321,15 @@ export function SettingsPanel() {
             >
               <span style={{ fontSize: 24 }}>📄</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: textC }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: readableDarkText(textC, dark, "none") }}>
                   Termini di utilizzo
                 </div>
-                <div style={{ fontSize: 12, color: subC }}>
+                <div style={{ fontSize: 12, color: readableDarkText(subC, dark, "none") }}>
                   Consulta ambito dell’app, limiti dell’Agente AI e
                   responsabilità utente.
                 </div>
               </div>
-              <span style={{ fontSize: 18, color: subC }}>›</span>
+              <span style={{ fontSize: 18, color: readableDarkText(subC, dark, "none") }}>›</span>
             </button>
             <div style={{ height: 1, background: borderC, marginBottom: 14 }} />
             <button
@@ -14281,15 +14350,15 @@ export function SettingsPanel() {
             >
               <span style={{ fontSize: 24 }}>🔐</span>
               <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: textC }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: readableDarkText(textC, dark, "none") }}>
                   Informativa Privacy
                 </div>
-                <div style={{ fontSize: 12, color: subC }}>
+                <div style={{ fontSize: 12, color: readableDarkText(subC, dark, "none") }}>
                   Consulta dati salvati, sincronizzazione, Firebase e uso
                   dell’Agente AI.
                 </div>
               </div>
-              <span style={{ fontSize: 18, color: subC }}>›</span>
+              <span style={{ fontSize: 18, color: readableDarkText(subC, dark, "none") }}>›</span>
             </button>
           </div>
 
@@ -14352,7 +14421,7 @@ export function SettingsPanel() {
               >
                 <span style={{ fontSize: 20 }}>✅</span>
                 <span
-                  style={{ fontSize: 13, color: "#1D9E75", fontWeight: 500 }}
+                  style={{ fontSize: 13, color: readableDarkText("#1D9E75", dark, dark ? "#1a2a1e" : "#edfaf3"), fontWeight: 500 }}
                 >
                   {L("È stato aperto lo store corretto per il dispositivo.")}
                 </span>
@@ -14375,7 +14444,7 @@ export function SettingsPanel() {
                 <span
                   style={{
                     fontSize: 13,
-                    color: dark ? "#C9C4FF" : "#534AB7",
+                    color: readableDarkText(dark ? "#C9C4FF" : "#534AB7", dark, dark ? "#252044" : "#F0EEFF"),
                     fontWeight: 600,
                   }}
                 >
@@ -14400,7 +14469,7 @@ export function SettingsPanel() {
               >
                 <span style={{ fontSize: 20 }}>🚫</span>
                 <span
-                  style={{ fontSize: 13, color: "#E24B4A", fontWeight: 500 }}
+                  style={{ fontSize: 13, color: readableDarkText("#E24B4A", dark, dark ? "#321d23" : "#fff0f0"), fontWeight: 500 }}
                 >
                   {L("Impossibile controllare gli aggiornamenti.")}
                 </span>
@@ -14489,7 +14558,7 @@ export function SettingsPanel() {
                     alignItems: "center",
                     justifyContent: "center",
                     background: "#1877F2",
-                    color: "#fff",
+                    color: readableDarkText("#fff", dark, "#1877F2"),
                     fontSize: 20,
                     fontWeight: 950,
                     flexShrink: 0,
@@ -14605,14 +14674,14 @@ export function SettingsPanel() {
             >
               <span style={{ fontSize: 24 }}>⭐</span>
               <div style={{ textAlign: "left" }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: textC }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: readableDarkText(textC, dark, "none") }}>
                   Vota sullo store
                 </div>
-                <div style={{ fontSize: 12, color: subC }}>
+                <div style={{ fontSize: 12, color: readableDarkText(subC, dark, "none") }}>
                   Se ti piace l'app, lasciaci una recensione!
                 </div>
               </div>
-              <span style={{ marginLeft: "auto", fontSize: 16, color: subC }}>
+              <span style={{ marginLeft: "auto", fontSize: 16, color: readableDarkText(subC, dark, "none") }}>
                 ›
               </span>
             </button>

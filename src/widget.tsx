@@ -1,3 +1,4 @@
+import { readableDarkText } from './ui/textContrast';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import { savingsGoalText } from './i18n/savingsGoalsTranslations';
@@ -332,7 +333,7 @@ export function DonutChart({ data, size }) {
           alignItems: "center",
           justifyContent: "center",
           fontSize: 11,
-          color: "#aaa",
+          color: readableDarkText("#aaa", dark, dark ? "#2a2a3e" : "#f0f0f0"),
         }}
       >
         vuoto
@@ -672,7 +673,7 @@ export function Btn({ children, onClick, bg, color, style, disabled }) {
       disabled={disabled}
       style={{
         background: resolved,
-        color: color || "#fff",
+        color: readableDarkText(color || "#fff", (ctx as any).dark, resolved),
         border: "none",
         borderRadius: btnRadius,
         padding: "8px 16px",
@@ -767,7 +768,7 @@ export function Toggle({ label, checked, onChange, color }) {
         <span
           style={{
             fontSize: 13,
-            color: checked ? c : dark ? "#aaa" : "#888",
+            color: readableDarkText(checked ? c : dark ? "#aaa" : "#888", dark, "transparent"),
             fontWeight: checked ? 500 : 400,
           }}
         >
@@ -823,7 +824,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
           <label
             style={{
               fontSize: 11,
-              color: dark ? "#aaa" : "#666",
+              color: readableDarkText(dark ? "#aaa" : "#666", dark, "#35354a"),
               display: "block",
               marginBottom: 4,
             }}
@@ -846,7 +847,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
               padding: "7px 10px",
               fontSize: 13,
               background: dark ? "#2a2a3e" : "#fff",
-              color: dark ? "#eee" : "#333",
+              color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
             }}
           />
         </div>
@@ -866,7 +867,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
                     "1px solid " + (Number(value) === n ? "#7F77DD" : "#ddd"),
                   background: Number(value) === n ? "#EEEDFE" : "transparent",
                   color:
-                    Number(value) === n ? "#534AB7" : dark ? "#ddd" : "#666",
+                    readableDarkText(Number(value) === n ? "#534AB7" : dark ? "#ddd" : "#666", dark, Number(value) === n ? "#EEEDFE" : "transparent"),
                   fontSize: 13,
                   cursor: "pointer",
                 }}
@@ -903,7 +904,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
                 border:
                   "1px solid " + (active ? "#7F77DD" : dark ? "#444" : "#ddd"),
                 background: active ? "#EEEDFE" : "transparent",
-                color: active ? "#534AB7" : dark ? "#ddd" : "#666",
+                color: readableDarkText(active ? "#534AB7" : dark ? "#ddd" : "#666", dark, active ? "#EEEDFE" : "transparent"),
                 fontSize: 12,
                 fontWeight: active ? 700 : 500,
                 cursor: "pointer",
@@ -1052,7 +1053,7 @@ export function PopupCloseButton({ onClick, dark, label }) {
         borderRadius: 9,
         border: "1px solid #FCA5A5",
         background: "#FFF0F0",
-        color: "#F87171",
+        color: readableDarkText("#F87171", dark, "#FFF0F0"),
         fontSize: 14,
         fontWeight: 950,
         lineHeight: 1,
@@ -1256,7 +1257,7 @@ export function FainanceInfoPopover({
               padding: "11px 13px",
               fontSize: 12,
               lineHeight: 1.45,
-              color: theme.popupText,
+              color: readableDarkText(theme.popupText, dark, "#35354a"),
               zIndex: 2147483000,
               visibility: placement ? "visible" : "hidden",
               ...infoSurface,
@@ -1268,7 +1269,7 @@ export function FainanceInfoPopover({
                 style={{
                   fontSize: 13,
                   fontWeight: 900,
-                  color: theme.popupText,
+                  color: readableDarkText(theme.popupText, dark, "#35354a"),
                   marginBottom: popupBody ? 4 : 0,
                 }}
               >
@@ -1276,7 +1277,7 @@ export function FainanceInfoPopover({
               </div>
             )}
             {popupBody && (
-              <div style={{ color: theme.popupSubtle }}>{popupBody}</div>
+              <div style={{ color: readableDarkText(theme.popupSubtle, dark, "#35354a") }}>{popupBody}</div>
             )}
           </div>,
           document.body
@@ -1314,7 +1315,7 @@ export function FainanceInfoPopover({
             borderRadius: "50%",
             border: "1px solid " + theme.buttonBorder,
             background: theme.buttonBg,
-            color: theme.buttonText,
+            color: readableDarkText(theme.buttonText, dark, theme.buttonBg),
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1749,7 +1750,7 @@ export function AmountCalculatorButton({
                 border: "none",
                 outline: "none",
                 background: "transparent",
-                color: textC,
+                color: readableDarkText(textC, dark, "transparent"),
                 fontSize: 25,
                 fontWeight: 950,
                 textAlign: "right",
@@ -1759,7 +1760,7 @@ export function AmountCalculatorButton({
               <div
                 style={{
                   fontSize: 11,
-                  color: "#E24B4A",
+                  color: readableDarkText("#E24B4A", dark, dark ? "#1E1E30" : "#F8FAFF"),
                   fontWeight: 800,
                   textAlign: "right",
                   marginTop: 5,
@@ -1798,7 +1799,13 @@ export function AmountCalculatorButton({
                       : dark
                       ? "#2A2A3E"
                       : "#fff",
-                    color: operator ? primary : textC,
+                    color: readableDarkText(operator ? primary : textC, dark, operator
+                      ? dark
+                        ? primary + "33"
+                        : primary + "12"
+                      : dark
+                      ? "#2A2A3E"
+                      : "#fff"),
                     fontSize: 18,
                     fontWeight: 950,
                     cursor: "pointer",
@@ -1839,7 +1846,7 @@ export function AmountCalculatorButton({
                 border: "1px solid " + primary,
                 borderRadius: 12,
                 background: dark ? primary + "33" : primary + "12",
-                color: primary,
+                color: readableDarkText(primary, dark, dark ? primary + "33" : primary + "12"),
                 fontWeight: 950,
                 cursor: "pointer",
               }}
@@ -1854,7 +1861,7 @@ export function AmountCalculatorButton({
                 border: "none",
                 borderRadius: 12,
                 background: primary,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, primary),
                 fontWeight: 950,
                 cursor: "pointer",
               }}
@@ -1988,7 +1995,11 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     ? "#35354D"
                     : "#fff"
                   : "transparent",
-              color: text,
+              color: readableDarkText(text, dark, source === "standard"
+                  ? dark
+                    ? "#35354D"
+                    : "#fff"
+                  : "transparent"),
               fontWeight: source === "standard" ? 900 : 700,
               cursor: "pointer",
             }}
@@ -2010,7 +2021,11 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     ? "#35354D"
                     : "#fff"
                   : "transparent",
-              color: text,
+              color: readableDarkText(text, dark, source === "custom"
+                  ? dark
+                    ? "#35354D"
+                    : "#fff"
+                  : "transparent"),
               fontWeight: source === "custom" ? 900 : 700,
               cursor: "pointer",
             }}
@@ -2026,7 +2041,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
               top: "50%",
               transform: "translateY(-50%)",
               fontSize: 17,
-              color: sub,
+              color: readableDarkText(sub, dark, "#35354a"),
               pointerEvents: "none",
             }}
           >
@@ -2047,7 +2062,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
               padding: "11px 12px 11px 40px",
               fontSize: 14,
               background: dark ? "#1E1E30" : "#fff",
-              color: text,
+              color: readableDarkText(text, dark, dark ? "#1E1E30" : "#fff"),
               outline: "none",
             }}
           />
@@ -2080,7 +2095,11 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                         : dark
                         ? "#29293D"
                         : "#fff",
-                      color: active ? "#fff" : text,
+                      color: readableDarkText(active ? "#fff" : text, dark, active
+                        ? secondary
+                        : dark
+                        ? "#29293D"
+                        : "#fff"),
                       borderRadius: 999,
                       padding: "8px 12px",
                       fontSize: 12,
@@ -2157,7 +2176,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     textAlign: "center",
                     padding: "30px 12px",
                     fontSize: 13,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                   }}
                 >
                   {L2("Nessuna icona trovata")}
@@ -2171,7 +2190,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
             <div
               style={{
                 fontSize: 11,
-                color: sub,
+                color: readableDarkText(sub, dark, panel),
                 lineHeight: 1.45,
                 background: panel,
                 border: "1px solid " + border,
@@ -2197,7 +2216,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     textAlign: "center",
                     padding: "28px 12px",
                     fontSize: 13,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                   }}
                 >
                   {L2("Caricamento icone...")}
@@ -2255,7 +2274,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     textAlign: "center",
                     padding: "30px 12px",
                     fontSize: 13,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                   }}
                 >
                   {L2("Non hai ancora caricato icone personali.")}
@@ -2510,7 +2529,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                   : "3px solid transparent",
               background:
                 mode === "preset" ? (dark ? "#35354B" : "#fff") : "transparent",
-              color: mode === "preset" ? primary : text,
+              color: readableDarkText(mode === "preset" ? primary : text, dark, mode === "preset" ? (dark ? "#35354B" : "#fff") : "transparent"),
               padding: "12px 8px",
               fontSize: 14,
               fontWeight: mode === "preset" ? 900 : 750,
@@ -2532,7 +2551,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                   : "3px solid transparent",
               background:
                 mode === "custom" ? (dark ? "#35354B" : "#fff") : "transparent",
-              color: mode === "custom" ? primary : text,
+              color: readableDarkText(mode === "custom" ? primary : text, dark, mode === "custom" ? (dark ? "#35354B" : "#fff") : "transparent"),
               padding: "12px 8px",
               fontSize: 14,
               fontWeight: mode === "custom" ? 900 : 750,
@@ -2555,7 +2574,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
               style={{
                 fontSize: 12,
                 fontWeight: 900,
-                color: text,
+                color: readableDarkText(text, dark, panel),
                 marginBottom: 11,
               }}
             >
@@ -2591,7 +2610,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "#fff",
+                      color: readableDarkText("#fff", dark, c),
                       fontSize: 18,
                       fontWeight: 950,
                       textShadow: "0 1px 4px rgba(0,0,0,.28)",
@@ -2617,7 +2636,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
               style={{
                 fontSize: 12,
                 fontWeight: 900,
-                color: text,
+                color: readableDarkText(text, dark, panel),
                 marginBottom: 11,
               }}
             >
@@ -2739,7 +2758,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                   style={{
                     fontSize: 11,
                     fontWeight: 800,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                     display: "block",
                     marginBottom: 6,
                   }}
@@ -2764,7 +2783,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                     fontWeight: 850,
                     letterSpacing: 0.4,
                     background: dark ? "#29293D" : "#fff",
-                    color: text,
+                    color: readableDarkText(text, dark, dark ? "#29293D" : "#fff"),
                     outline: "none",
                   }}
                 />
@@ -2774,7 +2793,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
               <div
                 style={{
                   fontSize: 11,
-                  color: "#E24B4A",
+                  color: readableDarkText("#E24B4A", dark, panel),
                   fontWeight: 800,
                   marginTop: 7,
                 }}
@@ -2801,7 +2820,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                 borderRadius: ctx.btnRadius || 12,
                 padding: "12px 14px",
                 background: valid ? primary : "#A8A8A8",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, valid ? primary : "#A8A8A8"),
                 fontSize: 14,
                 fontWeight: 900,
                 cursor: valid ? "pointer" : "not-allowed",
@@ -2817,7 +2836,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                 borderRadius: ctx.btnRadius || 12,
                 padding: "12px 14px",
                 background: dark ? "#333348" : "#EFF0F4",
-                color: text,
+                color: readableDarkText(text, dark, dark ? "#333348" : "#EFF0F4"),
                 fontSize: 14,
                 fontWeight: 850,
                 cursor: "pointer",
@@ -2891,7 +2910,7 @@ export function AppIconSelector({
           <FainanceIcon value={selected} size={small ? 22 : 30} />
         </span>
         {!small && (
-          <span style={{ fontSize: 22, color: chevron, fontWeight: 850 }}>
+          <span style={{ fontSize: 22, color: readableDarkText(chevron, dark, panel), fontWeight: 850 }}>
             ›
           </span>
         )}
@@ -2967,7 +2986,7 @@ export function AppColorSelector({
         {!small && (
           <>
             <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 22, color: chevron, fontWeight: 850 }}>
+            <span style={{ fontSize: 22, color: readableDarkText(chevron, dark, panel), fontWeight: 850 }}>
               ›
             </span>
           </>
@@ -2986,7 +3005,7 @@ export function AppColorSelector({
 }
 
 export function DatePickerField({ value, onChange }) {
-  var { t, btnRadius } = useApp();
+  var { t, btnRadius, dark, textC, borderC, inp } = useApp() as any;
   var td = todayStr(),
     y = dateOffset(1),
     tw = dateOffset(2);
@@ -3009,7 +3028,7 @@ export function DatePickerField({ value, onChange }) {
                 borderRadius: btnRadius,
                 border: "1px solid " + (value === p.v ? "#333" : "#ddd"),
                 background: value === p.v ? "#333" : "transparent",
-                color: value === p.v ? "#fff" : "#666",
+                color: value === p.v ? "#fff" : (dark ? textC : "#666"),
                 fontSize: 13,
                 cursor: "pointer",
               }}
@@ -3026,9 +3045,10 @@ export function DatePickerField({ value, onChange }) {
           onChange(e.target.value);
         }}
         style={{
+          ...(dark ? inp : {}),
           width: "100%",
           borderRadius: 8,
-          border: "1px solid #ddd",
+          border: "1px solid " + (dark ? borderC : "#ddd"),
           padding: "8px 10px",
           fontSize: 14,
         }}
@@ -3233,7 +3253,7 @@ export function Toast({ msg, onDone, color }) {
         left: "50%",
         transform: "translateX(-50%)",
         background: bg,
-        color: toastTextColor,
+        color: readableDarkText(toastTextColor, (ctx as any).dark, bg),
         borderRadius: payload.compact ? 12 : 22,
         padding: payload.compact ? "12px 42px 12px 12px" : "16px 22px",
         fontSize: payload.compact ? 12 : 14,
@@ -3264,7 +3284,7 @@ export function Toast({ msg, onDone, color }) {
             background: lightActionSurface ? "#7F77DD" : "rgba(255,255,255,0.18)",
             border: lightActionSurface ? "1px solid #6B63C9" : "1px solid rgba(255,255,255,0.48)",
             borderRadius: 12,
-            color: "#fff",
+            color: readableDarkText("#fff", (ctx as any).dark, lightActionSurface ? "#7F77DD" : "rgba(255,255,255,0.18)"),
             padding: "8px 14px",
             fontSize: 13,
             fontWeight: 900,
@@ -3325,10 +3345,10 @@ export function AlertPopup({ newAlerts, onClose }) {
         >
           <span style={{ fontSize: 26 }}>🔔</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: readableDarkText("#fff", (ctx as any).dark, "#E24B4A") }}>
               {L("Alert superato!")}
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+            <div style={{ fontSize: 12, color: readableDarkText("rgba(255,255,255,0.85)", (ctx as any).dark, "#E24B4A") }}>
               {newAlerts.length === 1
                 ? L("1 nuova soglia superata")
                 : String(newAlerts.length) + " " + L("nuove soglie superate")}
@@ -3342,7 +3362,7 @@ export function AlertPopup({ newAlerts, onClose }) {
               background: "rgba(255,255,255,0.2)",
               border: "none",
               borderRadius: 8,
-              color: "#fff",
+              color: readableDarkText("#fff", (ctx as any).dark, "rgba(255,255,255,0.2)"),
               fontSize: 18,
               cursor: "pointer",
               padding: "4px 10px",
@@ -3370,7 +3390,7 @@ export function AlertPopup({ newAlerts, onClose }) {
                   style={{
                     fontSize: 14,
                     fontWeight: 600,
-                    color: "#C03030",
+                    color: readableDarkText("#C03030", (ctx as any).dark, "#fff5f5"),
                     marginBottom: 4,
                     display: "flex",
                     alignItems: "center",
@@ -3389,7 +3409,7 @@ export function AlertPopup({ newAlerts, onClose }) {
                   <div
                     style={{
                       fontSize: 13,
-                      color: "#555",
+                      color: readableDarkText("#555", (ctx as any).dark, "#fff5f5"),
                       marginBottom: 6,
                       fontStyle: "italic",
                     }}
@@ -3405,11 +3425,11 @@ export function AlertPopup({ newAlerts, onClose }) {
                   }}
                 >
                   <span
-                    style={{ fontSize: 13, fontWeight: 600, color: "#E24B4A" }}
+                    style={{ fontSize: 13, fontWeight: 600, color: readableDarkText("#E24B4A", (ctx as any).dark, "#fff5f5") }}
                   >
                     {al.spentFmt}
                   </span>
-                  <span style={{ fontSize: 12, color: "#aaa" }}>
+                  <span style={{ fontSize: 12, color: readableDarkText("#aaa", (ctx as any).dark, "#fff5f5") }}>
                     {L("budget")} {al.budgetFmt}
                   </span>
                 </div>
@@ -3428,7 +3448,7 @@ export function AlertPopup({ newAlerts, onClose }) {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", (ctx as any).dark, "#fff5f5"),
                     marginTop: 3,
                     textAlign: "right",
                   }}
@@ -3447,7 +3467,7 @@ export function AlertPopup({ newAlerts, onClose }) {
             style={{
               width: "100%",
               background: "#E24B4A",
-              color: "#fff",
+              color: readableDarkText("#fff", (ctx as any).dark, "#E24B4A"),
               border: "none",
               borderRadius: 10,
               padding: "11px",
@@ -3611,7 +3631,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
           gap: 10,
           border: "none",
           background: "transparent",
-          color: inline ? "#8FD3FF" : tc,
+          color: readableDarkText(inline ? "#8FD3FF" : tc, dark, "transparent"),
           cursor: "pointer",
           padding: 0,
         }}
@@ -3619,7 +3639,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         {!inline && <span>
           <strong>{L("Cambia valuta")}</strong>
           <span
-            style={{ display: "block", fontSize: 11, color: sc, marginTop: 2 }}
+            style={{ display: "block", fontSize: 11, color: readableDarkText(sc, dark, "transparent"), marginTop: 2 }}
           >
             {info}
           </span>
@@ -3627,7 +3647,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         <span
           style={{
             fontWeight: 900,
-            color: inline ? "#8FD3FF" : ctx.secondaryButtonColor || "#5FAFE5",
+            color: readableDarkText(inline ? "#8FD3FF" : (ctx as any).secondaryButtonColor || "#5FAFE5", dark, "transparent"),
             fontSize: inline ? 12 : undefined,
             letterSpacing: inline ? 0.6 : undefined,
           }}
@@ -3698,7 +3718,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
                   borderRadius: 12,
                   border: "1px solid #FFD0D0",
                   background: "#FFF0F0",
-                  color: "#E24B4A",
+                  color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                   fontSize: 22,
                 }}
               >
@@ -4165,7 +4185,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             : "58px minmax(0,1fr) 128px",
           gap: isMobile ? "clamp(3px,1.5vw,6px)" : 14,
           alignItems: "center",
-          color: "#fff",
+          color: readableDarkText("#fff", dark, amountGradient),
           boxShadow: dark
             ? "0 12px 28px rgba(0,0,0,.20)"
             : "0 14px 30px rgba(83,74,183,.22)",
@@ -4190,7 +4210,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
               fontWeight: 850,
               textTransform: "uppercase",
               letterSpacing: 0.8,
-              color: whiteSoft,
+              color: readableDarkText(whiteSoft, dark, amountGradient),
               marginBottom: 2,
             }}
           >
@@ -4224,7 +4244,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
                     justifyContent: "center",
                     fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
                     fontWeight: 950,
-                    color: "#fff",
+                    color: readableDarkText("#fff", dark, amountGradient),
                     lineHeight: 1,
                     pointerEvents: "none",
                     textShadow: "0 2px 10px rgba(0,0,0,.12)",
@@ -4265,7 +4285,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
                   textAlign: "center",
                   fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
                   fontWeight: 950,
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, "transparent"),
                   WebkitTextFillColor: "#fff",
                   outline: "none",
                   lineHeight: 1,
@@ -4289,7 +4309,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             <div
               style={{
                 fontSize: isMobile ? 14.6 : 16,
-                color: whiteSoft,
+                color: readableDarkText(whiteSoft, dark, amountGradient),
                 fontWeight: 600,
                 marginTop: 4,
               }}
@@ -4298,7 +4318,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             </div>
           )}
           {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
-            <div style={{ fontSize: isMobile ? 11.6 : 12, color: whiteSoft, marginTop: 3 }}>
+            <div style={{ fontSize: isMobile ? 11.6 : 12, color: readableDarkText(whiteSoft, dark, amountGradient), marginTop: 3 }}>
               ≈ {formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(ctx.currency || "EUR")}
             </div>
           )}
@@ -4323,7 +4343,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
               fontWeight: 950,
               textTransform: "uppercase",
               letterSpacing: 0.35,
-              color: "#fff",
+              color: readableDarkText("#fff", dark, amountGradient),
               lineHeight: 0.95,
               textAlign: "center",
             }}
@@ -4345,7 +4365,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           <div
             style={{
               fontSize: 12,
-              color: dark ? "#BEB8FF" : "#534AB7",
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
               marginBottom: 7,
               fontWeight: 800,
             }}
@@ -4385,7 +4405,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           <div
             style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
           >
-            <label style={{ ...label, color: dark ? sc : "#343647" }}>
+            <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
               {t.category}
             </label>
             <div style={{ position: "relative", minWidth: 0 }}>
@@ -4425,7 +4445,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
                   right: 1,
                   top: -12,
                   pointerEvents: "none",
-                  color: mainButtonC,
+                  color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"),
                   fontSize: 21,
                   fontWeight: 950,
                   lineHeight: 1,
@@ -4438,7 +4458,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           <div
             style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
           >
-            <label style={{ ...label, color: dark ? sc : "#343647" }}>
+            <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
               {TL("Pagamento")}
             </label>
             <div style={{ position: "relative", minWidth: 0 }}>
@@ -4478,7 +4498,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
                   right: 1,
                   top: -12,
                   pointerEvents: "none",
-                  color: mainButtonC,
+                  color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"),
                   fontSize: 21,
                   fontWeight: 950,
                   lineHeight: 1,
@@ -4491,7 +4511,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         </div>
       ) : (
         <div style={fieldCard}>
-          <label style={{ ...label, color: dark ? sc : "#343647" }}>
+          <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
             {t.incomeType}
           </label>
           <select
@@ -4523,7 +4543,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         </div>
       )}
       <div style={{ ...fieldCard, padding: isMobile ? 8 : 11 }}>
-        <label style={{ ...label, color: dark ? sc : "#343647" }}>
+        <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
           {t.description}
         </label>
         <textarea
@@ -4637,7 +4657,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         disabled={!expenseFormValid}
         style={{
           background: expenseFormValid ? mainButtonC : "#A8A8A8",
-          color: "#fff",
+          color: readableDarkText("#fff", dark, expenseFormValid ? mainButtonC : "#A8A8A8"),
           border: "none",
           borderRadius: btnRadius,
           padding: isMobile ? 15 : 17,
@@ -5953,7 +5973,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
         />
       </div>
       {cameraError ? (
-        <div style={{ color: "#FFD27A", fontWeight: 800, marginTop: 10 }}>
+        <div style={{ color: readableDarkText("#FFD27A", dark, "#05050a"), fontWeight: 800, marginTop: 10 }}>
           {cameraError}
         </div>
       ) : null}
@@ -6031,7 +6051,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
           fontSize: 18,
           fontWeight: 1000,
           background: expenseColor,
-          color: "#fff",
+          color: readableDarkText("#fff", dark, expenseColor),
         }}
       >
         📷 {L("Scatta foto")}
@@ -6225,7 +6245,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
           disabled={ocrLoading}
           style={{
             background: ocrLoading ? "#aaa" : expenseColor,
-            color: "#fff",
+            color: readableDarkText("#fff", dark, ocrLoading ? "#aaa" : expenseColor),
             border: "none",
             borderRadius: btnRadius,
             padding: "10px 14px",
@@ -6250,7 +6270,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
             borderRadius: 12,
             padding: "10px 12px",
             fontSize: 12,
-            color: dark ? "#ddd" : "#745400",
+            color: readableDarkText(dark ? "#ddd" : "#745400", dark, dark ? "#1e1e30" : "#fff8e1"),
             lineHeight: 1.45,
           }}
         >
@@ -6363,7 +6383,9 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
           background: receiptFormValid
             ? confirmButtonColor || "#378ADD"
             : "#A8A8A8",
-          color: "#fff",
+          color: readableDarkText("#fff", dark, receiptFormValid
+            ? confirmButtonColor || "#378ADD"
+            : "#A8A8A8"),
           border: "none",
           borderRadius: btnRadius,
           padding: isMobile ? 12 : 15,
@@ -6478,7 +6500,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
         borderRadius: 12,
         padding: "10px 12px",
         fontSize: 12,
-        color: "#856404",
+        color: readableDarkText("#856404", dark, "#FFF8E1"),
         fontWeight: 700,
         lineHeight: 1.35,
       }}
@@ -6496,7 +6518,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
     minWidth: 0,
   };
@@ -6507,7 +6529,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     padding: "6px 8px",
     fontSize: 13,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
   };
   function upd(id, k, v) {
     setRows(function (r) {
@@ -6596,7 +6618,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
       padding: "6px 8px",
       fontSize: 14,
       background: fieldBgMobile,
-      color: tcMobile,
+      color: readableDarkText(tcMobile, dark, fieldBgMobile),
       boxSizing: "border-box",
       outline: "none",
       minWidth: 0,
@@ -6612,7 +6634,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     };
     var mobileLabel = {
       fontSize: 11.8,
-      color: dark ? scMobile : "#343647",
+      color: readableDarkText(dark ? scMobile : "#343647", dark, "#35354a"),
       display: "block",
       marginBottom: 4,
       fontWeight: 700,
@@ -6703,7 +6725,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px 2px" }}>
-                <div style={{ fontSize: 18.6, fontWeight: 950, color: tcMobile, letterSpacing: 0.1 }}>
+                <div style={{ fontSize: 18.6, fontWeight: 950, color: readableDarkText(tcMobile, dark, dark ? "#181827" : "#fff"), letterSpacing: 0.1 }}>
                   {L("Voce")} {idx + 1}
                 </div>
                 {rows.length > 1 && (
@@ -6719,7 +6741,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                       borderRadius: 10,
                       border: "1px solid " + borderCMobile,
                       background: dark ? "#252535" : "#fff",
-                      color: "#F87171",
+                      color: readableDarkText("#F87171", dark, dark ? "#252535" : "#fff"),
                       fontSize: 18,
                       fontWeight: 900,
                       cursor: "pointer",
@@ -6740,7 +6762,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                   gridTemplateColumns: "clamp(36px,11vw,44px) minmax(0,1fr) clamp(98px,29vw,108px)",
                   gap: "clamp(3px,1.5vw,6px)",
                   alignItems: "center",
-                  color: "#fff",
+                  color: readableDarkText("#fff", dark, amountGradient),
                   boxShadow: dark ? "0 12px 28px rgba(0,0,0,.20)" : "0 14px 30px rgba(83,74,183,.22)",
                 }}
               >
@@ -6753,13 +6775,13 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                   iconSize={34}
                 />
                 <div style={{ minWidth: 0, textAlign: "center" }}>
-                  <div style={{ fontSize: 12.6, fontWeight: 850, textTransform: "uppercase", letterSpacing: 0.8, color: whiteSoftMobile, marginBottom: 2 }}>
+                  <div style={{ fontSize: 12.6, fontWeight: 850, textTransform: "uppercase", letterSpacing: 0.8, color: readableDarkText(whiteSoftMobile, dark, amountGradient), marginBottom: 2 }}>
                     {L("Importo")}
                   </div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, maxWidth: "100%" }}>
                     <div style={{ position: "relative", flex: "0 1 auto", minWidth: 0, maxWidth: "calc(100% - 48px)" }}>
                       {showAmountPlaceholder && (
-                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "clamp(31.5px,10.4vw,37.5px)", fontWeight: 950, color: "#fff", lineHeight: 1, pointerEvents: "none", textShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "clamp(31.5px,10.4vw,37.5px)", fontWeight: 950, color: readableDarkText("#fff", dark, amountGradient), lineHeight: 1, pointerEvents: "none", textShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
                           _,__
                         </div>
                       )}
@@ -6784,7 +6806,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                           textAlign: "center",
                           fontSize: "clamp(31.5px,10.4vw,37.5px)",
                           fontWeight: 950,
-                          color: "#fff",
+                          color: readableDarkText("#fff", dark, "transparent"),
                           WebkitTextFillColor: "#fff",
                           outline: "none",
                           lineHeight: 1,
@@ -6801,18 +6823,18 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                     />
                   </div>
                   {showAmountPlaceholder && (
-                    <div style={{ fontSize: 14.6, color: whiteSoftMobile, fontWeight: 600, marginTop: 4 }}>
+                    <div style={{ fontSize: 14.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), fontWeight: 600, marginTop: 4 }}>
                       {L("Inserisci l'importo")}
                     </div>
                   )}
                   {String(r.currency || ctx.currency) !== String(ctx.currency) && Number(r.baseAmount) > 0 && (
-                    <div style={{ fontSize: 11.6, color: whiteSoftMobile, marginTop: 3 }}>
+                    <div style={{ fontSize: 11.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), marginTop: 3 }}>
                       ≈ {formatNumber(r.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(ctx.currency || "EUR")}
                     </div>
                   )}
                 </div>
                 <div style={{ height: "100%", minHeight: 52, borderLeft: "1px solid rgba(255,255,255,.32)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, paddingLeft: 12 }}>
-                  <div style={{ fontSize: "clamp(7.4px,2.35vw,8.6px)", fontWeight: 950, textTransform: "uppercase", letterSpacing: 0.35, color: "#fff", lineHeight: 0.95, textAlign: "center" }}>
+                  <div style={{ fontSize: "clamp(7.4px,2.35vw,8.6px)", fontWeight: 950, textTransform: "uppercase", letterSpacing: 0.35, color: readableDarkText("#fff", dark, amountGradient), lineHeight: 0.95, textAlign: "center" }}>
                     {L("Rateizza")}
                   </div>
                   {bulkToggleSwitch(r)}
@@ -6821,7 +6843,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
 
               {r.rateizzato && (
                 <div style={{ background: dark ? "#24213a" : "#F0EDFF", border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"), borderRadius: 14, padding: 10 }}>
-                  <div style={{ fontSize: 12, color: dark ? "#BEB8FF" : "#534AB7", marginBottom: 7, fontWeight: 800 }}>
+                  <div style={{ fontSize: 12, color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"), marginBottom: 7, fontWeight: 800 }}>
                     {L("Rateizza")} · {r.rate} {L("mesi")}
                   </div>
                   <RatePicker
@@ -6847,7 +6869,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                           return <option key={c.id} value={c.id}>{iconTextValue(c.icon)} {c.name}</option>;
                         })}
                       </select>
-                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: mainButtonC, fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
+                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"), fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
                     </div>
                   </div>
                   <div style={{ ...mobileFieldCard, padding: "4px clamp(5px,1.9vw,7px)" }}>
@@ -6862,7 +6884,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                           return <option key={m.id} value={m.id}>{iconTextValue(m.icon)} {m.name}</option>;
                         })}
                       </select>
-                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: mainButtonC, fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
+                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"), fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
                     </div>
                   </div>
                 </div>
@@ -7155,7 +7177,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         background: "none",
                         border: "none",
                         cursor: "pointer",
-                        color: "#aaa",
+                        color: readableDarkText("#aaa", dark, "none"),
                         fontSize: 15,
                       }}
                     >
@@ -7320,7 +7342,7 @@ export function RecurringManager() {
     padding: "10px 12px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var tc = dark ? "#eee" : "#333";
@@ -7370,7 +7392,7 @@ export function RecurringManager() {
           border: "1px solid " + (dark ? "#6a5520" : "#FFD54F"),
           borderRadius: 14,
           padding: 16,
-          color: dark ? "#ffd58a" : "#856404",
+          color: readableDarkText(dark ? "#ffd58a" : "#856404", dark, dark ? "#342b16" : "#FFF8E1"),
           fontSize: 13,
           fontWeight: 800,
         }}
@@ -7614,7 +7636,7 @@ export function RecurringManager() {
           fontSize: 11,
           fontWeight: 800,
           background: bg,
-          color: color,
+          color: readableDarkText(color, dark, bg),
           whiteSpace: "nowrap",
           maxWidth: "100%",
         }}
@@ -7653,7 +7675,7 @@ export function RecurringManager() {
             border: "none",
             borderRadius: 10,
             background: form.rtype !== "income" ? "#E24B4A" : "transparent",
-            color: form.rtype !== "income" ? "#fff" : sc,
+            color: readableDarkText(form.rtype !== "income" ? "#fff" : sc, dark, form.rtype !== "income" ? "#E24B4A" : "transparent"),
             fontSize: 13,
             cursor: "pointer",
             fontWeight: form.rtype !== "income" ? 800 : 600,
@@ -7671,7 +7693,7 @@ export function RecurringManager() {
             border: "none",
             borderRadius: 10,
             background: form.rtype === "income" ? "#1D9E75" : "transparent",
-            color: form.rtype === "income" ? "#fff" : sc,
+            color: readableDarkText(form.rtype === "income" ? "#fff" : sc, dark, form.rtype === "income" ? "#1D9E75" : "transparent"),
             fontSize: 13,
             cursor: "pointer",
             fontWeight: form.rtype === "income" ? 800 : 600,
@@ -7815,7 +7837,11 @@ export function RecurringManager() {
                     : dark
                     ? "#252535"
                     : "#fff",
-                color: form.frequency !== "annual" ? "#fff" : sc,
+                color: readableDarkText(form.frequency !== "annual" ? "#fff" : sc, dark, form.frequency !== "annual"
+                    ? secondaryButtonColor || "#7F77DD"
+                    : dark
+                    ? "#252535"
+                    : "#fff"),
                 fontSize: 13,
                 cursor: "pointer",
                 fontWeight: form.frequency !== "annual" ? 700 : 500,
@@ -7838,7 +7864,11 @@ export function RecurringManager() {
                     : dark
                     ? "#252535"
                     : "#fff",
-                color: form.frequency === "annual" ? "#fff" : sc,
+                color: readableDarkText(form.frequency === "annual" ? "#fff" : sc, dark, form.frequency === "annual"
+                    ? secondaryButtonColor || "#7F77DD"
+                    : dark
+                    ? "#252535"
+                    : "#fff"),
                 fontSize: 13,
                 cursor: "pointer",
                 fontWeight: form.frequency === "annual" ? 700 : 500,
@@ -8120,7 +8150,7 @@ export function RecurringManager() {
                   style={{
                     fontSize: 20,
                     fontWeight: 950,
-                    color: r.rtype === "income" ? "#1D9E75" : "#E24B4A",
+                    color: readableDarkText(r.rtype === "income" ? "#1D9E75" : "#E24B4A", dark, cardBg),
                     marginTop: 2,
                   }}
                 >
@@ -8134,7 +8164,7 @@ export function RecurringManager() {
                   padding: "3px 9px",
                   fontWeight: 900,
                   background: r.rtype === "income" ? "#1D9E7522" : "#E24B4A22",
-                  color: r.rtype === "income" ? "#1D9E75" : "#E24B4A",
+                  color: readableDarkText(r.rtype === "income" ? "#1D9E75" : "#E24B4A", dark, r.rtype === "income" ? "#1D9E7522" : "#E24B4A22"),
                   whiteSpace: "nowrap",
                 }}
               >
@@ -8195,7 +8225,7 @@ export function RecurringManager() {
                 borderRadius: 10,
                 padding: "8px 10px",
                 cursor: "pointer",
-                color: dark ? "#BEB8FF" : "#378ADD",
+                color: readableDarkText(dark ? "#BEB8FF" : "#378ADD", dark, dark ? "#24213a" : "#EEF4FF"),
                 fontSize: 12,
                 fontWeight: 900,
               }}
@@ -8214,7 +8244,7 @@ export function RecurringManager() {
                 borderRadius: 10,
                 padding: "8px 10px",
                 cursor: "pointer",
-                color: "#E24B4A",
+                color: readableDarkText("#E24B4A", dark, dark ? "#3a1a1a" : "#FFF0F0"),
                 fontSize: 12,
                 fontWeight: 900,
               }}
@@ -8238,13 +8268,13 @@ export function RecurringManager() {
             }}
           >
             <div style={{ flex: 1, minWidth: 190 }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: "#E24B4A" }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: readableDarkText("#E24B4A", dark, dark ? "#3a1a1a" : "#fff0f0") }}>
                 {L("Eliminare questa ricorrente?")}
               </div>
               <div
                 style={{
                   fontSize: 12,
-                  color: dark ? "#f0bbbb" : "#8a4a4a",
+                  color: readableDarkText(dark ? "#f0bbbb" : "#8a4a4a", dark, dark ? "#3a1a1a" : "#fff0f0"),
                   marginTop: 2,
                 }}
               >
@@ -8334,7 +8364,7 @@ export function RecurringManager() {
             style={{
               fontSize: 13,
               fontWeight: 900,
-              color: dark ? "#ffd58a" : "#856404",
+              color: readableDarkText(dark ? "#ffd58a" : "#856404", dark, dark ? "#342b16" : "#FFF8E1"),
               marginBottom: 10,
             }}
           >
@@ -8411,7 +8441,7 @@ export function RecurringManager() {
             borderRadius: 14,
             padding: "12px 16px",
             fontSize: 13,
-            color: "#1D9E75",
+            color: readableDarkText("#1D9E75", dark, dark ? "#153025" : "#e8f8f0"),
             fontWeight: 800,
           }}
         >
@@ -8424,7 +8454,7 @@ export function RecurringManager() {
           <div
             style={{
               fontSize: 13,
-              color: "#ccc",
+              color: readableDarkText("#ccc", dark, "#35354a"),
               textAlign: "center",
               padding: "24px 0",
             }}
@@ -8474,7 +8504,7 @@ export function GoalsPanel() {
     padding: "10px 12px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var lang = (ctx && ctx.lang) || "it";
@@ -8677,7 +8707,7 @@ export function GoalsPanel() {
             <div
               style={{
                 fontSize: 12,
-                color: goalsAllowed() ? sc : dark ? "#ffd58a" : "#856404",
+                color: readableDarkText(goalsAllowed() ? sc : dark ? "#ffd58a" : "#856404", dark, "#35354a"),
                 marginTop: 2,
               }}
             >
@@ -8913,7 +8943,9 @@ export function GoalsPanel() {
                             form.period === "monthly"
                               ? secondaryButtonColor
                               : "transparent",
-                          color: form.period === "monthly" ? "#fff" : sc,
+                          color: readableDarkText(form.period === "monthly" ? "#fff" : sc, dark, form.period === "monthly"
+                              ? secondaryButtonColor
+                              : "transparent"),
                           fontWeight: form.period === "monthly" ? 850 : 650,
                           cursor: "pointer",
                           boxShadow:
@@ -8944,7 +8976,9 @@ export function GoalsPanel() {
                             form.period === "annual"
                               ? secondaryButtonColor
                               : "transparent",
-                          color: form.period === "annual" ? "#fff" : sc,
+                          color: readableDarkText(form.period === "annual" ? "#fff" : sc, dark, form.period === "annual"
+                              ? secondaryButtonColor
+                              : "transparent"),
                           fontWeight: form.period === "annual" ? 850 : 650,
                           cursor: "pointer",
                           boxShadow:
@@ -9075,7 +9109,7 @@ export function GoalsPanel() {
         <div
           style={{
             textAlign: "center",
-            color: "#ccc",
+            color: readableDarkText("#ccc", dark, "#35354a"),
             padding: "40px 0",
             fontSize: 14,
           }}
@@ -9191,7 +9225,7 @@ export function GoalsPanel() {
                       borderRadius: 10,
                       border: "1px solid " + borderC,
                       background: dark ? "#1e1e30" : "#f8f8f8",
-                      color: idx === 0 ? "#bbb" : tc,
+                      color: readableDarkText(idx === 0 ? "#bbb" : tc, dark, dark ? "#1e1e30" : "#f8f8f8"),
                       cursor: idx === 0 ? "default" : "pointer",
                     }}
                   >
@@ -9208,7 +9242,7 @@ export function GoalsPanel() {
                       borderRadius: 10,
                       border: "1px solid " + borderC,
                       background: dark ? "#1e1e30" : "#f8f8f8",
-                      color: idx === goals.length - 1 ? "#bbb" : tc,
+                      color: readableDarkText(idx === goals.length - 1 ? "#bbb" : tc, dark, dark ? "#1e1e30" : "#f8f8f8"),
                       cursor: idx === goals.length - 1 ? "default" : "pointer",
                     }}
                   >
@@ -9223,7 +9257,7 @@ export function GoalsPanel() {
                       background: "#EEF4FF",
                       border: "1px solid #BFD7FF",
                       cursor: "pointer",
-                      color: "#378ADD",
+                      color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                       fontSize: 14,
                       padding: "5px 8px",
                       borderRadius: 8,
@@ -9249,7 +9283,7 @@ export function GoalsPanel() {
                       background: "#FFF0F0",
                       border: "1px solid #FFD0D0",
                       cursor: "pointer",
-                      color: "#E24B4A",
+                      color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                       fontSize: 14,
                       padding: "5px 8px",
                       borderRadius: 8,
@@ -9301,7 +9335,7 @@ export function GoalsPanel() {
                           style={{
                             fontSize: 13,
                             fontWeight: 850,
-                            color: linkedBuckets.length ? tc : sc,
+                            color: readableDarkText(linkedBuckets.length ? tc : sc, dark, dark ? "#1E1E30" : "#F8FAFC"),
                             marginTop: 4,
                             overflowWrap: "anywhere",
                           }}
@@ -9317,7 +9351,7 @@ export function GoalsPanel() {
                             border: "1px solid " + (dark ? "#4B4A70" : "#D9D3FF"),
                             borderRadius: 9,
                             background: dark ? "#26253B" : "#F3F0FF",
-                            color: secondaryButtonColor,
+                            color: readableDarkText(secondaryButtonColor, dark, dark ? "#26253B" : "#F3F0FF"),
                             padding: "7px 9px",
                             fontSize: 11,
                             fontWeight: 850,
@@ -9354,7 +9388,7 @@ export function GoalsPanel() {
                               border: "none",
                               borderRadius: 9,
                               background: secondaryButtonColor,
-                              color: "#fff",
+                              color: readableDarkText("#fff", dark, secondaryButtonColor),
                               padding: "8px 11px",
                               fontWeight: 850,
                               cursor: "pointer",
@@ -9378,7 +9412,7 @@ export function GoalsPanel() {
                             {L("Annulla")}
                           </button>
                         </div>
-                        {linkError && <div role="alert" style={{ fontSize: 11, color: "#E24B4A", marginTop: 7 }}>{linkError}</div>}
+                        {linkError && <div role="alert" style={{ fontSize: 11, color: readableDarkText("#E24B4A", dark, dark ? "#1E1E30" : "#F8FAFC"), marginTop: 7 }}>{linkError}</div>}
                       </div>
                     )}
                   </div>
@@ -9393,7 +9427,7 @@ export function GoalsPanel() {
                   marginBottom: 6,
                 }}
               >
-                <span style={{ fontSize: 18, fontWeight: 900, color: g.color }}>
+                <span style={{ fontSize: 18, fontWeight: 900, color: readableDarkText(g.color, dark, cardBg) }}>
                   {fmtAmt(saved, sym)}
                 </span>
                 <span style={{ fontSize: 14, color: sc }}>
@@ -9428,7 +9462,7 @@ export function GoalsPanel() {
                 <span
                   style={{
                     fontSize: 12,
-                    color: done ? "#1D9E75" : sc,
+                    color: readableDarkText(done ? "#1D9E75" : sc, dark, cardBg),
                     fontWeight: 700,
                   }}
                 >
@@ -9482,7 +9516,7 @@ export function GoalsPanel() {
                       <span
                         style={{
                           fontSize: 18,
-                          color: g.color,
+                          color: readableDarkText(g.color, dark, dark ? "#252535" : "#fff"),
                           fontWeight: 900,
                         }}
                       >
@@ -9508,7 +9542,7 @@ export function GoalsPanel() {
                           padding: "13px 0",
                           fontSize: 16,
                           background: "transparent",
-                          color: tc,
+                          color: readableDarkText(tc, dark, "transparent"),
                           minWidth: 0,
                         }}
                       />
@@ -9525,7 +9559,7 @@ export function GoalsPanel() {
                         borderRadius: 12,
                         background:
                           Number(addAmt[g.id]) > 0 ? g.color : "#A8A8A8",
-                        color: "#fff",
+                        color: readableDarkText("#fff", dark, Number(addAmt[g.id]) > 0 ? g.color : "#A8A8A8"),
                         fontSize: 15,
                         fontWeight: 900,
                         cursor:
@@ -9598,7 +9632,7 @@ export function AlertsPanel() {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var lang = (ctx && ctx.lang) || "it";
@@ -9797,7 +9831,7 @@ export function AlertsPanel() {
             <span
               style={{
                 background: "#E24B4A",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, "#E24B4A"),
                 borderRadius: 20,
                 padding: "2px 8px",
                 fontSize: 12,
@@ -10059,7 +10093,9 @@ export function AlertsPanel() {
                           form.period === "monthly"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.period === "monthly" ? "#fff" : sc,
+                        color: readableDarkText(form.period === "monthly" ? "#fff" : sc, dark, form.period === "monthly"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.period === "monthly" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10090,7 +10126,9 @@ export function AlertsPanel() {
                           form.period === "annual"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.period === "annual" ? "#fff" : sc,
+                        color: readableDarkText(form.period === "annual" ? "#fff" : sc, dark, form.period === "annual"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.period === "annual" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10183,7 +10221,9 @@ export function AlertsPanel() {
                           form.type === "cat"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.type === "cat" ? "#fff" : sc,
+                        color: readableDarkText(form.type === "cat" ? "#fff" : sc, dark, form.type === "cat"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.type === "cat" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10212,7 +10252,9 @@ export function AlertsPanel() {
                           form.type === "group"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.type === "group" ? "#fff" : sc,
+                        color: readableDarkText(form.type === "group" ? "#fff" : sc, dark, form.type === "group"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.type === "group" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10345,7 +10387,9 @@ export function AlertsPanel() {
                           form.triggerMode === "immediate"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.triggerMode === "immediate" ? "#fff" : sc,
+                        color: readableDarkText(form.triggerMode === "immediate" ? "#fff" : sc, dark, form.triggerMode === "immediate"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight:
                           form.triggerMode === "immediate" ? 850 : 650,
                         cursor: "pointer",
@@ -10377,7 +10421,9 @@ export function AlertsPanel() {
                           form.triggerMode === "pct"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.triggerMode === "pct" ? "#fff" : sc,
+                        color: readableDarkText(form.triggerMode === "pct" ? "#fff" : sc, dark, form.triggerMode === "pct"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.triggerMode === "pct" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10450,7 +10496,7 @@ export function AlertsPanel() {
         <div
           style={{
             textAlign: "center",
-            color: "#ccc",
+            color: readableDarkText("#ccc", dark, "#35354a"),
             padding: "40px 0",
             fontSize: 14,
           }}
@@ -10563,7 +10609,13 @@ export function AlertsPanel() {
                       style={{
                         fontSize: 15,
                         fontWeight: 850,
-                        color: trig ? "#E24B4A" : tc,
+                        color: readableDarkText(trig ? "#E24B4A" : tc, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff"),
                       }}
                     >
                       {al.name}
@@ -10572,7 +10624,7 @@ export function AlertsPanel() {
                       style={{
                         fontSize: 10,
                         background: al.period === "annual" ? "#EEF" : "#EFE",
-                        color: al.period === "annual" ? "#534AB7" : "#1D9E75",
+                        color: readableDarkText(al.period === "annual" ? "#534AB7" : "#1D9E75", dark, al.period === "annual" ? "#EEF" : "#EFE"),
                         borderRadius: 10,
                         padding: "2px 7px",
                         fontWeight: 750,
@@ -10588,7 +10640,13 @@ export function AlertsPanel() {
                     <div
                       style={{
                         fontSize: 12,
-                        color: trig ? "#E24B4A" : sc,
+                        color: readableDarkText(trig ? "#E24B4A" : sc, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff"),
                         marginTop: 5,
                         fontStyle: "italic",
                       }}
@@ -10609,7 +10667,7 @@ export function AlertsPanel() {
                     border: "1px solid #BFD7FF",
                     borderRadius: 9,
                     cursor: "pointer",
-                    color: "#378ADD",
+                    color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                     fontSize: 14,
                     padding: "6px 9px",
                     fontWeight: 700,
@@ -10633,7 +10691,7 @@ export function AlertsPanel() {
                     border: "1px solid #FFD0D0",
                     borderRadius: 9,
                     cursor: "pointer",
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                     fontSize: 14,
                     padding: "6px 9px",
                     fontWeight: 700,
@@ -10650,7 +10708,13 @@ export function AlertsPanel() {
                 marginBottom: 5,
               }}
             >
-              <span style={{ fontSize: 14, fontWeight: 800, color: barColor }}>
+              <span style={{ fontSize: 14, fontWeight: 800, color: readableDarkText(barColor, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff") }}>
                 {fmtAmt(spent, sym)}
               </span>
               <span style={{ fontSize: 12, color: sc }}>
@@ -10677,7 +10741,13 @@ export function AlertsPanel() {
             <div
               style={{
                 fontSize: 11,
-                color: barColor,
+                color: readableDarkText(barColor, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff"),
                 marginTop: 4,
                 textAlign: "right",
                 fontWeight: 750,
@@ -10904,7 +10974,7 @@ export function BudgetPlanPanel() {
     padding: isMobile ? "6px 6px" : "7px 10px",
     fontSize: isMobile ? 13.2 : 13,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
     minWidth: 0,
   };
@@ -11019,7 +11089,7 @@ export function BudgetPlanPanel() {
           onClick={openBudgetStatistics}
           style={{
             background: confirmButtonColor,
-            color: "#fff",
+            color: readableDarkText("#fff", dark, confirmButtonColor),
             border: "none",
             borderRadius: btnRadius,
             padding: "10px 14px",
@@ -11092,15 +11162,15 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "7px 0" }}>
               <span style={{ fontSize: 12, color: sc }}>{L("Totale allocato")}</span>
-              <strong style={{ fontSize: 15, color: "#E24B4A", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>− {fmtBudget(totalAlloc)}</strong>
+              <strong style={{ fontSize: 15, color: readableDarkText("#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>− {fmtBudget(totalAlloc)}</strong>
             </div>
             <div style={{ height: 1, background: borderC, margin: "4px 0 9px" }} />
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: "#1D9E75", fontWeight: 800 }}>{L("Risparmio pianif.")}</div>
+                <div style={{ fontSize: 12, color: readableDarkText("#1D9E75", dark, dark ? "#202030" : "#F7F8FC"), fontWeight: 800 }}>{L("Risparmio pianif.")}</div>
                 <div style={{ fontSize: 11, color: sc, marginTop: 3 }}>{Math.round(savingPct)}% {L("del reddito")}</div>
               </div>
-              <strong style={{ fontSize: isMobile ? 23 : 24, lineHeight: 1, color: "#1D9E75", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtBudget(savingPlanned)}</strong>
+              <strong style={{ fontSize: isMobile ? 23 : 24, lineHeight: 1, color: readableDarkText("#1D9E75", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtBudget(savingPlanned)}</strong>
             </div>
           </div>
 
@@ -11114,12 +11184,12 @@ export function BudgetPlanPanel() {
           >
             <div style={{ background: dark ? "#202030" : "#F7F8FC", border: "1px solid " + borderC, borderRadius: 12, padding: "10px 11px", minWidth: 0 }}>
               <div style={{ fontSize: 11, color: sc, marginBottom: 4 }}>{L("Risparmio reale")}</div>
-              <strong style={{ display: "block", fontSize: 17, color: realSaving >= 0 ? "#1D9E75" : "#E24B4A", fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{fmtBudget(realSaving)}</strong>
+              <strong style={{ display: "block", fontSize: 17, color: readableDarkText(realSaving >= 0 ? "#1D9E75" : "#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{fmtBudget(realSaving)}</strong>
             </div>
             <div style={{ background: dark ? "#202030" : "#F7F8FC", border: "1px solid " + borderC, borderRadius: 12, padding: "10px 11px", minWidth: 0 }}>
               <div style={{ fontSize: 11, color: sc, marginBottom: 4 }}>{L("Rispetto al piano")}</div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                <strong style={{ display: "block", fontSize: 17, color: savingDiff >= 0 ? "#1D9E75" : "#E24B4A", fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{savingDiff >= 0 ? "+" : ""}{fmtBudget(savingDiff)}</strong>
+                <strong style={{ display: "block", fontSize: 17, color: readableDarkText(savingDiff >= 0 ? "#1D9E75" : "#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{savingDiff >= 0 ? "+" : ""}{fmtBudget(savingDiff)}</strong>
                 <span aria-hidden="true" style={{ fontSize: 16 }}>{savingDiff >= 0 ? "✅" : "⚠️"}</span>
               </div>
             </div>
@@ -11184,7 +11254,7 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ fontSize: 12, color: sc }}>
               {L("Reddito di rif.")}:{" "}
-              <strong style={{ color: "#1D9E75" }}>
+              <strong style={{ color: readableDarkText("#1D9E75", dark, cardBg) }}>
                 {fmtBudget(effectiveIncome)}
               </strong>
             </div>
@@ -11238,7 +11308,7 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ fontSize: 12, color: sc }}>
               {L("Totale allocato")}:{" "}
-              <strong style={{ color: barColor }}>{fmtBudget(totalAlloc)}</strong> ·{" "}
+              <strong style={{ color: readableDarkText(barColor, dark, cardBg) }}>{fmtBudget(totalAlloc)}</strong> ·{" "}
               {Math.round(pctBar)}%
             </div>
           </div>
@@ -11282,13 +11352,13 @@ export function BudgetPlanPanel() {
                 popupWidth={320}
               >
                 <div>
-                  <div style={{ color: dark ? "#F2DF9C" : "#6B5900" }}>
+                  <div style={{ color: readableDarkText(dark ? "#F2DF9C" : "#6B5900", dark, dark ? "#1A2A1E" : "#EDFAF3") }}>
                     {L("Media entrate mensili (ultimi 12 mesi)")}
                   </div>
                   <div
                     style={{
                       fontWeight: 900,
-                      color: "#1D9E75",
+                      color: readableDarkText("#1D9E75", dark, dark ? "#1A2A1E" : "#EDFAF3"),
                       fontSize: 18,
                       marginTop: 6,
                     }}
@@ -11298,7 +11368,7 @@ export function BudgetPlanPanel() {
                 </div>
               </FainanceInfoPopover>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: "#1D9E75" }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: readableDarkText("#1D9E75", dark, dark ? "#1A2A1E" : "#EDFAF3") }}>
               {fmtBudget(effectiveIncome)}
             </div>
           </div>
@@ -11368,7 +11438,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc, marginBottom: 3 }}>
                 {L("Totale allocato")}
               </div>
-              <div style={{ fontSize: 17, fontWeight: 850, color: barColor }}>
+              <div style={{ fontSize: 17, fontWeight: 850, color: readableDarkText(barColor, dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(totalAlloc)}
               </div>
             </div>
@@ -11382,7 +11452,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc, marginBottom: 3 }}>
                 {L("Disponibile")}
               </div>
-              <div style={{ fontSize: 17, fontWeight: 850, color: "#1D9E75" }}>
+              <div style={{ fontSize: 17, fontWeight: 850, color: readableDarkText("#1D9E75", dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(savingPlanned)}
               </div>
             </div>
@@ -11456,7 +11526,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc }}>
                 {L("Reddito di rif.")}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 850, color: "#1D9E75" }}>
+              <div style={{ fontSize: 16, fontWeight: 850, color: readableDarkText("#1D9E75", dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(effectiveIncome)}
               </div>
             </div>
@@ -11464,7 +11534,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc }}>
                 {L("Totale allocato")}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 850, color: barColor }}>
+              <div style={{ fontSize: 16, fontWeight: 850, color: readableDarkText(barColor, dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(totalAlloc)}
               </div>
             </div>
@@ -11529,7 +11599,7 @@ export function BudgetPlanPanel() {
                     style={{
                       fontSize: isMobile ? 12.5 : 11,
                       fontWeight: 700,
-                      color: "#aaa",
+                      color: readableDarkText("#aaa", dark, "#35354a"),
                       textTransform: "uppercase",
                       letterSpacing: 1,
                       marginBottom: 6,
@@ -11707,7 +11777,7 @@ export function SettingsList({
     padding: "10px 11px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var tc = dark ? "#eee" : "#333";
@@ -12404,7 +12474,7 @@ export function SettingsList({
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
-                  color: "#aaa",
+                  color: readableDarkText("#aaa", dark, "#35354a"),
                   textTransform: "uppercase",
                   letterSpacing: 1,
                   margin: "12px 0 6px",
@@ -12487,7 +12557,11 @@ export function SettingsList({
                             : "#BFD7FF"),
                         borderRadius: 8,
                         cursor: "pointer",
-                        color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD",
+                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD", dark, baseBlocked
+                          ? dark
+                            ? "#34343f"
+                            : "#E5E7EB"
+                          : "#EEF4FF"),
                         fontSize: 14,
                         padding: "5px 8px",
                         fontWeight: 700,
@@ -12506,7 +12580,7 @@ export function SettingsList({
                         borderRadius: 8,
                         cursor: "pointer",
                         fontSize: 15,
-                        color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#bbb",
+                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#bbb", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "none"),
                         padding: "5px 8px",
                       }}
                     >
@@ -12520,7 +12594,7 @@ export function SettingsList({
                         background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0",
                         border: "1px solid " + (baseBlocked ? (dark ? "#4B4B58" : "#D1D5DB") : "#FFD0D0"),
                         borderRadius: 8, cursor: "pointer",
-                        color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A",
+                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0"),
                         fontSize: 14, padding: "5px 8px", fontWeight: 700,
                       }}
                     >
@@ -12546,7 +12620,7 @@ export function SettingsList({
           width: "100%",
           marginTop: 8,
           background: baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor,
-          color: "#fff",
+          color: readableDarkText("#fff", dark, baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor),
           border: "none",
           borderRadius: btnRadius,
           padding: "13px 16px",
@@ -12953,7 +13027,7 @@ export function AreasEditor({ onlyPatrimonio }) {
                 borderRadius: 8,
                 background:
                   areaTab === tb.id ? (dark ? "#444" : "#fff") : "transparent",
-                color: areaTab === tb.id ? tc : sc,
+                color: readableDarkText(areaTab === tb.id ? tc : sc, dark, areaTab === tb.id ? (dark ? "#444" : "#fff") : "transparent"),
                 fontSize: 12,
                 cursor: "pointer",
                 fontWeight: areaTab === tb.id ? 600 : 400,
@@ -13023,7 +13097,11 @@ export function AreasEditor({ onlyPatrimonio }) {
                     : "#BFD7FF"),
                 borderRadius: 8,
                 cursor: "pointer",
-                color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD",
+                color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD", dark, baseBlocked
+                  ? dark
+                    ? "#34343f"
+                    : "#E5E7EB"
+                  : "#EEF4FF"),
                 fontSize: 14,
                 padding: "5px 8px",
                 fontWeight: 700,
@@ -13040,7 +13118,7 @@ export function AreasEditor({ onlyPatrimonio }) {
                 background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0",
                 border: "1px solid " + (baseBlocked ? (dark ? "#4B4B58" : "#D1D5DB") : "#FFD0D0"),
                 borderRadius: 8, cursor: "pointer",
-                color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A",
+                color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0"),
                 fontSize: 14, padding: "5px 8px", fontWeight: 700,
               }}
             >
@@ -13055,7 +13133,7 @@ export function AreasEditor({ onlyPatrimonio }) {
         style={{
           width: "100%",
           background: baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor,
-          color: "#fff",
+          color: readableDarkText("#fff", dark, baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor),
           border: "none",
           borderRadius: btnRadius,
           padding: "13px 16px",
@@ -13303,7 +13381,7 @@ export function PatrimonioSettingsPanel({
         }}
         style={{
           fontSize: 12,
-          color: dark ? "#ffd58a" : "#856404",
+          color: readableDarkText(dark ? "#ffd58a" : "#856404", dark, dark ? "#342b16" : "#FFF8E1"),
           background: dark ? "#342b16" : "#FFF8E1",
           border: "1px solid " + (dark ? "#6a5520" : "#FFD54F"),
           borderRadius: 10,
@@ -13714,7 +13792,7 @@ export function PatrimonioSettingsPanel({
                 padding: "10px 12px",
               }}
             >
-              <span style={{ fontSize: 12, color: "#856404" }}>
+              <span style={{ fontSize: 12, color: readableDarkText("#856404", dark, "#FFF8E1") }}>
                 {L(
                   "⚠️ La modalità semi-automatica è in beta. I valori potrebbero non essere precisi."
                 )}
@@ -14469,7 +14547,7 @@ export function DeleteDataPanel() {
                 border: "none",
                 borderRadius: 10,
                 background: movType === "expense" ? "#E24B4A" : "transparent",
-                color: movType === "expense" ? "#fff" : sc,
+                color: readableDarkText(movType === "expense" ? "#fff" : sc, dark, movType === "expense" ? "#E24B4A" : "transparent"),
                 fontSize: 13,
                 cursor: "pointer",
               }}
@@ -14487,7 +14565,7 @@ export function DeleteDataPanel() {
                 border: "none",
                 borderRadius: 10,
                 background: movType === "income" ? "#1D9E75" : "transparent",
-                color: movType === "income" ? "#fff" : sc,
+                color: readableDarkText(movType === "income" ? "#fff" : sc, dark, movType === "income" ? "#1D9E75" : "transparent"),
                 fontSize: 13,
                 cursor: "pointer",
               }}
@@ -14518,7 +14596,7 @@ export function DeleteDataPanel() {
                       "1px solid " + (mode === m.id ? "#E24B4A" : borderC),
                     borderRadius: 10,
                     background: mode === m.id ? "#fde8e8" : cardBg,
-                    color: mode === m.id ? "#E24B4A" : tc,
+                    color: readableDarkText(mode === m.id ? "#E24B4A" : tc, dark, mode === m.id ? "#fde8e8" : cardBg),
                     cursor: "pointer",
                     textAlign: "left",
                     fontSize: 13,
@@ -14548,7 +14626,7 @@ export function DeleteDataPanel() {
                         style={{
                           fontSize: 11,
                           fontWeight: 600,
-                          color: "#aaa",
+                          color: readableDarkText("#aaa", dark, "#35354a"),
                           textTransform: "uppercase",
                           letterSpacing: 1,
                           margin: "10px 0 6px",
@@ -14795,7 +14873,7 @@ export function DeleteDataPanel() {
                       style={{
                         fontSize: 13,
                         fontWeight: 500,
-                        color: movType === "expense" ? "#E24B4A" : "#1D9E75",
+                        color: readableDarkText(movType === "expense" ? "#E24B4A" : "#1D9E75", dark, "#35354a"),
                       }}
                     >
                       {fmt(e.amount)}
@@ -14833,13 +14911,13 @@ export function DeleteDataPanel() {
             style={{
               fontSize: 14,
               fontWeight: 600,
-              color: "#E24B4A",
+              color: readableDarkText("#E24B4A", dark, "#fff0f0"),
               marginBottom: 8,
             }}
           >
             Conferma eliminazione
           </div>
-          <div style={{ fontSize: 13, color: "#555", marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: readableDarkText("#555", dark, "#fff0f0"), marginBottom: 14 }}>
             Operazione non reversibile. Elementi interessati:{" "}
             <strong>{count}</strong>.
           </div>
@@ -14868,7 +14946,7 @@ export function DeleteDataPanel() {
         <div
           style={{
             fontSize: 13,
-            color: "#aaa",
+            color: readableDarkText("#aaa", dark, "#35354a"),
             textAlign: "center",
             padding: "8px 0",
           }}
@@ -14929,7 +15007,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
     minWidth: 0,
   };
@@ -15016,7 +15094,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
               border: "none",
               fontSize: 20,
               cursor: "pointer",
-              color: "#aaa",
+              color: readableDarkText("#aaa", dark, "none"),
             }}
           >
             x
@@ -15229,7 +15307,13 @@ export function EditModal({ item, isExp, onSave, onClose }) {
             {f.rateizzato && (
               <div style={{ marginTop: 8 }}>
                 <div
-                  style={{ fontSize: 12, color: "#534AB7", marginBottom: 4 }}
+                  style={{ fontSize: 12, color: readableDarkText("#534AB7", dark, f.rateizzato
+                ? dark
+                  ? "#2a2a3e"
+                  : "#EEEDFE"
+                : dark
+                ? "#252535"
+                : "#f5f5f5"), marginBottom: 4 }}
                 >
                   {f.rate} {t.months} -{" "}
                   {fmtAmt(
@@ -15396,7 +15480,7 @@ export function ImportData(props: any = {}) {
     padding: "6px 10px",
     fontSize: 13,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
   };
   var tc = dark ? "#eee" : "#333";
   var sc = dark ? "#aaa" : "#888";
@@ -17273,7 +17357,7 @@ export function ImportData(props: any = {}) {
           style={{
             fontSize: 14,
             fontWeight: 800,
-            color: dark ? "#FFD54F" : "#856404",
+            color: readableDarkText(dark ? "#FFD54F" : "#856404", dark, dark ? "#2a2414" : "#FFF8E1"),
             marginBottom: 5,
           }}
         >
@@ -17282,7 +17366,7 @@ export function ImportData(props: any = {}) {
         <div
           style={{
             fontSize: 12,
-            color: dark ? "#f5d98a" : "#856404",
+            color: readableDarkText(dark ? "#f5d98a" : "#856404", dark, dark ? "#2a2414" : "#FFF8E1"),
             lineHeight: 1.45,
             marginBottom: 12,
           }}
@@ -17325,7 +17409,11 @@ export function ImportData(props: any = {}) {
                     : dark
                     ? "#252535"
                     : "#fff",
-                  color: active ? "#fff" : tc,
+                  color: readableDarkText(active ? "#fff" : tc, dark, active
+                    ? (ctx as any).confirmButtonColor || "#7F77DD"
+                    : dark
+                    ? "#252535"
+                    : "#fff"),
                   border:
                     "1px solid " +
                     (active
@@ -17350,7 +17438,7 @@ export function ImportData(props: any = {}) {
           <div
             style={{
               fontSize: 12,
-              color: dark ? "#f5d98a" : "#856404",
+              color: readableDarkText(dark ? "#f5d98a" : "#856404", dark, dark ? "#2a2414" : "#FFF8E1"),
               marginBottom: 8,
             }}
           >
@@ -17425,7 +17513,7 @@ export function ImportData(props: any = {}) {
             <div style={{ fontSize: 13, fontWeight: 800, color: tc }}>
               📥 {importLoading.stage || L("Caricamento file")}
             </div>
-            <div style={{ fontSize: 12, fontWeight: 900, color: tabColor }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: readableDarkText(tabColor, dark, dark ? "#202033" : "#EEF4FF") }}>
               {importLoading.pct || 0}%
             </div>
           </div>
@@ -17481,7 +17569,7 @@ export function ImportData(props: any = {}) {
             border: "none",
             borderRadius: 10,
             background: importType === "expense" ? "#E24B4A" : "transparent",
-            color: importType === "expense" ? "#fff" : sc,
+            color: readableDarkText(importType === "expense" ? "#fff" : sc, dark, importType === "expense" ? "#E24B4A" : "transparent"),
             fontSize: 14,
             cursor: "pointer",
             fontWeight: importType === "expense" ? 500 : 400,
@@ -17503,7 +17591,7 @@ export function ImportData(props: any = {}) {
             border: "none",
             borderRadius: 10,
             background: importType === "income" ? "#1D9E75" : "transparent",
-            color: importType === "income" ? "#fff" : sc,
+            color: readableDarkText(importType === "income" ? "#fff" : sc, dark, importType === "income" ? "#1D9E75" : "transparent"),
             fontSize: 14,
             cursor: "pointer",
             fontWeight: importType === "income" ? 500 : 400,
@@ -17525,7 +17613,7 @@ export function ImportData(props: any = {}) {
             border: "none",
             borderRadius: 10,
             background: importType === "patrimonio" ? "#7F77DD" : "transparent",
-            color: importType === "patrimonio" ? "#fff" : sc,
+            color: readableDarkText(importType === "patrimonio" ? "#fff" : sc, dark, importType === "patrimonio" ? "#7F77DD" : "transparent"),
             fontSize: 14,
             cursor: "pointer",
             fontWeight: importType === "patrimonio" ? 500 : 400,
@@ -17574,11 +17662,21 @@ export function ImportData(props: any = {}) {
               fontSize: 12,
               fontWeight: 700,
               color:
-                importType === "patrimonio"
+                readableDarkText(importType === "patrimonio"
                   ? "#534AB7"
                   : importType === "expense"
                   ? "#E24B4A"
-                  : "#1D9E75",
+                  : "#1D9E75", dark, importType === "patrimonio"
+                ? dark
+                  ? "#252535"
+                  : "#f0edff"
+                : importType === "expense"
+                ? dark
+                  ? "#2a1e1e"
+                  : "#fff5f5"
+                : dark
+                ? "#1e2a1e"
+                : "#f0faf5"),
               marginBottom: 6,
             }}
           >
@@ -17607,7 +17705,11 @@ export function ImportData(props: any = {}) {
             borderRadius: 8,
             padding: "10px 14px",
             fontSize: 13,
-            color: msg.startsWith("Import") ? "#1D9E75" : "#856404",
+            color: readableDarkText(msg.startsWith("Import") ? "#1D9E75" : "#856404", dark, msg.startsWith("Import")
+              ? "#e8f8f0"
+              : msg.startsWith("⚠")
+              ? "#fff8e1"
+              : "#fff3cd"),
           }}
         >
           {msg}
@@ -17699,7 +17801,7 @@ export function ImportData(props: any = {}) {
               style={{
                 fontSize: 12,
                 fontWeight: 600,
-                color: dark ? "#8bf" : "#1a5fa8",
+                color: readableDarkText(dark ? "#8bf" : "#1a5fa8", dark, dark ? "#1e1e30" : "#f0f8ff"),
                 display: "block",
                 marginBottom: 6,
               }}
@@ -17885,7 +17987,11 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: "#7F77DD",
+                              color: readableDarkText("#7F77DD", dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontWeight: 500,
                             }}
                           >
@@ -17907,7 +18013,11 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: warn ? "#EF9F27" : sc,
+                              color: readableDarkText(warn ? "#EF9F27" : sc, dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontSize: 11,
                             }}
                           >
@@ -17922,7 +18032,11 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: tabColor,
+                              color: readableDarkText(tabColor, dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontWeight: 500,
                             }}
                           >
@@ -17945,7 +18059,11 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: warn ? "#EF9F27" : sc,
+                              color: readableDarkText(warn ? "#EF9F27" : sc, dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontSize: 11,
                             }}
                           >
@@ -18013,7 +18131,7 @@ export function ImportData(props: any = {}) {
               borderRadius: 12,
               padding: "13px 14px",
               background: ctx.confirmButtonColor || "#1D9E75",
-              color: "#fff",
+              color: readableDarkText("#fff", dark, (ctx as any).confirmButtonColor || "#1D9E75"),
               fontSize: 13,
               fontWeight: 900,
               cursor: "pointer",
@@ -18031,7 +18149,7 @@ export function ImportData(props: any = {}) {
               borderRadius: 12,
               padding: "13px 14px",
               background: dark ? "#3a2020" : "#FFF0F0",
-              color: "#E24B4A",
+              color: readableDarkText("#E24B4A", dark, dark ? "#3a2020" : "#FFF0F0"),
               fontSize: 13,
               fontWeight: 900,
               cursor: "pointer",

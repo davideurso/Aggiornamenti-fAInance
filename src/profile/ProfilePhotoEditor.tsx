@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 
 type Props = {
@@ -193,7 +194,7 @@ export function ProfilePhotoEditor({
     >
       <canvas ref={canvasRef} style={{width:"100%",height:"100%",display:"block"}} />
     </div>
-    <div style={{fontSize:12,lineHeight:1.45,color:dark?"#bbb":"#687386",textAlign:"center"}}>{hint}</div>
+    <div style={{fontSize:12,lineHeight:1.45,color:readableDarkText(dark?"#bbb":"#687386", dark, "#35354a"),textAlign:"center"}}>{hint}</div>
     <label style={{display:"flex",flexDirection:"column",gap:7,color:tc,fontSize:12,fontWeight:800}}>
       <span>{zoomLabel}</span>
       <input type="range" min="1" max="3" step="0.01" value={zoom} disabled={!imageReady} onChange={(event) => changeZoom(Number(event.target.value))} style={{width:"100%",accentColor:pc}} />

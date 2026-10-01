@@ -1,3 +1,5 @@
+import { DarkTextDefaults } from './ui/DarkTextDefaults';
+import { readableDarkText } from './ui/textContrast';
 import { getDocFromCache } from "firebase/firestore";
 import { readExistingCachedDocument, serializeSnapshotHandler, restoreResumeTab, needsCategoryRecovery, hasResumeCheckpoint, writeResumeCheckpoint } from "./utils/resumeCache";
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
@@ -400,7 +402,7 @@ class SectionErrorBoundary extends Component {
               style={{
                 fontSize: 20,
                 fontWeight: 900,
-                color: dark ? "#ffd0d0" : "#8a2d2d",
+                color: readableDarkText(dark ? "#ffd0d0" : "#8a2d2d", dark, dark ? "#2a2424" : "#fff0f0"),
                 marginBottom: 8,
               }}
             >
@@ -436,7 +438,7 @@ class SectionErrorBoundary extends Component {
               onClick={this.props.onHome}
               style={{
                 background: "#7F77DD",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, "#7F77DD"),
                 border: "none",
                 borderRadius: 14,
                 padding: "11px 18px",
@@ -515,6 +517,7 @@ function AdminOnlyApp({ session, onLogout }: { session: AdminSession; onLogout: 
 
   return (
     <AppCtx.Provider value={ctxValue}>
+      <DarkTextDefaults dark={dark} background={bgColor} />
       <div
         data-fainance-admin-only="true"
         style={{
@@ -542,7 +545,7 @@ function AdminOnlyApp({ session, onLogout }: { session: AdminSession; onLogout: 
               <div style={{ fontSize: 16, fontWeight: 950 }}>Admin</div>
               <div style={{ marginTop: 2, color: subC, fontSize: 10 }}>Centro di amministrazione fAInance</div>
             </div>
-            <span style={{ borderRadius: 999, padding: "5px 9px", background: primary + "18", color: primary, fontSize: 10, fontWeight: 900 }}>
+            <span style={{ borderRadius: 999, padding: "5px 9px", background: primary + "18", color: readableDarkText(primary, dark, primary + "18"), fontSize: 10, fontWeight: 900 }}>
               {String(session.role || "admin").toUpperCase()}
             </span>
             <button
@@ -15745,7 +15748,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           <span
             style={{
               fontSize: 10,
-              color: active ? primary : subC,
+              color: readableDarkText(active ? primary : subC, dark, active
+              ? dark
+                ? primary + "2B"
+                : primary + "12"
+              : dark
+              ? "#252535"
+              : "#fff"),
               fontWeight: active ? 900 : 700,
               whiteSpace: "nowrap",
             }}
@@ -15909,7 +15918,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             >
               {selectedLabel(id, value)}
             </span>
-            <span aria-hidden="true" style={{ color: primary, fontSize: 18 }}>
+            <span aria-hidden="true" style={{ color: readableDarkText(primary, dark, dark ? "#1E1E30" : "#fff"), fontSize: 18 }}>
               ⌄
             </span>
           </button>
@@ -15955,7 +15964,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               return (
                 <div key={x[0]} style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 9, color: subC }}>{SL(x[0])}</div>
-                  <div style={{ fontSize: 13, fontWeight: 950, color: x[2] }}>
+                  <div style={{ fontSize: 13, fontWeight: 950, color: readableDarkText(x[2], dark, "#35354a") }}>
                     {x[1]}
                   </div>
                 </div>
@@ -16006,7 +16015,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   display: "block",
                   fontSize: 14,
                   fontWeight: 900,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                 }}
               >
                 {SL("Mostra riepilogo in alto?")}
@@ -16015,7 +16024,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   display: "block",
                   fontSize: 12,
-                  color: subC,
+                  color: readableDarkText(subC, dark, "transparent"),
                   marginTop: 4,
                   lineHeight: 1.35,
                 }}
@@ -16516,7 +16525,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   {active && (
                     <span
                       aria-hidden="true"
-                      style={{ color: primary, fontWeight: 950, flexShrink: 0 }}
+                      style={{ color: readableDarkText(primary, dark, active
+                      ? dark
+                        ? primary + "28"
+                        : primary + "12"
+                      : dark
+                      ? "#252535"
+                      : "#fff"), fontWeight: 950, flexShrink: 0 }}
                     >
                       ✓
                     </span>
@@ -16596,7 +16611,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   fontSize: 11,
                   fontWeight: 950,
-                  color: primary,
+                  color: readableDarkText(primary, dark, cardBg),
                   textTransform: "uppercase",
                   letterSpacing: 0.6,
                   marginBottom: 6,
@@ -16729,7 +16744,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   border: "1px solid " + primary,
                   background: dark ? "#252535" : "#fff",
-                  color: primary,
+                  color: readableDarkText(primary, dark, dark ? "#252535" : "#fff"),
                   borderRadius: 15,
                   padding: "13px 14px",
                   fontSize: 14,
@@ -16842,7 +16857,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   marginTop: 10,
                   border: "none",
                   background: "transparent",
-                  color: subC,
+                  color: readableDarkText(subC, dark, "transparent"),
                   fontSize: 12,
                   fontWeight: 850,
                   cursor: "pointer",
@@ -16927,9 +16942,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         if (part !== "fAInance") return <span key={i}>{part}</span>;
         return (
           <span key={i} style={{ fontWeight: 950, whiteSpace: "nowrap" }}>
-            <span style={{ color: "#111827" }}>f</span>
-            <span style={{ color: "#F2C94C" }}>AI</span>
-            <span style={{ color: "#111827" }}>nance</span>
+            <span style={{ color: readableDarkText("#111827", dark, "#35354a") }}>f</span>
+            <span style={{ color: readableDarkText("#F2C94C", dark, "#35354a") }}>AI</span>
+            <span style={{ color: readableDarkText("#111827", dark, "#35354a") }}>nance</span>
           </span>
         );
       });
@@ -17107,7 +17122,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             style={{
               fontSize: 11,
               fontWeight: 900,
-              color: primary,
+              color: readableDarkText(primary, dark, dark ? "#1E1E30" : "#fff"),
               letterSpacing: 0.5,
               textTransform: "uppercase",
               marginBottom: 12,
@@ -17274,7 +17289,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               marginTop: 12,
               border: "none",
               background: "transparent",
-              color: subC,
+              color: readableDarkText(subC, dark, "transparent"),
               fontSize: 12,
               fontWeight: 800,
               cursor: "pointer",
@@ -19531,7 +19546,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       alignItems: "flex-start",
                     }}
                   >
-                    <span style={{ color: green, fontWeight: 950 }}>✓</span>
+                    <span style={{ color: readableDarkText(green, dark, "#35354a"), fontWeight: 950 }}>✓</span>
                     <span>{translateUiRuntimeText(x)}</span>
                   </div>
                 );
@@ -22702,7 +22717,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           <div
             style={{
               fontSize: 13,
-              color: dark ? "#BEB8FF" : "#534AB7",
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
               lineHeight: 1.55,
               fontWeight: 600,
             }}
@@ -22858,7 +22873,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           <div
             style={{
               fontSize: 13,
-              color: dark ? "#BEB8FF" : "#534AB7",
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
               lineHeight: 1.55,
               fontWeight: 600,
             }}
@@ -23251,7 +23266,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             borderRadius: 4,
             border: "2px solid " + (checked ? "#7F77DD" : borderC),
             background: checked ? "#7F77DD" : "transparent",
-            color: "#fff",
+            color: readableDarkText("#fff", dark, checked ? "#7F77DD" : "transparent"),
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -23345,7 +23360,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: "transparent",
                   border: "none",
                   padding: 0,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   textAlign: "left",
                   cursor: "pointer",
                   WebkitTapHighlightColor: "transparent",
@@ -23353,11 +23368,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }}
               >
                 {checkMark(termsChecked)}
-                <span style={{ fontSize: 13, color: textC, lineHeight: 1.45 }}>
+                <span style={{ fontSize: 13, color: readableDarkText(textC, dark, "transparent"), lineHeight: 1.45 }}>
                   {LT(
                     "Dichiaro di aver letto e accettato i Termini di utilizzo"
                   )}{" "}
-                  <span style={{ color: "#E24B4A" }}>*</span>
+                  <span style={{ color: readableDarkText("#E24B4A", dark, "transparent") }}>*</span>
                 </span>
               </button>
               <button
@@ -23368,7 +23383,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   background: "transparent",
                   border: "none",
-                  color: dark ? "#BEB8FF" : "#378ADD",
+                  color: readableDarkText(dark ? "#BEB8FF" : "#378ADD", dark, "transparent"),
                   padding: "8px 0 0 30px",
                   fontSize: 13,
                   fontWeight: 700,
@@ -23405,7 +23420,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: "transparent",
                   border: "none",
                   padding: 0,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   textAlign: "left",
                   cursor: "pointer",
                   WebkitTapHighlightColor: "transparent",
@@ -23413,11 +23428,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }}
               >
                 {checkMark(privacyChecked)}
-                <span style={{ fontSize: 13, color: textC, lineHeight: 1.45 }}>
+                <span style={{ fontSize: 13, color: readableDarkText(textC, dark, "transparent"), lineHeight: 1.45 }}>
                   {LT(
                     "Dichiaro di aver letto e accettato l’Informativa Privacy"
                   )}{" "}
-                  <span style={{ color: "#E24B4A" }}>*</span>
+                  <span style={{ color: readableDarkText("#E24B4A", dark, "transparent") }}>*</span>
                 </span>
               </button>
               <button
@@ -23428,7 +23443,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   background: "transparent",
                   border: "none",
-                  color: dark ? "#BEB8FF" : "#378ADD",
+                  color: readableDarkText(dark ? "#BEB8FF" : "#378ADD", dark, "transparent"),
                   padding: "8px 0 0 30px",
                   fontSize: 13,
                   fontWeight: 700,
@@ -23465,7 +23480,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: "transparent",
                   border: "none",
                   padding: 0,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   textAlign: "left",
                   cursor: "pointer",
                   WebkitTapHighlightColor: "transparent",
@@ -23473,7 +23488,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }}
               >
                 {checkMark(metaChecked)}
-                <span style={{ fontSize: 13, color: textC, lineHeight: 1.45 }}>
+                <span style={{ fontSize: 13, color: readableDarkText(textC, dark, "transparent"), lineHeight: 1.45 }}>
                   <strong>{LT("Consenso facoltativo")}</strong>
                   <br />
                   {LT(
@@ -23991,7 +24006,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       name: (name || "").trim() || "Progetto Share",
       description: (description || "").trim(),
       icon: icon || "🤝",
-      color: color || "#4F8FF7",
+      color: readableDarkText(color || "#4F8FF7", dark, "#35354a"),
       ownerUid: userId,
       ownerName: owner.name,
       ownerEmail: owner.email,
@@ -24414,7 +24429,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 border: "1px solid #F2B8B5",
                 background: dark ? "#3A2426" : "#FFF2F1",
-                color: expenseColor,
+                color: readableDarkText(expenseColor, dark, dark ? "#3A2426" : "#FFF2F1"),
                 borderRadius: 13,
                 padding: "11px 9px",
                 fontSize: 12,
@@ -24434,7 +24449,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 border: 0,
                 background: confirmButtonColor,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, confirmButtonColor),
                 borderRadius: 13,
                 padding: "11px 9px",
                 fontSize: 12,
@@ -24521,7 +24536,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               : dark
               ? "#252535"
               : "#fff",
-            color: active ? confirmButtonColor : textC,
+            color: readableDarkText(active ? confirmButtonColor : textC, dark, active
+              ? confirmButtonColor + "22"
+              : dark
+              ? "#252535"
+              : "#fff"),
             borderRadius: btnRadius,
             padding: "9px 8px",
             fontSize: 12,
@@ -24601,7 +24620,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 background: dark ? "#342424" : "#fff0f0",
                 border: "1px solid " + (dark ? "#5a3333" : "#f3b6b6"),
-                color: dark ? "#ffd0d0" : "#8a2d2d",
+                color: readableDarkText(dark ? "#ffd0d0" : "#8a2d2d", dark, dark ? "#342424" : "#fff0f0"),
                 borderRadius: 12,
                 padding: "10px 12px",
                 fontSize: 12,
@@ -24676,7 +24695,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   background: "transparent",
                   border: "none",
-                  color: confirmButtonColor,
+                  color: readableDarkText(confirmButtonColor, dark, "transparent"),
                   fontSize: 12,
                   fontWeight: 900,
                   cursor: "pointer",
@@ -25485,6 +25504,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
   return (
     <AppCtx.Provider value={ctxValue}>
+      <DarkTextDefaults dark={dark} background={bgColor} />
       <style>{"input:focus::placeholder,textarea:focus::placeholder{color:transparent!important;opacity:0!important;}"}</style>
       {firestoreReady && !appLocked && (
         <NotificationCenter
@@ -25623,7 +25643,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       style={{
                         fontSize: 19,
                         fontWeight: 600,
-                        color: expenseColor,
+                        color: readableDarkText(expenseColor, dark, headerBg),
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
@@ -25638,7 +25658,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       style={{
                         fontSize: 17,
                         fontWeight: 600,
-                        color: BALANCE_COLOR,
+                        color: readableDarkText(BALANCE_COLOR, dark, headerBg),
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
@@ -25653,7 +25673,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       style={{
                         fontSize: 19,
                         fontWeight: 600,
-                        color: incomeColor,
+                        color: readableDarkText(incomeColor, dark, headerBg),
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
@@ -25733,11 +25753,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     gap: 2,
                     cursor: "pointer",
                     color:
-                      tab === item.id ||
+                      readableDarkText(tab === item.id ||
                       (item.id === "more" && tab === "more") ||
                       (item.id === "voice" && voiceModal)
                         ? textC
-                        : subC,
+                        : subC, dark, "transparent"),
                     borderTop:
                       tab === item.id ||
                       (item.id === "more" && tab === "more") ||
@@ -25810,7 +25830,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     zIndex: 5,
                   }}
                 >
-                  <div style={{ fontSize: 16, fontWeight: 900, color: dark ? "#FFF7D8" : "#6B5900" }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: readableDarkText(dark ? "#FFF7D8" : "#6B5900", dark, dark ? "#4F482A" : "#FFF3C4") }}>
                     {translateUiRuntimeText("Altro")}
                   </div>
                   <button
@@ -25824,7 +25844,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       borderRadius: 9,
                       border: "1px solid #FCA5A5",
                       background: "#FFF0F0",
-                      color: "#F87171",
+                      color: readableDarkText("#F87171", dark, "#FFF0F0"),
                       fontSize: 16,
                       fontWeight: 900,
                       cursor: "pointer",
@@ -25865,7 +25885,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                           borderBottom: "1px solid " + borderC,
                           fontSize: 15,
                           cursor: "pointer",
-                          color: textC,
+                          color: readableDarkText(textC, dark, "transparent"),
                         }}
                       >
                         <span style={{ fontSize: 22 }}>{item.icon}</span>
@@ -25875,7 +25895,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                             style={{
                               marginLeft: "auto",
                               background: expenseColor,
-                              color: "#fff",
+                              color: readableDarkText("#fff", dark, expenseColor),
                               borderRadius: "50%",
                               width: 20,
                               height: 20,
@@ -25904,7 +25924,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 right: 0,
                 zIndex: 9998,
                 background: "#E24B4A",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, "#E24B4A"),
                 textAlign: "center",
                 fontSize: 13,
                 fontWeight: 700,
@@ -26006,7 +26026,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                           style={{
                             fontSize: 16,
                             fontWeight: 600,
-                            color: item[1],
+                            color: readableDarkText(item[1], dark, "#35354a"),
                           }}
                         >
                           {item[2]}
@@ -26058,9 +26078,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                             : "#f0f0f0"
                           : "transparent",
                       color:
-                        tab === item.id || (item.id === "voice" && voiceModal)
+                        readableDarkText(tab === item.id || (item.id === "voice" && voiceModal)
                           ? textC
-                          : subC,
+                          : subC, dark, tab === item.id || (item.id === "voice" && voiceModal)
+                          ? dark
+                            ? "#2a2a3e"
+                            : "#f0f0f0"
+                          : "transparent"),
                       fontSize: 14,
                       cursor: "pointer",
                       fontWeight:
@@ -26079,7 +26103,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                           position: "absolute",
                           right: 14,
                           background: expenseColor,
-                          color: "#fff",
+                          color: readableDarkText("#fff", dark, expenseColor),
                           borderRadius: "50%",
                           width: 18,
                           height: 18,

@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useState } from 'react';
 import { useApp, fmtDate } from '../core';
 import { budgetText } from '../i18n/budgetTranslations';
@@ -25,13 +26,13 @@ export function BudgetPeriodControls({ periodKey, onPeriodChange, scope, onScope
   const sourceLabel=T(source.kind==='month'?'monthlyOverride':'standard');
 
   return <section aria-label="Budget" style={{background:ctx.cardBg,color:ctx.textC,border:`1px solid ${ctx.borderC}`,borderRadius:16,overflow:'hidden',boxShadow:ctx.dark?'none':'0 6px 20px rgba(0,0,0,.04)'}}>
-    <button type="button" onClick={()=>setExpanded(value=>!value)} aria-expanded={expanded} style={{appearance:'none',width:'100%',border:'none',background:'transparent',padding:isMobile?'14px 15px':'16px 18px',cursor:'pointer',display:'flex',alignItems:'center',gap:14,textAlign:'left',color:ctx.textC}}>
+    <button type="button" onClick={()=>setExpanded(value=>!value)} aria-expanded={expanded} style={{appearance:'none',width:'100%',border:'none',background:'transparent',padding:isMobile?'14px 15px':'16px 18px',cursor:'pointer',display:'flex',alignItems:'center',gap:14,textAlign:'left',color:readableDarkText(ctx.textC, ctx.dark, 'transparent')}}>
       <div style={{width:46,height:46,borderRadius:14,background:ctx.dark?'#252B3C':'#F1F4FA',display:'flex',alignItems:'center',justifyContent:'center',fontSize:23,flexShrink:0}}>📅</div>
       <div style={{minWidth:0,flex:1}}>
-        <div style={{fontSize:15,fontWeight:850,color:ctx.textC,marginBottom:4}}>{T('period')}</div>
-        <div style={{fontSize:12,color:ctx.subC,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{periodLabel(periodKey,ctx.lang||'it')} · <strong style={{color:sourceAccent}}>{sourceLabel}</strong></div>
+        <div style={{fontSize:15,fontWeight:850,color:readableDarkText(ctx.textC, ctx.dark, 'transparent'),marginBottom:4}}>{T('period')}</div>
+        <div style={{fontSize:12,color:readableDarkText(ctx.subC, ctx.dark, 'transparent'),whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{periodLabel(periodKey,ctx.lang||'it')} · <strong style={{color:readableDarkText(sourceAccent, ctx.dark, 'transparent')}}>{sourceLabel}</strong></div>
       </div>
-      <span aria-hidden="true" style={{fontSize:20,color:ctx.subC,flexShrink:0,transform:expanded?'rotate(90deg)':'rotate(0deg)',transition:'transform .15s ease'}}>›</span>
+      <span aria-hidden="true" style={{fontSize:20,color:readableDarkText(ctx.subC, ctx.dark, 'transparent'),flexShrink:0,transform:expanded?'rotate(90deg)':'rotate(0deg)',transition:'transform .15s ease'}}>›</span>
     </button>
 
     {expanded && <div style={{borderTop:`1px solid ${ctx.borderC}`,padding:isMobile?14:16}}>
@@ -72,7 +73,7 @@ export function BudgetPeriodControls({ periodKey, onPeriodChange, scope, onScope
         </div>
         <div style={metricCard}>
           <div style={{fontSize:12,color:ctx.subC,marginBottom:4}}>{T('difference')}</div>
-          <strong style={{display:'block',fontSize:20,lineHeight:1.1,color:differenceColor,fontVariantNumeric:'tabular-nums'}}>{summary.difference>0?'+':''}{ctx.fmt(summary.difference)}</strong>
+          <strong style={{display:'block',fontSize:20,lineHeight:1.1,color:readableDarkText(differenceColor, ctx.dark, ctx.cardBg),fontVariantNumeric:'tabular-nums'}}>{summary.difference>0?'+':''}{ctx.fmt(summary.difference)}</strong>
           <div style={{fontSize:11,color:ctx.subC,marginTop:4}}>{T(comparison)}</div>
         </div>
       </div>

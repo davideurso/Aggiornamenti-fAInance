@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../core';
@@ -39,7 +40,7 @@ export function SavingsGoalPanel({bucketId, completion}:{bucketId:string;complet
           <strong style={{fontSize:14,overflowWrap:'anywhere'}}>{goal?.name || (bucket.goalId?T('unavailable'):T('none'))}</strong>
         </div>
       </div>
-      {!draft && <button type="button" style={{...button,color:accent,border:`1px solid ${ctx.dark?'#4B4A70':'#D9D3FF'}`,background:ctx.dark?'#26253B':'#F3F0FF',flexShrink:0}} onClick={edit}>{T('change')}</button>}
+      {!draft && <button type="button" style={{...button,color:readableDarkText(accent, ctx.dark, ctx.dark?'#26253B':'#F3F0FF'),border:`1px solid ${ctx.dark?'#4B4A70':'#D9D3FF'}`,background:ctx.dark?'#26253B':'#F3F0FF',flexShrink:0}} onClick={edit}>{T('change')}</button>}
     </div>
 
     {goal && <div style={{marginTop:10}}>
@@ -52,14 +53,14 @@ export function SavingsGoalPanel({bucketId, completion}:{bucketId:string;complet
     {draft && <form onSubmit={event=>{event.preventDefault();save(draft.goalId,draft.expectedGoalId);}} style={{display:'grid',gap:9,marginTop:10,paddingTop:10,borderTop:`1px solid ${ctx.borderC}`}}>
       <label style={{fontSize:12,fontWeight:800}}>{T('title')}<select autoFocus value={draft.goalId} onChange={event=>setDraft({...draft,goalId:event.target.value})} style={{...ctx.inp,display:'block',width:'100%',minWidth:0,boxSizing:'border-box',marginTop:6}}><option value="">{T('none')}</option>{eligible.map(item=><option key={item.id} value={String(item.id)}>{item.name}</option>)}</select></label>
       {!eligible.length && <p style={{fontSize:11,color:ctx.subC,margin:0}}>{T('empty')}</p>}
-      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="submit" style={{...button,background:accent,color:'#fff',border:`1px solid ${accent}`}}>{S('save')}</button><button type="button" style={button} onClick={()=>{setDraft(null);setError(false);}}>{S('cancel')}</button></div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="submit" style={{...button,background:accent,color:readableDarkText('#fff', ctx.dark, accent),border:`1px solid ${accent}`}}>{S('save')}</button><button type="button" style={button} onClick={()=>{setDraft(null);setError(false);}}>{S('cancel')}</button></div>
     </form>}
-    {error && <p role="alert" style={{fontSize:11,color:ctx.expColor || '#B42318',margin:'8px 0 0'}}>{T('error')}</p>}
+    {error && <p role="alert" style={{fontSize:11,color:readableDarkText(ctx.expColor || '#B42318', ctx.dark, softBg),margin:'8px 0 0'}}>{T('error')}</p>}
     {complete && createPortal(<div style={{position:'fixed',inset:0,zIndex:11000,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
       <div role="dialog" aria-modal="true" aria-label={T('completed')} style={{background:ctx.cardBg,color:ctx.textC,borderRadius:16,padding:20,width:'100%',maxWidth:420,maxHeight:'85dvh',overflowY:'auto',boxSizing:'border-box'}}>
         <h3 style={{margin:'0 0 12px'}}>{T('completed')}</h3><p style={{overflowWrap:'anywhere'}}>{goal.name}</p>
         <p>{money(saved)} / {money(target)}</p>
-        <div style={{display:'grid',gap:10,marginTop:16}}><button type="button" autoFocus style={{...button,background:accent,color:'#fff'}} onClick={edit}>{T('newGoal')}</button><button type="button" style={button} onClick={()=>save(null,bucket.goalId)}>{T('unlink')}</button></div>
+        <div style={{display:'grid',gap:10,marginTop:16}}><button type="button" autoFocus style={{...button,background:accent,color:readableDarkText('#fff', ctx.dark, accent)}} onClick={edit}>{T('newGoal')}</button><button type="button" style={button} onClick={()=>save(null,bucket.goalId)}>{T('unlink')}</button></div>
         {error && <p role="alert">{T('error')}</p>}
       </div>
     </div>,document.body)}
