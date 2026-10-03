@@ -224,6 +224,7 @@ export function HomePanel() {
     getIT,
     curMonthExp,
     curMonthInc,
+    curMonthBalance,
     last12Balance,
     pendingCount,
     alertTriggered,
@@ -241,6 +242,8 @@ export function HomePanel() {
     setAiDismissed,
   }: any = ctx;
   var expenses: any[] = ctx.expensesForAnalysis || rawExpenses || [];
+  var countedExpenses: any[] = ctx.countedExpensesForAnalysis || expenses;
+  var countedIncomes: any[] = ctx.countedIncomes || incomes || [];
   // Cache dei confronti usati dal worklet Riepilogo: con account storici molto
   // grandi evitiamo di ripercorrere migliaia di movimenti a ogni render della Home.
   var summaryTrendMetrics = useMemo(
@@ -258,16 +261,16 @@ export function HomePanel() {
         }, 0);
       }
       var previousKey = shiftKey(curMonthKey, -1);
-      var prevExp = total(rawExpenses || [], previousKey);
-      var prevInc = total(incomes || [], previousKey);
+      var prevExp = total(countedExpenses || [], previousKey);
+      var prevInc = total(countedIncomes || [], previousKey);
       var prev12 = 0;
       for (var i = 0; i < 12; i++) {
         var key = shiftKey(previousKey, -i);
-        prev12 += total(incomes || [], key) - total(rawExpenses || [], key);
+        prev12 += total(countedIncomes || [], key) - total(countedExpenses || [], key);
       }
       return { prevMonthExp: prevExp, prevMonthInc: prevInc, prevMonthBal: prevInc - prevExp, prev12Balance: prev12 };
     },
-    [rawExpenses, incomes, curMonthKey, homeBalanceView, balancePeriodMode, financialMonthStartDay]
+    [countedExpenses, countedIncomes, curMonthKey, homeBalanceView, balancePeriodMode, financialMonthStartDay]
   );
   var t = TRANSLATIONS[lang] || TRANSLATIONS.it;
   // Traduzioni esatte della Home: evitano frasi ibride quando il traduttore generico
@@ -1622,7 +1625,7 @@ export function HomePanel() {
   }
   function allGroups() {
     var base =
-      Array.isArray(expenseGroups) && expenseGroups.length
+      Array.isArray(expenseGroups)
         ? expenseGroups
         : DEFAULT_EXPENSE_GROUPS;
     var out = base.slice();
@@ -1684,8 +1687,8 @@ export function HomePanel() {
     var keys = lastMonthKeys(n);
     return keys
       .map(function (k) {
-        var exp = totalInKeys(expenses, [k]);
-        var inc = totalInKeys(incomes, [k]);
+        var exp = totalInKeys(countedExpenses, [k]);
+        var inc = totalInKeys(countedIncomes, [k]);
         return { label: monthLabel(k), exp: exp, inc: inc, value: inc - exp };
       })
       .filter(function (row) {
@@ -2303,8 +2306,8 @@ export function HomePanel() {
     var planned = plannedMonthly * factor;
     var income = incomeMonthly * factor;
     var saving = keys.reduce((sum, key) => sum + plannedSavings(ctx.budgetForPeriod(key)), 0);
-    var spent = totalInKeys(expenses, keys);
-    var real = totalInKeys(incomes, keys) - spent;
+    var spent = totalInKeys(countedExpenses, keys);
+    var real = totalInKeys(countedIncomes, keys) - spent;
     return {
       items: items,
       keys: keys,
@@ -3409,7 +3412,7 @@ export function HomePanel() {
       var prev12Balance = summaryTrendMetrics.prev12Balance;
       var expPct = pct(curMonthExp, prevMonthExp);
       var incPct = pct(curMonthInc, prevMonthInc);
-      var balPct = pct(curMonthInc - curMonthExp, prevMonthBal);
+      var balPct = pct(curMonthBalance, prevMonthBal);
       var y12Pct = pct(last12Balance, prev12Balance);
       var cards = [
         {
@@ -3438,15 +3441,15 @@ export function HomePanel() {
         },
         {
           title: L("Saldo mese"),
-          value: summaryAmountNode(fmt(curMonthInc - curMonthExp)),
+          value: summaryAmountNode(fmt(curMonthBalance)),
           accent: "#378ADD",
           icon: "=" ,
           soft: "#dbeafe",
           pctText: balPct == null ? "" : "+" + balPct + "%",
           arrow: "↗",
-          pillColor: trendColor(curMonthInc - curMonthExp, prevMonthBal, true, "#378ADD"),
+          pillColor: trendColor(curMonthBalance, prevMonthBal, true, "#378ADD"),
           caption: trendLabel("month"),
-          path: sparkPath([prevMonthBal * 0.75, prevMonthBal, (curMonthInc - curMonthExp) * 0.85, curMonthInc - curMonthExp]),
+          path: sparkPath([prevMonthBal * 0.75, prevMonthBal, curMonthBalance * 0.85, curMonthBalance]),
         },
         {
           title: L("Saldo ultimi 12 mesi"),
@@ -3501,7 +3504,7 @@ export function HomePanel() {
     }
     if (w.type === "distribution_expenses") {
       var distributionData = sumBy(
-        expenses,
+        countedExpenses,
         keys,
         function (e) {
           var g = groupForExpense(e);
@@ -3525,7 +3528,7 @@ export function HomePanel() {
     }
     if (w.type === "expenses_by_area") {
       var data = sumBy(
-        expenses,
+        countedExpenses,
         keys,
         function (e) {
           return groupForExpense(e).id;
@@ -3542,7 +3545,7 @@ export function HomePanel() {
     }
     if (w.type === "expenses_by_category") {
       var data2 = sumBy(
-        expenses,
+        countedExpenses,
         keys,
         function (e) {
           var c = homeCategoryForExpense(e);
@@ -3560,7 +3563,7 @@ export function HomePanel() {
       return legendChart(data2, compact, doubleSize, (w.params && w.params.valueMode) || "percent");
     }
     if (w.type === "monthlyized_expenses") {
-      var monthlyExpenseAverage = totalInKeys(expenses, keys) / Math.max(1, keys.length);
+      var monthlyExpenseAverage = totalInKeys(countedExpenses, keys) / Math.max(1, keys.length);
       return (
         <div
           style={{
@@ -3586,7 +3589,7 @@ export function HomePanel() {
     if (w.type === "monthlyized_expenses_by_area") {
       var monthlyAreaDivisor = Math.max(1, keys.length);
       var monthlyAreaData = sumBy(
-        expenses,
+        countedExpenses,
         keys,
         function (e) {
           return groupForExpense(e).id;
@@ -3609,7 +3612,7 @@ export function HomePanel() {
     if (w.type === "monthlyized_expenses_by_category") {
       var monthlyCategoryDivisor = Math.max(1, keys.length);
       var monthlyCategoryData = sumBy(
-        expenses,
+        countedExpenses,
         keys,
         function (e) {
           var c = homeCategoryForExpense(e);
@@ -3633,7 +3636,7 @@ export function HomePanel() {
     }
     if (w.type === "incomes_by_type") {
       var data3 = sumBy(
-        incomes,
+        countedIncomes,
         keys,
         function (e) {
           return e.type || "other";
@@ -4270,7 +4273,7 @@ export function HomePanel() {
     }
     if (w.type === "savings_progress") {
       var rows = monthlyChart(range).map(function (m) {
-        return { label: m.label, value: m.value };
+        return { label: m.label, value: safeNum(m.inc) - safeNum(m.exp) };
       });
       return (
         <div style={{ overflow: "hidden", width: "100%" }}>
@@ -4290,7 +4293,7 @@ export function HomePanel() {
         <div>
           {b2.items.slice(0, 6).map(function (it, i) {
             var c = getCat ? getCat(it.catId) : null;
-            var spent = (expenses || []).reduce(function (a, e) {
+            var spent = (countedExpenses || []).reduce(function (a, e) {
               return String(e.catId) === String(it.catId)
                 ? a +
                     b2.keys.reduce(function (s, k) {
@@ -6506,9 +6509,10 @@ export function HomePanel() {
           <span style={{ fontSize: 13, color: readableDarkText("#856404", dark, "#fff3cd") }}>
             🔄{" "}
             {String(
-              (t && t.recurringPendingHome) ||
-                L("{count} transazioni ricorrenti da confermare")
-            ).replace("{count}", String(pendingCount))}
+              pendingCount === 1
+                ? (t && t.recurringPendingHomeOne) || L("Transazione ricorrente")
+                : (t && t.recurringPendingHomeMany) || L("Transazioni ricorrenti")
+            )}
           </span>
           <span style={{ color: readableDarkText("#856404", dark, "#fff3cd") }}>›</span>
         </div>
@@ -7583,6 +7587,8 @@ export function HistoryPanel() {
     getCat,
     getMethod,
     getIT,
+    isExpenseExcludedFromTotals,
+    isIncomeExcludedFromTotals,
     secRate,
     showSecInHistory,
     fmtSec,
@@ -7622,6 +7628,21 @@ export function HistoryPanel() {
     return String(historyCurrencyPriority) === "default"
       ? { main: base, sub: paid }
       : { main: paid, sub: base };
+  }
+  function historyAmountDisplay(value) {
+    var str = String(value == null ? "" : value);
+    // Riduce solo separatore+decimali, lasciando invariati simbolo, migliaia e valuta.
+    var match = str.match(/^(.*)([.,]\d{2})(\D*)$/);
+    if (!match) return str;
+    return (
+      <>
+        {match[1]}
+        <span style={{ fontSize: "0.82em", fontWeight: "inherit" }}>
+          {match[2]}
+        </span>
+        {match[3]}
+      </>
+    );
   }
   var t = TRANSLATIONS[lang] || TRANSLATIONS.it;
   var V = t;
@@ -9314,6 +9335,9 @@ export function HistoryPanel() {
   function renderExpense(e) {
     var shareColor = e._share ? e._shareProjectColor || confirmC : null;
     var sharePersonalCategory = e._share ? getCat(e.catId) : null;
+    var excludedFromTotals = isExpenseExcludedFromTotals
+      ? isExpenseExcludedFromTotals(e)
+      : !!((sharePersonalCategory || getCat(e.catId))?.excludeFromTotals);
     var c = e._share
       ? {
           icon: e._shareProjectIcon || "🤝",
@@ -9404,6 +9428,9 @@ export function HistoryPanel() {
               {e.rateizzato && (
                 <Badge color="#7F77DD" name={"÷" + e.rate + "m"} small />
               )}
+              {excludedFromTotals && (
+                <Badge color="#EF9F27" name={L("Non conteggiata")} small />
+              )}
               <span style={{ fontSize: 11, color: subC, flexBasis: '100%', display: 'block' }}>
                 {fmtDate(e.date, dateFmt)}
               </span>
@@ -9418,14 +9445,14 @@ export function HistoryPanel() {
             }}
           >
             <div style={{ fontSize: 15, fontWeight: 850, color: readableDarkText(expenseColor, dark, e._share ? shareColor + "18" : cardBg) }}>
-              {historyFxView(e).main}
+              {historyAmountDisplay(historyFxView(e).main)}
               {historyFxView(e).sub ? (
                 <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
-                  {historyFxView(e).sub}
+                  {historyAmountDisplay(historyFxView(e).sub)}
                 </div>
               ) : secRate && showSecInHistory && fmtSec(e.amount) ? (
                 <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
-                  {fmtSec(e.amount)}
+                  {historyAmountDisplay(fmtSec(e.amount))}
                 </div>
               ) : null}
             </div>
@@ -9524,6 +9551,9 @@ export function HistoryPanel() {
   }
   function renderIncome(inc) {
     var it = getIT(inc.type);
+    var excludedFromTotals = isIncomeExcludedFromTotals
+      ? isIncomeExcludedFromTotals(inc)
+      : !!it?.excludeFromTotals;
     var iid = "inc_" + inc.id;
     var icopy = {
       ...inc,
@@ -9575,6 +9605,9 @@ export function HistoryPanel() {
               {inc.rateizzato && (
                 <Badge color="#7F77DD" name={"÷" + inc.rate + "m"} small />
               )}
+              {excludedFromTotals && (
+                <Badge color="#EF9F27" name={L("Non conteggiata")} small />
+              )}
               <span style={{ fontSize: 11, color: subC, flexBasis: '100%', display: 'block' }}>
                 {fmtDate(inc.date, dateFmt)}
               </span>
@@ -9589,14 +9622,14 @@ export function HistoryPanel() {
             }}
           >
             <div style={{ fontSize: 15, fontWeight: 850, color: readableDarkText(incomeColor, dark, cardBg) }}>
-              +{historyFxView(inc).main}
+              +{historyAmountDisplay(historyFxView(inc).main)}
               {historyFxView(inc).sub ? (
                 <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
-                  {historyFxView(inc).sub}
+                  {historyAmountDisplay(historyFxView(inc).sub)}
                 </div>
               ) : secRate && showSecInHistory && fmtSec(inc.amount) ? (
                 <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
-                  {fmtSec(inc.amount)}
+                  {historyAmountDisplay(fmtSec(inc.amount))}
                 </div>
               ) : null}
             </div>
@@ -9693,9 +9726,11 @@ export function HistoryPanel() {
   }
 
   var totalExpenses = (filteredExpenses || []).reduce(function (a, e) {
+    if (isExpenseExcludedFromTotals && isExpenseExcludedFromTotals(e)) return a;
     return a + (Number(e.amount) || 0);
   }, 0);
   var totalIncomes = (filteredIncomes || []).reduce(function (a, i) {
+    if (isIncomeExcludedFromTotals && isIncomeExcludedFromTotals(i)) return a;
     return a + (Number(i.amount) || 0);
   }, 0);
   var historyActionsStyle: any = {
@@ -9829,6 +9864,7 @@ export function ConsulenteAIPanel() {
     setExpenses,
   }: any = _c;
   var expenses: any[] = _c.expensesForAnalysis || rawExpenses || [];
+  var countedExpenses: any[] = _c.countedExpensesForAnalysis || expenses;
   var {
     incomes,
     setIncomes,
@@ -9839,6 +9875,7 @@ export function ConsulenteAIPanel() {
     curMonthKey,
     addExpenses,
   }: any = _c;
+  var countedIncomes: any[] = _c.countedIncomes || incomes || [];
   var {
     addIncomes,
     confirmRecurring,
@@ -10258,7 +10295,7 @@ export function ConsulenteAIPanel() {
     return accountingPeriod.shiftKey(curMonthKey, offset);
   }
   function sumExpMonth(mk, filterFn) {
-    return expenses
+    return countedExpenses
       .filter(function (e) {
         return e.date && accountingPeriod.matches(e.date, mk) && (!filterFn || filterFn(e));
       })
@@ -10267,7 +10304,7 @@ export function ConsulenteAIPanel() {
       }, 0);
   }
   function sumIncMonth(mk, filterFn) {
-    return incomes
+    return countedIncomes
       .filter(function (i) {
         return i.date && accountingPeriod.matches(i.date, mk) && (!filterFn || filterFn(i));
       })
@@ -10746,14 +10783,14 @@ export function ConsulenteAIPanel() {
     var prevMonth = monthKeyOffset(-1);
     var expPrev = sumExpMonth(prevMonth);
     var incPrev = sumIncMonth(prevMonth);
-    var expYear = expenses
+    var expYear = countedExpenses
       .filter(function (e) {
         return e.date && accountingPeriod.matches(e.date, String(curYear));
       })
       .reduce(function (a, e) {
         return a + (parseFloat(e.amount) || 0);
       }, 0);
-    var incYear = incomes
+    var incYear = countedIncomes
       .filter(function (i) {
         return i.date && accountingPeriod.matches(i.date, String(curYear));
       })
@@ -10761,7 +10798,7 @@ export function ConsulenteAIPanel() {
         return a + (parseFloat(i.amount) || 0);
       }, 0);
     var byCat = {};
-    expenses
+    countedExpenses
       .filter(function (e) {
         return e.date && accountingPeriod.matches(e.date, mk);
       })
@@ -10779,7 +10816,7 @@ export function ConsulenteAIPanel() {
       })
       .slice(0, 8);
     var byIncome = {};
-    incomes
+    countedIncomes
       .filter(function (i) {
         return i.date && accountingPeriod.matches(i.date, mk);
       })
@@ -13994,6 +14031,8 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     setAlerts,
   }: any = c;
   var expenses: any[] = c.expensesForAnalysis || rawVoiceExpenses || [];
+  var countedExpenses: any[] = c.countedExpensesForAnalysis || expenses;
+  var countedIncomes: any[] = c.countedIncomes || incomes || [];
   var {
     patrimonioValues,
     setPatrimonioValues,
@@ -14125,6 +14164,22 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   var RT = assistantRealtimeUiText(lang || "it");
   var readyPlaceholder = assistantVoiceReadyPlaceholder(lang || "it");
   var [input, setInput] = useState("");
+  var aiComposerInputRef = useRef<any>(null);
+  function resizeAiComposerInput() {
+    var el = aiComposerInputRef.current;
+    if (!el) return;
+    var minHeight = 38;
+    var maxHeight = 118;
+    try {
+      el.style.height = minHeight + "px";
+      var nextHeight = Math.max(minHeight, Math.min(maxHeight, Number(el.scrollHeight || minHeight)));
+      el.style.height = nextHeight + "px";
+      el.style.overflowY = Number(el.scrollHeight || 0) > maxHeight ? "auto" : "hidden";
+    } catch (e) {}
+  }
+  useEffect(function () {
+    resizeAiComposerInput();
+  }, [input]);
   useEffect(function () {
     var prefill = "";
     try {
@@ -14635,10 +14690,10 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   function debtBalance(d){var total=Number(d&&d.initialAmount)||0;(d&&d.transactions||[]).forEach(function(t){var n=Number(t.amount)||0;total+=t.action==="increase"?n:-n;});return Math.max(0,total);}
   function buildContext() {
     var mk = monthKey();
-    var monthExpenses = (expenses || []).filter(function (x) {
+    var monthExpenses = (countedExpenses || []).filter(function (x) {
       return accountingPeriod.keyForDate(String(x.date || "")) === mk;
     });
-    var monthIncomes = (incomes || []).filter(function (x) {
+    var monthIncomes = (countedIncomes || []).filter(function (x) {
       return accountingPeriod.keyForDate(String(x.date || "")) === mk;
     });
     var expM = monthExpenses.reduce(function (a, x) {
@@ -16000,7 +16055,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                 display: "grid",
                 gridTemplateColumns: "auto auto minmax(0,1fr) auto",
                 gap: 6,
-                alignItems: "center",
+                alignItems: "end",
                 borderTop: "1px solid " + borderC,
                 position: "sticky",
                 bottom: 0,
@@ -16097,10 +16152,12 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                 ↑
               </button>
               <textarea
+                ref={aiComposerInputRef}
                 value={input}
                 onChange={function (e) {
                   setInput(e.target.value);
                 }}
+                onInput={resizeAiComposerInput}
                 onKeyDown={function (e) {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -16112,12 +16169,12 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                   ...sinp,
                   height: 38,
                   minHeight: 38,
-                  maxHeight: 72,
+                  maxHeight: 118,
                   padding: "7px 9px",
                   fontSize: 13,
                   lineHeight: "22px",
                   resize: "none",
-                  overflowY: "auto",
+                  overflowY: "hidden",
                   boxSizing: "border-box",
                 }}
               />

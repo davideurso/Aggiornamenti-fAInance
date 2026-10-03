@@ -74,7 +74,7 @@ export function ShoppingPanel(){
     var activeList=lists.find(function(x){return String(x.id)===String(activeShoppingListId);})||lists[0];
     var activeListId=activeList?activeList.id:"main";
     var areas=(shoppingAreas&&shoppingAreas.length)?shoppingAreas:DEFAULT_SHOPPING_AREAS;
-    var unitOptions=(Array.isArray(shoppingUnits)&&shoppingUnits.length?shoppingUnits:DEFAULT_SHOPPING_UNITS).slice();
+    var unitOptions=(Array.isArray(shoppingUnits)?shoppingUnits:DEFAULT_SHOPPING_UNITS).slice();
     function unitOptionsWithCurrent(value){var arr=unitOptions.slice();var current=canonicalShoppingUnitName(value);if(current&&arr.indexOf(current)<0)arr.push(current);return arr;}
     function areaIcon(a){return (shoppingAreaIcons&&shoppingAreaIcons[a])||"📌";}
     function areaColor(a){var idx=areas.indexOf(a);return (shoppingAreaColors&&shoppingAreaColors[a])||COLORS[(idx<0?0:idx)%COLORS.length];}

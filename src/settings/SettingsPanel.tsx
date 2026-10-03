@@ -4661,7 +4661,7 @@ export function SettingsPanel() {
         color: item.color || COLORS[0],
       });
     }
-    function GroupModal({ mode }) {
+    function renderGroupModal({ mode }) {
       var editing = mode === "edit";
       var value = editing ? edit : form;
       var valid = editing ? groupEditValid : groupCreateValid;
@@ -4826,7 +4826,7 @@ export function SettingsPanel() {
                   {L("Nome area")}
                 </div>
                 <input
-                  autoFocus
+                  autoFocus={!editing}
                   disabled={!baseSettingsAllowed}
                   placeholder={L("Nome area")}
                   value={value.name || ""}
@@ -4972,7 +4972,7 @@ export function SettingsPanel() {
                       style={{
                         background: baseSettingsAllowed ? "none" : (dark ? "#34343F" : "#E5E7EB"),
                         border: baseSettingsAllowed ? "none" : "1px solid " + (dark ? "#4B4B58" : "#D1D5DB"),
-                        borderRadius: 8, cursor: "pointer", padding: "5px 8px",
+                        borderRadius: 8, cursor: "pointer", padding: "5px 8px", marginLeft: -5,
                         fontSize: 16,
                         color: readableDarkText(baseSettingsAllowed ? subC : (dark ? "#8F8F9B" : "#9CA3AF"), dark, baseSettingsAllowed ? "none" : (dark ? "#34343F" : "#E5E7EB")),
                       }}
@@ -4992,6 +4992,7 @@ export function SettingsPanel() {
                         fontSize: 14,
                         color: readableDarkText(baseSettingsAllowed ? "#E24B4A" : (dark ? "#8F8F9B" : "#9CA3AF"), dark, baseSettingsAllowed ? "#FFF0F0" : (dark ? "#34343F" : "#E5E7EB")),
                         padding: "5px 8px",
+                        marginLeft: -5,
                         fontWeight: 700,
                       }}
                     >
@@ -5114,8 +5115,8 @@ export function SettingsPanel() {
                 })}
             </select>
           )}
-          {showCreate && <GroupModal mode="create" />}
-          {edit && <GroupModal mode="edit" />}
+          {showCreate && renderGroupModal({ mode: "create" })}
+          {edit && renderGroupModal({ mode: "edit" })}
         </div>
       </div>
     );
@@ -5682,6 +5683,7 @@ export function SettingsPanel() {
           icon: it.icon || "💰",
           color: it.color || "#5DCAA5",
           group: it.group || (groups[0] ? groups[0].id : "lavoro"),
+          excludeFromTotals: !!it.excludeFromTotals,
           archived: !!it.archived,
           deleted: false,
         };
@@ -7874,6 +7876,7 @@ export function SettingsPanel() {
                         color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                         borderRadius: 8,
                         padding: "6px 8px",
+                        marginLeft: -5,
                         cursor: "pointer",
                       }}
                     >
@@ -7986,7 +7989,7 @@ export function SettingsPanel() {
                     {L("Nome lista")}
                   </div>
                   <input
-                    autoFocus
+                    autoFocus={!editingListSettId}
                     placeholder={L("Nome lista")}
                     value={newListSettTitle}
                     onChange={function (e) {
@@ -8038,7 +8041,7 @@ export function SettingsPanel() {
     var [unitDraft, setUnitDraft] = useState("");
     var [pendingDeleteUnit, setPendingDeleteUnit] = useState("");
     var units = (
-      Array.isArray(shoppingUnits) && shoppingUnits.length
+      Array.isArray(shoppingUnits)
         ? shoppingUnits
         : DEFAULT_SHOPPING_UNITS
     )
@@ -8329,6 +8332,7 @@ export function SettingsPanel() {
                         fontSize: 14,
                         color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                         padding: "5px 8px",
+                        marginLeft: -5,
                         fontWeight: 700,
                       }}
                     >
@@ -8462,7 +8466,7 @@ export function SettingsPanel() {
                 {L("Nome unità di misura")}
               </div>
               <input
-                autoFocus
+                autoFocus={!editingUnit}
                 value={unitDraft}
                 onChange={function (e) {
                   setUnitDraft(e.target.value);

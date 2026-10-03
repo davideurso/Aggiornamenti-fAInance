@@ -269,6 +269,22 @@ export function useStorage(key,dv){
   useEffect(function(){
     setV(current.current.value);
   },[key]);
+  // Le preferenze ripristinate dal cloud devono aggiornare anche gli hook gia'
+  // montati. Scrivere soltanto localStorage non basta: senza questo evento un
+  // reinstall/login manterrebbe in memoria i default fino al riavvio successivo.
+  useEffect(function(){
+    function onRestore(ev){
+      try{
+        var restoredKey=String((ev&&ev.detail&&ev.detail.key)||"");
+        if(restoredKey!==String(key))return;
+        var next=readFainanceStorageValue(key,dv);
+        current.current={key:key,value:next};
+        setV(next);
+      }catch(e){}
+    }
+    try{if(typeof window!=="undefined")window.addEventListener("fainance-storage-restore",onRestore);}catch(e){}
+    return function(){try{if(typeof window!=="undefined")window.removeEventListener("fainance-storage-restore",onRestore);}catch(e){}};
+  },[key]);
   var save=useCallback(function(val){
       // Persist at the call site: React can defer or replay state updaters.
       // A deferred cloud write must never become a new local edit or overwrite

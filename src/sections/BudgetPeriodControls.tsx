@@ -12,7 +12,7 @@ export function BudgetPeriodControls({ periodKey, onPeriodChange, scope, onScope
   const [expanded,setExpanded]=useState(false);
   const T=(key: Parameters<typeof budgetText>[1])=>budgetText(ctx.lang||'it',key);
   const comparison=ctx.financeEvolution.budget.comparison as PeriodComparison;
-  const summary=budgetPeriodSummary(ctx.expensesForAnalysis||ctx.expenses,ctx.incomes,plan,periodKey,ctx.accountingPeriod.settings,comparison);
+  const summary=budgetPeriodSummary(ctx.countedExpensesForAnalysis||ctx.expensesForAnalysis||ctx.expenses,ctx.countedIncomes||ctx.incomes,plan,periodKey,ctx.accountingPeriod.settings,comparison);
   const pct=(value: number|null)=>value===null?'—':new Intl.NumberFormat(ctx.lang||'it',{style:'percent',maximumFractionDigits:1}).format(value);
   const bounds=ctx.accountingPeriod.forKey(periodKey);
   const source=budgetSourceForPeriod(ctx.financeEvolution,periodKey);

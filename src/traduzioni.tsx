@@ -11585,51 +11585,71 @@ Object.assign(TRANSLATIONS.el,{
   var rows={
     it:{
       recurringPendingHome:"{count} transazioni ricorrenti da confermare",
+      recurringPendingHomeOne:"Transazione ricorrente",
+      recurringPendingHomeMany:"Transazioni ricorrenti",
       "Da confermare":"Da confermare",
       "Ricorrente saltata per questa occorrenza.":"Ricorrente saltata per questa occorrenza."
     },
     en:{
       recurringPendingHome:"{count} recurring transactions to confirm",
+      recurringPendingHomeOne:"Recurring transaction",
+      recurringPendingHomeMany:"Recurring transactions",
       "Da confermare":"To confirm",
       "Ricorrente saltata per questa occorrenza.":"Recurring transaction skipped for this occurrence."
     },
     es:{
       recurringPendingHome:"{count} transacciones recurrentes por confirmar",
+      recurringPendingHomeOne:"Transacción recurrente",
+      recurringPendingHomeMany:"Transacciones recurrentes",
       "Da confermare":"Por confirmar",
       "Ricorrente saltata per questa occorrenza.":"Transacción recurrente omitida para esta ocurrencia."
     },
     fr:{
       recurringPendingHome:"{count} transactions récurrentes à confirmer",
+      recurringPendingHomeOne:"Transaction récurrente",
+      recurringPendingHomeMany:"Transactions récurrentes",
       "Da confermare":"À confirmer",
       "Ricorrente saltata per questa occorrenza.":"Transaction récurrente ignorée pour cette occurrence."
     },
     de:{
       recurringPendingHome:"{count} wiederkehrende Transaktionen zu bestätigen",
+      recurringPendingHomeOne:"Wiederkehrende Transaktion",
+      recurringPendingHomeMany:"Wiederkehrende Transaktionen",
       "Da confermare":"Zu bestätigen",
       "Ricorrente saltata per questa occorrenza.":"Wiederkehrende Transaktion für diesen Termin übersprungen."
     },
     pt:{
       recurringPendingHome:"{count} transações recorrentes por confirmar",
+      recurringPendingHomeOne:"Transação recorrente",
+      recurringPendingHomeMany:"Transações recorrentes",
       "Da confermare":"Por confirmar",
       "Ricorrente saltata per questa occorrenza.":"Transação recorrente ignorada para esta ocorrência."
     },
     pl:{
       recurringPendingHome:"{count} transakcji cyklicznych do potwierdzenia",
+      recurringPendingHomeOne:"Transakcja cykliczna",
+      recurringPendingHomeMany:"Transakcje cykliczne",
       "Da confermare":"Do potwierdzenia",
       "Ricorrente saltata per questa occorrenza.":"Transakcja cykliczna pominięta dla tego wystąpienia."
     },
     nl:{
       recurringPendingHome:"{count} terugkerende transacties te bevestigen",
+      recurringPendingHomeOne:"Terugkerende transactie",
+      recurringPendingHomeMany:"Terugkerende transacties",
       "Da confermare":"Te bevestigen",
       "Ricorrente saltata per questa occorrenza.":"Terugkerende transactie voor deze keer overgeslagen."
     },
     ro:{
       recurringPendingHome:"{count} tranzacții recurente de confirmat",
+      recurringPendingHomeOne:"Tranzacție recurentă",
+      recurringPendingHomeMany:"Tranzacții recurente",
       "Da confermare":"De confirmat",
       "Ricorrente saltata per questa occorrenza.":"Tranzacție recurentă omisă pentru această apariție."
     },
     el:{
       recurringPendingHome:"{count} επαναλαμβανόμενες συναλλαγές προς επιβεβαίωση",
+      recurringPendingHomeOne:"Επαναλαμβανόμενη συναλλαγή",
+      recurringPendingHomeMany:"Επαναλαμβανόμενες συναλλαγές",
       "Da confermare":"Προς επιβεβαίωση",
       "Ricorrente saltata per questa occorrenza.":"Η επαναλαμβανόμενη συναλλαγή παραλείφθηκε για αυτή την εμφάνιση."
     }

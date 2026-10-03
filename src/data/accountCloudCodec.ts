@@ -25,7 +25,7 @@ export async function fainanceExpandAccountCloudDataV5(raw:any){
     var parsed=JSON.parse(decoded);
     if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))throw new Error("INVALID_CLOUD_DOCUMENT");
     var merged:any={...raw,...parsed};
-    ["currentPlan","plan","subscriptionPlan"].forEach(function(key){if(raw[key]!==undefined)merged[key]=raw[key];});
+    ["currentPlan","plan","subscriptionPlan","userStateAuthorityV2","userStateAuthorityV3"].forEach(function(key){if(raw[key]!==undefined)merged[key]=raw[key];});
     return merged;
   }catch(e){
     console.error("Cloud data decompression error",(e&&e.message)||e);

@@ -231,7 +231,7 @@ function PL(value: any) {
 
 function effectiveExpenseGroups(groups: any) {
   var explicit = Array.isArray(groups) ? groups : null;
-  var base = explicit && explicit.length ? explicit : DEFAULT_EXPENSE_GROUPS;
+  var base = Array.isArray(explicit) ? explicit : DEFAULT_EXPENSE_GROUPS;
   var out = (base || []).filter(function (g: any) {
     return !!g && !g.deleted;
   });
@@ -254,7 +254,7 @@ function effectiveExpenseGroups(groups: any) {
 }
 function effectiveIncomeGroups(list: any) {
   var explicit = Array.isArray(list) ? list : null;
-  var base = explicit && explicit.length ? explicit : DEFAULT_INCOME_GROUPS;
+  var base = Array.isArray(explicit) ? explicit : DEFAULT_INCOME_GROUPS;
   var out = (base || []).filter(function (g: any) {
     return !!g && !g.deleted && !g.archived;
   });
@@ -9592,7 +9592,7 @@ export function AlertsPanel() {
     alerts = ctx.alerts,
     setAlerts = ctx.setAlerts,
     cats = effectiveExpenseCats(ctx.cats),
-    expenses = ctx.expensesForAnalysis || ctx.expenses,
+    expenses = ctx.countedExpensesForAnalysis || ctx.expensesForAnalysis || ctx.expenses,
     sym = ctx.sym,
     dark = ctx.dark,
     curMonthKey = ctx.curMonthKey,
@@ -10769,8 +10769,8 @@ export function BudgetPlanPanel() {
   const accountingPeriod = (ctx as any).accountingPeriod;
   const rateMonth = (item, key) => accountingPeriod.amount(item, key);
   var cats = effectiveExpenseCats(ctx.cats),
-    incomes = ctx.incomes,
-    expenses = ctx.expensesForAnalysis || ctx.expenses,
+    incomes = ctx.countedIncomes || ctx.incomes,
+    expenses = ctx.countedExpensesForAnalysis || ctx.expensesForAnalysis || ctx.expenses,
     budgetPlan = ctx.budgetForPeriod(selectedPeriod),
     setBudgetPlan = plan => ctx.savePeriodBudget(selectedPeriod, plan, budgetScope),
     sym = ctx.sym,
@@ -11764,12 +11764,16 @@ export function SettingsList({
   var [newColor, setNewColor] = useState(COLORS[0]);
   var [newGroup, setNewGroup] = useState(gl[0] ? gl[0].id : "");
   var [newIcon, setNewIcon] = useState("📦");
+  var [newExcludeFromTotals, setNewExcludeFromTotals] = useState(false);
   var [showCreate, setShowCreate] = useState(false);
   var [editId, setEditId] = useState(null);
   var [editName, setEditName] = useState("");
   var [editColor, setEditColor] = useState("");
   var [editGroup, setEditGroup] = useState(gl[0] ? gl[0].id : "");
   var [editIcon, setEditIcon] = useState("📦");
+  var [editExcludeFromTotals, setEditExcludeFromTotals] = useState(false);
+  var supportsExcludeFromTotals =
+    usageScope === "expenseCategory" || usageScope === "incomeCategory";
   var inp = {
     width: "100%",
     borderRadius: 10,
@@ -11809,6 +11813,7 @@ export function SettingsList({
     setNewColor(COLORS[0]);
     setNewGroup(gl[0] ? gl[0].id : "");
     setNewIcon("📦");
+    setNewExcludeFromTotals(false);
     setShowCreate(false);
   }
   function closeEdit() {
@@ -11817,6 +11822,7 @@ export function SettingsList({
     setEditColor("");
     setEditGroup(gl[0] ? gl[0].id : "");
     setEditIcon("📦");
+    setEditExcludeFromTotals(false);
   }
   function add() {
     if (baseBlocked) {
@@ -11846,6 +11852,9 @@ export function SettingsList({
         createdAt: nowIso,
         updatedAt: nowIso,
         ...(showGroup ? { group: groupToSave } : {}),
+        ...(supportsExcludeFromTotals
+          ? { excludeFromTotals: !!newExcludeFromTotals }
+          : {}),
       },
     ]);
     resetCreate();
@@ -12125,6 +12134,7 @@ export function SettingsList({
     setEditColor(item.color || COLORS[0]);
     setEditGroup(item.group || (gl[0] ? gl[0].id : ""));
     setEditIcon(item.icon || "📦");
+    setEditExcludeFromTotals(!!item.excludeFromTotals);
   }
   function saveEdit() {
     if (baseBlocked) {
@@ -12143,6 +12153,9 @@ export function SettingsList({
               custom: true,
               updatedAt: new Date().toISOString(),
               ...(showGroup ? { group: editGroup } : {}),
+              ...(supportsExcludeFromTotals
+                ? { excludeFromTotals: !!editExcludeFromTotals }
+                : {}),
             }
           : i;
       })
@@ -12253,7 +12266,7 @@ export function SettingsList({
     if (/area/i.test(createLabel)) return "Nome area";
     return "Nome voce";
   }
-  function ModalShell({
+  function renderModalShell({
     title,
     onClose,
     icon,
@@ -12264,6 +12277,8 @@ export function SettingsList({
     setName,
     group,
     setGroup,
+    excludeFromTotals,
+    setExcludeFromTotals,
     onSave,
   }) {
     var valid = !baseBlocked && !!String(name || "").trim();
@@ -12397,7 +12412,7 @@ export function SettingsList({
                 {L(nameFieldLabel())}
               </div>
               <input
-                autoFocus
+                autoFocus={editId === null}
                 value={name}
                 disabled={baseBlocked}
                 onChange={function (e) {
@@ -12438,6 +12453,42 @@ export function SettingsList({
                     );
                   })}
                 </select>
+              </div>
+            )}
+            {supportsExcludeFromTotals && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 14,
+                  padding: "12px 13px",
+                  borderRadius: 12,
+                  border: "1px solid " + borderC,
+                  background: dark ? "#20202f" : "#f8f9fb",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 850, color: tc }}>
+                    {L("Escludi dai calcoli")}
+                  </div>
+                  <div style={{ fontSize: 11, color: sc, lineHeight: 1.35, marginTop: 3 }}>
+                    {L(
+                      "I movimenti di questa categoria restano nello storico, ma non modificano saldo, entrate, uscite e statistiche."
+                    )}
+                  </div>
+                </div>
+                <Toggle
+                  label=""
+                  checked={!!excludeFromTotals}
+                  onChange={function () {
+                    if (baseBlocked) {
+                      lockedWarn();
+                      return;
+                    }
+                    setExcludeFromTotals(!excludeFromTotals);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -12538,6 +12589,21 @@ export function SettingsList({
                         {L("Archiviato")}
                       </span>
                     )}
+                    {supportsExcludeFromTotals && item.excludeFromTotals && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          background: dark ? "#4a3a16" : "#FFF4D6",
+                          color: readableDarkText("#8A5A00", dark, dark ? "#4a3a16" : "#FFF4D6"),
+                          borderRadius: 10,
+                          padding: "1px 6px",
+                          fontWeight: 800,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {L("Non conteggiata")}
+                      </span>
+                    )}
                     <button
                       onClick={function () {
                         startEdit(item);
@@ -12582,6 +12648,7 @@ export function SettingsList({
                         fontSize: 15,
                         color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#bbb", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "none"),
                         padding: "5px 8px",
+                        marginLeft: -5,
                       }}
                     >
                       {item.archived ? "📂" : "🗂"}
@@ -12595,7 +12662,7 @@ export function SettingsList({
                         border: "1px solid " + (baseBlocked ? (dark ? "#4B4B58" : "#D1D5DB") : "#FFD0D0"),
                         borderRadius: 8, cursor: "pointer",
                         color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0"),
-                        fontSize: 14, padding: "5px 8px", fontWeight: 700,
+                        fontSize: 14, padding: "5px 8px", marginLeft: -5, fontWeight: 700,
                       }}
                     >
                       🗑️
@@ -12632,36 +12699,36 @@ export function SettingsList({
       >
         ＋ {L(createLabel)}
       </button>
-      {showCreate && (
-        <ModalShell
-          title={createLabel}
-          onClose={resetCreate}
-          icon={newIcon}
-          color={newColor}
-          setIcon={setNewIcon}
-          setColor={setNewColor}
-          name={newName}
-          setName={setNewName}
-          group={newGroup}
-          setGroup={setNewGroup}
-          onSave={add}
-        />
-      )}{" "}
-      {editId !== null && (
-        <ModalShell
-          title={editDialogLabel()}
-          onClose={closeEdit}
-          icon={editIcon}
-          color={editColor}
-          setIcon={setEditIcon}
-          setColor={setEditColor}
-          name={editName}
-          setName={setEditName}
-          group={editGroup}
-          setGroup={setEditGroup}
-          onSave={saveEdit}
-        />
-      )}
+      {showCreate && renderModalShell({
+        title: createLabel,
+        onClose: resetCreate,
+        icon: newIcon,
+        color: newColor,
+        setIcon: setNewIcon,
+        setColor: setNewColor,
+        name: newName,
+        setName: setNewName,
+        group: newGroup,
+        setGroup: setNewGroup,
+        excludeFromTotals: newExcludeFromTotals,
+        setExcludeFromTotals: setNewExcludeFromTotals,
+        onSave: add,
+      })}{" "}
+      {editId !== null && renderModalShell({
+        title: editDialogLabel(),
+        onClose: closeEdit,
+        icon: editIcon,
+        color: editColor,
+        setIcon: setEditIcon,
+        setColor: setEditColor,
+        name: editName,
+        setName: setEditName,
+        group: editGroup,
+        setGroup: setEditGroup,
+        excludeFromTotals: editExcludeFromTotals,
+        setExcludeFromTotals: setEditExcludeFromTotals,
+        onSave: saveEdit,
+      })}
     </div>
   );
 }
@@ -12823,7 +12890,7 @@ export function AreasEditor({ onlyPatrimonio }) {
       ? "Pagamenti"
       : "Patrimonio";
   }
-  function AreaModal() {
+  function renderAreaModal() {
     if (!modalMode) return null;
     var valid = !baseBlocked && !!String(draftName || "").trim();
     return (
@@ -12947,7 +13014,7 @@ export function AreasEditor({ onlyPatrimonio }) {
                 {L("Nome area")}
               </div>
               <input
-                autoFocus
+                autoFocus={modalMode !== "edit"}
                 disabled={baseBlocked}
                 placeholder={L("Nome area")}
                 value={draftName}
@@ -13119,7 +13186,7 @@ export function AreasEditor({ onlyPatrimonio }) {
                 border: "1px solid " + (baseBlocked ? (dark ? "#4B4B58" : "#D1D5DB") : "#FFD0D0"),
                 borderRadius: 8, cursor: "pointer",
                 color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0"),
-                fontSize: 14, padding: "5px 8px", fontWeight: 700,
+                fontSize: 14, padding: "5px 8px", marginLeft: -5, fontWeight: 700,
               }}
             >
               🗑️
@@ -13144,7 +13211,7 @@ export function AreasEditor({ onlyPatrimonio }) {
       >
         ＋ {L("Nuova area")}
       </button>
-      <AreaModal />
+      {renderAreaModal()}
     </div>
   );
 }

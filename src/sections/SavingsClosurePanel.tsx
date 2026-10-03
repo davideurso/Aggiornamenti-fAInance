@@ -15,7 +15,7 @@ export function SavingsClosurePanel({periodKey}:{periodKey:string}) {
   const T=(key:Parameters<typeof closureText>[1])=>closureText(ctx.lang||'it',key);
   const money=(n:number)=>new Intl.NumberFormat(ctx.lang||'it',{style:'currency',currency}).format(n/100);
   let preview:any;
-  try{preview=closurePreview(ctx.financeEvolution,ctx.legacyBudgetPlan,ctx.expensesForAnalysis||ctx.expenses,ctx.incomes,periodKey,currency,today);}
+  try{preview=closurePreview(ctx.financeEvolution,ctx.legacyBudgetPlan,ctx.countedExpensesForAnalysis||ctx.expensesForAnalysis||ctx.expenses,ctx.countedIncomes||ctx.incomes,periodKey,currency,today);}
   catch{return <p role="note">{T('overlap')}</p>;}
   const summary=preview.existing||preview.snapshot;
   const button={padding:'10px 12px',borderRadius:10,border:`1px solid ${ctx.borderC}`,background:ctx.cardBg,color:ctx.textC,cursor:'pointer'};
@@ -32,7 +32,7 @@ export function SavingsClosurePanel({periodKey}:{periodKey:string}) {
     {preview.existing?<p style={{fontSize:12,color:ctx.subC}}>{T('snapshot')}</p>:<>
       {summary.depositedMinor>Math.max(0,summary.realMinor)&&<p role="note" style={{fontSize:12}}>{T('overallocated')}</p>}
       {!draft?<button type="button" style={{...button,marginTop:12}} onClick={()=>{setDraft({token:preview.token,buckets:preview.buckets,values:Object.fromEntries(Object.entries(preview.proposal).map(([id,n])=>[id,String(Number(n)/100)]))});setError(false);}}>{T('review')}</button>:
-        <form onSubmit={event=>{event.preventDefault();if(!valid)return;try{ctx.setFinanceEvolution(previous=>closeSavingsPeriod(previous,{legacyPlan:ctx.legacyBudgetPlan,expenses:ctx.expensesForAnalysis||ctx.expenses,incomes:ctx.incomes,periodKey,currency,today,goals:ctx.goals,expectedToken:draft.token,allocations:values}));setDraft(null);setError(false);}catch{setError(true);}}}>
+        <form onSubmit={event=>{event.preventDefault();if(!valid)return;try{ctx.setFinanceEvolution(previous=>closeSavingsPeriod(previous,{legacyPlan:ctx.legacyBudgetPlan,expenses:ctx.countedExpensesForAnalysis||ctx.expensesForAnalysis||ctx.expenses,incomes:ctx.countedIncomes||ctx.incomes,periodKey,currency,today,goals:ctx.goals,expectedToken:draft.token,allocations:values}));setDraft(null);setError(false);}catch{setError(true);}}}>
           <p style={{fontSize:12}}>{T('hint')}</p>
           <p style={{fontSize:12}}>{T('closingHint')}</p>
           {!draft.buckets.length&&<p>{T('empty')}</p>}

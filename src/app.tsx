@@ -1,6 +1,6 @@
 import { DarkTextDefaults } from './ui/DarkTextDefaults';
 import { readableDarkText } from './ui/textContrast';
-import { getDocFromCache } from "firebase/firestore";
+import { getDocFromCache, getDocFromServer } from "firebase/firestore";
 import { readExistingCachedDocument, serializeSnapshotHandler, restoreResumeTab, needsCategoryRecovery, hasResumeCheckpoint, writeResumeCheckpoint } from "./utils/resumeCache";
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
@@ -18,6 +18,7 @@ import './ui/responsiveLayout.css';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createFinanceEvolution, migrateFinanceEvolution, selectFinanceEvolution } from './data/financeEvolution';
+import { mergeAutomaticRulesIntoFinanceEvolution, trackAutomaticRuleLocalChange } from './data/automaticRuleAccountSync';
 import { createAccountingPeriod } from './finance/accountingPeriod';
 import { PeriodPreferences } from './settings/PeriodPreferences';
 import { periodText } from './i18n/periodTranslations';
@@ -254,7 +255,12 @@ import {
   fainanceCompressAccountDataV5,
   fainanceExpandAccountCloudDataV5,
 } from "./data/accountCloudCodec";
-import { createAutomaticAccountBackup } from "./data/automaticBackups";
+import {
+  createAutomaticAccountBackup,
+  saveUserStateAuthorityBackupV6,
+  readLatestUserStateAuthorityBackupV6,
+  readUserStateAuthorityBackupV6ById,
+} from "./data/automaticBackups";
 import { writeTechnicalLog } from "./observability/technicalLogs";
 import {
   accountSyncErrorInfo,
@@ -841,6 +847,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var marker = prefix + "legacy_account_storage_migrated_v3";
     var ownerKey = "fainance_legacy_storage_owner_uid_v2";
     try {
+      // This migration is intentionally one-shot. Replaying recovery_legacy_*
+      // on every login can resurrect values that the user has explicitly
+      // deleted or disabled after the original migration.
+      if (localStorage.getItem(marker) === "1") return;
       var keys = [
         "exp_v10",
         "inc_v10",
@@ -1206,7 +1216,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
     ensureArrayValue(expenseList, []).forEach(maybeAdd);
     ensureArrayValue(recurringList, []).forEach(maybeAdd);
-    return out.length ? out : ensureArrayValue(DEFAULT_METHODS, []);
+    // An explicit empty catalog is an authoritative user choice.
+    // Defaults are only used by useStorage when the key has never existed.
+    return out;
   }
   function hasFallbackItems(fallback) {
     return Array.isArray(fallback) && fallback.length > 0;
@@ -1241,8 +1253,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return map;
   }
   function compactProtectedArray(value, fallback, dict) {
-    var arr = Array.isArray(value) ? value.slice() : [];
-    if (!arr.length) arr = ensureArrayValue(fallback, []).slice();
+    // IMPORTANT: [] is a valid, authoritative user state. Never interpret
+    // an empty array as "missing" and never repopulate defaults after setup.
+    var arr = Array.isArray(value)
+      ? value.slice()
+      : ensureArrayValue(fallback, []).slice();
     var defaults = ensureArrayValue(fallback, []);
     var defaultIds = {};
     defaults.forEach(function (d) {
@@ -1305,21 +1320,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return defaultProtectedArray(value, fallback, dict);
   }
   function patrimonioProtectedArray(value, fallback, dict) {
-    var stored = Array.isArray(value) ? value : [];
-    // Mantiene l'ordine scelto dall'utente e aggiunge in coda soltanto gli
-    // elementi predefiniti realmente mancanti. Le personalizzazioni/tombstone
-    // del catalogo salvato hanno sempre precedenza sui default.
-    return compactProtectedArray(
-      mergeProtectedArrayByStableId(
-        stored,
-        ensureArrayValue(fallback, []),
-        fallback,
-        dict,
-        false
-      ),
-      fallback,
-      dict
-    );
+    // Patrimonio follows the same invariant as every other user-owned catalog:
+    // defaults seed a brand-new account only. Missing/deleted/disabled items
+    // must NEVER be silently appended again after the user has changed them.
+    return compactProtectedArray(value, fallback, dict);
   }
   function resolvePatrimonioProtectedNext(next, current, fallback, dict) {
     var base = patrimonioProtectedArray(current, fallback, dict);
@@ -1334,8 +1338,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var merged = mergeArrayByStableId(c, l);
       if (merged.length || !fallbackHasItems) return merged;
     }
-    if (c && (c.length || !fallbackHasItems)) return c;
-    if (l && (l.length || !fallbackHasItems)) return l;
+    // Explicit empty arrays are authoritative. Fallback is allowed only
+    // when neither cloud nor local has a stored array at all.
+    if (c) return c;
+    if (l) return l;
     return ensureArrayValue(fallback, []);
   }
   function chooseCloudLocalObject(cloud, local, fallback) {
@@ -1461,6 +1467,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var applyingFirestoreRef = useRef(false);
   var remoteApplyDepthRef = useRef(0);
   var pendingAccountSyncRef = useRef<any>({ revision: 0, token: "" });
+  var userStateAuthoritySaveTimerRef = useRef<any>(null);
+  var latestUserStateAuthoritySaveRef = useRef<any>(null);
+  var userStateAuthorityV3SaveChainRef = useRef<any>(Promise.resolve(true));
+  var userStateAuthorityV3RevisionRef = useRef(0);
+  var userStateAuthorityV5SaveChainRef = useRef<any>(Promise.resolve(true));
+  var userStateAuthorityV5RevisionRef = useRef(0);
+  var userStateAuthorityV5AnchorRef = useRef<any>(null);
+  var userStateAuthorityV6SaveChainRef = useRef<any>(Promise.resolve(true));
+  var userStateAuthorityV6RevisionRef = useRef(0);
+  var userStateAuthorityV6AnchorRef = useRef<any>(null);
   var accountSyncSavingRef = useRef(false);
   var accountSyncRetryRequestedRef = useRef(false);
   var lastCloudIntegrityRef = useRef<any>({});
@@ -1473,6 +1489,960 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var postHydrationSyncRequestedRef = useRef(false);
   var accountSyncErrorToastAtRef = useRef(0);
   var [accountSyncRetryPulse, setAccountSyncRetryPulse] = useState(0);
+
+  // USER STATE AUTHORITY V2 - snapshot generico delle preferenze.
+  // La lista copre categorie/aree, impostazioni visuali, widget, notifiche e
+  // preferenze funzionali. Dati transazionali e impostazioni di sicurezza
+  // locali (PIN/biometria) restano volutamente esclusi.
+  var USER_STATE_AUTHORITY_PREFERENCE_KEYS_V2: any = {
+    cats_v10: true, meth_v10: true, expense_groups_v1: true, method_groups_v1: true,
+    income_groups_v1: true, custom_income_types_v1: true, income_type_overrides_v1: true,
+    cat_order_v1: true, method_order_v1: true, cat_sort_mode: true, method_sort_mode: true,
+    default_expense_area_v1: true, default_expense_cat_v1: true, default_expense_method_v1: true,
+    default_income_area_v1: true, default_income_type_v1: true, default_method_area_v1: true,
+    income_type_order_v1: true, budget_plan_v1: true, patrimonio_areas_v1: true,
+    patrimonio_entries_v1: true, patrimonio_mode_v1: true, home_worklets_v1: true,
+    notif_prefs_v1: true, custom_notifs_v1: true, history_future_mode_v1: true,
+    history_sort_date_v1: true, history_sort_direction_v1: true, history_sort_secondary_v1: true,
+    history_sort_secondary_direction_v1: true, terms_accepted_v1: true, privacy_accepted_v1: true,
+    meta_events_consent_v1: true, legal_acceptance_date_v1: true, onboarding_guide_seen_v1: true,
+    initial_setup_status_v1: true, share_show_history_v1: true, share_category_mappings_v1: true,
+    share_default_category_v1: true, shopping_areas_v1: true, shopping_units_v1: true,
+    shopping_area_icons_v1: true, shopping_area_colors_v1: true, shopping_bought_color_v1: true,
+    shopping_active_list_id_v2: true, shopping_product_sort_v1: true, shopping_default_area_v1: true,
+    shopping_default_unit_v1: true, debt_credits_show_patrimonio_v1: true,
+    debt_credits_show_expenses_v1: true, ai_dismissed_v1: true, ai_data_access_v1: true,
+    ai_floating_enabled_v1: true, ai_floating_pos_v1: true, ai_tab_v1: true,
+    expense_cats_settings_view_v1: true, expense_methods_settings_view_v1: true,
+    income_cats_settings_view_v1: true, patrimonio_settings_area_view: true,
+    patrimonio_settings_entry_view: true
+  };
+  function userStateAuthorityPreferenceKeyAllowed(baseKey: string) {
+    var key = String(baseKey || "");
+    if (!key) return false;
+    // Metadati di sync/receipt non sono preferenze utente. In V3/V4 il wildcard
+    // pref_* li includeva e rendeva la verifica cloud instabile anche quando i
+    // dati funzionali erano corretti.
+    if (/_updated_at$/.test(key)) return false;
+    if (/(?:^|_)receipt(?:_|$)/.test(key)) return false;
+    if (/sync_(?:pending|last_error|error_toast)/.test(key)) return false;
+    if (/^pref_(?:biometric|local_lock)/.test(key)) return false;
+    if (/^pref_/.test(key)) return true;
+    if (/^widget/.test(key)) return true;
+    return !!USER_STATE_AUTHORITY_PREFERENCE_KEYS_V2[key];
+  }
+  function readUserPreferenceStorageSnapshotV2() {
+    var values: any = {};
+    if (!userId) return values;
+    var prefix = "user_" + String(userId) + "_";
+    try {
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = localStorage.getItem(fullKey);
+        if (raw !== null) values[baseKey] = raw;
+      });
+    } catch (e) {}
+    return values;
+  }
+  function restoreUserPreferenceStorageSnapshotV2(data: any) {
+    var values = data && data.values && typeof data.values === "object" ? data.values : null;
+    if (!values || !userId) return;
+    Object.keys(values).forEach(function (baseKey) {
+      if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+      var fullKey = userKey(baseKey);
+      var raw = values[baseKey];
+      if (typeof raw !== "string") return;
+      try {
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        if (typeof window !== "undefined" && window.dispatchEvent) {
+          var ev: any;
+          try { ev = new CustomEvent("fainance-storage-restore", { detail: { key: fullKey } }); }
+          catch (_e) { ev = new Event("fainance-storage-restore"); ev.detail = { key: fullKey }; }
+          window.dispatchEvent(ev);
+        }
+      } catch (e) {}
+    });
+  }
+  // USER STATE AUTHORITY V3
+  // Documento indipendente e verificabile dello stato configurabile dell'utente.
+  // Viene salvato in un campo Firestore separato dal grande snapshot compresso,
+  // cosi' una scrittura legacy/stale non puo' sovrascriverlo.
+  function validUserStateAuthorityV3(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      Number(value.schemaVersion || 0) === 3 &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+  function canonicalUserStateAuthorityValue(value: any): string {
+    function normalize(v: any): any {
+      if (Array.isArray(v)) return v.map(normalize);
+      if (v && typeof v === "object") {
+        var out: any = {};
+        Object.keys(v)
+          .sort()
+          .forEach(function (key) {
+            out[key] = normalize(v[key]);
+          });
+        return out;
+      }
+      return v;
+    }
+    var raw = String(value ?? "");
+    try {
+      return JSON.stringify(normalize(JSON.parse(raw)));
+    } catch (e) {
+      return raw;
+    }
+  }
+  function userStateAuthorityStorageValueEqual(a: any, b: any) {
+    if (String(a ?? "") === String(b ?? "")) return true;
+    return (
+      canonicalUserStateAuthorityValue(a) ===
+      canonicalUserStateAuthorityValue(b)
+    );
+  }
+  function userStateAuthorityV3ValuesEqual(a: any, b: any) {
+    var aa = a && typeof a === "object" ? a : {};
+    var bb = b && typeof b === "object" ? b : {};
+    var keys = Array.from(new Set(Object.keys(aa).concat(Object.keys(bb)))).sort();
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (!userStateAuthorityStorageValueEqual(aa[k], bb[k])) return false;
+    }
+    return true;
+  }
+  function currentUserStateAuthorityV3Values() {
+    return readUserPreferenceStorageSnapshotV2();
+  }
+  function dispatchUserStorageRestore(fullKey: string) {
+    try {
+      if (typeof window === "undefined" || !window.dispatchEvent) return;
+      var ev: any;
+      try {
+        ev = new CustomEvent("fainance-storage-restore", { detail: { key: fullKey } });
+      } catch (_e) {
+        ev = new Event("fainance-storage-restore");
+        ev.detail = { key: fullKey };
+      }
+      window.dispatchEvent(ev);
+    } catch (e) {}
+  }
+  function restoreUserStateAuthorityV3(value: any) {
+    if (!validUserStateAuthorityV3(value) || !userId) return false;
+    var values: any = value.values || {};
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      // V3 e' uno snapshot completo, non un merge. Una chiave configurabile
+      // assente nello snapshot deve restare assente anche su un vecchio device.
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+      var ts = Math.max(1, Number(value.updatedAtMs || Date.now()));
+      [
+        "preference_storage_v2",
+        "expense_catalog_v2",
+        "cats",
+        "payment_catalog_v2",
+        "methods",
+        "income_catalog_v2",
+        "income_catalog_v1",
+        "category_preferences_v2",
+        "patrimonio_catalog_v2",
+        "budget_plan_v1",
+        "home_preferences",
+        "display_preferences_v2",
+        "shopping_preferences_v2",
+        "patrimony_preferences_v2",
+      ].forEach(function (groupKey) {
+        writeUserLocalUpdatedAt(groupKey, ts);
+      });
+      userStateAuthorityV3RevisionRef.current = Math.max(
+        Number(userStateAuthorityV3RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+
+  // USER STATE AUTHORITY V4
+  // V4 vive DENTRO lo snapshot account compresso gia' usato e autorizzato
+  // da fAInance. Non dipende quindi da un nuovo campo Firestore top-level,
+  // che puo' essere rifiutato da regole esistenti o da build precedenti.
+  function validUserStateAuthorityV4(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      Number(value.schemaVersion || 0) === 4 &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+  function buildUserStateAuthorityV4(previous: any) {
+    var values = currentUserStateAuthorityV3Values();
+    var prevValid = validUserStateAuthorityV4(previous);
+    var same =
+      prevValid &&
+      userStateAuthorityV3ValuesEqual(
+        (previous && previous.values) || {},
+        values
+      );
+    return {
+      schemaVersion: 4,
+      scope: "compressed-complete-user-config-v1",
+      revision: prevValid
+        ? Number(previous.revision || 0) + (same ? 0 : 1)
+        : 1,
+      updatedAtMs:
+        prevValid && same
+          ? Number(previous.updatedAtMs || Date.now())
+          : Date.now(),
+      writerId: catalogSyncWriterId(),
+      values: values,
+    };
+  }
+  function restoreUserStateAuthorityV4(value: any) {
+    if (!validUserStateAuthorityV4(value) || !userId) return false;
+    var values: any = value.values || {};
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      // V4 e' uno snapshot COMPLETO: cio' che l'utente ha eliminato o
+      // disabilitato non puo' essere ricreato da default o merge legacy.
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+      var ts = Math.max(1, Number(value.updatedAtMs || Date.now()));
+      [
+        "preference_storage_v2",
+        "expense_catalog_v2",
+        "cats",
+        "payment_catalog_v2",
+        "methods",
+        "income_catalog_v2",
+        "income_catalog_v1",
+        "category_preferences_v2",
+        "patrimonio_catalog_v2",
+        "budget_plan_v1",
+        "home_preferences",
+        "display_preferences_v2",
+        "shopping_preferences_v2",
+        "patrimony_preferences_v2",
+      ].forEach(function (groupKey) {
+        writeUserLocalUpdatedAt(groupKey, ts);
+      });
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v4_receipt"),
+          JSON.stringify({
+            revision: Number(value.revision || 0),
+            updatedAtMs: Number(value.updatedAtMs || 0),
+            appliedAtMs: Date.now(),
+          })
+        );
+      } catch (e) {}
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+
+  // USER STATE AUTHORITY V5
+  // Documento separato in users/{uid}/backups, lo stesso percorso gia' usato
+  // dal catalog anchor. Le vecchie build che riscrivono userData/{uid} non
+  // possono quindi cancellare lo stato scelto dall'utente.
+  function userStateAuthorityV5DocRef() {
+    if (!userId) return null;
+    return doc(
+      fbDb,
+      "users",
+      String(userId),
+      "backups",
+      "user_state_authority_v5"
+    );
+  }
+  function validUserStateAuthorityV5(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      String(value.kind || "") === "user-state-authority-v5" &&
+      Number(value.schemaVersion || 0) === 5 &&
+      String(value.uid || "") === String(userId || "") &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+  function parseAuthorityStorageValue(values: any, key: string) {
+    if (
+      !values ||
+      !Object.prototype.hasOwnProperty.call(values, key) ||
+      typeof values[key] !== "string"
+    )
+      return undefined;
+    try {
+      return JSON.parse(values[key]);
+    } catch (e) {
+      return undefined;
+    }
+  }
+  function applyUserStateAuthorityV5ToCloudData(data: any, authority: any) {
+    if (!validUserStateAuthorityV5(authority)) return data;
+    var d: any = { ...(data || {}) };
+    var values: any = authority.values || {};
+    var ts = Math.max(1, Number(authority.updatedAtMs || Date.now()));
+
+    function put(storageKey: string, cloudKey: string) {
+      var value = parseAuthorityStorageValue(values, storageKey);
+      if (value !== undefined) d[cloudKey] = value;
+      return value;
+    }
+
+    var catsV5 = put("cats_v10", "cats");
+    var expenseGroupsV5 = put("expense_groups_v1", "expenseGroups");
+    var methodsV5 = put("meth_v10", "methods");
+    var methodGroupsV5 = put("method_groups_v1", "methodGroups");
+    var incomeGroupsV5 = put("income_groups_v1", "incomeGroups");
+    var customIncomeV5 = put("custom_income_types_v1", "customIncomeTypes");
+    var incomeOverridesV5 = put("income_type_overrides_v1", "incomeTypeOverrides");
+    var budgetV5 = put("budget_plan_v1", "budgetPlan");
+    var patAreasV5 = put("patrimonio_areas_v1", "patrimonioAreas");
+    var patEntriesV5 = put("patrimonio_entries_v1", "patrimonioEntries");
+    var patModeV5 = put("patrimonio_mode_v1", "patrimonioMode");
+
+    if (catsV5 !== undefined || expenseGroupsV5 !== undefined) {
+      d.expenseCatalogUpdatedAt = ts;
+      d.catsUpdatedAt = ts;
+      d.expenseCatalogV2 = {
+        ...(d.expenseCatalogV2 || {}),
+        categories:
+          catsV5 !== undefined
+            ? catsV5
+            : ((d.expenseCatalogV2 || {}).categories || d.cats || []),
+        groups:
+          expenseGroupsV5 !== undefined
+            ? expenseGroupsV5
+            : ((d.expenseCatalogV2 || {}).groups || d.expenseGroups || []),
+        updatedAtMs: ts,
+      };
+    }
+    if (methodsV5 !== undefined || methodGroupsV5 !== undefined) {
+      d.methodsUpdatedAt = ts;
+      d.paymentCatalogUpdatedAt = ts;
+      d.methodCatalogUpdatedAt = ts;
+      d.paymentCatalogV2 = {
+        ...(d.paymentCatalogV2 || {}),
+        methods:
+          methodsV5 !== undefined
+            ? methodsV5
+            : ((d.paymentCatalogV2 || {}).methods || d.methods || []),
+        groups:
+          methodGroupsV5 !== undefined
+            ? methodGroupsV5
+            : ((d.paymentCatalogV2 || {}).groups || d.methodGroups || []),
+        updatedAtMs: ts,
+      };
+    }
+    if (
+      incomeGroupsV5 !== undefined ||
+      customIncomeV5 !== undefined ||
+      incomeOverridesV5 !== undefined
+    ) {
+      d.incomeCatalogUpdatedAt = ts;
+      d.incomeCatalogV2 = {
+        ...(d.incomeCatalogV2 || {}),
+        groups:
+          incomeGroupsV5 !== undefined
+            ? incomeGroupsV5
+            : ((d.incomeCatalogV2 || {}).groups || d.incomeGroups || []),
+        customTypes:
+          customIncomeV5 !== undefined
+            ? customIncomeV5
+            : ((d.incomeCatalogV2 || {}).customTypes ||
+              d.customIncomeTypes ||
+              []),
+        overrides:
+          incomeOverridesV5 !== undefined
+            ? incomeOverridesV5
+            : ((d.incomeCatalogV2 || {}).overrides ||
+              d.incomeTypeOverrides ||
+              {}),
+        updatedAtMs: ts,
+      };
+    }
+    if (budgetV5 !== undefined) {
+      d.budgetPlanUpdatedAt = ts;
+      if (budgetV5 === null) d.budgetPlanClearedAt = ts;
+    }
+    if (patAreasV5 !== undefined || patEntriesV5 !== undefined) {
+      d.patrimonioCatalogUpdatedAt = ts;
+    }
+    if (patModeV5 !== undefined) {
+      d.patrimonyPreferencesV2 = {
+        ...(d.patrimonyPreferencesV2 || {}),
+        patrimonioMode: patModeV5,
+      };
+      d.patrimonyPreferencesUpdatedAt = ts;
+    }
+
+    // Mantiene coerente anche CatalogSyncV4, evitando che il merge legacy
+    // scelga una copia precedente solo perche' possiede un timestamp maggiore.
+    var catalogV4: any =
+      d.catalogSyncV4 && typeof d.catalogSyncV4 === "object"
+        ? { ...d.catalogSyncV4 }
+        : { schemaVersion: 4, writerId: String(authority.writerId || "") };
+    if (catsV5 !== undefined || expenseGroupsV5 !== undefined) {
+      catalogV4.expenseCatalog = {
+        updatedAtMs: ts,
+        data: {
+          categories: catsV5 !== undefined ? catsV5 : d.cats || [],
+          groups:
+            expenseGroupsV5 !== undefined
+              ? expenseGroupsV5
+              : d.expenseGroups || [],
+        },
+      };
+    }
+    if (methodsV5 !== undefined || methodGroupsV5 !== undefined) {
+      catalogV4.paymentCatalog = {
+        updatedAtMs: ts,
+        data: {
+          methods: methodsV5 !== undefined ? methodsV5 : d.methods || [],
+          groups:
+            methodGroupsV5 !== undefined ? methodGroupsV5 : d.methodGroups || [],
+        },
+      };
+    }
+    if (
+      incomeGroupsV5 !== undefined ||
+      customIncomeV5 !== undefined ||
+      incomeOverridesV5 !== undefined
+    ) {
+      catalogV4.incomeCatalog = {
+        updatedAtMs: ts,
+        data: {
+          groups:
+            incomeGroupsV5 !== undefined ? incomeGroupsV5 : d.incomeGroups || [],
+          customTypes:
+            customIncomeV5 !== undefined
+              ? customIncomeV5
+              : d.customIncomeTypes || [],
+          overrides:
+            incomeOverridesV5 !== undefined
+              ? incomeOverridesV5
+              : d.incomeTypeOverrides || {},
+        },
+      };
+    }
+    d.catalogSyncV4 = catalogV4;
+    d.userStateAuthorityV5 = authority;
+    return d;
+  }
+  function restoreUserStateAuthorityV5(value: any) {
+    if (!validUserStateAuthorityV5(value) || !userId) return false;
+    var values: any = value.values || {};
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+      userStateAuthorityV5RevisionRef.current = Math.max(
+        Number(userStateAuthorityV5RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+      userStateAuthorityV5AnchorRef.current = value;
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v5_receipt"),
+          JSON.stringify({
+            revision: Number(value.revision || 0),
+            updatedAtMs: Number(value.updatedAtMs || 0),
+            appliedAtMs: Date.now(),
+          })
+        );
+      } catch (e) {}
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+  async function readUserStateAuthorityV5(preferCache = false) {
+    var ref: any = userStateAuthorityV5DocRef();
+    if (!ref) return null;
+    try {
+      var snap: any = preferCache
+        ? await readExistingCachedDocument(
+            () => getDocFromCache(ref),
+            () => getDoc(ref)
+          )
+        : await fainancePromiseTimeout(
+            getDocFromServer(ref),
+            15000,
+            "Timeout lettura User State Authority V5."
+          );
+      if (!snap || !snap.exists || !snap.exists()) return null;
+      var value: any = snap.data() || {};
+      if (!validUserStateAuthorityV5(value)) return null;
+      userStateAuthorityV5RevisionRef.current = Math.max(
+        Number(userStateAuthorityV5RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+      userStateAuthorityV5AnchorRef.current = value;
+      return value;
+    } catch (error) {
+      console.error(
+        "User State Authority V5 read failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      return null;
+    }
+  }
+  async function saveUserStateAuthorityV5Direct(
+    reason?: string,
+    verifyServer = false
+  ) {
+    var execute = async function () {
+      if (
+        !financeSchemaCompatibleRef.current ||
+        !userId ||
+        !firestoreHydratedRef.current ||
+        applyingFirestoreRef.current
+      )
+        return false;
+      if (!navigator.onLine) return false;
+
+      var ref: any = userStateAuthorityV5DocRef();
+      if (!ref) return false;
+      var values = currentUserStateAuthorityV3Values();
+      var previous: any = userStateAuthorityV5AnchorRef.current;
+      var same =
+        validUserStateAuthorityV5(previous) &&
+        userStateAuthorityV3ValuesEqual(previous.values || {}, values);
+      if (same && !verifyServer) return true;
+
+      var revision =
+        Math.max(
+          Date.now(),
+          Number(userStateAuthorityV5RevisionRef.current || 0) + 1,
+          validUserStateAuthorityV5(previous)
+            ? Number(previous.revision || 0) + 1
+            : 1
+        );
+      var now = Date.now();
+      var authority: any = {
+        kind: "user-state-authority-v5",
+        schemaVersion: 5,
+        scope: "complete-user-config-v2",
+        uid: String(userId),
+        createdAtMs: 4102444800000,
+        updatedAtMs: now,
+        updatedAtIso: new Date(now).toISOString(),
+        revision: revision,
+        writerId: catalogSyncWriterId(),
+        values: values,
+      };
+      if (JSON.stringify(authority).length > 300000)
+        throw new Error("USER_STATE_AUTHORITY_V5_TOO_LARGE");
+
+      try {
+        if (!same) {
+          await setDoc(ref, authority, { merge: false });
+          userStateAuthorityV5RevisionRef.current = revision;
+          userStateAuthorityV5AnchorRef.current = authority;
+        }
+        if (!verifyServer) return true;
+
+        var serverSnap: any = await fainancePromiseTimeout(
+          getDocFromServer(ref),
+          15000,
+          "Timeout verifica User State Authority V5."
+        );
+        var serverValue: any =
+          serverSnap && serverSnap.exists && serverSnap.exists()
+            ? serverSnap.data() || {}
+            : null;
+        var ok =
+          validUserStateAuthorityV5(serverValue) &&
+          userStateAuthorityV3ValuesEqual(
+            (serverValue && serverValue.values) || {},
+            values || {}
+          );
+        if (ok) {
+          userStateAuthorityV5RevisionRef.current = Math.max(
+            Number(userStateAuthorityV5RevisionRef.current || 0),
+            Number(serverValue.revision || 0)
+          );
+          userStateAuthorityV5AnchorRef.current = serverValue;
+        }
+        return ok;
+      } catch (error) {
+        var code =
+          (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          "unknown";
+        console.error(
+          "User State Authority V5 save/verify failed",
+          String(reason || "change"),
+          code
+        );
+        persistAccountSyncError("user-state-authority-v5", error, false);
+        try {
+          localStorage.setItem(
+            userKey("user_state_authority_v5_last_error"),
+            String(code)
+          );
+        } catch (e) {}
+        return false;
+      }
+    };
+
+    var chained = Promise.resolve(userStateAuthorityV5SaveChainRef.current)
+      .catch(function () {
+        return false;
+      })
+      .then(execute);
+    userStateAuthorityV5SaveChainRef.current = chained;
+    return chained;
+  }
+
+
+  // USER STATE AUTHORITY V6
+  // V6 deliberately uses the exact same Firestore document shape as the
+  // already-established automatic backup flow. Earlier attempts introduced
+  // new fields/documents whose writes could be rejected or ignored by existing
+  // rules. A V6 snapshot is an ordinary private backup with a dedicated reason,
+  // so the persistence path is already exercised by fAInance.
+  function validUserStateAuthorityV6(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      String(value.kind || "") === "user-state-authority-v6" &&
+      Number(value.schemaVersion || 0) === 6 &&
+      String(value.uid || "") === String(userId || "") &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+
+  function restoreUserStateAuthorityV6(value: any) {
+    if (!validUserStateAuthorityV6(value) || !userId) return false;
+    var values: any = value.values || {};
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      // Full snapshot semantics: absence is intentional. This is the critical
+      // invariant that prevents defaults, migration snapshots and old devices
+      // from reviving a user-deleted setting.
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+
+      var ts = Math.max(1, Number(value.updatedAtMs || Date.now()));
+      [
+        "preference_storage_v2",
+        "expense_catalog_v2",
+        "cats",
+        "payment_catalog_v2",
+        "methods",
+        "income_catalog_v2",
+        "income_catalog_v1",
+        "category_preferences_v2",
+        "patrimonio_catalog_v2",
+        "budget_plan_v1",
+        "home_preferences",
+        "display_preferences_v2",
+        "shopping_preferences_v2",
+        "patrimony_preferences_v2",
+      ].forEach(function (groupKey) {
+        writeUserLocalUpdatedAt(groupKey, ts);
+      });
+      userStateAuthorityV6RevisionRef.current = Math.max(
+        Number(userStateAuthorityV6RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v6_receipt"),
+          JSON.stringify({
+            revision: Number(value.revision || 0),
+            updatedAtMs: Number(value.updatedAtMs || 0),
+            backupId: String((value as any).__backupId || ""),
+            appliedAtMs: Date.now(),
+          })
+        );
+      } catch (e) {}
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+
+  function applyUserStateAuthorityV6ToCloudData(data: any, authority: any) {
+    if (!validUserStateAuthorityV6(authority)) return data;
+    // Reuse the mature field overlay mapping from V5, but V6 itself remains
+    // the authority and is persisted through the verified backup schema.
+    var bridge: any = {
+      ...authority,
+      kind: "user-state-authority-v5",
+      schemaVersion: 5,
+    };
+    var out: any = applyUserStateAuthorityV5ToCloudData(data, bridge);
+    try { delete out.userStateAuthorityV5; } catch (e) {}
+    out.userStateAuthorityV6 = authority;
+    return out;
+  }
+
+  async function readLatestUserStateAuthorityV6() {
+    if (!userId) return null;
+    try {
+      var row: any = await fainancePromiseTimeout(
+        readLatestUserStateAuthorityBackupV6(String(userId), true),
+        15000,
+        "Timeout lettura User State Authority V6."
+      );
+      var authority: any = row && row.authority;
+      if (!validUserStateAuthorityV6(authority)) return null;
+      authority = { ...authority, __backupId: String(row.id || "") };
+      userStateAuthorityV6RevisionRef.current = Math.max(
+        Number(userStateAuthorityV6RevisionRef.current || 0),
+        Number(authority.revision || 0)
+      );
+      userStateAuthorityV6AnchorRef.current = authority;
+      return authority;
+    } catch (error) {
+      console.error(
+        "User State Authority V6 read failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      return null;
+    }
+  }
+
+  async function verifyUserStateAuthorityV6Server(
+    authority: any,
+    backupId: string
+  ) {
+    if (!validUserStateAuthorityV6(authority) || !backupId || !userId)
+      return false;
+    try {
+      var serverValue: any = await fainancePromiseTimeout(
+        readUserStateAuthorityBackupV6ById(
+          String(userId),
+          String(backupId)
+        ),
+        15000,
+        "Timeout verifica User State Authority V6."
+      );
+      return (
+        validUserStateAuthorityV6(serverValue) &&
+        Number(serverValue.revision || 0) === Number(authority.revision || 0) &&
+        userStateAuthorityV3ValuesEqual(
+          (serverValue && serverValue.values) || {},
+          (authority && authority.values) || {}
+        )
+      );
+    } catch (error) {
+      var verifyCode =
+        (error && (error as any).code) ||
+        (error && (error as any).message) ||
+        "unknown";
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v6_last_error"),
+          String(verifyCode)
+        );
+      } catch (e) {}
+      console.error("User State Authority V6 verify failed", verifyCode);
+      return false;
+    }
+  }
+
+  async function saveUserStateAuthorityV6Direct(
+    reason?: string,
+    verifyServer = false
+  ) {
+    var execute = async function () {
+      if (
+        !financeSchemaCompatibleRef.current ||
+        !userId ||
+        !firestoreHydratedRef.current ||
+        applyingFirestoreRef.current
+      )
+        return false;
+      if (!navigator.onLine) return false;
+
+      var values = currentUserStateAuthorityV3Values();
+      var previous: any = userStateAuthorityV6AnchorRef.current;
+      var same =
+        validUserStateAuthorityV6(previous) &&
+        userStateAuthorityV3ValuesEqual(previous.values || {}, values);
+      var previousBackupId = String(
+        (previous && (previous as any).__backupId) || ""
+      );
+
+      if (same && !verifyServer) return true;
+      if (same && verifyServer && previousBackupId) {
+        return await verifyUserStateAuthorityV6Server(
+          previous,
+          previousBackupId
+        );
+      }
+
+      var revision = Math.max(
+        Date.now(),
+        Number(userStateAuthorityV6RevisionRef.current || 0) + 1,
+        validUserStateAuthorityV6(previous)
+          ? Number(previous.revision || 0) + 1
+          : 1
+      );
+      var now = Date.now();
+      var authority: any = {
+        kind: "user-state-authority-v6",
+        schemaVersion: 6,
+        scope: "complete-user-config-backup-v1",
+        uid: String(userId),
+        updatedAtMs: now,
+        updatedAtIso: new Date(now).toISOString(),
+        revision: revision,
+        writerId: catalogSyncWriterId(),
+        values: values,
+      };
+      if (JSON.stringify(authority).length > 300000)
+        throw new Error("USER_STATE_AUTHORITY_V6_TOO_LARGE");
+
+      try {
+        var saved: any = await fainancePromiseTimeout(
+          saveUserStateAuthorityBackupV6({
+            uid: String(userId),
+            authority: authority,
+            appVersion: "2.1.7",
+          }),
+          15000,
+          "Timeout salvataggio User State Authority V6."
+        );
+        var backupId = String((saved && saved.id) || "");
+        if (!backupId) throw new Error("USER_STATE_AUTHORITY_V6_BACKUP_ID_MISSING");
+
+        var anchored: any = { ...authority, __backupId: backupId };
+        userStateAuthorityV6RevisionRef.current = revision;
+        userStateAuthorityV6AnchorRef.current = anchored;
+        try {
+          localStorage.removeItem(
+            userKey("user_state_authority_v6_last_error")
+          );
+        } catch (e) {}
+
+        if (!verifyServer) return true;
+        return await verifyUserStateAuthorityV6Server(
+          anchored,
+          backupId
+        );
+      } catch (error) {
+        var code =
+          (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          "unknown";
+        console.error(
+          "User State Authority V6 save failed",
+          String(reason || "change"),
+          code
+        );
+        persistAccountSyncError("user-state-authority-v6", error, false);
+        try {
+          localStorage.setItem(
+            userKey("user_state_authority_v6_last_error"),
+            String(code)
+          );
+        } catch (e) {}
+        return false;
+      }
+    };
+
+    var chained = Promise.resolve(userStateAuthorityV6SaveChainRef.current)
+      .catch(function () {
+        return false;
+      })
+      .then(execute);
+    userStateAuthorityV6SaveChainRef.current = chained;
+    return chained;
+  }
+
   // Clean Movement Sync V2 is deliberately enabled only for accounts with no
   // legacy expenses/incomes. Old accounts stay on the untouched legacy path until
   // the engine has passed isolated tests and a separate migration is added.
@@ -1687,6 +2657,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
     markAccountSyncPendingOnDevice();
     scheduleCompleteAccountRecoverySnapshot("local-change");
+    // Salva rapidamente in cloud lo stato autoritativo delle preferenze.
+    // Il callback usa il ref dell'ultimo render, quindi legge sempre i valori
+    // aggiornati anche se markPendingAccountSync e' partito dal setter precedente.
+    try {
+      if (userStateAuthoritySaveTimerRef.current)
+        clearTimeout(userStateAuthoritySaveTimerRef.current);
+      userStateAuthoritySaveTimerRef.current = setTimeout(function () {
+        userStateAuthoritySaveTimerRef.current = null;
+        var saver = latestUserStateAuthoritySaveRef.current;
+        if (typeof saver === "function") saver("pending-change");
+      }, 220);
+    } catch (e) {}
     if (accountSyncSavingRef.current)
       accountSyncRetryRequestedRef.current = true;
   }
@@ -1695,7 +2677,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       function onStorageWrite(ev: any) {
         if (applyingFirestoreRef.current) return;
         var key = String((ev && ev.detail && ev.detail.key) || "");
-        if (!key || key.indexOf("user_" + userId + "_") !== 0) return;
+        var prefix = "user_" + userId + "_";
+        if (!key || key.indexOf(prefix) !== 0) return;
+        var baseKey = key.slice(prefix.length);
+        if (userStateAuthorityPreferenceKeyAllowed(baseKey))
+          writeUserLocalUpdatedAt("preference_storage_v2", Date.now());
         markPendingAccountSync();
       }
       try {
@@ -2083,7 +3069,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       : valid;
   }
   function normalizeStringOrderValue(value, fallback) {
-    var source = Array.isArray(value) ? value : [];
+    var hasStoredValue = Array.isArray(value);
+    var source = hasStoredValue ? value : [];
     var seen = {};
     var out = [];
     source.forEach(function (item) {
@@ -2093,7 +3080,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         out.push(id);
       }
     });
-    return out.length ? out : Array.isArray(fallback) ? fallback.slice() : [];
+    return hasStoredValue
+      ? out
+      : Array.isArray(fallback)
+      ? fallback.slice()
+      : [];
   }
 
   var [accountDeletedRecords, setAccountDeletedRecordsRaw] = useStorage(
@@ -2508,8 +3499,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var source = candidatesById[String(category && category.id)];
       if (!source) return category;
       repaired = true;
-      var restored = { ...source, id: category.id };
-      delete restored.recovered;
+      var restored = { ...source, ...category, id: category.id };
+      // Preserve deleted/archived state from the authoritative catalog.
       return restored;
     });
     return { categories: categories, repaired: repaired };
@@ -2578,16 +3569,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var source = candidatesById[id];
       if (!source) return;
       if (!existing) {
-        var added = { ...source };
-        delete added.recovered;
+        // Keep historical references resolvable without making a
+        // deleted/missing category active again in the user's catalog.
+        var added = {
+          ...source,
+          archived: true,
+          deleted: true,
+          recovered: true,
+        };
         current.push(added);
         byId[id] = added;
         repaired = true;
         return;
       }
       if (isRecoveredExpenseCategory(existing)) {
-        var replacement = { ...source, id: existing.id };
-        delete replacement.recovered;
+        var replacement = { ...source, ...existing, id: existing.id };
         var index = current.findIndex(function (category) { return String(category && category.id) === id; });
         if (index >= 0) current[index] = replacement;
         byId[id] = replacement;
@@ -3294,14 +4290,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   function setFinanceEvolution(nextValue) {
     // Validate before marking a write or touching the existing state.
     const next = migrateFinanceEvolution(typeof nextValue === 'function' ? nextValue(financeEvolutionRef.current) : nextValue);
-    if (syncJsonEqual(next, financeEvolutionRef.current)) return;
+    const now = Date.now();
+    const nextWithRuleSync = migrateFinanceEvolution(trackAutomaticRuleLocalChange(financeEvolutionRef.current, next, now));
+    if (syncJsonEqual(nextWithRuleSync, financeEvolutionRef.current)) return;
     // Cloud hydration uses the raw setter. This public setter always represents
     // an explicit edit, including an edit made during an async cloud callback.
-    localStorage.setItem(userKey('finance_evolution_v1'), JSON.stringify(next));
-    writeUserLocalUpdatedAt('finance_evolution_v1', Date.now());
+    localStorage.setItem(userKey('finance_evolution_v1'), JSON.stringify(nextWithRuleSync));
+    writeUserLocalUpdatedAt('finance_evolution_v1', now);
     markPendingAccountSync(true);
-    financeEvolutionRef.current = next;
-    return setFinanceEvolutionRaw(next);
+    financeEvolutionRef.current = nextWithRuleSync;
+    return setFinanceEvolutionRaw(nextWithRuleSync);
   }
   useEffect(()=>{
     const clean=()=>{const current=financeEvolutionRef.current,tools=pruneToolHistory(current.tools);if(tools.calculator.length!==current.tools.calculator.length||tools.converter.length!==current.tools.converter.length)setFinanceEvolution({...current,tools});};
@@ -4789,6 +5787,198 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       currency,
     ]
   );
+  // "Escludi dai calcoli" e' una proprieta' della categoria, non del movimento.
+  // Ogni ricalcolo deve quindi risolvere la categoria ATTUALE anche per righe
+  // storiche/legacy, incluse quelle che conservano solo il nome categoria.
+  var allIncomeTypesForTotals = getAllIncomeTypes(
+    customIncomeTypes,
+    incomeTypeOverrides
+  );
+  function normalizeCalculationCategoryName(value) {
+    try {
+      return String(value == null ? "" : value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+    } catch (e) {
+      return String(value == null ? "" : value)
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+    }
+  }
+  function calculationCatalogId(value) {
+    if (value === undefined || value === null) return "";
+    var raw = String(value).trim().replace(/^(expense|income):/i, "");
+    if (!raw) return "";
+    if (/^-?\d+(?:\.0+)?$/.test(raw)) return String(Number(raw));
+    return raw;
+  }
+  function calculationCatalogIdsMatch(a, b) {
+    var left = calculationCatalogId(a);
+    var right = calculationCatalogId(b);
+    return !!left && !!right && left === right;
+  }
+  function expenseCategoryMatchesCalculationName(category, wantedName) {
+    var wanted = normalizeCalculationCategoryName(wantedName);
+    if (!wanted || !category) return false;
+    if (normalizeCalculationCategoryName(category.name) === wanted) return true;
+    var aliases =
+      DEFAULT_EXPENSE_CATEGORY_NAMES &&
+      (DEFAULT_EXPENSE_CATEGORY_NAMES[category.id] ||
+        DEFAULT_EXPENSE_CATEGORY_NAMES[String(category.id)]);
+    if (aliases && typeof aliases === "object") {
+      return Object.keys(aliases).some(function (key) {
+        return normalizeCalculationCategoryName(aliases[key]) === wanted;
+      });
+    }
+    return false;
+  }
+  function resolveExpenseCategoryForCalculations(itemOrCategoryId) {
+    var list = cats || [];
+    var item =
+      itemOrCategoryId && typeof itemOrCategoryId === "object"
+        ? itemOrCategoryId
+        : null;
+    var ids = item
+      ? [
+          item.catId,
+          item.categoryId,
+          item.category && typeof item.category === "object"
+            ? item.category.id
+            : null,
+          item.cat && typeof item.cat === "object" ? item.cat.id : null,
+        ]
+      : [itemOrCategoryId];
+    for (var i = 0; i < ids.length; i += 1) {
+      var id = ids[i];
+      if (id === undefined || id === null || String(id) === "") continue;
+      var byId = list.find(function (category) {
+        return calculationCatalogIdsMatch(category && category.id, id);
+      });
+      if (byId) return byId;
+    }
+    if (!item) return null;
+    var names = [
+      item.catName,
+      item.categoryName,
+      item.categoryLabel,
+      item.category && typeof item.category !== "object"
+        ? item.category
+        : item.category && item.category.name,
+      item.cat && typeof item.cat !== "object"
+        ? item.cat
+        : item.cat && item.cat.name,
+    ];
+    for (var n = 0; n < names.length; n += 1) {
+      var name = names[n];
+      if (!normalizeCalculationCategoryName(name)) continue;
+      var byName = list.find(function (category) {
+        return expenseCategoryMatchesCalculationName(category, name);
+      });
+      if (byName) return byName;
+    }
+    return null;
+  }
+  function resolveIncomeTypeForCalculations(itemOrTypeId) {
+    var list = allIncomeTypesForTotals || [];
+    var item =
+      itemOrTypeId && typeof itemOrTypeId === "object" ? itemOrTypeId : null;
+    var ids = item
+      ? [
+          item.type,
+          item.incomeType,
+          item.typeId,
+          item.catId,
+          item.categoryId,
+          item.category && typeof item.category === "object"
+            ? item.category.id
+            : null,
+        ]
+      : [itemOrTypeId];
+    for (var i = 0; i < ids.length; i += 1) {
+      var id = ids[i];
+      if (id === undefined || id === null || String(id) === "") continue;
+      var byId = list.find(function (incomeType) {
+        return calculationCatalogIdsMatch(incomeType && incomeType.id, id);
+      });
+      if (byId) return byId;
+    }
+    if (!item) return null;
+    var names = [
+      item.typeName,
+      item.incomeTypeName,
+      item.categoryName,
+      item.categoryLabel,
+      item.category && typeof item.category !== "object"
+        ? item.category
+        : item.category && item.category.name,
+    ];
+    for (var n = 0; n < names.length; n += 1) {
+      var wanted = normalizeCalculationCategoryName(names[n]);
+      if (!wanted) continue;
+      var byName = list.find(function (incomeType) {
+        return normalizeCalculationCategoryName(incomeType && incomeType.name) === wanted;
+      });
+      if (byName) return byName;
+    }
+    return null;
+  }
+  function isExpenseExcludedFromTotals(itemOrCategoryId) {
+    var cat = resolveExpenseCategoryForCalculations(itemOrCategoryId);
+    return !!(cat && cat.excludeFromTotals);
+  }
+  function isIncomeExcludedFromTotals(itemOrTypeId) {
+    var it = resolveIncomeTypeForCalculations(itemOrTypeId);
+    return !!(it && it.excludeFromTotals);
+  }
+  // Le signature rendono il filtro reattivo anche se un catalogo viene
+  // aggiornato in-place: attivare/disattivare una categoria ricalcola subito
+  // TUTTI i movimenti esistenti senza riscrivere le transazioni.
+  var expenseCalculationCategorySignature = (cats || [])
+    .map(function (category) {
+      return [
+        String(category && category.id),
+        normalizeCalculationCategoryName(category && category.name),
+        category && category.excludeFromTotals ? "1" : "0",
+      ].join(":");
+    })
+    .join("|");
+  var incomeCalculationCategorySignature = (allIncomeTypesForTotals || [])
+    .map(function (incomeType) {
+      return [
+        String(incomeType && incomeType.id),
+        normalizeCalculationCategoryName(incomeType && incomeType.name),
+        incomeType && incomeType.excludeFromTotals ? "1" : "0",
+      ].join(":");
+    })
+    .join("|");
+  var countedExpenses = useMemo(
+    function () {
+      return (expenses || []).filter(function (e) {
+        return !isExpenseExcludedFromTotals(e);
+      });
+    },
+    [expenses, expenseCalculationCategorySignature]
+  );
+  var countedExpensesForAnalysis = useMemo(
+    function () {
+      return (expensesForAnalysis || []).filter(function (e) {
+        return !isExpenseExcludedFromTotals(e);
+      });
+    },
+    [expensesForAnalysis, expenseCalculationCategorySignature]
+  );
+  var countedIncomes = useMemo(
+    function () {
+      return (incomes || []).filter(function (i) {
+        return !isIncomeExcludedFromTotals(i);
+      });
+    },
+    [incomes, incomeCalculationCategorySignature]
+  );
   var DEFAULT_SHOPPING_AREAS = [
     "Alimenti",
     "Banco Frigo",
@@ -5128,7 +6318,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         return item;
       });
       var base = (
-        Array.isArray(shoppingUnits) && shoppingUnits.length
+        Array.isArray(shoppingUnits)
           ? shoppingUnits
           : DEFAULT_SHOPPING_UNITS
       )
@@ -5138,7 +6328,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       base.forEach(function (unit) {
         if (unit && nextUnits.indexOf(unit) < 0) nextUnits.push(unit);
       });
-      if (!nextUnits.length) nextUnits = DEFAULT_SHOPPING_UNITS.slice();
+      // [] means the user intentionally disabled/removed all units.
+      // Never repopulate defaults after the initial seed.
+      if (!Array.isArray(shoppingUnits) && !nextUnits.length)
+        nextUnits = DEFAULT_SHOPPING_UNITS.slice();
       if (
         JSON.stringify(nextUnits) !==
         JSON.stringify(Array.isArray(shoppingUnits) ? shoppingUnits : [])
@@ -5147,9 +6340,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       if (itemsChanged) setShoppingItems(normalizedItems);
       var normalizedDefault =
         canonicalShoppingUnitName(shoppingDefaultUnit) || "Unità";
-      if (nextUnits.indexOf(normalizedDefault) < 0)
+      if (nextUnits.length && nextUnits.indexOf(normalizedDefault) < 0)
         normalizedDefault =
           nextUnits.indexOf("Unità") >= 0 ? "Unità" : nextUnits[0];
+      if (!nextUnits.length && Array.isArray(shoppingUnits))
+        normalizedDefault = "";
       if (String(shoppingDefaultUnit || "") !== String(normalizedDefault || ""))
         setShoppingDefaultUnit(normalizedDefault);
     },
@@ -5634,7 +6829,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       shoppingBoughtColor: String(shoppingBoughtColor || "#EAF7EE"),
       shoppingDefaultArea: String(shoppingDefaultArea || "Alimenti"),
       shoppingUnits:
-        Array.isArray(shoppingUnits) && shoppingUnits.length
+        Array.isArray(shoppingUnits)
           ? shoppingUnits
           : DEFAULT_SHOPPING_UNITS,
       shoppingDefaultUnit: String(shoppingDefaultUnit || "Unità"),
@@ -5668,6 +6863,214 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         : "",
       version: LEGAL_ACCEPTANCE_VERSION,
     };
+  }
+
+  // USER STATE AUTHORITY V2
+  // Ogni modifica esplicita dell'utente e' autoritativa per la sua sezione.
+  // I default servono solo quando una sezione non e' mai stata personalizzata.
+  function validUserStateAuthorityV2(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      Number(value.schemaVersion || 0) === 2 &&
+      value.sections &&
+      typeof value.sections === "object"
+    );
+  }
+  function currentUserStateAuthorityV2(previousValue: any, methodsValue?: any) {
+    var previous = validUserStateAuthorityV2(previousValue)
+      ? previousValue
+      : { schemaVersion: 2, sections: {} };
+    var sections: any = { ...(previous.sections || {}) };
+    function put(name: string, updatedAtMs: number, data: any) {
+      var ts = Math.max(0, Number(updatedAtMs || 0));
+      if (!ts) return;
+      var oldTs = Math.max(
+        0,
+        Number(sections[name] && sections[name].updatedAtMs || 0)
+      );
+      if (ts < oldTs) return;
+      sections[name] = { updatedAtMs: ts, data: data };
+    }
+    var catsTs = readUserLocalUpdatedAt("cats");
+    var methodsTs = readUserLocalUpdatedAt("methods");
+    put(
+      "expenseCatalog",
+      Math.max(readUserLocalUpdatedAt("expense_catalog_v2"), catsTs),
+      { categories: Array.isArray(cats) ? cats : [], groups: Array.isArray(expenseGroups) ? expenseGroups : [] }
+    );
+    put(
+      "paymentCatalog",
+      Math.max(readUserLocalUpdatedAt("payment_catalog_v2"), methodsTs),
+      { methods: Array.isArray(methodsValue) ? methodsValue : (Array.isArray(methods) ? methods : []), groups: Array.isArray(methodGroups) ? methodGroups : [] }
+    );
+    put(
+      "incomeCatalog",
+      Math.max(
+        readUserLocalUpdatedAt("income_catalog_v2"),
+        readUserLocalUpdatedAt("income_catalog_v1")
+      ),
+      {
+        groups: Array.isArray(incomeGroups) ? incomeGroups : [],
+        customTypes: Array.isArray(customIncomeTypes) ? customIncomeTypes : [],
+        overrides: incomeTypeOverrides && typeof incomeTypeOverrides === "object" ? incomeTypeOverrides : {},
+      }
+    );
+    put(
+      "categoryPreferences",
+      readUserLocalUpdatedAt("category_preferences_v2"),
+      currentCategoryPreferencesV2()
+    );
+    put(
+      "patrimonioCatalog",
+      readUserLocalUpdatedAt("patrimonio_catalog_v2"),
+      {
+        areas: Array.isArray(patrimonioAreas) ? patrimonioAreas : [],
+        entries: Array.isArray(patrimonioEntries) ? patrimonioEntries : [],
+      }
+    );
+    put(
+      "budget",
+      readUserLocalUpdatedAt("budget_plan_v1"),
+      { plan: budgetPlan, clearedAt: readBudgetPlanClearedAt() }
+    );
+    put(
+      "homePreferences",
+      readUserLocalUpdatedAt("home_preferences"),
+      currentHomeSyncValue()
+    );
+    put(
+      "displayPreferences",
+      readUserLocalUpdatedAt("display_preferences_v2"),
+      currentDisplayPreferencesV2()
+    );
+    put(
+      "shoppingPreferences",
+      readUserLocalUpdatedAt("shopping_preferences_v2"),
+      currentShoppingPreferencesV2()
+    );
+    put(
+      "patrimonyPreferences",
+      readUserLocalUpdatedAt("patrimony_preferences_v2"),
+      currentPatrimonyPreferencesV2()
+    );
+    put(
+      "preferenceStorage",
+      readUserLocalUpdatedAt("preference_storage_v2"),
+      { values: readUserPreferenceStorageSnapshotV2() }
+    );
+    var maxTs = Object.keys(sections).reduce(function (max, key) {
+      return Math.max(max, Number(sections[key] && sections[key].updatedAtMs || 0));
+    }, 0);
+    return {
+      schemaVersion: 2,
+      writerId: String(previous.writerId || catalogSyncWriterId()),
+      updatedAtMs: maxTs,
+      sections: sections,
+    };
+  }
+  function applyUserStateAuthorityV2(source: any) {
+    var d: any = source && typeof source === "object" ? { ...source } : {};
+    var authority: any = d.userStateAuthorityV2;
+    if (!validUserStateAuthorityV2(authority)) return d;
+    var sections: any = authority.sections || {};
+    function newerOrEqual(name: string, legacyTs: number) {
+      var section = sections[name];
+      if (!section || typeof section !== "object" || !section.data) return null;
+      return Number(section.updatedAtMs || 0) >= Number(legacyTs || 0)
+        ? section
+        : null;
+    }
+    var expense = newerOrEqual(
+      "expenseCatalog",
+      Math.max(Number(d.expenseCatalogUpdatedAt || 0), Number(d.catsUpdatedAt || 0))
+    );
+    if (expense) {
+      d.cats = Array.isArray(expense.data.categories) ? expense.data.categories : [];
+      d.expenseGroups = Array.isArray(expense.data.groups) ? expense.data.groups : [];
+      d.catsUpdatedAt = Number(expense.updatedAtMs || 0);
+      d.expenseCatalogUpdatedAt = Number(expense.updatedAtMs || 0);
+      d.expenseCatalogV2 = { categories: d.cats, groups: d.expenseGroups, updatedAtMs: Number(expense.updatedAtMs || 0) };
+    }
+    var payment = newerOrEqual(
+      "paymentCatalog",
+      Math.max(
+        Number(d.paymentCatalogUpdatedAt || 0),
+        Number(d.methodCatalogUpdatedAt || 0),
+        Number(d.methodsUpdatedAt || 0)
+      )
+    );
+    if (payment) {
+      d.methods = Array.isArray(payment.data.methods) ? payment.data.methods : [];
+      d.methodGroups = Array.isArray(payment.data.groups) ? payment.data.groups : [];
+      d.methodsUpdatedAt = Number(payment.updatedAtMs || 0);
+      d.methodCatalogUpdatedAt = Number(payment.updatedAtMs || 0);
+      d.paymentCatalogUpdatedAt = Number(payment.updatedAtMs || 0);
+      d.paymentCatalogV2 = { methods: d.methods, groups: d.methodGroups, updatedAtMs: Number(payment.updatedAtMs || 0) };
+    }
+    var income = newerOrEqual("incomeCatalog", Number(d.incomeCatalogUpdatedAt || 0));
+    if (income) {
+      d.incomeGroups = Array.isArray(income.data.groups) ? income.data.groups : [];
+      d.customIncomeTypes = Array.isArray(income.data.customTypes) ? income.data.customTypes : [];
+      d.incomeTypeOverrides = income.data.overrides && typeof income.data.overrides === "object" ? income.data.overrides : {};
+      d.incomeCatalogUpdatedAt = Number(income.updatedAtMs || 0);
+      d.incomeCatalogV2 = { groups: d.incomeGroups, customTypes: d.customIncomeTypes, overrides: d.incomeTypeOverrides, updatedAtMs: Number(income.updatedAtMs || 0) };
+    }
+    var category = newerOrEqual("categoryPreferences", Number(d.categoryPreferencesUpdatedAt || 0));
+    if (category) {
+      d.categoryPreferencesV2 = { ...(category.data || {}) };
+      Object.assign(d, d.categoryPreferencesV2);
+      d.categoryPreferencesUpdatedAt = Number(category.updatedAtMs || 0);
+    }
+    var patrimonio = newerOrEqual("patrimonioCatalog", Number(d.patrimonioCatalogUpdatedAt || 0));
+    if (patrimonio) {
+      d.patrimonioAreas = Array.isArray(patrimonio.data.areas) ? patrimonio.data.areas : [];
+      d.patrimonioEntries = Array.isArray(patrimonio.data.entries) ? patrimonio.data.entries : [];
+      d.patrimonioCatalogUpdatedAt = Number(patrimonio.updatedAtMs || 0);
+    }
+    var budget = newerOrEqual("budget", Number(d.budgetPlanUpdatedAt || 0));
+    if (budget) {
+      if (Object.prototype.hasOwnProperty.call(budget.data, "plan")) d.budgetPlan = budget.data.plan;
+      d.budgetPlanUpdatedAt = Number(budget.updatedAtMs || 0);
+      d.budgetPlanClearedAt = Number(budget.data.clearedAt || 0);
+    }
+    var home = newerOrEqual("homePreferences", Number(d.homePreferencesUpdatedAt || 0));
+    if (home) {
+      Object.assign(d, home.data || {});
+      d.homePreferencesUpdatedAt = Number(home.updatedAtMs || 0);
+    }
+    var display = newerOrEqual("displayPreferences", Number(d.displayPreferencesUpdatedAt || 0));
+    if (display) {
+      d.displayPreferencesV2 = { ...(display.data || {}) };
+      Object.assign(d, d.displayPreferencesV2);
+      d.displayPreferencesUpdatedAt = Number(display.updatedAtMs || 0);
+    }
+    var shopping = newerOrEqual("shoppingPreferences", Number(d.shoppingPreferencesUpdatedAt || 0));
+    if (shopping) {
+      d.shoppingPreferencesV2 = { ...(shopping.data || {}) };
+      Object.assign(d, d.shoppingPreferencesV2);
+      d.shoppingPreferencesUpdatedAt = Number(shopping.updatedAtMs || 0);
+    }
+    var patrimony = newerOrEqual("patrimonyPreferences", Number(d.patrimonyPreferencesUpdatedAt || 0));
+    if (patrimony) {
+      d.patrimonyPreferencesV2 = { ...(patrimony.data || {}) };
+      Object.assign(d, d.patrimonyPreferencesV2);
+      d.patrimonyPreferencesUpdatedAt = Number(patrimony.updatedAtMs || 0);
+    }
+    var preferenceStorage = newerOrEqual("preferenceStorage", Number(d.preferenceStorageUpdatedAt || 0));
+    if (preferenceStorage) {
+      restoreUserPreferenceStorageSnapshotV2(preferenceStorage.data || {});
+      d.preferenceStorageUpdatedAt = Number(preferenceStorage.updatedAtMs || 0);
+    }
+    var catalogV4: any = validCatalogSyncV4(d.catalogSyncV4)
+      ? { ...d.catalogSyncV4 }
+      : { schemaVersion: 4, writerId: String(authority.writerId || catalogSyncWriterId()) };
+    if (expense) catalogV4.expenseCatalog = { updatedAtMs: expense.updatedAtMs, data: { categories: d.cats, groups: d.expenseGroups } };
+    if (payment) catalogV4.paymentCatalog = { updatedAtMs: payment.updatedAtMs, data: { methods: d.methods, groups: d.methodGroups } };
+    if (income) catalogV4.incomeCatalog = { updatedAtMs: income.updatedAtMs, data: { groups: d.incomeGroups, customTypes: d.customIncomeTypes, overrides: d.incomeTypeOverrides } };
+    if (category) catalogV4.categoryPreferences = { updatedAtMs: category.updatedAtMs, data: d.categoryPreferencesV2 };
+    d.catalogSyncV4 = catalogV4;
+    return d;
   }
   function syncValueIsDefault(value, defaultValue) {
     return syncJsonEqual(value, defaultValue);
@@ -6011,16 +7414,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           }
         )
       );
-      setBudgetPlan(localSnap.budgetPlan || DEFAULT_BUDGET_PLAN);
+      setBudgetPlan(
+        localSnap.budgetPlan === undefined
+          ? DEFAULT_BUDGET_PLAN
+          : localSnap.budgetPlan
+      );
       setFinanceEvolutionRaw(localSnap.financeEvolution);
       setCats(
-        Array.isArray(localSnap.cats) && localSnap.cats.length
-          ? localSnap.cats
-          : DEFAULT_CATS
+        Array.isArray(localSnap.cats) ? localSnap.cats : DEFAULT_CATS
       );
       setMethods(
         ensureReferencedMethods(
-          Array.isArray(localSnap.methods) && localSnap.methods.length
+          Array.isArray(localSnap.methods)
             ? localSnap.methods
             : DEFAULT_METHODS,
           localSnap.expenses,
@@ -6028,17 +7433,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         )
       );
       setExpenseGroups(
-        Array.isArray(localSnap.expenseGroups) && localSnap.expenseGroups.length
+        Array.isArray(localSnap.expenseGroups)
           ? localSnap.expenseGroups
           : DEFAULT_EXPENSE_GROUPS
       );
       setIncomeGroups(
-        Array.isArray(localSnap.incomeGroups) && localSnap.incomeGroups.length
+        Array.isArray(localSnap.incomeGroups)
           ? localSnap.incomeGroups
           : DEFAULT_INCOME_GROUPS
       );
       setMethodGroups(
-        Array.isArray(localSnap.methodGroups) && localSnap.methodGroups.length
+        Array.isArray(localSnap.methodGroups)
           ? localSnap.methodGroups
           : DEFAULT_METHOD_GROUPS
       );
@@ -6185,7 +7590,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       );
       var lsp = localSnap.shoppingPreferencesV2;
       setShoppingAreas(
-        Array.isArray(lsp.shoppingAreas) && lsp.shoppingAreas.length
+        Array.isArray(lsp.shoppingAreas)
           ? lsp.shoppingAreas
           : DEFAULT_SHOPPING_AREAS
       );
@@ -6286,6 +7691,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var cancelled = false;
       var firstSnapshot = true;
       var catalogReadFromCache = false;
+      var userStateAuthorityV5ReadFromCache = false;
       var readyFallback = setTimeout(function () {
         if (!cancelled) {
           console.warn("Firestore load timeout", userId);
@@ -6309,8 +7715,82 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               lastCloudRawKeysRef.current = Object.keys(rawCloud);
               financeSchemaCompatibleRef.current = false;
               var d: any;
+              var cloudUserStateAuthorityV3: any = null;
+              var cloudUserStateAuthorityV4: any = null;
+              var cloudUserStateAuthorityV5: any = null;
+              var cloudUserStateAuthorityV6: any = null;
               try {
                 d = await fainanceExpandAccountCloudDataV5(rawCloud);
+
+                // V6 is loaded from the ordinary private-backup path using the
+                // exact schema already supported by the app/rules.
+                if (!userStateAuthorityV6AnchorRef.current) {
+                  var authorityV6 = await readLatestUserStateAuthorityV6();
+                  if (authorityV6)
+                    userStateAuthorityV6AnchorRef.current = authorityV6;
+                }
+                cloudUserStateAuthorityV6 = validUserStateAuthorityV6(
+                  userStateAuthorityV6AnchorRef.current
+                )
+                  ? userStateAuthorityV6AnchorRef.current
+                  : null;
+                if (cloudUserStateAuthorityV6)
+                  d = applyUserStateAuthorityV6ToCloudData(
+                    d,
+                    cloudUserStateAuthorityV6
+                  );
+
+                // Older authority formats are migration fallback only.
+                if (
+                  !cloudUserStateAuthorityV6 &&
+                  (!userStateAuthorityV5AnchorRef.current ||
+                    (userStateAuthorityV5ReadFromCache &&
+                      !snap.metadata.fromCache))
+                ) {
+                  userStateAuthorityV5ReadFromCache = !!snap.metadata.fromCache;
+                  var authorityV5 = await readUserStateAuthorityV5(
+                    userStateAuthorityV5ReadFromCache
+                  );
+                  if (authorityV5) userStateAuthorityV5AnchorRef.current = authorityV5;
+                }
+                cloudUserStateAuthorityV5 =
+                  !cloudUserStateAuthorityV6 &&
+                  validUserStateAuthorityV5(userStateAuthorityV5AnchorRef.current)
+                    ? userStateAuthorityV5AnchorRef.current
+                    : null;
+                if (cloudUserStateAuthorityV5)
+                  d = applyUserStateAuthorityV5ToCloudData(
+                    d,
+                    cloudUserStateAuthorityV5
+                  );
+                cloudUserStateAuthorityV4 = validUserStateAuthorityV4(
+                  d && d.userStateAuthorityV4
+                )
+                  ? d.userStateAuthorityV4
+                  : null;
+                cloudUserStateAuthorityV3 = validUserStateAuthorityV3(
+                  d && d.userStateAuthorityV3
+                )
+                  ? d.userStateAuthorityV3
+                  : null;
+                // V6 is definitive. V5/V4/V3/V2 remain migration fallback.
+                if (
+                  !cloudUserStateAuthorityV6 &&
+                  !cloudUserStateAuthorityV5 &&
+                  !cloudUserStateAuthorityV4 &&
+                  !cloudUserStateAuthorityV3
+                )
+                  d = applyUserStateAuthorityV2(d);
+                else if (
+                  !cloudUserStateAuthorityV6 &&
+                  !cloudUserStateAuthorityV5 &&
+                  !cloudUserStateAuthorityV4 &&
+                  cloudUserStateAuthorityV3
+                )
+                  userStateAuthorityV3RevisionRef.current = Math.max(
+                    Number(userStateAuthorityV3RevisionRef.current || 0),
+                    Number(cloudUserStateAuthorityV3.revision || 0)
+                  );
                 if (cancelled) return;
                 migrateFinanceEvolution(d.financeEvolution);
                 financeSchemaCompatibleRef.current = true;
@@ -6947,8 +8427,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 repairedExpenseCategories = repairedExpenseCategories || backupRepair.repaired || backupReferences.repaired;
               }
               var mergedExpenseGroups =
-                Array.isArray(expenseChoice.value.groups) &&
-                expenseChoice.value.groups.length
+                Array.isArray(expenseChoice.value.groups)
                   ? expenseChoice.value.groups
                   : DEFAULT_EXPENSE_GROUPS;
               var mergedMethodsBase = compactProtectedArray(
@@ -6962,13 +8441,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 mergedRecurring
               );
               var mergedMethodGroups =
-                Array.isArray(paymentChoice.value.groups) &&
-                paymentChoice.value.groups.length
+                Array.isArray(paymentChoice.value.groups)
                   ? paymentChoice.value.groups
                   : DEFAULT_METHOD_GROUPS;
               var mergedIncomeGroups =
-                Array.isArray(incomeChoice.value.groups) &&
-                incomeChoice.value.groups.length
+                Array.isArray(incomeChoice.value.groups)
                   ? incomeChoice.value.groups
                   : DEFAULT_INCOME_GROUPS;
               var mergedCustomIncomeTypes = Array.isArray(
@@ -7091,7 +8568,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               const localFinance = readUserLocalJson('finance_evolution_v1', localSnap.financeEvolution);
               const localFinanceTs = readUserLocalUpdatedAt('finance_evolution_v1');
               const cloudFinanceTs = Number(d.financeEvolutionUpdatedAt || 0);
-              const mergedFinance = selectFinanceEvolution(localFinance, d.financeEvolution, localFinanceTs, cloudFinanceTs, preserveLatestLocalOnFirst);
+              const selectedFinance = selectFinanceEvolution(localFinance, d.financeEvolution, localFinanceTs, cloudFinanceTs, preserveLatestLocalOnFirst);
+              const mergedFinance = migrateFinanceEvolution(mergeAutomaticRulesIntoFinanceEvolution(
+                selectedFinance,
+                localFinance,
+                d.financeEvolution,
+                localFinanceTs,
+                cloudFinanceTs,
+                preserveLatestLocalOnFirst
+              ));
+              financeEvolutionRef.current = mergedFinance;
               setFinanceEvolutionRaw(mergedFinance);
               const financeTs = Math.max(localFinanceTs, cloudFinanceTs) || Date.now();
               writeUserLocalUpdatedAt('finance_evolution_v1', financeTs);
@@ -7281,13 +8767,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 String(mergedCategory.defaultIncomeType || "")
               );
               setDefaultExpenseArea(
-                String(mergedCategory.defaultExpenseArea || "vita")
+                String(mergedCategory.defaultExpenseArea ?? "vita")
               );
               setDefaultIncomeArea(
-                String(mergedCategory.defaultIncomeArea || "lavoro")
+                String(mergedCategory.defaultIncomeArea ?? "lavoro")
               );
               setDefaultMethodArea(
-                String(mergedCategory.defaultMethodArea || "conti_carte")
+                String(mergedCategory.defaultMethodArea ?? "conti_carte")
               );
               setIncomeTypeOrder(mergedCategory.incomeTypeOrder);
               if (
@@ -7356,10 +8842,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   localPatrimonioCatalogTs > cloudPatrimonioCatalogTs;
               var mergedPatrimonioAreas = patrimonioProtectedArray(
                 preferLocalPatrimonioCatalog
-                  ? mergeArrayPreferLocalByStableId(
-                      Array.isArray(d.patrimonioAreas) ? d.patrimonioAreas : [],
-                      latestLocalPatrimonioAreas
-                    )
+                  ? (Array.isArray(latestLocalPatrimonioAreas)
+                      ? latestLocalPatrimonioAreas
+                      : [])
                   : chooseCloudLocalArray(
                       d.patrimonioAreas,
                       localSnap.patrimonioAreas,
@@ -7371,12 +8856,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               );
               var mergedPatrimonioEntries = patrimonioProtectedArray(
                 preferLocalPatrimonioCatalog
-                  ? mergeArrayPreferLocalByStableId(
-                      Array.isArray(d.patrimonioEntries)
-                        ? d.patrimonioEntries
-                        : [],
-                      latestLocalPatrimonioEntries
-                    )
+                  ? (Array.isArray(latestLocalPatrimonioEntries)
+                      ? latestLocalPatrimonioEntries
+                      : [])
                   : chooseCloudLocalArray(
                       d.patrimonioEntries,
                       localSnap.patrimonioEntries,
@@ -7497,7 +8979,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   preferLocalPat
                 ),
               };
-              setPatrimonioMode(String(mergedPat.patrimonioMode || "manuale"));
+              setPatrimonioMode(String(mergedPat.patrimonioMode ?? "manuale"));
               if (
                 !d.patrimonyPreferencesV2 ||
                 preferLocalPat ||
@@ -8357,8 +9839,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 );
               });
               setShoppingAreas(
-                Array.isArray(mergedShopPrefs.shoppingAreas) &&
-                  mergedShopPrefs.shoppingAreas.length
+                Array.isArray(mergedShopPrefs.shoppingAreas)
                   ? mergedShopPrefs.shoppingAreas
                   : DEFAULT_SHOPPING_AREAS
               );
@@ -8368,19 +9849,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 String(mergedShopPrefs.shoppingBoughtColor || "#EAF7EE")
               );
               setShoppingDefaultArea(
-                String(mergedShopPrefs.shoppingDefaultArea || "Alimenti")
+                String(mergedShopPrefs.shoppingDefaultArea ?? "Alimenti")
               );
               setShoppingUnits(
-                Array.isArray(mergedShopPrefs.shoppingUnits) &&
-                  mergedShopPrefs.shoppingUnits.length
+                Array.isArray(mergedShopPrefs.shoppingUnits)
                   ? mergedShopPrefs.shoppingUnits
                   : DEFAULT_SHOPPING_UNITS
               );
               setShoppingDefaultUnit(
-                String(mergedShopPrefs.shoppingDefaultUnit || "Unità")
+                String(mergedShopPrefs.shoppingDefaultUnit ?? "Unità")
               );
               setShoppingProductSort(
-                String(mergedShopPrefs.shoppingProductSort || "custom")
+                String(mergedShopPrefs.shoppingProductSort ?? "custom")
               );
               var shoppingNeedsBackfill =
                 isFirstSnapshot &&
@@ -8496,7 +9976,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var initialDisplay: any = localSnap.displayPreferencesV2;
               var initialShopPrefs: any = localSnap.shoppingPreferencesV2;
               var initialMethods = ensureReferencedMethods(
-                Array.isArray(localSnap.methods) && localSnap.methods.length
+                Array.isArray(localSnap.methods)
                   ? localSnap.methods
                   : DEFAULT_METHODS,
                 localSnap.expenses,
@@ -8520,6 +10000,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               );
               var initialPayload: any = {
                 accountSyncSchemaVersion: 5,
+                userStateAuthorityV4: buildUserStateAuthorityV4(null),
                 lang: String(lang || getDefaultLang()),
                 activeShoppingListId: String(activeShoppingListId || "main"),
                 accountDeletedRecords: localSnap.accountDeletedRecords || {},
@@ -8772,10 +10253,85 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 postHydrationSyncRequestedRef.current = true;
               }
             }
+            // Apply the authoritative snapshot again at the very end. This
+            // makes legacy merge/migration code unable to win over an explicit
+            // user choice during login or reinstall.
+            var pendingBeforeAuthorityRestore: any =
+              pendingAccountSyncRef.current || { revision: 0, token: "" };
+            if (
+              cloudUserStateAuthorityV6 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV6(cloudUserStateAuthorityV6);
+            } else if (
+              cloudUserStateAuthorityV5 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV5(cloudUserStateAuthorityV5);
+            } else if (
+              cloudUserStateAuthorityV4 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV4(cloudUserStateAuthorityV4);
+            } else if (
+              cloudUserStateAuthorityV3 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV3(cloudUserStateAuthorityV3);
+            }
             firestoreHydratedRef.current = true;
             setFirestoreReady(true);
             writeResumeCheckpoint(localStorage, userId, ACCOUNT_RECOVERY_KEYS);
             scheduleCompleteAccountRecoverySnapshot("account-hydrated");
+
+            // One post-hydration guard catches late React effects or legacy
+            // normalization code that tries to overwrite the freshly restored
+            // V6 configuration after the Firestore callback has completed.
+            if (cloudUserStateAuthorityV6) {
+              var guardedAuthorityV6: any = cloudUserStateAuthorityV6;
+              setTimeout(function () {
+                if (cancelled || !validUserStateAuthorityV6(guardedAuthorityV6))
+                  return;
+                var currentValues = currentUserStateAuthorityV3Values();
+                if (
+                  userStateAuthorityV3ValuesEqual(
+                    currentValues || {},
+                    guardedAuthorityV6.values || {}
+                  )
+                )
+                  return;
+                var mismatchKeys = Array.from(
+                  new Set(
+                    Object.keys(currentValues || {}).concat(
+                      Object.keys(guardedAuthorityV6.values || {})
+                    )
+                  )
+                ).filter(function (key) {
+                  return !userStateAuthorityStorageValueEqual(
+                    (currentValues || {})[key],
+                    (guardedAuthorityV6.values || {})[key]
+                  );
+                });
+                try {
+                  localStorage.setItem(
+                    userKey("user_state_authority_v6_guard_mismatch"),
+                    JSON.stringify({
+                      at: new Date().toISOString(),
+                      keys: mismatchKeys.slice(0, 20),
+                    })
+                  );
+                } catch (e) {}
+                console.warn(
+                  "USER STATE V6 LATE OVERRIDE RESTORED",
+                  mismatchKeys.slice(0, 20)
+                );
+                // Safety net only: restore silently. The previous warning toast
+                // was triggered even by semantically identical JSON serialized
+                // with a different object-key order, creating a false alarm
+                // after reinstall/login. Real differences are still restored.
+                restoreUserStateAuthorityV6(guardedAuthorityV6);
+              }, 700);
+            }
 
             if (postHydrationSyncRequestedRef.current) {
               setTimeout(function () {
@@ -8866,6 +10422,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       }
     }
     compactSource.accountSyncSchemaVersion = 5;
+    // V3 vive esclusivamente come campo Firestore separato e verificabile.
+    // Non deve mai essere incorporato nello snapshot compresso, altrimenti una
+    // save legacy potrebbe riportare in vita una copia precedente.
+    delete compactSource.userStateAuthorityV3;
     var compressed = await fainanceCompressAccountDataV5(compactSource);
     var write: any = {};
     var reserved: any = {
@@ -8877,6 +10437,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       accountDataRawBytesV5: true,
       accountDataCompressedBytesV5: true,
       accountDataUpdatedAtMsV5: true,
+      userStateAuthorityV2: true,
+      userStateAuthorityV3: true,
+      userStateAuthorityV4: true,
     };
     Array.from(
       new Set(
@@ -8886,6 +10449,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       if (!reserved[key]) write[key] = deleteField();
     });
     write.accountSyncSchemaVersion = 5;
+    write.userStateAuthorityV2 = compactSource.userStateAuthorityV2 || previous.userStateAuthorityV2 || null;
     write.accountDataCompressedV5 = compressed.value;
     write.accountDataCompressionV5 = compressed.encoding;
     write.accountDataRawBytesV5 = compressed.rawBytes;
@@ -8906,7 +10470,204 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     lastCloudRawKeysRef.current = Object.keys(write).filter(function (key) {
       return write[key] !== undefined;
     });
-    lastCloudExpandedDataRef.current = compactSource;
+    if (
+      previous.userStateAuthorityV3 &&
+      lastCloudRawKeysRef.current.indexOf("userStateAuthorityV3") < 0
+    )
+      lastCloudRawKeysRef.current.push("userStateAuthorityV3");
+    lastCloudExpandedDataRef.current = {
+      ...compactSource,
+      ...(previous.userStateAuthorityV3
+        ? { userStateAuthorityV3: previous.userStateAuthorityV3 }
+        : {}),
+    };
+  }
+
+  async function saveUserStateAuthorityV2Direct(reason?: string) {
+    if (
+      !financeSchemaCompatibleRef.current ||
+      !userId ||
+      !firestoreHydratedRef.current ||
+      applyingFirestoreRef.current ||
+      !navigator.onLine
+    )
+      return false;
+    var safeMethods = ensureReferencedMethods(methods, expenses, recurring);
+    var previousAuthority =
+      lastCloudExpandedDataRef.current &&
+      lastCloudExpandedDataRef.current.userStateAuthorityV2;
+    var authority = currentUserStateAuthorityV2(previousAuthority, safeMethods);
+    if (!authority || !Object.keys(authority.sections || {}).length) return true;
+    if (syncJsonEqual(previousAuthority || null, authority)) return true;
+    try {
+      await setDoc(
+        doc(fbDb, "userData", userId),
+        { userStateAuthorityV2: authority },
+        { merge: true }
+      );
+      lastCloudExpandedDataRef.current = {
+        ...(lastCloudExpandedDataRef.current || {}),
+        userStateAuthorityV2: authority,
+      };
+      if ((lastCloudRawKeysRef.current || []).indexOf("userStateAuthorityV2") < 0)
+        lastCloudRawKeysRef.current = (lastCloudRawKeysRef.current || []).concat([
+          "userStateAuthorityV2",
+        ]);
+      return true;
+    } catch (error) {
+      console.error(
+        "User state authority save failed",
+        String(reason || "change"),
+        (error && (error as any).code) || (error && (error as any).message) || error
+      );
+      return false;
+    }
+  }
+
+  async function saveUserStateAuthorityV3Direct(
+    reason?: string,
+    verifyServer = false
+  ) {
+    var execute = async function () {
+      if (
+        !financeSchemaCompatibleRef.current ||
+        !userId ||
+        !firestoreHydratedRef.current ||
+        applyingFirestoreRef.current
+      )
+        return false;
+
+      var values = currentUserStateAuthorityV3Values();
+      var previous: any =
+        lastCloudExpandedDataRef.current &&
+        lastCloudExpandedDataRef.current.userStateAuthorityV3;
+      var previousValid = validUserStateAuthorityV3(previous);
+      var sameAsPrevious =
+        previousValid &&
+        userStateAuthorityV3ValuesEqual(previous.values || {}, values);
+
+      // Se il device e' offline possiamo uscire solo quando non esiste alcuna
+      // modifica configurabile non ancora confermata rispetto all'ultima copia cloud.
+      if (!navigator.onLine) return !!sameAsPrevious;
+
+      var docRef = doc(fbDb, "userData", userId);
+
+      async function verifySnapshot(expected: any) {
+        try {
+          var serverSnap: any = await fainancePromiseTimeout(
+            getDocFromServer(docRef),
+            12000,
+            "Timeout verifica stato utente."
+          );
+          if (!serverSnap || !serverSnap.exists || !serverSnap.exists())
+            return false;
+          var serverValue: any =
+            (serverSnap.data() || {}).userStateAuthorityV3;
+          var ok =
+            validUserStateAuthorityV3(serverValue) &&
+            Number(serverValue.revision || 0) ===
+              Number(expected.revision || 0) &&
+            userStateAuthorityV3ValuesEqual(
+              serverValue.values || {},
+              expected.values || {}
+            );
+          if (ok) {
+            userStateAuthorityV3RevisionRef.current = Math.max(
+              Number(userStateAuthorityV3RevisionRef.current || 0),
+              Number(serverValue.revision || 0)
+            );
+            try {
+              localStorage.setItem(
+                userKey("user_state_authority_v3_receipt"),
+                JSON.stringify({
+                  revision: Number(serverValue.revision || 0),
+                  updatedAtMs: Number(serverValue.updatedAtMs || 0),
+                  confirmedAtMs: Date.now(),
+                })
+              );
+            } catch (e) {}
+          }
+          return ok;
+        } catch (error) {
+          console.error(
+            "User state authority V3 verify failed",
+            String(reason || "change"),
+            (error && (error as any).code) ||
+              (error && (error as any).message) ||
+              error
+          );
+          return false;
+        }
+      }
+
+      if (sameAsPrevious) {
+        return verifyServer ? await verifySnapshot(previous) : true;
+      }
+
+      var revision =
+        Math.max(
+          Number(userStateAuthorityV3RevisionRef.current || 0),
+          previousValid ? Number(previous.revision || 0) : 0
+        ) + 1;
+      var authority: any = {
+        schemaVersion: 3,
+        scope: "complete-user-config-v1",
+        revision: revision,
+        updatedAtMs: Date.now(),
+        writerId: catalogSyncWriterId(),
+        values: values,
+      };
+      // Manteniamo un margine ampio sotto il limite del documento Firestore:
+      // il grande snapshot account e' gia' compresso e limitato separatamente.
+      if (JSON.stringify(authority).length > 120000)
+        throw new Error("USER_STATE_AUTHORITY_V3_TOO_LARGE");
+
+      try {
+        // mergeFields sostituisce l'intera mappa V3: una chiave eliminata
+        // dall'utente non puo' sopravvivere come figlia di una vecchia mappa.
+        await setDoc(
+          docRef,
+          { userStateAuthorityV3: authority },
+          { mergeFields: ["userStateAuthorityV3"] }
+        );
+        userStateAuthorityV3RevisionRef.current = revision;
+        lastCloudExpandedDataRef.current = {
+          ...(lastCloudExpandedDataRef.current || {}),
+          userStateAuthorityV3: authority,
+        };
+        if (
+          (lastCloudRawKeysRef.current || []).indexOf(
+            "userStateAuthorityV3"
+          ) < 0
+        )
+          lastCloudRawKeysRef.current = (
+            lastCloudRawKeysRef.current || []
+          ).concat(["userStateAuthorityV3"]);
+        return verifyServer ? await verifySnapshot(authority) : true;
+      } catch (error) {
+        console.error(
+          "User state authority V3 save failed",
+          String(reason || "change"),
+          (error && (error as any).code) ||
+            (error && (error as any).message) ||
+            error
+        );
+        persistAccountSyncError("user-state-authority-v3", error, false);
+        return false;
+      }
+    };
+
+    // Serializza tutte le scritture V3: due modifiche rapide non possono arrivare
+    // al server in ordine inverso e resuscitare uno stato precedente.
+    var chained = Promise.resolve(
+      userStateAuthorityV3SaveChainRef.current
+    )
+      .catch(function () {
+        return false;
+      })
+      .then(execute);
+    userStateAuthorityV3SaveChainRef.current = chained;
+    return chained;
   }
 
   async function saveToFirestore() {
@@ -9187,8 +10948,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         data: categoryValue,
       },
     };
+    var userStateAuthorityV2 = currentUserStateAuthorityV2(
+      previousCloudForCatalog.userStateAuthorityV2,
+      safeMethodsToSave
+    );
+    var userStateAuthorityV4 = buildUserStateAuthorityV4(
+      previousCloudForCatalog.userStateAuthorityV4
+    );
     var savePayload: any = {
       accountSyncSchemaVersion: 5,
+      userStateAuthorityV2,
+      userStateAuthorityV4,
       dataIntegrityV1,
       lang: String(lang || getDefaultLang()),
       activeShoppingListId: String(activeShoppingListId || "main"),
@@ -9505,9 +11275,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       groups: expenseGroups,
     });
     var protectExpenseCatalog =
-      (previousExpensePersonalized && !currentExpensePersonalized) ||
-      (previousExpenseCustom > currentExpenseCustom &&
-        Number(expenseCatalogTs || 0) <= previousExpenseTs);
+      ((previousExpensePersonalized && !currentExpensePersonalized) ||
+        previousExpenseCustom > currentExpenseCustom) &&
+      Number(expenseCatalogTs || 0) <= previousExpenseTs;
     var protectPaymentCatalog =
       (previousPaymentCustom > currentPaymentCustom ||
         (previousActiveMethods > 0 && currentActiveMethods === 0)) &&
@@ -9801,6 +11571,183 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         }, accountSyncRetryDelay);
       }
     }
+  }
+
+  async function writeUserStateAuthorityV4IntoCompressedServer(
+    expectedValues: any
+  ) {
+    if (!userId || !navigator.onLine) return false;
+    try {
+      var docRef = doc(fbDb, "userData", userId);
+      var serverSnap: any = await fainancePromiseTimeout(
+        getDocFromServer(docRef),
+        15000,
+        "Timeout lettura stato utente V4."
+      );
+      if (!serverSnap || !serverSnap.exists || !serverSnap.exists())
+        return false;
+
+      var expanded: any = await fainanceExpandAccountCloudDataV5(
+        serverSnap.data() || {}
+      );
+      var next: any = { ...(expanded || {}) };
+
+      // Mai ricomprimere il blob dentro se stesso.
+      [
+        "accountDataCompressedV5",
+        "accountDataCompressionV5",
+        "accountDataRawBytesV5",
+        "accountDataCompressedBytesV5",
+        "accountDataUpdatedAtMsV5",
+      ].forEach(function (key) {
+        delete next[key];
+      });
+
+      var previousAuthority = validUserStateAuthorityV4(
+        expanded && expanded.userStateAuthorityV4
+      )
+        ? expanded.userStateAuthorityV4
+        : null;
+      var built = buildUserStateAuthorityV4(previousAuthority);
+      built.values = { ...(expectedValues || {}) };
+      built.updatedAtMs = Date.now();
+      built.revision =
+        Math.max(
+          Number((previousAuthority && previousAuthority.revision) || 0),
+          Number((built && built.revision) || 0)
+        ) + 1;
+      next.userStateAuthorityV4 = built;
+      next.updatedAt = new Date().toISOString();
+      next.updatedAtMs = Date.now();
+      next.accountSyncSchemaVersion = 5;
+
+      var compressed = await fainanceCompressAccountDataV5(next);
+      await setDoc(
+        docRef,
+        {
+          accountDataCompressedV5: compressed.value,
+          accountDataCompressionV5: compressed.encoding,
+          accountDataRawBytesV5: compressed.rawBytes,
+          accountDataCompressedBytesV5: compressed.compressedBytes,
+          accountDataUpdatedAtMsV5: Date.now(),
+          updatedAt: next.updatedAt,
+          updatedAtMs: next.updatedAtMs,
+        },
+        { merge: true }
+      );
+      return true;
+    } catch (error) {
+      console.error(
+        "User state authority V4 direct compressed save failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      persistAccountSyncError(
+        "user-state-authority-v4-direct-compressed",
+        error,
+        false
+      );
+      return false;
+    }
+  }
+
+  async function verifyUserStateAuthorityV4FromServer(expectedValues: any) {
+    if (!userId || !navigator.onLine) return false;
+    try {
+      var serverSnap: any = await fainancePromiseTimeout(
+        getDocFromServer(doc(fbDb, "userData", userId)),
+        15000,
+        "Timeout verifica stato utente V4."
+      );
+      if (!serverSnap || !serverSnap.exists || !serverSnap.exists())
+        return false;
+      var expanded: any = await fainanceExpandAccountCloudDataV5(
+        serverSnap.data() || {}
+      );
+      var serverValue: any = expanded && expanded.userStateAuthorityV4;
+      var ok =
+        validUserStateAuthorityV4(serverValue) &&
+        userStateAuthorityV3ValuesEqual(
+          (serverValue && serverValue.values) || {},
+          expectedValues || {}
+        );
+      if (ok) {
+        try {
+          localStorage.setItem(
+            userKey("user_state_authority_v4_server_receipt"),
+            JSON.stringify({
+              revision: Number(serverValue.revision || 0),
+              updatedAtMs: Number(serverValue.updatedAtMs || 0),
+              confirmedAtMs: Date.now(),
+            })
+          );
+        } catch (e) {}
+      }
+      return ok;
+    } catch (error) {
+      console.error(
+        "User state authority V4 verify failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      persistAccountSyncError("user-state-authority-v4-verify", error, false);
+      return false;
+    }
+  }
+
+  async function flushUserStateAndLogout() {
+    // V6 writes an ordinary private backup using the already-established
+    // backup schema, then verifies that exact document from the server.
+    if (!navigator.onLine) {
+      setToast({
+        text: "Per uscire dall'account serve una connessione: prima devo confermare le tue impostazioni nel cloud.",
+        type: "error",
+        color: "#E24B4A",
+        icon: "☁️",
+      });
+      return false;
+    }
+
+    await new Promise(function (resolve) {
+      setTimeout(resolve, 80);
+    });
+
+    var confirmed = await saveUserStateAuthorityV6Direct(
+      "logout",
+      true
+    );
+
+    if (!confirmed) {
+      var detail = "";
+      try {
+        detail = String(
+          localStorage.getItem(
+            userKey("user_state_authority_v6_last_error")
+          ) || ""
+        );
+      } catch (e) {}
+      setToast({
+        text:
+          "Impossibile confermare le impostazioni nel cloud V6" +
+          (detail ? " (" + detail + ")" : "") +
+          ". Logout annullato.",
+        type: "error",
+        color: "#E24B4A",
+        icon: "☁️",
+      });
+      return false;
+    }
+
+    // Align the main account snapshot too, but V6 is already durably confirmed
+    // in the private backup document before logout can continue.
+    markPendingAccountSync(true);
+    try {
+      await saveToFirestore();
+    } catch (e) {}
+
+    return Promise.resolve(onLogout && onLogout());
   }
 
   useEffect(
@@ -11364,6 +13311,42 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     return inviteId;
   }
+
+  // Salvataggio piccolo e prioritario dello stato scelto dall'utente.
+  // Il timer viene armato direttamente da markPendingAccountSync: non dipende
+  // da un re-render causato dalla mutazione di un ref.
+  latestUserStateAuthoritySaveRef.current = async function (
+    reason?: string
+  ) {
+    // V6 uses the exact private-backup document schema already exercised
+    // by fAInance. This is intentionally independent of userData.
+    var authoritySaved = await saveUserStateAuthorityV6Direct(
+      String(reason || "pending-change"),
+      false
+    );
+    try {
+      await saveToFirestore();
+    } catch (e) {}
+    return authoritySaved;
+  };
+  useEffect(function () {
+    return function () {
+      try {
+        if (userStateAuthoritySaveTimerRef.current)
+          clearTimeout(userStateAuthoritySaveTimerRef.current);
+      } catch (e) {}
+      userStateAuthoritySaveTimerRef.current = null;
+      latestUserStateAuthoritySaveRef.current = null;
+      userStateAuthorityV3SaveChainRef.current = Promise.resolve(true);
+      userStateAuthorityV3RevisionRef.current = 0;
+      userStateAuthorityV5SaveChainRef.current = Promise.resolve(true);
+      userStateAuthorityV5RevisionRef.current = 0;
+      userStateAuthorityV5AnchorRef.current = null;
+      userStateAuthorityV6SaveChainRef.current = Promise.resolve(true);
+      userStateAuthorityV6RevisionRef.current = 0;
+      userStateAuthorityV6AnchorRef.current = null;
+    };
+  }, [userId]);
 
   // Debounce durable local revisions, not render-time arrays and objects.
   // Use the latest render's state when the timer fires and retry after hydration.
@@ -20385,26 +22368,28 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return true;
   }
 
+  var balanceViewMode = homeBalanceView === "reale" ? "reale" : "rateizzato";
   var curMonthExp = totalForMonth(
-    expensesForAnalysis,
+    countedExpensesForAnalysis,
     curMonthKey,
-    homeBalanceView === "reale" ? "reale" : "rateizzato",
+    balanceViewMode,
     accountingPeriod.settings
   );
   var curMonthInc = totalForMonth(
-    incomes,
+    countedIncomes,
     curMonthKey,
-    homeBalanceView === "reale" ? "reale" : "rateizzato",
+    balanceViewMode,
     accountingPeriod.settings
   );
-  var yearExp = expensesForAnalysis
+  var curMonthBalance = curMonthInc - curMonthExp;
+  var yearExp = countedExpensesForAnalysis
     .filter(function (e) {
       return accountingPeriod.matches(e.date, String(curYear));
     })
     .reduce(function (a, e) {
       return a + e.amount;
     }, 0);
-  var yearInc = incomes
+  var yearInc = countedIncomes
     .filter(function (i) {
       return accountingPeriod.matches(i.date, String(curYear));
     })
@@ -20413,9 +22398,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }, 0);
   var last12Balance = useMemo(
     function () {
-      return balanceForMonths(expensesForAnalysis, incomes, accountingPeriod.lastKeys(12, now), 'reale', accountingPeriod.settings);
+      return balanceForMonths(countedExpensesForAnalysis, countedIncomes, accountingPeriod.lastKeys(12, now), 'reale', accountingPeriod.settings);
     },
-    [expensesForAnalysis, incomes, curMonthKey, accountingPeriod]
+    [countedExpensesForAnalysis, countedIncomes, curMonthKey, accountingPeriod]
   );
   var localizedMonthShorts = useMemo(
     function () {
@@ -20427,16 +22412,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
   var monthlyTotals = useMemo(
     function () {
-      return monthlyTotalsForYear(
-        expensesForAnalysis,
-        incomes,
+      var mode = statsView === "reale" ? "reale" : "rateizzato";
+      var counted = monthlyTotalsForYear(
+        countedExpensesForAnalysis,
+        countedIncomes,
         curYear,
-        statsView === "reale" ? "reale" : "rateizzato",
+        mode,
         localizedMonthShorts,
         accountingPeriod.settings
       );
+      return counted;
     },
-    [expensesForAnalysis, incomes, curYear, statsView, localizedMonthShorts, accountingPeriod]
+    [countedExpensesForAnalysis, countedIncomes, curYear, statsView, localizedMonthShorts, accountingPeriod]
   );
   var pendingCount = recurring.reduce(function (count, r) {
     var generated = r.rtype === "expense" ? expenses : incomes;
@@ -20455,7 +22442,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         var prefix = al.period === "annual" ? String(curYear) : curMonthKey;
         var spent;
         if (al.type === "cat")
-          spent = expensesForAnalysis
+          spent = countedExpensesForAnalysis
             .filter(function (e) {
               return e.catId === al.catId && accountingPeriod.matches(e.date, prefix);
             })
@@ -20470,7 +22457,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             .map(function (c) {
               return c.id;
             });
-          spent = expensesForAnalysis
+          spent = countedExpensesForAnalysis
             .filter(function (e) {
               return gc.includes(e.catId) && accountingPeriod.matches(e.date, prefix);
             })
@@ -20506,7 +22493,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
   var allTriggeredAlertsData = useMemo(computeTriggered, [
     alerts,
-    expensesForAnalysis,
+    countedExpensesForAnalysis,
     cats,
     curMonthKey,
     curYear,
@@ -25126,6 +27113,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     shareDefaultCategoryId: effectiveShareDefaultCategoryId,
     setShareDefaultCategoryId,
     expensesForAnalysis,
+    countedExpenses,
+    countedExpensesForAnalysis,
+    countedIncomes,
+    isExpenseExcludedFromTotals,
+    isIncomeExcludedFromTotals,
     shareSelectedProjectId,
     setShareSelectedProjectId,
     shareProjectTab,
@@ -25196,6 +27188,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     getIT,
     curMonthExp,
     curMonthInc,
+    curMonthBalance,
     last12Balance,
     // ── AI ─────────────────────────────────────────────────────────────────
     aiTab,
@@ -25410,7 +27403,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     normalizeOrder,
     normalizePhoneForLookup,
     now,
-    onLogout,
+    onLogout: flushUserStateAndLogout,
     onProfileUpdate,
     openFainanceStoreUrl,
     openPlanInfo,
@@ -25662,7 +27655,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                         fontVariantNumeric: "tabular-nums",
                       }}
                     >
-                      {fmtHeader(curMonthInc - curMonthExp)}
+                      {fmtHeader(curMonthBalance)}
                     </div>
                   </div>
                   <div style={{ textAlign: "center", minWidth: 0 }}>
@@ -26009,7 +28002,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     [
                       translateUiRuntimeText("Saldo"),
                       BALANCE_COLOR,
-                      fmtHeader(curMonthInc - curMonthExp),
+                      fmtHeader(curMonthBalance),
                     ],
                     [
                       translateUiRuntimeText("Entrate"),
