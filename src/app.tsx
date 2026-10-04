@@ -1220,6 +1220,257 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     // Defaults are only used by useStorage when the key has never existed.
     return out;
   }
+  function validRecurringReference(value) {
+    if (value === undefined || value === null || String(value).trim() === "") return false;
+    var n = Number(value);
+    return Number.isFinite(n) && n > 0;
+  }
+  function recurringRuleKey(item) {
+    if (!item || typeof item !== "object") return "";
+    if (item.id !== undefined && item.id !== null && String(item.id) !== "")
+      return String(item.id);
+    return String(accountSyncRecordKey("recurring", item) || "");
+  }
+  function preserveRecurringRuleReferences(currentValue, nextValue) {
+    var current = ensureArrayValue(currentValue, []);
+    var next = ensureArrayValue(nextValue, []);
+    var previousByKey: any = {};
+    current.forEach(function (rule) {
+      var key = recurringRuleKey(rule);
+      if (key) previousByKey[key] = rule;
+    });
+    return next.map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      var previous = previousByKey[recurringRuleKey(rule)];
+      if (!previous) return rule;
+      var repaired = rule;
+      if (!validRecurringReference(rule.catId) && validRecurringReference(previous.catId))
+        repaired = { ...repaired, catId: previous.catId };
+      if (!validRecurringReference(rule.methodId) && validRecurringReference(previous.methodId))
+        repaired = { ...repaired, methodId: previous.methodId };
+      return repaired;
+    });
+  }
+  function repairMergedRecurringReferences(mergedValue, localValue, cloudValue) {
+    var candidatesByKey: any = {};
+    ensureArrayValue(localValue, []).concat(ensureArrayValue(cloudValue, [])).forEach(function (rule) {
+      var key = recurringRuleKey(rule);
+      if (!key) return;
+      if (!candidatesByKey[key]) candidatesByKey[key] = [];
+      candidatesByKey[key].push(rule);
+    });
+    return ensureArrayValue(mergedValue, []).map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      var candidates = (candidatesByKey[recurringRuleKey(rule)] || []).slice().sort(function (a, b) {
+        return Number(syncRecordTime(b) || 0) - Number(syncRecordTime(a) || 0);
+      });
+      var repaired = rule;
+      if (!validRecurringReference(rule.catId)) {
+        var catSource = candidates.find(function (candidate) { return validRecurringReference(candidate && candidate.catId); });
+        if (catSource) repaired = { ...repaired, catId: catSource.catId };
+      }
+      if (!validRecurringReference(rule.methodId)) {
+        var methodSource = candidates.find(function (candidate) { return validRecurringReference(candidate && candidate.methodId); });
+        if (methodSource) repaired = { ...repaired, methodId: methodSource.methodId };
+      }
+      return repaired;
+    });
+  }
+  function repairRecurringRuleReferencesFromCatalogs(recurringValue, categoryValue, methodValue) {
+    var categoryList = ensureArrayValue(categoryValue, []);
+    var methodList = ensureArrayValue(methodValue, []);
+    var changed = false;
+    var repaired = ensureArrayValue(recurringValue, []).map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      var next = rule;
+      if (!validRecurringReference(rule.catId) && String(rule.categoryNameSnapshot || "").trim()) {
+        var categoryName = String(rule.categoryNameSnapshot || "").trim().toLowerCase();
+        var category = categoryList.find(function (item) {
+          return String(item && item.name || "").trim().toLowerCase() === categoryName;
+        });
+        if (category && validRecurringReference(category.id)) {
+          next = { ...next, catId: category.id };
+          changed = true;
+        }
+      }
+      if (!validRecurringReference(rule.methodId) && String(rule.methodNameSnapshot || "").trim()) {
+        var methodName = String(rule.methodNameSnapshot || "").trim().toLowerCase();
+        var method = methodList.find(function (item) {
+          return String(item && item.name || "").trim().toLowerCase() === methodName;
+        });
+        if (method && validRecurringReference(method.id)) {
+          next = { ...next, methodId: method.id };
+          changed = true;
+        }
+      }
+      return next;
+    });
+    return { recurring: repaired, repaired: changed };
+  }
+  function repairRecurringRuleReferencesFromMovements(recurringValue, expenseValue) {
+    var movementsByRule: any = {};
+    ensureArrayValue(expenseValue, []).forEach(function (row) {
+      var ruleId = String((row && row.recurringRuleId) || "");
+      if (!ruleId) return;
+      if (!movementsByRule[ruleId]) movementsByRule[ruleId] = [];
+      movementsByRule[ruleId].push(row);
+    });
+    var changed = false;
+    var repaired = ensureArrayValue(recurringValue, []).map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      if (validRecurringReference(rule.catId) && validRecurringReference(rule.methodId)) return rule;
+      var rows = (movementsByRule[String(rule.id)] || []).slice().sort(function (a, b) {
+        var bd = String((b && b.date) || "");
+        var ad = String((a && a.date) || "");
+        if (bd !== ad) return bd.localeCompare(ad);
+        return Number(syncRecordTime(b) || 0) - Number(syncRecordTime(a) || 0);
+      });
+      var next = rule;
+      if (!validRecurringReference(rule.catId)) {
+        var catRow = rows.find(function (row) { return validRecurringReference(row && row.catId); });
+        if (catRow) { next = { ...next, catId: catRow.catId }; changed = true; }
+      }
+      if (!validRecurringReference(rule.methodId)) {
+        var methodRow = rows.find(function (row) { return validRecurringReference(row && row.methodId); });
+        if (methodRow) { next = { ...next, methodId: methodRow.methodId }; changed = true; }
+      }
+      return next;
+    });
+    return { recurring: repaired, repaired: changed };
+  }
+  function recurringExpenseRuleScheduleMatchesDate(rule, dateValue) {
+    var date = String(dateValue || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !rule) return false;
+    var month = Number(date.slice(5, 7));
+    var day = Number(date.slice(8, 10));
+    var rawDay = Number(rule.dayOfMonth == null ? 1 : rule.dayOfMonth);
+    var expectedDay = rawDay === 0 ? new Date(Number(date.slice(0, 4)), month, 0).getDate() : Math.max(1, Math.min(31, rawDay || 1));
+    var actualExpectedDay = Math.min(expectedDay, new Date(Number(date.slice(0, 4)), month, 0).getDate());
+    if (day !== actualExpectedDay) return false;
+    if (String(rule.frequency || "monthly") === "annual") {
+      var annualMonth = Number(rule.annualMonth ?? rule.monthOfYear ?? rule.month ?? 1) || 1;
+      if (month !== annualMonth) return false;
+    }
+    var effectiveFrom = String(rule.effectiveFrom || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) && date < effectiveFrom) return false;
+    return true;
+  }
+  function recurringExpenseRuleMatchesLegacyMovement(rule, row) {
+    if (!rule || !row || String(rule.rtype || "expense") === "income") return false;
+    var rowName = String(row.desc || row.description || "").trim().toLowerCase();
+    var ruleName = String(rule.name || "").trim().toLowerCase();
+    if (!rowName || !ruleName || rowName !== ruleName) return false;
+    if (Math.abs(parseMoney(row.amount) - parseMoney(rule.amount)) > 0.005) return false;
+    return recurringExpenseRuleScheduleMatchesDate(rule, row.date);
+  }
+  function repairRecurringExpenseMovementReferences(expenseValue, recurringValue) {
+    var rules = ensureArrayValue(recurringValue, []).filter(function (rule) {
+      return rule && String(rule.rtype || "expense") !== "income";
+    });
+    var rulesById: any = {};
+    rules.forEach(function (rule) {
+      var key = recurringRuleKey(rule);
+      if (key) rulesById[key] = rule;
+    });
+    var changed = false;
+    var repaired = ensureArrayValue(expenseValue, []).map(function (row) {
+      if (!row) return row;
+      var rule = row.recurringRuleId
+        ? (rulesById[String(row.recurringRuleId)] || rulesById[recurringRuleKey({ id: row.recurringRuleId })])
+        : null;
+      if (!rule) {
+        // Le vecchie occorrenze potevano essere salvate senza recurringRuleId e,
+        // in alcuni casi, anche senza categoria/metodo. Le riconosciamo solo con
+        // una corrispondenza univoca nome + importo + data prevista, evitando
+        // associazioni per semplice somiglianza.
+        var candidates = rules.filter(function (candidate) {
+          return recurringExpenseRuleMatchesLegacyMovement(candidate, row);
+        });
+        if (candidates.length === 1) rule = candidates[0];
+      }
+      if (!rule) return row;
+      var next = row;
+      var occurrenceDate = String(row.recurringOccurrenceDate || row.date || "").slice(0, 10);
+      var occurrenceId = String(rule.id) + "@" + occurrenceDate;
+      if (!row.recurringRuleId || String(row.recurringRuleId) !== String(rule.id)) {
+        next = { ...next, recurringRuleId: String(rule.id) };
+        changed = true;
+      }
+      if (!row.recurringOccurrenceDate && occurrenceDate) {
+        next = { ...next, recurringOccurrenceDate: occurrenceDate };
+        changed = true;
+      }
+      if (!row.recurringOccurrenceId && occurrenceDate) {
+        next = { ...next, recurringOccurrenceId: occurrenceId };
+        changed = true;
+      }
+      if (String(row.source || "") !== "recurring") {
+        next = { ...next, source: "recurring" };
+        changed = true;
+      }
+      if (!validRecurringReference(next.catId) && validRecurringReference(rule.catId)) {
+        next = { ...next, catId: rule.catId };
+        changed = true;
+      }
+      if (!validRecurringReference(next.methodId) && validRecurringReference(rule.methodId)) {
+        next = { ...next, methodId: rule.methodId };
+        changed = true;
+      }
+      return next;
+    });
+    return { expenses: repaired, repaired: changed };
+  }
+  function restoreReferencedPaymentMethods(methodList, candidateLists, expenseRows, recurringRows) {
+    var current = ensureArrayValue(methodList, []).slice();
+    var byId: any = {};
+    current.forEach(function (method) {
+      if (method && method.id !== undefined && method.id !== null) byId[String(method.id)] = method;
+    });
+    var candidatesById: any = {};
+    ensureArrayValue(candidateLists, []).forEach(function (list) {
+      ensureArrayValue(list, []).forEach(function (method) {
+        if (!method || method.id === undefined || method.id === null) return;
+        var id = String(method.id);
+        if (!id || candidatesById[id]) return;
+        candidatesById[id] = method;
+      });
+    });
+    var referenced: any = {};
+    var recurringReferenced: any = {};
+    ensureArrayValue(expenseRows, []).forEach(function (row) {
+      if (row && validRecurringReference(row.methodId)) referenced[String(row.methodId)] = true;
+    });
+    ensureArrayValue(recurringRows, []).forEach(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income" || !validRecurringReference(rule.methodId)) return;
+      var id = String(rule.methodId);
+      referenced[id] = true;
+      recurringReferenced[id] = true;
+    });
+    var repaired = false;
+    Object.keys(referenced).forEach(function (id) {
+      var existing = byId[id];
+      var source = candidatesById[id];
+      var activeRecurringReference = !!recurringReferenced[id];
+      if (!existing && source) {
+        var added = activeRecurringReference && !source.deleted && !source.archived
+          ? { ...source, deleted: false, archived: false, recovered: false }
+          : { ...source, archived: true, recovered: true };
+        current.push(added);
+        byId[id] = added;
+        repaired = true;
+        return;
+      }
+      if (existing && activeRecurringReference && source && !source.deleted && !source.archived && (existing.deleted || existing.archived || existing.recovered)) {
+        var replacement = { ...existing, ...source, id: existing.id, deleted: false, archived: false, recovered: false };
+        var index = current.findIndex(function (method) { return String(method && method.id) === id; });
+        if (index >= 0) current[index] = replacement;
+        byId[id] = replacement;
+        repaired = true;
+      }
+    });
+    return { methods: current, repaired: repaired };
+  }
+
   function hasFallbackItems(fallback) {
     return Array.isArray(fallback) && fallback.length > 0;
   }
@@ -3544,7 +3795,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       return [];
     }
   }
-  function restoreReferencedExpenseCategories(categoryList, candidateLists, expenseRows) {
+  function restoreReferencedExpenseCategories(categoryList, candidateLists, expenseRows, recurringRows) {
     var current = ensureArrayValue(categoryList, []).slice();
     var byId: any = {};
     current.forEach(function (category) {
@@ -3560,30 +3811,46 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
     });
     var referenced: any = {};
+    var recurringReferenced: any = {};
     ensureArrayValue(expenseRows, []).forEach(function (row) {
       if (row && row.catId !== undefined && row.catId !== null && String(row.catId) !== "") referenced[String(row.catId)] = true;
+    });
+    ensureArrayValue(recurringRows, []).forEach(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return;
+      if (rule.catId === undefined || rule.catId === null || String(rule.catId) === "") return;
+      var id = String(rule.catId);
+      referenced[id] = true;
+      recurringReferenced[id] = true;
     });
     var repaired = false;
     Object.keys(referenced).forEach(function (id) {
       var existing = byId[id];
       var source = candidatesById[id];
       if (!source) return;
+      var activeRecurringReference =
+        !!recurringReferenced[id] && !source.deleted && !source.archived;
       if (!existing) {
-        // Keep historical references resolvable without making a
-        // deleted/missing category active again in the user's catalog.
-        var added = {
-          ...source,
-          archived: true,
-          deleted: true,
-          recovered: true,
-        };
+        // Le categorie usate da una ricorrente attiva devono restare selezionabili:
+        // se il catalogo corrente le perde durante un merge, recuperiamo l'ultima
+        // definizione valida. Le categorie referenziate solo dallo storico restano
+        // invece archiviate, come prima.
+        var added = activeRecurringReference
+          ? { ...source, recovered: false }
+          : {
+              ...source,
+              archived: true,
+              deleted: true,
+              recovered: true,
+            };
         current.push(added);
         byId[id] = added;
         repaired = true;
         return;
       }
       if (isRecoveredExpenseCategory(existing)) {
-        var replacement = { ...source, ...existing, id: existing.id };
+        var replacement = activeRecurringReference
+          ? { ...existing, ...source, id: existing.id, recovered: false }
+          : { ...source, ...existing, id: existing.id };
         var index = current.findIndex(function (category) { return String(category && category.id) === id; });
         if (index >= 0) current[index] = replacement;
         byId[id] = replacement;
@@ -4176,11 +4443,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
+    var requestedWithReferences = preserveRecurringRuleReferences(current, requested);
     var prepared = applyingFirestoreRef.current
-      ? Array.isArray(requested)
-        ? requested
+      ? Array.isArray(requestedWithReferences)
+        ? requestedWithReferences
         : []
-      : prepareAccountCollectionWrite("recurring", current, requested);
+      : prepareAccountCollectionWrite("recurring", current, requestedWithReferences);
     recurringRef.current = prepared;
     return setRecurringRaw(prepared);
   }
@@ -4283,6 +4551,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     financeEvolution.period.startDay,
     recurring,
   ]);
+  useEffect(function () {
+    if (!Array.isArray(recurring) || !recurring.length) return;
+    var catalogRepair = repairRecurringRuleReferencesFromCatalogs(recurring, cats, methods);
+    if (catalogRepair.repaired) {
+      setRecurring(catalogRepair.recurring);
+      return;
+    }
+    var ruleRepair = repairRecurringRuleReferencesFromMovements(recurring, expensesRef.current);
+    if (ruleRepair.repaired) {
+      setRecurring(ruleRepair.recurring);
+      return;
+    }
+    var movementRepair = repairRecurringExpenseMovementReferences(expensesRef.current, recurring);
+    if (movementRepair.repaired) setExpenses(movementRepair.expenses);
+  }, [recurring, expenses, cats, methods]);
   var [toolShareDraft,setToolShareDraft]=useState<any>(null);
   useEffect(()=>{setToolShareDraft(null);},[userId]);
   var financeEvolutionRef = useRef(financeEvolution);
@@ -6711,7 +6994,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         userId,
         function (records) {
           var state = movementStateFromV2(records);
-          setExpenses(state.expenses, true);
+          var repairedRecurringExpenses = repairRecurringExpenseMovementReferences(
+            state.expenses,
+            recurringRef.current
+          );
+          if (repairedRecurringExpenses.repaired)
+            setExpenses(repairedRecurringExpenses.expenses);
+          else
+            setExpenses(state.expenses, true);
           setIncomes(state.incomes, true);
         },
         function (error) {
@@ -8067,17 +8357,26 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 (item.confirmedOccurrences || item.confirmedOccurrenceDates || []).forEach(function (value) { state.confirmedOccurrences.add(String(value)); });
                 (item.skippedOccurrences || item.skippedOccurrenceDates || []).forEach(function (value) { state.skippedOccurrences.add(String(value)); });
               });
-              var mergedRecurring = mergedRecurringBase.map(function (item) {
-                var state = recurringOccurrenceState[recurringKey(item)];
-                if (!state) return item;
-                return {
-                  ...item,
-                  confirmed: Array.from(state.confirmed),
-                  skipped: Array.from(state.skipped),
-                  confirmedOccurrences: Array.from(state.confirmedOccurrences),
-                  skippedOccurrences: Array.from(state.skippedOccurrences),
-                };
-              });
+              var mergedRecurring = repairMergedRecurringReferences(
+                mergedRecurringBase.map(function (item) {
+                  var state = recurringOccurrenceState[recurringKey(item)];
+                  if (!state) return item;
+                  return {
+                    ...item,
+                    confirmed: Array.from(state.confirmed),
+                    skipped: Array.from(state.skipped),
+                    confirmedOccurrences: Array.from(state.confirmedOccurrences),
+                    skippedOccurrences: Array.from(state.skippedOccurrences),
+                  };
+                }),
+                latestLocalRecurring,
+                cloudRecurring
+              );
+              var recurringDefinitionRepair = repairRecurringRuleReferencesFromMovements(
+                mergedRecurring,
+                mergedExpenses
+              );
+              mergedRecurring = recurringDefinitionRepair.recurring;
               var mergedGoals = mergeSyncRecords(
                 latestLocalGoals,
                 cloudGoals,
@@ -8410,7 +8709,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var referencedCategoryResult = restoreReferencedExpenseCategories(
                 mergedCats,
                 categoryRecoveryCandidates,
-                mergedExpenses
+                mergedExpenses,
+                mergedRecurring
               );
               mergedCats = referencedCategoryResult.categories;
               var repairedExpenseCategories = !!(
@@ -8418,11 +8718,26 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               );
               // Backups are a recovery source, not a prerequisite for opening
               // an already complete account. Try every local/cloud catalog first.
-              if (isFirstSnapshot && needsCategoryRecovery(mergedCats, mergedExpenses, isRecoveredExpenseCategory)) {
+              var recurringExpenseCategoryReferences = mergedRecurring
+                .filter(function (rule) {
+                  return rule && String(rule.rtype || "expense") !== "income";
+                })
+                .map(function (rule) {
+                  return { catId: rule.catId };
+                });
+              var allExpenseCategoryReferences = mergedExpenses.concat(
+                recurringExpenseCategoryReferences
+              );
+              if (isFirstSnapshot && needsCategoryRecovery(mergedCats, allExpenseCategoryReferences, isRecoveredExpenseCategory)) {
                 var cloudBackupCategoryCandidates = await readCloudExpenseCategoryBackupCandidates();
                 if (cancelled) return;
                 var backupRepair = repairRecoveredExpenseCategories(mergedCats, cloudBackupCategoryCandidates);
-                var backupReferences = restoreReferencedExpenseCategories(backupRepair.categories, cloudBackupCategoryCandidates, mergedExpenses);
+                var backupReferences = restoreReferencedExpenseCategories(
+                  backupRepair.categories,
+                  cloudBackupCategoryCandidates,
+                  mergedExpenses,
+                  mergedRecurring
+                );
                 mergedCats = backupReferences.categories;
                 repairedExpenseCategories = repairedExpenseCategories || backupRepair.repaired || backupReferences.repaired;
               }
@@ -8435,11 +8750,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 DEFAULT_METHODS,
                 DEFAULT_METHOD_NAMES
               );
-              var mergedMethods = ensureReferencedMethods(
-                mergedMethodsBase,
+              var methodRecoveryCandidates = [
+                latestLocalMethods,
+                cloudPaymentCatalog.methods,
+                localPaymentCatalog.methods,
+              ];
+              var referencedMethodResult = restoreReferencedPaymentMethods(
+                ensureReferencedMethods(mergedMethodsBase, mergedExpenses, mergedRecurring),
+                methodRecoveryCandidates,
                 mergedExpenses,
                 mergedRecurring
               );
+              var mergedMethods = referencedMethodResult.methods;
               var mergedMethodGroups =
                 Array.isArray(paymentChoice.value.groups)
                   ? paymentChoice.value.groups
@@ -8488,7 +8810,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               if (
                 !readOnlyTestBuild &&
                 isFirstSnapshot &&
-                (paymentChoice.source === "local" || !cloudPaymentV2)
+                (paymentChoice.source === "local" || !cloudPaymentV2 || referencedMethodResult.repaired)
               ) {
                 var pct = Math.max(localPaymentTs, cloudPaymentTs, Date.now());
                 backfill.methods = mergedMethods;
@@ -8524,9 +8846,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 writeUserLocalUpdatedAt("income_catalog_v2", ict);
                 needsBackfill = true;
               }
+              var recurringExpenseRepair = repairRecurringExpenseMovementReferences(
+                mergedExpenses,
+                mergedRecurring
+              );
+              if (isFirstSnapshot && recurringExpenseRepair.repaired && !movementSyncV2ActiveRef.current) {
+                backfill.expenses = recurringExpenseRepair.expenses;
+                needsBackfill = true;
+              }
               setAccountDeletedRecordsRaw(mergedAccountDeleted);
               if (!movementSyncV2ActiveRef.current) {
-                setExpenses(mergedExpenses, true);
+                setExpenses(recurringExpenseRepair.expenses, true);
                 setIncomes(mergedIncomes, true);
               }
               setRecurring(mergedRecurring);
@@ -22341,7 +22671,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         source: "recurring",
         createdAt: new Date().toISOString(),
         ...(r.rtype === "expense"
-          ? {catId: Number(r.catId), methodId: Number(r.methodId)}
+          ? {
+              catId: r.catId,
+              methodId: r.methodId,
+              recurringCategoryName: String(r.categoryNameSnapshot || ""),
+              recurringMethodName: String(r.methodNameSnapshot || ""),
+            }
           : {type: r.incomeType}),
       };
       prepared = prepareAutomaticMovements([item], r.rtype, 'recurring');
@@ -27942,19 +28277,93 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               item={editingItem.item}
               isExp={editingItem.isExp}
               onSave={function (updated) {
-                if (editingItem.isExp) {
-                  setExpenses(
-                    expenses.map(function (e) {
-                      return e.id === updated.id ? updated : e;
-                    })
+                var originalEditingItem = editingItem.item || {};
+                function isSameEditedMovement(row) {
+                  if (!row) return false;
+                  if (
+                    row.id !== undefined &&
+                    row.id !== null &&
+                    updated.id !== undefined &&
+                    updated.id !== null &&
+                    String(row.id) === String(updated.id)
+                  )
+                    return true;
+                  var occurrenceId = String(
+                    updated.recurringOccurrenceId ||
+                      originalEditingItem.recurringOccurrenceId ||
+                      ""
                   );
+                  if (
+                    occurrenceId &&
+                    String(row.recurringOccurrenceId || "") === occurrenceId
+                  )
+                    return true;
+                  var recurringRuleId = String(
+                    updated.recurringRuleId ||
+                      originalEditingItem.recurringRuleId ||
+                      ""
+                  );
+                  var recurringOccurrenceDate = String(
+                    updated.recurringOccurrenceDate ||
+                      originalEditingItem.recurringOccurrenceDate ||
+                      ""
+                  );
+                  return !!(
+                    recurringRuleId &&
+                    recurringOccurrenceDate &&
+                    String(row.recurringRuleId || "") === recurringRuleId &&
+                    String(row.recurringOccurrenceDate || "") === recurringOccurrenceDate
+                  );
+                }
+                function editedRow(row) {
+                  var next = { ...row, ...updated, id: row.id, updatedAt: new Date().toISOString() };
+                  if (next.recurringOccurrenceId || next.recurringRuleId || String(next.source || "") === "recurring") {
+                    next.recurringOverride = true;
+                    next.recurringOverrideUpdatedAt = next.updatedAt;
+                  }
+                  // Never detach an edited occurrence from its recurring source.
+                  ["recurringOccurrenceId", "recurringRuleId", "recurringOccurrenceDate", "source", "createdAt"].forEach(function (key) {
+                    if ((next[key] === undefined || next[key] === null || next[key] === "") && row[key] !== undefined)
+                      next[key] = row[key];
+                  });
+                  if (editingItem.isExp && next.recurringRuleId) {
+                    var rule = (recurringRef.current || []).find(function (candidate) {
+                      return String(candidate && candidate.id) === String(next.recurringRuleId);
+                    });
+                    if (rule) {
+                      if (!validRecurringReference(next.catId) && validRecurringReference(rule.catId)) next.catId = rule.catId;
+                      if (!validRecurringReference(next.methodId) && validRecurringReference(rule.methodId)) next.methodId = rule.methodId;
+                    }
+                  }
+                  return next;
+                }
+                var current = editingItem.isExp
+                  ? (Array.isArray(expensesRef.current) ? expensesRef.current : [])
+                  : (Array.isArray(incomesRef.current) ? incomesRef.current : []);
+                var matchedIndex = current.findIndex(isSameEditedMovement);
+                if (matchedIndex < 0) {
+                  setToast({
+                    text: "Movimento non trovato. Riapri lo storico e riprova.",
+                    type: "warning",
+                    color: "#EF9F27",
+                    icon: "⚠️",
+                  });
+                  return;
+                }
+                var nextList = current.slice();
+                nextList[matchedIndex] = editedRow(current[matchedIndex]);
+                // Legacy duplicates of the same recurring occurrence receive the same edit,
+                // so a stale duplicate cannot immediately reappear after synchronization.
+                if (nextList[matchedIndex].recurringOccurrenceId || nextList[matchedIndex].recurringRuleId) {
+                  nextList = nextList.map(function (row, index) {
+                    return index !== matchedIndex && isSameEditedMovement(row) ? editedRow(row) : row;
+                  });
+                }
+                if (editingItem.isExp) {
+                  setExpenses(nextList);
                   setToast("Spesa aggiornata");
                 } else {
-                  setIncomes(
-                    incomes.map(function (i) {
-                      return i.id === updated.id ? updated : i;
-                    })
-                  );
+                  setIncomes(nextList);
                   setToast("Entrata aggiornata");
                 }
                 setEditingItem(null);
@@ -28156,19 +28565,93 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               item={editingItem.item}
               isExp={editingItem.isExp}
               onSave={function (updated) {
-                if (editingItem.isExp) {
-                  setExpenses(
-                    expenses.map(function (e) {
-                      return e.id === updated.id ? updated : e;
-                    })
+                var originalEditingItem = editingItem.item || {};
+                function isSameEditedMovement(row) {
+                  if (!row) return false;
+                  if (
+                    row.id !== undefined &&
+                    row.id !== null &&
+                    updated.id !== undefined &&
+                    updated.id !== null &&
+                    String(row.id) === String(updated.id)
+                  )
+                    return true;
+                  var occurrenceId = String(
+                    updated.recurringOccurrenceId ||
+                      originalEditingItem.recurringOccurrenceId ||
+                      ""
                   );
+                  if (
+                    occurrenceId &&
+                    String(row.recurringOccurrenceId || "") === occurrenceId
+                  )
+                    return true;
+                  var recurringRuleId = String(
+                    updated.recurringRuleId ||
+                      originalEditingItem.recurringRuleId ||
+                      ""
+                  );
+                  var recurringOccurrenceDate = String(
+                    updated.recurringOccurrenceDate ||
+                      originalEditingItem.recurringOccurrenceDate ||
+                      ""
+                  );
+                  return !!(
+                    recurringRuleId &&
+                    recurringOccurrenceDate &&
+                    String(row.recurringRuleId || "") === recurringRuleId &&
+                    String(row.recurringOccurrenceDate || "") === recurringOccurrenceDate
+                  );
+                }
+                function editedRow(row) {
+                  var next = { ...row, ...updated, id: row.id, updatedAt: new Date().toISOString() };
+                  if (next.recurringOccurrenceId || next.recurringRuleId || String(next.source || "") === "recurring") {
+                    next.recurringOverride = true;
+                    next.recurringOverrideUpdatedAt = next.updatedAt;
+                  }
+                  // Never detach an edited occurrence from its recurring source.
+                  ["recurringOccurrenceId", "recurringRuleId", "recurringOccurrenceDate", "source", "createdAt"].forEach(function (key) {
+                    if ((next[key] === undefined || next[key] === null || next[key] === "") && row[key] !== undefined)
+                      next[key] = row[key];
+                  });
+                  if (editingItem.isExp && next.recurringRuleId) {
+                    var rule = (recurringRef.current || []).find(function (candidate) {
+                      return String(candidate && candidate.id) === String(next.recurringRuleId);
+                    });
+                    if (rule) {
+                      if (!validRecurringReference(next.catId) && validRecurringReference(rule.catId)) next.catId = rule.catId;
+                      if (!validRecurringReference(next.methodId) && validRecurringReference(rule.methodId)) next.methodId = rule.methodId;
+                    }
+                  }
+                  return next;
+                }
+                var current = editingItem.isExp
+                  ? (Array.isArray(expensesRef.current) ? expensesRef.current : [])
+                  : (Array.isArray(incomesRef.current) ? incomesRef.current : []);
+                var matchedIndex = current.findIndex(isSameEditedMovement);
+                if (matchedIndex < 0) {
+                  setToast({
+                    text: "Movimento non trovato. Riapri lo storico e riprova.",
+                    type: "warning",
+                    color: "#EF9F27",
+                    icon: "⚠️",
+                  });
+                  return;
+                }
+                var nextList = current.slice();
+                nextList[matchedIndex] = editedRow(current[matchedIndex]);
+                // Legacy duplicates of the same recurring occurrence receive the same edit,
+                // so a stale duplicate cannot immediately reappear after synchronization.
+                if (nextList[matchedIndex].recurringOccurrenceId || nextList[matchedIndex].recurringRuleId) {
+                  nextList = nextList.map(function (row, index) {
+                    return index !== matchedIndex && isSameEditedMovement(row) ? editedRow(row) : row;
+                  });
+                }
+                if (editingItem.isExp) {
+                  setExpenses(nextList);
                   setToast("Spesa aggiornata");
                 } else {
-                  setIncomes(
-                    incomes.map(function (i) {
-                      return i.id === updated.id ? updated : i;
-                    })
-                  );
+                  setIncomes(nextList);
                   setToast("Entrata aggiornata");
                 }
                 setEditingItem(null);

@@ -7434,14 +7434,22 @@ export function RecurringManager() {
     if (day > 31) day = 31;
     var month = Number(form.annualMonth);
     if (isNaN(month) || month < 1 || month > 12) month = now.getMonth() + 1;
+    var selectedCategory = sCats.find(function (c) {
+      return String(c.id) === String(form.catId || "");
+    });
+    var selectedMethod = sMethods.find(function (m) {
+      return String(m.id) === String(form.methodId || "");
+    });
     return {
       ...form,
       id: editingId || Date.now(),
       icon: icon,
       name: String(form.name || "").trim(),
       amount: parseMoney(form.amount),
-      catId: Number(form.catId),
-      methodId: Number(form.methodId),
+      catId: form.rtype === "expense" ? form.catId : null,
+      methodId: form.rtype === "expense" ? form.methodId : null,
+      categoryNameSnapshot: selectedCategory ? String(selectedCategory.name || "") : String(form.categoryNameSnapshot || ""),
+      methodNameSnapshot: selectedMethod ? String(selectedMethod.name || "") : String(form.methodNameSnapshot || ""),
       dayOfMonth: day,
       annualMonth: month,
       rate: Number(form.rate || 12),
@@ -7466,10 +7474,26 @@ export function RecurringManager() {
     var base = makeBlank();
     var annualMonth = recurringMonth(r);
     var day = recurringDay(r);
+    var resolvedCategory = sCats.find(function (c) {
+      return String(c.id) === String(r.catId || "");
+    }) || sCats.find(function (c) {
+      return String(c.name || "").trim().toLowerCase() === String(r.categoryNameSnapshot || "").trim().toLowerCase();
+    });
+    var resolvedMethod = sMethods.find(function (m) {
+      return String(m.id) === String(r.methodId || "");
+    }) || sMethods.find(function (m) {
+      return String(m.name || "").trim().toLowerCase() === String(r.methodNameSnapshot || "").trim().toLowerCase();
+    });
     setEditingId(r.id);
     setForm({
       ...base,
       ...r,
+      ...(r.rtype === "expense"
+        ? {
+            catId: resolvedCategory ? resolvedCategory.id : base.catId,
+            methodId: resolvedMethod ? resolvedMethod.id : base.methodId,
+          }
+        : {}),
       icon: r.icon || autoIcon(r.name) || (r.rtype === "income" ? "💰" : "💸"),
       annualMonth: annualMonth,
       dayOfMonth: day,
@@ -7582,15 +7606,23 @@ export function RecurringManager() {
       );
     return (
       sCats.find(function (x) {
-        return Number(x.id) === Number(r.catId);
-      }) || { icon: "📦", name: "Categoria" }
+        return String(x.id) === String(r.catId || "");
+      }) ||
+      sCats.find(function (x) {
+        return String(x.name || "").trim().toLowerCase() === String(r.categoryNameSnapshot || "").trim().toLowerCase();
+      }) ||
+      { icon: "📦", name: "Categoria" }
     );
   }
   function methodObj(r) {
     return (
       sMethods.find(function (x) {
-        return Number(x.id) === Number(r.methodId);
-      }) || null
+        return String(x.id) === String(r.methodId || "");
+      }) ||
+      sMethods.find(function (x) {
+        return String(x.name || "").trim().toLowerCase() === String(r.methodNameSnapshot || "").trim().toLowerCase();
+      }) ||
+      null
     );
   }
   function recIcon(r) {
@@ -15056,8 +15088,20 @@ export function EditModal({ item, isExp, onSave, onClose }) {
       );
     });
   }
+  var recurringRuleForItem = (ctx.recurring || []).find(function (rule) {
+    return item && item.recurringRuleId && String(rule && rule.id) === String(item.recurringRuleId);
+  });
+  var fallbackEditCat =
+    (item && item.catId) ||
+    (recurringRuleForItem && recurringRuleForItem.catId) ||
+    (cats && cats[0] ? cats[0].id : "");
+  var fallbackEditMethod =
+    (item && item.methodId) ||
+    (recurringRuleForItem && recurringRuleForItem.methodId) ||
+    (methods && methods[0] ? methods[0].id : "");
   var [f, setF] = useState({
     ...item,
+    ...(isExp ? { catId: fallbackEditCat, methodId: fallbackEditMethod } : {}),
     amount: item.originalAmount || item.amount,
     currency: item.currency || ctx.currency,
     baseCurrency: item.baseCurrency || ctx.currency,

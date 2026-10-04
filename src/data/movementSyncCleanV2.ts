@@ -575,6 +575,29 @@ export async function completeMovementSyncV2Migration(uidValue: string): Promise
   await saveLocalActiveMarker(uid);
 }
 
+function movementPayloadWithCanonicalRecordId(record: MovementRecordV2): any {
+  const source = record && record.payload;
+  if (!source || typeof source !== "object") return source;
+
+  // The Firestore V2 recordId is the authoritative identity of the movement.
+  // Older/corrupted recurring occurrences can have a payload whose id is missing
+  // or no longer matches that stored recordId (for example after category/method
+  // fields disappeared). If we hydrate that payload as-is, editing it writes a new
+  // V2 document instead of updating the existing one, so the corrupted row appears
+  // impossible to modify. Reattach only the canonical id; all business fields stay
+  // untouched and healthy records are returned exactly as they are.
+  const storedRecordId = String(record.recordId || "");
+  const expectedPrefix = `${record.kind}:`;
+  if (!storedRecordId.startsWith(expectedPrefix)) return source;
+
+  const currentRecordId = movementRecordId(record.kind, source);
+  if (currentRecordId === storedRecordId) return source;
+
+  const canonicalRawId = storedRecordId.slice(expectedPrefix.length);
+  if (!canonicalRawId) return source;
+  return { ...source, id: canonicalRawId };
+}
+
 export function movementStateFromV2(records: MovementRecordV2[]) {
   const expenses: any[] = [];
   const incomes: any[] = [];
@@ -582,8 +605,9 @@ export function movementStateFromV2(records: MovementRecordV2[]) {
     .filter((record) => record && !record.deleted && record.payload)
     .sort((a, b) => Number(b.updatedAtMs || 0) - Number(a.updatedAtMs || 0))
     .forEach((record) => {
-      if (record.kind === "income") incomes.push(record.payload);
-      else expenses.push(record.payload);
+      const payload = movementPayloadWithCanonicalRecordId(record);
+      if (record.kind === "income") incomes.push(payload);
+      else expenses.push(payload);
     });
   return { expenses, incomes };
 }
