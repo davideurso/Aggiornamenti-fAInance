@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { App as CapacitorApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { formatNumber,
+  smallDecimalNode,
   useApp,
   fbAuth,
   PLAN_LIMITS,
@@ -5355,7 +5356,7 @@ export function SharePanel() {
                             )}
                             {String(shareFx.currency || _c.currency) !== String(_c.currency) && Number(shareFx.baseAmount) > 0 && (
                               <div style={{ fontSize: 10, color: "rgba(255,255,255,.70)", marginTop: 3 }}>
-                                ≈ {formatNumber(shareFx.baseAmount, lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(_c.currency || "EUR")}
+                                ≈ {smallDecimalNode(formatNumber(shareFx.baseAmount, lang, {minimumFractionDigits:2,maximumFractionDigits:2}), lang)} {String(_c.currency || "EUR")}
                               </div>
                             )}
                           </div>
@@ -5893,7 +5894,7 @@ export function SharePanel() {
                               fontWeight: 600,
                             }}
                           >
-                            💡 {shareCheck.message}
+                            💡 {smallDecimalNode(shareCheck.message, lang)}
                           </div>
                         )}
                         {sharePendingReceipt && (
@@ -5955,10 +5956,10 @@ export function SharePanel() {
                         <div style={{ marginTop: 10, marginBottom: 4 }}>
                           <div style={{ fontSize: 12, color: subC, marginBottom: 8 }}>
                             {L("Quote")}: {" "}
-                            {Object.keys(computeShares()).map(function (id) {
+                            {Object.keys(computeShares()).map(function (id, index, ids) {
                               var p = participants.find(function (x) { return x.id === id; });
-                              return (p ? personLabel(p) : L("Partecipante")) + " " + fmt(computeShares()[id]);
-                            }).join(" · ")}
+                              return <span key={id}>{p ? personLabel(p) : L("Partecipante")} {smallDecimalNode(fmt(computeShares()[id]), lang)}{index < ids.length - 1 ? " · " : ""}</span>;
+                            })}
                           </div>
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                             <Btn onClick={function () { requestShareReceiptUpload("expense"); }} bg={secondaryButtonColor} disabled={!shareReceiptAllowed()} style={{ padding: "11px 12px", fontWeight: 900, opacity: shareReceiptAllowed() ? 1 : .65 }}>
@@ -6273,18 +6274,13 @@ export function SharePanel() {
                                     </div>
                                     <div style={{ fontSize: 11, color: subC }}>
                                       {L("Condivisa con")}: {" "}
-                                      {Object.keys(a.shares || {})
-                                        .map(function (pid) {
+                                      {Object.keys(a.shares || {}).length ? Object.keys(a.shares || {})
+                                        .map(function (pid, index, ids) {
                                           var pp = participants.find(function (x) {
                                             return x.id === pid;
                                           });
-                                          return (
-                                            (pp ? personLabel(pp) : L("Partecipante")) +
-                                            " " +
-                                            fmt((a && a.shares && a.shares[pid]) || 0)
-                                          );
-                                        })
-                                        .join(" · ") || "—"}
+                                          return <span key={pid}>{pp ? personLabel(pp) : L("Partecipante")} {smallDecimalNode(fmt((a && a.shares && a.shares[pid]) || 0), lang)}{index < ids.length - 1 ? " · " : ""}</span>;
+                                        }) : "—"}
                                     </div>
                                   </>
                                 )}
@@ -6305,12 +6301,12 @@ export function SharePanel() {
                                 textAlign: "right",
                               }}
                             >
-                              {a.originalAmount && a.currency && a.currency !== (_c.currency || a.baseCurrency)
+                              {smallDecimalNode(a.originalAmount && a.currency && a.currency !== (_c.currency || a.baseCurrency)
                                 ? Number(a.originalAmount).toLocaleString(lang || "it", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " " + a.currency
-                                : fmt(a.amount)}
+                                : fmt(a.amount), lang)}
                               {a.originalAmount && a.currency && a.currency !== (_c.currency || a.baseCurrency) && (
                                 <div style={{ fontSize: 10, color: subC, fontWeight: 400 }}>
-                                  {fmt(a.baseAmount || a.amount)}
+                                  {smallDecimalNode(fmt(a.baseAmount || a.amount), lang)}
                                 </div>
                               )}
                             </div>
@@ -7188,7 +7184,7 @@ export function SharePanel() {
                   >
                     <StatCard
                       title={L("Spese progetto")}
-                      value={fmt(totalSpent)}
+                      value={smallDecimalNode(fmt(totalSpent), lang)}
                       color={expenseColor}
                       bg={expenseColor + "22"}
                     />
@@ -7196,7 +7192,7 @@ export function SharePanel() {
                   <div style={{ minWidth: 0 }}>
                     <StatCard
                       title={L("Mi devono")}
-                      value={fmt(Math.max(0, myBalance))}
+                      value={smallDecimalNode(fmt(Math.max(0, myBalance)), lang)}
                       color={incomeColor}
                       bg={incomeColor + "22"}
                     />
@@ -7204,7 +7200,7 @@ export function SharePanel() {
                   <div style={{ minWidth: 0 }}>
                     <StatCard
                       title={L("Devo")}
-                      value={fmt(Math.max(0, -myBalance))}
+                      value={smallDecimalNode(fmt(Math.max(0, -myBalance)), lang)}
                       color={expenseColor}
                       bg={expenseColor + "22"}
                     />
@@ -7271,7 +7267,7 @@ export function SharePanel() {
                           color: readableDarkText(confirmButtonColor, dark, "#35354a"),
                         }}
                       >
-                        {fmt(d.amount)}
+                        {smallDecimalNode(fmt(d.amount), lang)}
                       </span>
                     </div>
                   );
@@ -7720,7 +7716,7 @@ export function SharePanel() {
                           color: readableDarkText(confirmButtonColor, dark, "#35354a"),
                         }}
                       >
-                        {fmt(d.amount)}
+                        {smallDecimalNode(fmt(d.amount), lang)}
                       </span>
                     </div>
                   );

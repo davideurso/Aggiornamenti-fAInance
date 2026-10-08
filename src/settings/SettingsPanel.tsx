@@ -43,6 +43,7 @@ import {
   androidDownload,
   exportToCSV,
   exportToXLSX,
+  smallDecimalNode,
   appBanner,
 } from "../core";
 import {
@@ -3915,7 +3916,7 @@ export function SettingsPanel() {
             <div style={{flex:1,minWidth:0}}>
               <div style={{display:"flex",justifyContent:"space-between",gap:10}}><div style={{fontSize:16,fontWeight:900,color:readableDarkText(draftTextColor, dark, dark?"#111827":"#F8FAFC"),whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selectedGoal ? selectedGoal.name || "Obiettivo" : "Anteprima obiettivo"}</div>{widget3ShowPercent&&<div style={{fontSize:16,fontWeight:900,color:readableDarkText(draftPercentColor, dark, dark?"#111827":"#F8FAFC")}}>{pct}%</div>}</div>
               <div style={{height:8,borderRadius:8,background:dark?"#273244":"#E5E7EB",overflow:"hidden",marginTop:8}}><div style={{width:pct+"%",height:"100%",background:gColor,borderRadius:8}}/></div>
-              {widget3ShowAmounts&&<div style={{fontSize:12,color:readableDarkText(draftTextColor, dark, dark?"#111827":"#F8FAFC"),marginTop:5,opacity:.82}}><span style={{color:readableDarkText(draftPercentColor, dark, dark?"#111827":"#F8FAFC"),fontWeight:800}}>{fmt(saved)}</span> / {fmt(target)}</div>}
+              {widget3ShowAmounts&&<div style={{fontSize:12,color:readableDarkText(draftTextColor, dark, dark?"#111827":"#F8FAFC"),marginTop:5,opacity:.82}}><span style={{color:readableDarkText(draftPercentColor, dark, dark?"#111827":"#F8FAFC"),fontWeight:800}}>{smallDecimalNode(fmt(saved), lang)}</span> / {smallDecimalNode(fmt(target), lang)}</div>}
             </div>
           </div>
         </div>
@@ -4323,7 +4324,7 @@ export function SettingsPanel() {
                     color: readableDarkText(draftTitleColor, dark, "rgba(255,255,255,.13)"),
                   }}
                 >
-                  {fmt(preview.net)}
+                  {smallDecimalNode(fmt(preview.net), lang)}
                 </div>
               </div>
               <div
@@ -4336,13 +4337,13 @@ export function SettingsPanel() {
                 <div>
                   {L("Ti devono")}:{" "}
                   <strong style={{ color: readableDarkText(draftTitleColor, dark, draftBgColor) }}>
-                    {fmt(preview.owed)}
+                    {smallDecimalNode(fmt(preview.owed), lang)}
                   </strong>
                 </div>
                 <div>
                   {L("Devi")}:{" "}
                   <strong style={{ color: readableDarkText(draftTitleColor, dark, draftBgColor) }}>
-                    {fmt(preview.owe)}
+                    {smallDecimalNode(fmt(preview.owe), lang)}
                   </strong>
                 </div>
                 <div

@@ -370,6 +370,26 @@ export function formatNumber(value,lang,options){
   }
 }
 export function fmtAmt(n,sym,lang){return String(sym||"")+"\u00A0"+formatNumber(n,lang,{minimumFractionDigits:2,maximumFractionDigits:2});}
+export function smallDecimalNode(value,lang,scale="0.70em") {
+  if (value == null || typeof value === "boolean") return value as any;
+  if (typeof value !== "string" && typeof value !== "number") return value as any;
+  var raw=String(value);
+  var decimal=",";
+  try{
+    var decimalPart=new Intl.NumberFormat(numberLocale(lang)).formatToParts(1.1).find(function(part){return part.type==="decimal";});
+    if(decimalPart&&decimalPart.value)decimal=decimalPart.value;
+  }catch(e){}
+  var escaped=decimal.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  var splitRe=new RegExp("("+escaped+"\\d+)","g");
+  var exactRe=new RegExp("^"+escaped+"\\d+$");
+  var parts=raw.split(splitRe);
+  if(parts.length===1)return raw;
+  return <>{parts.map(function(part,index){
+    return exactRe.test(part)
+      ? <span key={index} className="fainance-small-decimals" style={{fontSize:scale,fontWeight:"inherit",verticalAlign:"baseline"}}>{part}</span>
+      : part;
+  })}</>;
+}
 export function rateMonth(item,mk){
   return itemAmountForMonth(item,mk);
 }

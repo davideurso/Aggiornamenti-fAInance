@@ -1,6 +1,6 @@
 import { readableDarkText } from '../ui/textContrast';
 import { useState } from 'react';
-import { useApp, fmtDate } from '../core';
+import { useApp, fmtDate, smallDecimalNode } from '../core';
 import { budgetText } from '../i18n/budgetTranslations';
 import { budgetPeriodSummary, budgetSourceForPeriod, type BudgetScope } from '../finance/budgetEngine';
 import { periodLabel, type PeriodComparison } from '../finance/periodEngine';
@@ -65,15 +65,15 @@ export function BudgetPeriodControls({ periodKey, onPeriodChange, scope, onScope
       <div style={{display:'grid',gridTemplateColumns:isMobile?'repeat(2,minmax(0,1fr))':'repeat(3,minmax(0,1fr))',gap:10,marginTop:12}}>
         <div style={{...metricCard,gridColumn:isMobile?'1 / -1':'auto'}}>
           <div style={{fontSize:12,color:ctx.subC,marginBottom:4}}>{T('achievement')}</div>
-          <strong style={{display:'block',fontSize:isMobile?28:26,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{pct(summary.planAchievement)}</strong>
+          <strong style={{display:'block',fontSize:isMobile?28:26,lineHeight:1.05,fontVariantNumeric:'tabular-nums'}}>{smallDecimalNode(pct(summary.planAchievement),ctx.lang||'it')}</strong>
         </div>
         <div style={metricCard}>
           <div style={{fontSize:12,color:ctx.subC,marginBottom:4}}>{T('rate')}</div>
-          <strong style={{display:'block',fontSize:20,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{pct(summary.actualSavingsRate)}</strong>
+          <strong style={{display:'block',fontSize:20,lineHeight:1.1,fontVariantNumeric:'tabular-nums'}}>{smallDecimalNode(pct(summary.actualSavingsRate),ctx.lang||'it')}</strong>
         </div>
         <div style={metricCard}>
           <div style={{fontSize:12,color:ctx.subC,marginBottom:4}}>{T('difference')}</div>
-          <strong style={{display:'block',fontSize:20,lineHeight:1.1,color:readableDarkText(differenceColor, ctx.dark, ctx.cardBg),fontVariantNumeric:'tabular-nums'}}>{summary.difference>0?'+':''}{ctx.fmt(summary.difference)}</strong>
+          <strong style={{display:'block',fontSize:20,lineHeight:1.1,color:readableDarkText(differenceColor, ctx.dark, ctx.cardBg),fontVariantNumeric:'tabular-nums'}}>{summary.difference>0?'+':''}{smallDecimalNode(ctx.fmt(summary.difference),ctx.lang||'it')}</strong>
           <div style={{fontSize:11,color:ctx.subC,marginTop:4}}>{T(comparison)}</div>
         </div>
       </div>

@@ -1,7 +1,7 @@
 import { readableDarkText } from '../ui/textContrast';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useApp } from '../core';
+import { useApp, smallDecimalNode } from '../core';
 import { goalSavedAmount, linkSavingsGoal } from '../finance/savingsGoals';
 import { savingsGoalText } from '../i18n/savingsGoalsTranslations';
 import { savingsText } from '../i18n/savingsTranslations';
@@ -17,7 +17,7 @@ export function SavingsGoalPanel({bucketId, completion}:{bucketId:string;complet
   const goals=ctx.goals || [];
   const goal=goals.find(item=>String(item.id)===bucket.goalId && (item.currency || ctx.currency)===bucket.currency);
   const eligible=goals.filter(item=>(item.currency || ctx.currency)===bucket.currency && Number(item.target)>goalSavedAmount(ctx.financeEvolution,item,ctx.currency));
-  const money=(value:number)=>new Intl.NumberFormat(ctx.lang || 'it',{style:'currency',currency:bucket.currency}).format(value);
+  const money=(value:number)=>smallDecimalNode(new Intl.NumberFormat(ctx.lang || 'it',{style:'currency',currency:bucket.currency}).format(value),ctx.lang||'it');
   const button={border:`1px solid ${ctx.borderC}`,borderRadius:10,padding:'9px 11px',background:ctx.cardBg,color:ctx.textC,cursor:'pointer',fontWeight:700,overflowWrap:'anywhere' as const};
   const accent=ctx.confirmButtonColor || '#6555BA';
   const softBg=ctx.dark?'#191A28':'#FFFFFF';

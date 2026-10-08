@@ -47,6 +47,7 @@ import {
   fmtDate,
   fmtAmt,
   formatNumber,
+  smallDecimalNode,
   parseMoney,
   todayStr,
   dateOffset,
@@ -3057,7 +3058,8 @@ export function DatePickerField({ value, onChange }) {
   );
 }
 export function StatCard({ title, value, color, bg, sub, valueWeight }) {
-  var { dark } = useApp();
+  var statCtx:any = useApp();
+  var dark = statCtx.dark;
   var hasSub = !!sub;
   return (
     <div
@@ -3101,7 +3103,7 @@ export function StatCard({ title, value, color, bg, sub, valueWeight }) {
           wordBreak: "break-word",
         }}
       >
-        {value}
+        {smallDecimalNode(value, statCtx.lang)}
       </div>
       {sub && (
         <div
@@ -3116,7 +3118,7 @@ export function StatCard({ title, value, color, bg, sub, valueWeight }) {
             wordBreak: "break-word",
           }}
         >
-          {sub}
+          {smallDecimalNode(sub, statCtx.lang)}
         </div>
       )}
     </div>
@@ -3216,7 +3218,7 @@ export function Toast({ msg, onDone, color }) {
       ? "✅"
       : "ℹ️");
   var duration = Number(
-    payload.duration || (isError || isWarning ? 3600 : 2400)
+    payload.duration || (isError || isWarning ? 2500 : 1500)
   );
   function goInfo() {
     var actionTab = String((payload && payload.actionTab) || "settings");
@@ -3659,9 +3661,9 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         <div style={{ fontSize: 11, color: sc, marginTop: 8 }}>
           {L("Equivalente nella valuta principale")}:{" "}
           <strong style={{ color: tc }}>
-            {formatNumber(value.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {base}
+            {smallDecimalNode(formatNumber(value.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {base}
           </strong>{" "}
-          · 1 {selected} = {Number(value.exchangeRate).toFixed(6)} {base}
+          · 1 {selected} = {smallDecimalNode(Number(value.exchangeRate).toFixed(6), ctx.lang)} {base}
         </div>
       )}
       {open && (
@@ -4319,7 +4321,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           )}
           {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
             <div style={{ fontSize: isMobile ? 11.6 : 12, color: readableDarkText(whiteSoft, dark, amountGradient), marginTop: 3 }}>
-              ≈ {formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(ctx.currency || "EUR")}
+              ≈ {smallDecimalNode(formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
             </div>
           )}
         </div>
@@ -4371,10 +4373,10 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             }}
           >
             {t.instalmentIn} {f.rate} {t.months} -{" "}
-            {fmtAmt(
+            {smallDecimalNode(fmtAmt(
               parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
               sym
-            )}{" "}
+            ), ctx.lang)}{" "}
             {t.perMonth}
           </div>
           <RatePicker
@@ -6829,7 +6831,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                   )}
                   {String(r.currency || ctx.currency) !== String(ctx.currency) && Number(r.baseAmount) > 0 && (
                     <div style={{ fontSize: 11.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), marginTop: 3 }}>
-                      ≈ {formatNumber(r.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2})} {String(ctx.currency || "EUR")}
+                      ≈ {smallDecimalNode(formatNumber(r.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
                     </div>
                   )}
                 </div>
@@ -8186,7 +8188,7 @@ export function RecurringManager() {
                     marginTop: 2,
                   }}
                 >
-                  {fmtAmt(r.amount, sym)}
+                  {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)}
                 </div>
               </div>
               <span
@@ -8439,7 +8441,7 @@ export function RecurringManager() {
                     {r.name}
                   </div>
                   <div style={{ fontSize: 12, color: sc }}>
-                    {fmtAmt(r.amount, sym)} · {cat.icon} {L(cat.name)} ·{" "}
+                    {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)} · {cat.icon} {L(cat.name)} ·{" "}
                     {occurrenceDateText(r)}
                   </div>
                 </div>
@@ -9173,7 +9175,7 @@ export function GoalsPanel() {
                 boxShadow: dark ? "none" : "0 4px 18px rgba(0,0,0,0.04)",
               }}
             >
-              {goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)>0 && <p style={{fontSize:12,color:sc,margin:'0 0 10px'}}>{savingsGoalText(lang,'budget')}: {fmtAmt(goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)/100,sym)}</p>}
+              {goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)>0 && <p style={{fontSize:12,color:sc,margin:'0 0 10px'}}>{savingsGoalText(lang,'budget')}: {smallDecimalNode(fmtAmt(goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)/100,sym), ctx.lang)}</p>}
               <div
                 style={{
                   position: "absolute",
@@ -9460,10 +9462,10 @@ export function GoalsPanel() {
                 }}
               >
                 <span style={{ fontSize: 18, fontWeight: 900, color: readableDarkText(g.color, dark, cardBg) }}>
-                  {fmtAmt(saved, sym)}
+                  {smallDecimalNode(fmtAmt(saved, sym), ctx.lang)}
                 </span>
                 <span style={{ fontSize: 14, color: sc }}>
-                  {L("di")} {fmtAmt(target, sym)}
+                  {L("di")} {smallDecimalNode(fmtAmt(target, sym), ctx.lang)}
                 </span>
               </div>
               <div
@@ -9502,7 +9504,7 @@ export function GoalsPanel() {
                 </span>
                 {!done && (
                   <span style={{ fontSize: 12, color: sc }}>
-                    {L("mancano")} {fmtAmt(Math.max(0, target - saved), sym)}
+                    {L("mancano")} {smallDecimalNode(fmtAmt(Math.max(0, target - saved), sym), ctx.lang)}
                   </span>
                 )}
               </div>
@@ -10747,10 +10749,10 @@ export function AlertsPanel() {
                 : dark
                 ? "#252535"
                 : "#fff") }}>
-                {fmtAmt(spent, sym)}
+                {smallDecimalNode(fmtAmt(spent, sym), ctx.lang)}
               </span>
               <span style={{ fontSize: 12, color: sc }}>
-                {L("budget")} {fmtAmt(al.budget, sym)}
+                {L("budget")} {smallDecimalNode(fmtAmt(al.budget, sym), ctx.lang)}
               </span>
             </div>
             <div
@@ -14975,7 +14977,7 @@ export function DeleteDataPanel() {
                         color: readableDarkText(movType === "expense" ? "#E24B4A" : "#1D9E75", dark, "#35354a"),
                       }}
                     >
-                      {fmt(e.amount)}
+                      {smallDecimalNode(fmt(e.amount), ctx.lang)}
                     </div>
                   </div>
                 );
@@ -15074,7 +15076,8 @@ export function EditModal({ item, isExp, onSave, onClose }) {
     incomeTypes = orderedIncomeTypesForContext(ctx),
     sym = ctx.sym,
     dark = ctx.dark,
-    btnRadius = ctx.btnRadius;
+    btnRadius = ctx.btnRadius,
+    confirmButtonColor = ctx.confirmButtonColor || "#378ADD";
   var groups = expenseGroups;
   var groupIds = (groups || []).map(function (g) {
     return String(g.id);
@@ -15111,19 +15114,29 @@ export function EditModal({ item, isExp, onSave, onClose }) {
   useEffect(function () {
     focusFainanceInput(editAmountInputRef, 120);
   }, []);
-  var inp = {
-    width: "100%",
-    borderRadius: 8,
-    border: "1px solid " + (dark ? "#444" : "#ddd"),
-    padding: "8px 10px",
-    fontSize: 14,
-    background: dark ? "#2a2a3e" : "#fff",
-    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
-    boxSizing: "border-box",
-    minWidth: 0,
-  };
   var tc = dark ? "#eee" : "#333";
   var sc = dark ? "#aaa" : "#888";
+  var borderC = dark ? "#444" : "#e8e8ee";
+  var fieldBg = dark ? "#1e1e30" : "#fff";
+  var inp = {
+    width: "100%",
+    borderRadius: 10,
+    border: "1px solid " + borderC,
+    padding: "10px 12px",
+    fontSize: 14,
+    background: fieldBg,
+    color: readableDarkText(tc, dark, fieldBg),
+    boxSizing: "border-box",
+    minWidth: 0,
+    outline: "none",
+  };
+  var editLabel = {
+    fontSize: 12,
+    fontWeight: 850,
+    color: sc,
+    display: "block",
+    marginBottom: 6,
+  };
   function L(s) {
     return ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(s) : s;
   }
@@ -15163,63 +15176,51 @@ export function EditModal({ item, isExp, onSave, onClose }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        zIndex: 400,
+        background: "rgba(0,0,0,0.58)",
+        zIndex: 980,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "10vh 16px 2vh",
+        padding: "7vh 16px 3vh",
         boxSizing: "border-box",
         overflowY: "auto",
       }}
-      onClick={function (e) {
+      onMouseDown={function (e) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         style={{
-          background: dark ? "#1e1e30" : "#fff",
-          borderRadius: 16,
-          padding: 20,
+          position: "relative",
+          background: dark ? "#252535" : "#fff",
+          borderRadius: 22,
+          border: "1px solid " + borderC,
+          boxShadow: "0 18px 65px rgba(0,0,0,0.38)",
+          padding: "20px 18px 18px",
           width: "100%",
-          maxWidth: 440,
+          maxWidth: 520,
           maxHeight: "90vh",
           overflowY: "auto",
         }}
       >
+        <div style={{ position: "absolute", right: 14, top: 14 }}>
+          <PopupCloseButton onClick={onClose} dark={dark} label={L("Chiudi")} />
+        </div>
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            fontSize: 18,
+            fontWeight: 950,
+            color: tc,
             marginBottom: 16,
+            paddingRight: 44,
           }}
         >
-          <div style={{ fontSize: 15, fontWeight: 600, color: tc }}>
-            Modifica {isExp ? t.expenses : t.incomes}
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 20,
-              cursor: "pointer",
-              color: readableDarkText("#aaa", dark, "none"),
-            }}
-          >
-            x
-          </button>
+          {L("Modifica")} {isExp ? L("Uscita") : L("Entrata")}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
           <div>
             <label
-              style={{
-                fontSize: 12,
-                color: sc,
-                display: "block",
-                marginBottom: 4,
-              }}
+              style={editLabel}
             >
               {t.amount} ({sym})
             </label>
@@ -15235,7 +15236,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                   return { ...p, amount: e.target.value };
                 });
               }}
-              style={{ ...inp, fontSize: 20, fontWeight: 500 }}
+              style={{ ...inp, fontSize: 18, fontWeight: 850 }}
             />
             <div style={{ marginTop: 8 }}>
               <MultiCurrencyField
@@ -15250,12 +15251,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
           </div>
           <div>
             <label
-              style={{
-                fontSize: 12,
-                color: sc,
-                display: "block",
-                marginBottom: 4,
-              }}
+              style={editLabel}
             >
               {t.description}
             </label>
@@ -15279,14 +15275,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
               }}
             >
               <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
+                <label style={editLabel}>
                   {t.category}
                 </label>
                 <select
@@ -15308,14 +15297,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 </select>
               </div>
               <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
+                <label style={editLabel}>
                   {t.method}
                 </label>
                 <select
@@ -15342,12 +15324,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
           {!isExp && (
             <div>
               <label
-                style={{
-                  fontSize: 12,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
+                style={editLabel}
               >
                 {L("Categoria entrata")}
               </label>
@@ -15372,12 +15349,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
           )}
           <div>
             <label
-              style={{
-                fontSize: 12,
-                color: sc,
-                display: "block",
-                marginBottom: 4,
-              }}
+              style={editLabel}
             >
               {t.date}
             </label>
@@ -15400,7 +15372,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 ? "#252535"
                 : "#f5f5f5",
               borderRadius: 12,
-              padding: 12,
+              padding: "12px 13px",
               border: f.rateizzato
                 ? "1px solid #AFA9EC"
                 : "1px solid " + (dark ? "#444" : "#eee"),
@@ -15427,10 +15399,10 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 : "#f5f5f5"), marginBottom: 4 }}
                 >
                   {f.rate} {t.months} -{" "}
-                  {fmtAmt(
+                  {smallDecimalNode(fmtAmt(
                     parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
                     sym
-                  )}
+                  ), ctx.lang)}
                   {t.perMonth}
                 </div>
                 <RatePicker
@@ -15450,22 +15422,20 @@ export function EditModal({ item, isExp, onSave, onClose }) {
               </div>
             )}
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <div style={{ display: "flex", gap: 9, marginTop: 5 }}>
             <Btn
               onClick={save}
               disabled={!editMovementValid}
-              bg={
-                editMovementValid ? (isExp ? "#E24B4A" : "#1D9E75") : "#A8A8A8"
-              }
-              style={{ flex: 1, padding: 12, fontSize: 14, fontWeight: 600 }}
+              bg={editMovementValid ? confirmButtonColor : "#A8A8A8"}
+              style={{ flex: 1, padding: 12, fontSize: 14, fontWeight: 950 }}
             >
               {t.save}
             </Btn>
             <Btn
               onClick={onClose}
               bg={dark ? "#333" : "#f0f0f0"}
-              color={dark ? "#eee" : "#555"}
-              style={{ flex: 1, padding: 12, fontSize: 14 }}
+              color={tc}
+              style={{ padding: "12px 16px", fontSize: 14, fontWeight: 900 }}
             >
               {t.cancel}
             </Btn>
@@ -18106,7 +18076,7 @@ export function ImportData(props: any = {}) {
                               fontWeight: 500,
                             }}
                           >
-                            {fmtAmt(r.amount, sym)}
+                            {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)}
                           </td>
                           <td
                             style={{
@@ -18151,7 +18121,7 @@ export function ImportData(props: any = {}) {
                               fontWeight: 500,
                             }}
                           >
-                            {fmtAmt(r.amount, sym)}
+                            {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)}
                           </td>
                           <td style={{ padding: "6px 10px", color: tc }}>
                             {r.desc}

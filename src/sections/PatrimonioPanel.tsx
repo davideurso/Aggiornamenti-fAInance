@@ -1,6 +1,6 @@
 import { readableDarkText } from '../ui/textContrast';
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { useApp, DEFAULT_PATRIMONIO_AREAS, DEFAULT_PATRIMONIO_ENTRIES, parseMoney } from '../core';
+import { useApp, DEFAULT_PATRIMONIO_AREAS, DEFAULT_PATRIMONIO_ENTRIES, parseMoney, smallDecimalNode } from '../core';
 import { Btn, EmojiPicker, PopupCloseButton } from '../widget';
 import { L } from '../utils/translationFallback';
 import { CopyMonthWidget } from './CopyMonthWidget';
@@ -279,7 +279,7 @@ export function PatrimonioPanel(){
           <div style={{minWidth:0}}>
             <div style={{fontSize:11,color:subC}}>{L("Totale")} {monthShortName(selMonth-1)} {selYear}</div>
             <div style={{fontSize:isMobile?24:26,fontWeight:900,color:readableDarkText(draftTotal>=0?"#1D9E75":"#E24B4A", dark, dark?"#252535":"#f9f9f9"),lineHeight:1.1,wordBreak:"break-word"}}><PatrimonioAmount value={draftTotal}/></div>
-            {secRate&&showSecInPatrimonio&&fmtSec(draftTotal)&&<div style={{fontSize:12,color:subC,fontWeight:500,marginTop:2}}>{fmtSec(draftTotal)}</div>}
+            {secRate&&showSecInPatrimonio&&fmtSec(draftTotal)&&<div style={{fontSize:12,color:subC,fontWeight:500,marginTop:2}}>{smallDecimalNode(fmtSec(draftTotal), lang)}</div>}
             {totalDelta!==null&&<div style={{fontSize:13,fontWeight:800,color:readableDarkText(totalDelta>=0?"#1D9E75":"#E24B4A", dark, dark?"#252535":"#f9f9f9"),marginTop:5}}>{L("vs")} {monthShortName(parseInt(prevKey.split("-")[1])-1)}: <PatrimonioAmount value={totalDelta} forcePlus/></div>}
           </div>
           <button onClick={saveMonthSnap} style={{background:"#7F77DD",color:readableDarkText("#fff", dark, "#7F77DD"),border:"none",borderRadius:btnRadius,padding:"12px 18px",fontSize:14,cursor:"pointer",fontWeight:900,width:isMobile?"100%":"auto",minWidth:isMobile?0:118,boxShadow:dark?"none":"0 6px 18px rgba(127,119,221,0.28)"}}>

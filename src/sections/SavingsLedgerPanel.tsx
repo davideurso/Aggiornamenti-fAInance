@@ -2,7 +2,7 @@ import { readableDarkText } from '../ui/textContrast';
 import { closureText } from '../i18n/savingsClosureTranslations';
 import { savingsGoalText } from '../i18n/savingsGoalsTranslations';
 import { useState } from 'react';
-import { useApp, todayStr } from '../core';
+import { useApp, todayStr, smallDecimalNode } from '../core';
 import { cancelSavingsEntry, saveSavingsEntry, savingsAmountMinor } from '../finance/savingsLedger';
 import { ledgerText } from '../i18n/savingsLedgerTranslations';
 import { savingsText } from '../i18n/savingsTranslations';
@@ -19,7 +19,7 @@ export function SavingsLedgerPanel({bucketId}:{bucketId:string}) {
   const T=(key:Parameters<typeof ledgerText>[1])=>ledgerText(lang,key);
   const G=(key:Parameters<typeof savingsGoalText>[1])=>savingsGoalText(lang,key);
   const S=(key:Parameters<typeof savingsText>[1])=>savingsText(lang,key);
-  const money=(minor:number)=>new Intl.NumberFormat(lang,{style:'currency',currency:bucket.currency,minimumFractionDigits:2,maximumFractionDigits:2}).format(minor/100);
+  const money=(minor:number)=>smallDecimalNode(new Intl.NumberFormat(lang,{style:'currency',currency:bucket.currency,minimumFractionDigits:2,maximumFractionDigits:2}).format(minor/100),lang);
   const dateLabel=(date:string)=>{try{return date ? new Intl.DateTimeFormat(lang).format(new Date(date+'T12:00:00')) : '—';}catch{return '—';}};
   const entries=[...ctx.financeEvolution.savings.entries,...ctx.financeEvolution.savings.coverageEntries.filter(e=>e.kind==='period-v1').map(e=>({...e,kind:'coverage',amountMinor:-e.amountMinor}))].filter(entry=>entry.bucketId===bucketId).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')) || String(b.createdAt||'').localeCompare(String(a.createdAt||'')) || a.id.localeCompare(b.id));
   const button={border:`1px solid ${ctx.borderC}`,borderRadius:10,padding:'9px 11px',background:ctx.cardBg,color:ctx.textC,cursor:'pointer'};

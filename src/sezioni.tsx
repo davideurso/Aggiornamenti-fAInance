@@ -1,3 +1,6 @@
+import {categoryCorrectionMentioned, isVoicePromptEcho, requestedMovementField, isReferencedMovementQuestion, latestPersonalMovement, isLatestMovementQuestion, isMovementCorrectionText, methodMentioned, mergeMovementUpdate, previewMovementUpdate, applyMovementUpdate, movementLabel, movementUpdateError, movementUpdateSummary, stripPreparationAnnouncements} from "./finance/assistantMovementUpdate";
+import {assistantRuleActions, mergeRuleRequest, previewRuleRequest, applyRuleRequest, assistantRuleError, ruleRequestSummary} from "./finance/assistantAutomaticRules";
+import { mergeRecategorization, previewRecategorization, applyRecategorization, recategorizationText } from "./finance/assistantRecategorization";
 import { readableDarkText } from './ui/textContrast';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
@@ -29,6 +32,7 @@ import {
   fmtDate,
   fmtAmt,
   formatNumber,
+  smallDecimalNode,
   parseMoney,
   todayStr,
   dateOffset,
@@ -2116,7 +2120,7 @@ export function HomePanel() {
                     textOverflow: "ellipsis",
                   }}
                 >
-                  {fmt(safeNum(e.amount))}
+                  {smallDecimalNode(fmt(safeNum(e.amount)), lang)}
                 </div>
                 {!compact && secRate && fmtSec && (
                   <div
@@ -2127,7 +2131,7 @@ export function HomePanel() {
                       overflowWrap: "anywhere",
                     }}
                   >
-                    {fmtSec(safeNum(e.amount))}
+                    {smallDecimalNode(fmtSec(safeNum(e.amount)), lang)}
                   </div>
                 )}
               </div>
@@ -3578,7 +3582,7 @@ export function HomePanel() {
           }}
         >
           <div style={{ fontSize: compact ? 21 : doubleSize ? 34 : 27, fontWeight: 950, color: readableDarkText(expenseColor, dark, "#35354a") }}>
-            {fmt(monthlyExpenseAverage)}
+            {smallDecimalNode(fmt(monthlyExpenseAverage), lang)}
           </div>
           <div style={{ fontSize: compact ? 10 : 11, color: subC }}>
             {H("Media mensile delle uscite")}
@@ -3753,7 +3757,7 @@ export function HomePanel() {
                       flexShrink: 0,
                     }}
                   >
-                    {fmt(safeNum(r.amount))}
+                    {smallDecimalNode(fmt(safeNum(r.amount)), lang)}
                   </div>
                 </div>
               );
@@ -3851,7 +3855,7 @@ export function HomePanel() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {fmt(safeNum(a.amount))}
+                    {smallDecimalNode(fmt(safeNum(a.amount)), lang)}
                   </div>
                 </div>
               );
@@ -3884,7 +3888,7 @@ export function HomePanel() {
                   whiteSpace: "nowrap",
                 }}
               >
-                {fmt(Math.abs(bal))}
+                {smallDecimalNode(fmt(Math.abs(bal)), lang)}
               </div>
               <div
                 style={{
@@ -3940,7 +3944,7 @@ export function HomePanel() {
                               alignSelf: "center",
                             }}
                           >
-                            {fmt(r.amount)}
+                            {smallDecimalNode(fmt(r.amount), lang)}
                           </strong>
                         </div>
                       );
@@ -3967,7 +3971,7 @@ export function HomePanel() {
               >
                 <span>{L("Totale del mese")}</span>
                 <strong style={{ color: textC, whiteSpace: "nowrap", fontSize: compact ? 10 : 11 }}>
-                  {fmt(shareInfo.monthTotal)}
+                  {smallDecimalNode(fmt(shareInfo.monthTotal), lang)}
                 </strong>
               </div>
             </>
@@ -4019,7 +4023,7 @@ export function HomePanel() {
                   {L("Pianificato")}
                 </div>
                 <div style={{ fontSize: 13, lineHeight: 1.05, color: readableDarkText("#1D9E75", dark, "#35354a"), fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {fmt(b.saving)}
+                  {smallDecimalNode(fmt(b.saving), lang)}
                 </div>
               </div>
               <div style={{ minWidth: 0, textAlign: "right" }}>
@@ -4027,7 +4031,7 @@ export function HomePanel() {
                   {L("Reale")}
                 </div>
                 <div style={{ fontSize: 13, lineHeight: 1.05, color: readableDarkText(realPositive ? "#1D9E75" : "#E24B4A", dark, "#35354a"), fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                  {fmt(b.real)}
+                  {smallDecimalNode(fmt(b.real), lang)}
                 </div>
               </div>
             </div>
@@ -4123,7 +4127,7 @@ export function HomePanel() {
                   textOverflow: "ellipsis",
                 }}
               >
-                {fmt(b.saving)}
+                {smallDecimalNode(fmt(b.saving), lang)}
               </div>
             </div>
             <div
@@ -4173,7 +4177,7 @@ export function HomePanel() {
                   textOverflow: "ellipsis",
                 }}
               >
-                {fmt(b.real)}
+                {smallDecimalNode(fmt(b.real), lang)}
               </div>
             </div>
           </div>
@@ -4213,7 +4217,7 @@ export function HomePanel() {
                 }}
               >
                 {b.diff >= 0 ? "+" : ""}
-                {fmt(b.diff)}
+                {smallDecimalNode(fmt(b.diff), lang)}
               </span>
             </div>
             <div
@@ -4251,13 +4255,13 @@ export function HomePanel() {
         >
           <StatCard
             title={L("Risparmio pianificato")}
-            value={fmt(b2.saving)}
+            value={smallDecimalNode(fmt(b2.saving), lang)}
             color="#1D9E75"
             bg="#E8F8F0"
           />
           <StatCard
             title={L("Risparmio reale")}
-            value={fmt(b2.real)}
+            value={smallDecimalNode(fmt(b2.real), lang)}
             color={b2.real >= 0 ? "#1D9E75" : "#E24B4A"}
             bg={b2.real >= 0 ? "#E8F8F0" : "#FFF0F0"}
           />
@@ -4265,7 +4269,7 @@ export function HomePanel() {
             {L("Scostamento")}:{" "}
             <b style={{ color: readableDarkText(b2.diff >= 0 ? incomeColor : expenseColor, dark, "#35354a") }}>
               {b2.diff >= 0 ? "+" : ""}
-              {fmt(b2.diff)}
+              {smallDecimalNode(fmt(b2.diff), lang)}
             </b>
           </div>
         </div>
@@ -4325,7 +4329,7 @@ export function HomePanel() {
                     <span>{c ? c.name : L("Categoria")}</span>
                   </span>
                   <b>
-                    {fmt(spent)} / {fmt(lim)}
+                    {smallDecimalNode(fmt(spent), lang)} / {smallDecimalNode(fmt(lim), lang)}
                   </b>
                 </div>
                 <div
@@ -4687,7 +4691,7 @@ export function HomePanel() {
                 {g.name}
               </div>
               <div style={{ fontSize: 12, color: subC }}>
-                {Math.round(pct2)}% · {fmt(saved)} / {fmt(target)}
+                {Math.round(pct2)}% · {smallDecimalNode(fmt(saved), lang)} / {smallDecimalNode(fmt(target), lang)}
               </div>
             </div>
           </div>
@@ -6646,7 +6650,7 @@ export function HomePanel() {
         >
           💱 {L("Conversione")} {currency} → {secondaryCurrency}: 1 {sym} ={" "}
           {secSym}
-          {secRate.toFixed(4)} · {L("Tasso aggiornato in tempo reale")}
+          {smallDecimalNode(secRate.toFixed(4), lang)} · {L("Tasso aggiornato in tempo reale")}
         </div>
       )}
       {secondaryCurrency && !secRate && !secRateLoading && (
@@ -11585,7 +11589,7 @@ export function ConsulenteAIPanel() {
         >
           <StatCard
             title={L("Risparmio potenziale")}
-            value={fmt(totalSaving)}
+            value={smallDecimalNode(fmt(totalSaving), lang)}
             color="#1D9E75"
             bg="#e8f8f0"
             sub={fmt(totalSaving * 12) + "/anno"}
@@ -11783,7 +11787,7 @@ export function ConsulenteAIPanel() {
                           padding: "2px 7px",
                         }}
                       >
-                        +{fmt(a.savingMonthly)}/{L("mese")}
+                        +{smallDecimalNode(fmt(a.savingMonthly), lang)}/{L("mese")}
                       </span>
                     )}
                   </div>
@@ -14239,6 +14243,12 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   var lastAssistantLanguageResolutionRef = useRef<any>(null);
   var lastRealtimeAssistantTranscriptRef = useRef("");
   var pendingActionsRef = useRef<any[]>([]);
+  var operationDraftRef = useRef<any>(null);
+  var lastReferencedMovementRef = useRef<any>(null);
+  var assistantLiveContextRef = useRef<any>(c);
+  assistantLiveContextRef.current=c;
+  var realtimeInputItemsRef = useRef(new Map<string, any>());
+  var realtimeCompletedInputRef = useRef(new Set<string>());
   var nativeTextRef = useRef("");
   var nativeSessionDoneRef = useRef(false);
   var mountedRef = useRef(true);
@@ -14399,6 +14409,37 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     microphoneProcessedStreamRef.current=acquired;
     return acquired;
   }
+  function movementLiveContext(){return {...assistantLiveContextRef.current,lastReferencedMovement:lastReferencedMovementRef.current};}
+  function handleLocalMovementTurn(question:any,resolution:any){
+    if(activeAttachmentRef.current)return false;
+    var live=movementLiveContext(),language=resolution?.language||lastAssistantUserLanguageRef.current||lang;
+    if(isLatestMovementQuestion(question)||isReferencedMovementQuestion(question)){
+      var kind=/\b(entrata|income|revenu|einnahme|receita)\b/i.test(normalized(question))?"income":"expense";
+      var reference=lastReferencedMovementRef.current;
+      if(!isLatestMovementQuestion(question)&&(!reference||reference.ownerUid!==String(live.userId||"")))return false;
+      var useReference=!isLatestMovementQuestion(question)&&reference&&reference.ownerUid===String(live.userId||"");
+      if(useReference)kind=reference.kind;
+      var row=useReference?((kind==="income"?live.incomes:live.expenses)||[]).find(r=>String(r.id)===String(reference.id)):latestPersonalMovement(live,kind);
+      if(!row){var empty=movementUpdateError(language,"empty");appendMessage("assistant",empty);speak(empty,true);return true;}
+      lastReferencedMovementRef.current={kind:kind,id:row.id,ownerUid:String(live.userId||"")};
+      var category=(kind==="income"?live.incomeTypes:live.cats||[]).find(item=>String(item.id)===String(kind==="income"?row.type:row.catId)),method=(live.methods||[]).find(item=>String(item.id)===String(row.methodId??row.method));
+      var info=[movementLabel(language,kind==="income"?1:0)+": "+String(row.desc||""),movementLabel(language,2)+": "+fmtDate(row.date,live.dateFmt||"dmy"),movementLabel(language,3)+": "+fmtAmt(row.amount,live.sym||live.currency||"EUR",language),category?movementLabel(language,4)+": "+category.name:"",kind==="expense"?movementLabel(language,5)+": "+String(method?.name||row.methodName||""):""].filter(Boolean).join(". ")+".";
+      var requestedField=requestedMovementField(question);
+      if(requestedField){var fieldValue=requestedField==="category"?category?.name:requestedField==="payment"?String(method?.name||row.methodName||""):requestedField==="amount"?fmtAmt(row.amount,live.sym||live.currency||"EUR",language):requestedField==="date"?fmtDate(row.date,live.dateFmt||"dmy"):String(row.desc||"");var fieldIndex={category:4,payment:5,amount:3,date:2,description:6}[requestedField];info=movementLabel(language,fieldIndex)+": "+String(fieldValue||"—")+".";}
+      if(live.aiDataAccess==="full")appendMessage("assistant",info);else setAiChat(previous=>[...(previous||[]),{id:Date.now()+Math.random(),role:"assistant",text:info,rawText:info,source:"local-movement-read",localOnly:true}].slice(-80));
+      sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"system",content:[{type:"input_text",text:"The app has bound the latest personal "+kind+" locally. For a follow-up correction use update_movement with selection referenced. Call the tool silently; never announce preparation."}]}});
+      speak(live.aiDataAccess==="full"?info:movementLabel(language,13),true);setBusy(false);setAiLoading(false);return true;
+    }
+    if(lastReferencedMovementRef.current&&lastReferencedMovementRef.current.ownerUid===String(live.userId||"")){
+      var categoryChange=categoryCorrectionMentioned(question,lastReferencedMovementRef.current.kind==="income"?live.incomeTypes:live.cats);
+      if(categoryChange){var categoryReady=updatePendingActions([{action:"update_movement",selection:"referenced",categoryName:categoryChange.name}]);if(categoryReady)speak(movementUpdateSummary(pendingActionsRef.current[0],{...live,lang:language},true),true);setBusy(false);setAiLoading(false);return true;}
+    }
+    if(lastReferencedMovementRef.current&&isMovementCorrectionText(question)){
+      var method=methodMentioned(question,live.methods);
+      if(method){var ready=updatePendingActions([{action:"update_movement",selection:"referenced",methodName:method.name}]);if(ready)speak(movementUpdateSummary(pendingActionsRef.current[0],{...live,lang:language},true),true);setBusy(false);setAiLoading(false);return true;}
+    }
+    return false;
+  }
   function conciseTechnicalMessage(raw:any){var text=String(raw||"").replace(/\s+/g," ").trim();if(!text)return "";if(text.length>180)text=text.slice(0,177)+"…";return text;}
   function realtimeFailureMessage(error:any,phase?:string,status?:number,serverMessage?:string){
     var raw=conciseTechnicalMessage(serverMessage||((error&&error.message)||error)||"");
@@ -14418,7 +14459,8 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     var activeLanguage=lastAssistantUserLanguageRef.current||String(lang||"it");
     if(code==="no_match"||code==="no-match"||type==="no_match"||type==="no-match")return "";
     if(code.indexOf("rate")>=0||type.indexOf("rate")>=0)return assistantRuntimeText(activeLanguage,"rateLimited");
-    return assistantRuntimeText(activeLanguage,"repeatCloser");
+    if(["response_cancel_not_active","output_audio_buffer_clear_failed","conversation_already_has_active_response"].includes(code))return "";
+    return assistantRuntimeText(activeLanguage,"unavailable");
   }
   function sendRealtimeEvent(event:any){var dc=realtimeChannelRef.current;if(!dc||dc.readyState!=="open")return false;try{dc.send(JSON.stringify(event));return true;}catch(e){return false;}}
   function realtimeTurnDirective(resolution:any,extraInstruction?:string){
@@ -14426,6 +14468,9 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     var languageName=resolution&&resolution.languageName?String(resolution.languageName):assistantLanguageName(language);
     return [
       "This is a per-turn directive only. Keep the existing Realtime session instructions, finance context, privacy rules and fAInance tools authoritative.",
+      "Normally answer in 1 or 2 short sentences, at most 40 words. Expand only on explicit request. Ask only for missing required fields. Check supported tools before collecting operation details.",
+      "Answer informational questions with only the requested facts. Never offer changes, next steps or write actions unless the user requests them. A question about a category, payment, date or amount is a read request, never permission to modify it.",
+      "Call tools silently. Never say OK I will prepare, preparo la modifica, sto preparando, procedo, or other action announcements. Produce the proposal directly or ask only an unresolved required question.",
       "Reply exclusively in "+languageName+" for this turn.",
       "If the user asks to create, change, delete, update, open or configure something in fAInance and a supplied tool can do it, use the tool. Do not answer with a how-to, do not say the internal setting name is missing, and do not claim the app action cannot be performed.",
       String(extraInstruction||"").trim()
@@ -14443,15 +14488,36 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     if(!n)return false;
     var verb=/(^| )(imposta|attiva|disattiva|cambia|modifica|crea|aggiungi|registra|inserisci|elimina|cancella|rimuovi|apri|vai|aggiorna|salva|set|enable|disable|change|modify|create|add|record|insert|delete|remove|open|update|save|configura|configure|activar|desactivar|cambiar|crear|anadir|eliminar|abrir|actualizar|activer|desactiver|changer|creer|ajouter|supprimer|ouvrir|modifier|aktiviere|deaktiviere|andere|erstelle|hinzufuge|losche|offne|atualiza|cria|adiciona|remove|abre)( |$)/i.test(n);
     if(!verb)return false;
-    return /(modalita|tema|scur|dark|light|chiara|aspetto|appearance|impostaz|setting|spesa|uscita|expense|entrata|income|ricorrent|recurring|obiettiv|goal|alert|budget|patrimonio|asset|debito|credito|debt|credit|nota|appunto|note|lista|shopping|share|categoria|category|metodo|payment|storico|history|statistic|barra|valuta|currency|data|date|settimana|week|pulsante|button|sezione|section)/i.test(n);
+    return /(modalita|tema|scur|dark|light|chiara|aspetto|appearance|impostaz|setting|spesa|uscita|expense|entrata|income|regola|regole|rule|regla|regle|regel|ricorrent|recurring|obiettiv|goal|alert|budget|patrimonio|asset|debito|credito|debt|credit|nota|appunto|note|lista|shopping|share|categoria|category|metodo|payment|storico|history|statistic|barra|valuta|currency|data|date|settimana|week|pulsante|button|sezione|section)/i.test(n);
   }
-  function realtimeActionsFrom(value:any){var allowed=["open_section","create_expense","create_income","create_recurring","create_goal","update_goal_saved","create_alert","set_category_budget","create_debt_credit","update_debt_credit","delete_debt_credit","set_patrimonio_value","create_note","add_shopping_items","create_shopping_list","create_shopping_unit","create_share_project","create_share_expense","create_share_settlement","create_expense_category","create_payment_method","set_setting"];return (Array.isArray(value)?value:[]).map(function(raw){var a={...(raw||{})},signal=[lastVoiceUserRequestRef.current,a.summary,a.description,a.projectName,a.holder,a.entityName].join(" ").toLowerCase();if(a.action==="create_expense"&&/(spesa condivisa|spesa share|share expense|shared expense|split expense|divid|nel progetto|progetto share)/i.test(signal))a.action="create_share_expense";if(a.action==="update_debt_credit"&&/(elimina|cancella|rimuovi|chiudi definitivamente|delete|remove|erase)/i.test(signal)){a.action="delete_debt_credit";a.amount=null;a.initialAmount=null;}return a;}).filter(function(a){return a&&allowed.indexOf(String(a.action||""))>=0;}).slice(0,16).map(function(a){return {...a,action:String(a.action||""),summary:String(a.summary||"").slice(0,500),items:Array.isArray(a.items)?a.items.slice(0,100):[],shareParticipants:Array.isArray(a.shareParticipants)?a.shareParticipants.slice(0,50):[]};});}
-  function updatePendingActions(next:any[]){pendingActionsRef.current=Array.isArray(next)?next.map(a=>({...a,_ruleOriginRequest:a._ruleOriginRequest??lastVoiceUserRequestRef.current})):[];setPendingActions(pendingActionsRef.current);}
+  function realtimeActionsFrom(value:any){var allowed=["update_movement",...assistantRuleActions,"recategorize_expenses","open_section","create_expense","create_income","create_recurring","create_goal","update_goal_saved","create_alert","set_category_budget","create_debt_credit","update_debt_credit","delete_debt_credit","set_patrimonio_value","create_note","add_shopping_items","create_shopping_list","create_shopping_unit","create_share_project","create_share_expense","create_share_settlement","create_expense_category","create_payment_method","set_setting"];return (Array.isArray(value)?value:[]).map(function(raw){var a={...(raw||{})},signal=[lastVoiceUserRequestRef.current,a.summary,a.description,a.projectName,a.holder,a.entityName].join(" ").toLowerCase();if(a.action==="create_expense"&&/(spesa condivisa|spesa share|share expense|shared expense|split expense|divid|nel progetto|progetto share)/i.test(signal))a.action="create_share_expense";if(a.action==="update_debt_credit"&&/(elimina|cancella|rimuovi|chiudi definitivamente|delete|remove|erase)/i.test(signal)){a.action="delete_debt_credit";a.amount=null;a.initialAmount=null;}return a;}).filter(function(a){return a&&allowed.indexOf(String(a.action||""))>=0;}).slice(0,16).map(function(a){return {...a,action:String(a.action||""),summary:String(a.summary||"").slice(0,500),items:Array.isArray(a.items)?a.items.slice(0,100):[],shareParticipants:Array.isArray(a.shareParticipants)?a.shareParticipants.slice(0,50):[]};});}
+  function updatePendingActions(next:any[]){
+    var prepared:any[]=[];
+    var projectedFinance=c.financeEvolution;
+    var liveMovementContext=movementLiveContext();
+    for(var a of (Array.isArray(next)?next:[])){
+      if(a.action==="update_movement"){
+        var movementDraft=mergeMovementUpdate(operationDraftRef.current,a);operationDraftRef.current=movementDraft;
+        try{prepared.push(previewMovementUpdate(liveMovementContext,movementDraft));}
+        catch(error){pendingActionsRef.current=[];setPendingActions([]);var movementError=movementUpdateError(lastAssistantUserLanguageRef.current||lang,String(error&&error.code||"target"));appendMessage("assistant",movementError);speak(movementError,true);return false;}
+      }else if(assistantRuleActions.includes(a.action)){
+        var ruleDraft=mergeRuleRequest(operationDraftRef.current,a);operationDraftRef.current=ruleDraft;
+        try{var rulePreview=previewRuleRequest(projectedFinance,{...c,currentPlan},ruleDraft);projectedFinance=applyRuleRequest(projectedFinance,{...c,currentPlan},rulePreview);prepared.push({...rulePreview,_ownerUid:String(userId||"")});}
+        catch(error){pendingActionsRef.current=[];setPendingActions([]);var message=assistantRuleError(lastAssistantUserLanguageRef.current||lang,String(error&&error.code||error&&error.message||""));appendMessage("assistant",message);speak(message,true);return false;}
+      }else if(a.action==="recategorize_expenses"){
+        var draft=mergeRecategorization(operationDraftRef.current?.action==="recategorize_expenses"?operationDraftRef.current:null,a);operationDraftRef.current=draft;
+        try{var preview=previewRecategorization(c.expenses||[],cats||[],draft);prepared.push({...preview,_ownerUid:String(userId||"")});}
+        catch(error){var code=String(error&&error.code||"conflict");if(!["missingDescription","missingCategory","invalidCategory","invalidMode","invalidDate"].includes(code))operationDraftRef.current=null;
+          pendingActionsRef.current=[];setPendingActions([]);var message=recategorizationText(lastAssistantUserLanguageRef.current||lang,code);appendMessage("assistant",message);speak(message,true);return false;}
+      }else prepared.push({...a,_ruleOriginRequest:a._ruleOriginRequest??lastVoiceUserRequestRef.current});
+    }
+    pendingActionsRef.current=prepared;setPendingActions(prepared);return true;
+  }
   function sendRealtimeToolResult(callId:string,payload:any,createResponse?:boolean){var sent=sendRealtimeEvent({type:"conversation.item.create",item:{type:"function_call_output",call_id:callId,output:JSON.stringify(payload||{})}});if(sent&&createResponse!==false){var turn=assistantTurnRef.current;setTimeout(function(){if(isCurrentAssistantTurn(turn))sendRealtimeModelResponse(currentVoiceLanguageResolution());},20);}}
   async function handleRealtimeFunctionCall(event:any){var callId=String(event&&event.call_id||"");if(!callId||realtimeHandledCallsRef.current.has(callId))return;realtimeHandledCallsRef.current.add(callId);var args:any={};try{args=JSON.parse(String(event.arguments||"{}"));}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"invalidArguments")});return;}var name=String(event.name||"");
-    if(name==="propose_fainance_actions"){var actions=realtimeActionsFrom(args.actions),opens=actions.filter(function(a){return a.action==="open_section";}),writes=actions.filter(function(a){return a.action!=="open_section";});if(writes.length){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});var preamble=lastRealtimeAssistantTranscriptRef.current;lastRealtimeAssistantTranscriptRef.current="";if(preamble)setAiChat(function(p){var list=[...(p||[])];var last=list[list.length-1];if(last&&last.role==="assistant"&&last.source==="voice-assistant"&&String(last.text||"").trim()===preamble)list.pop();return list;});realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");setSpeaking(false);setBusy(false);updatePendingActions(writes);sendRealtimeToolResult(callId,{status:"confirmation_required",summaries:writes.map(actionSummary),uiConfirmation:true},false);return;}if(opens.length){sendRealtimeToolResult(callId,{status:"completed",result:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"sectionOpened")},false);setTimeout(function(){openSection(opens[0]);},80);return;}sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"noValidAction")});return;}
-    if(name==="confirm_pending_actions"){var pending=pendingActionsRef.current.slice();if(!pending.length){sendRealtimeToolResult(callId,{status:"nothing_to_confirm"});return;}var results:any[]=[];try{pending.forEach(function(a){var r=executeAction(a);if(r)results.push(r);});updatePendingActions([]);sendRealtimeToolResult(callId,{status:"completed",results:results});}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error")});}return;}
-    if(name==="cancel_pending_actions"){updatePendingActions([]);sendRealtimeToolResult(callId,{status:"cancelled"});return;}
+    if(name==="propose_fainance_actions"){var actions=realtimeActionsFrom(args.actions),opens=actions.filter(function(a){return a.action==="open_section";}),writes=actions.filter(function(a){return a.action!=="open_section";});if(writes.length){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});var preamble=lastRealtimeAssistantTranscriptRef.current;lastRealtimeAssistantTranscriptRef.current="";if(preamble)setAiChat(function(p){var list=[...(p||[])];var last=list[list.length-1];if(last&&last.role==="assistant"&&last.source==="voice-assistant"&&String(last.text||"").trim()===preamble)list.pop();return list;});realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");setSpeaking(false);setBusy(false);var ready=updatePendingActions(writes);sendRealtimeToolResult(callId,{status:ready?"confirmation_required":"clarification_required",summaries:pendingActionsRef.current.map(a=>a.action==="update_movement"?movementUpdateSummary(a,{...movementLiveContext(),lang:lastAssistantUserLanguageRef.current||lang},true):assistantRuleActions.includes(a.action)?ruleRequestSummary(a,{...c,lang:lastAssistantUserLanguageRef.current||lang},true):actionSummary(a)),operationDraft:operationDraftRef.current,uiConfirmation:ready},false);if(ready&&pendingActionsRef.current.length===1){var pendingPreview=pendingActionsRef.current[0];if(pendingPreview.action==="update_movement")speak(movementUpdateSummary(pendingPreview,{...movementLiveContext(),lang:lastAssistantUserLanguageRef.current||lang},true),true);else if(pendingPreview.action==="recategorize_expenses")speak(actionSummary(pendingPreview),true);else if(assistantRuleActions.includes(pendingPreview.action))speak(ruleRequestSummary(pendingPreview,{...c,lang:lastAssistantUserLanguageRef.current||lang},true),true);}return;}if(opens.length){sendRealtimeToolResult(callId,{status:"completed",result:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"sectionOpened")},false);setTimeout(function(){openSection(opens[0]);},80);return;}sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"noValidAction")});return;}
+    if(name==="confirm_pending_actions"){if(!isYes(lastVoiceUserRequestRef.current)){sendRealtimeToolResult(callId,{status:"confirmation_required"},false);return;}var pending=pendingActionsRef.current.slice();if(!pending.length){sendRealtimeToolResult(callId,{status:"nothing_to_confirm"});return;}var results:any[]=[];try{pending.forEach(function(a){var r=executeAction(a);if(r)results.push(r);});updatePendingActions([]);sendRealtimeToolResult(callId,{status:"completed",results:results});}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error")});}return;}
+    if(name==="cancel_pending_actions"){operationDraftRef.current=null;updatePendingActions([]);sendRealtimeToolResult(callId,{status:"cancelled"});return;}
     sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"toolUnavailable")});
   }
   function handleRealtimeEvent(raw:any){var event:any=raw;try{if(typeof raw==="string")event=JSON.parse(raw);}catch(e){return;}if(!event||!event.type)return;var type=String(event.type);
@@ -14471,12 +14537,14 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     if(eventResponseId&&realtimeResponseTurnsRef.current.get(eventResponseId)!==assistantTurnRef.current)return;
     if(type==="error"&&String(event.error&&event.error.event_id||"").startsWith("fainance_interrupt_")&&
       ["response_cancel_not_active","output_audio_buffer_clear_failed"].includes(String(event.error&&event.error.code||"")))return;
-    if(type==="session.created"){setRealtimeStatus("connected");clearVoiceNotice();if(!realtimeManualResponseConfiguredRef.current){realtimeManualResponseConfiguredRef.current=true;sendRealtimeEvent(buildRealtimeManualResponseSessionUpdate());}return;}
+    if(type==="session.created"){setRealtimeStatus("connected");clearVoiceNotice();if(!realtimeManualResponseConfiguredRef.current){realtimeManualResponseConfiguredRef.current=true;sendRealtimeEvent(buildRealtimeManualResponseSessionUpdate({closeMicrophone:nativePlatform(),lockedLanguage:assistantLanguageStateRef.current.mode==="locked"?assistantLanguageStateRef.current.activeLanguage:null}));}return;}
     if(type==="session.updated"){setRealtimeStatus("connected");clearVoiceNotice();return;}
     if(type==="input_audio_buffer.speech_started"){interruptAssistantTurn();clearVoiceNotice();realtimeUserDraftRef.current="";setRealtimeUserDraft("");setVoiceListening(true);setSpeaking(false);setBusy(false);return;}
     if(type==="input_audio_buffer.speech_stopped"){setVoiceListening(false);setBusy(true);return;}
-    if(type==="conversation.item.input_audio_transcription.delta"){var ud=String(event.delta||"");realtimeUserDraftRef.current+=ud;return;}
-    if(type==="conversation.item.input_audio_transcription.completed"){var ut=String(event.transcript||realtimeUserDraftRef.current||"").trim();realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();if(ut){var probs=Array.isArray(event.logprobs)?event.logprobs:[];var avgLogProb=probs.length?probs.reduce(function(sum,p){var lp=Number(p&&p.logprob);return sum+(Number.isFinite(lp)?lp:-4);},0)/probs.length:null;var confidence=avgLogProb===null?null:Math.exp(Math.max(-12,Math.min(0,avgLogProb)));var turnResolution:any=resolveVoiceAssistantTurn(ut);var turnLanguage=turnResolution.language;lastVoiceUserRequestRef.current=ut;appendVoiceMessage(ut,confidence);if(pendingActionsRef.current.length&&isYes(ut)){confirmPending("");return;}if(pendingActionsRef.current.length&&isNo(ut)){cancelPending("");return;}var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(ut,turnLanguage);var check=normalized(ut);var hearingCheck=/^(mi senti|mi stai sentendo|riesci a sentirmi|mi ascolti|ci sei|can you hear me|do you hear me|tu m'entends|vous m'entendez|me escuchas|puedes oirme|kannst du mich horen|consegues ouvir-me|slyszysz mnie|hoor je mij|ma auzi|με ακους)[?.! ]*$/.test(check);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else if(localHelpAnswer)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with the following verified fAInance help text, without adding anything:\n"+localHelpAnswer);else{if(consumePlanFeature)consumePlanFeature("aiReply",1);if(hearingCheck)sendRealtimeModelResponse(turnResolution,"Reply exactly and only: "+assistantHearingReply(turnLanguage));else if(activeAttachmentRef.current||looksLikeDirectAppAction(ut)){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});callAssistant(ut,turnResolution);}else sendRealtimeModelResponse(turnResolution);}}return;}
+    if(type==="input_audio_buffer.committed"){var itemId=String(event.item_id||"");if(itemId){if(realtimeInputItemsRef.current.size>=64)realtimeInputItemsRef.current.delete(realtimeInputItemsRef.current.keys().next().value);realtimeInputItemsRef.current.set(itemId,{turn:assistantTurnRef.current,text:""});}return;}
+    if(type==="conversation.item.input_audio_transcription.delta"){var id=String(event.item_id||"");if(!id||realtimeCompletedInputRef.current.has(id))return;var item=realtimeInputItemsRef.current.get(id)||{turn:assistantTurnRef.current,text:""};item.text+=String(event.delta||"");realtimeInputItemsRef.current.set(id,item);return;}
+    if(type==="conversation.item.input_audio_transcription.failed"){if(event.item_id&&realtimeCompletedInputRef.current.has(String(event.item_id)))return;var failedItem=realtimeInputItemsRef.current.get(String(event.item_id||""));realtimeInputItemsRef.current.delete(String(event.item_id||""));if(failedItem&&failedItem.turn!==assistantTurnRef.current)return;setBusy(false);setVoiceListening(false);var failureNotice=realtimeServerFailure(event.error||{});if(failureNotice)showTemporaryVoiceNotice(failureNotice,4500);return;}
+    if(type==="conversation.item.input_audio_transcription.completed"){var id=String(event.item_id||""),item=id?realtimeInputItemsRef.current.get(id):null;if(id&&realtimeCompletedInputRef.current.has(id))return;if(id){if(realtimeCompletedInputRef.current.size>=128)realtimeCompletedInputRef.current.delete(realtimeCompletedInputRef.current.values().next().value);realtimeCompletedInputRef.current.add(id);realtimeInputItemsRef.current.delete(id);}if(item&&item.turn!==assistantTurnRef.current)return;var ut=String(event.transcript||(item&&item.text)||"").trim();if(!ut||isVoicePromptEcho(ut)){if(id)sendRealtimeEvent({type:"conversation.item.delete",item_id:id});realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();setBusy(false);setVoiceListening(false);return;}realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();if(ut){var probs=Array.isArray(event.logprobs)?event.logprobs:[];var avgLogProb=probs.length?probs.reduce(function(sum,p){var lp=Number(p&&p.logprob);return sum+(Number.isFinite(lp)?lp:-4);},0)/probs.length:null;var confidence=avgLogProb===null?null:Math.exp(Math.max(-12,Math.min(0,avgLogProb)));var turnResolution:any=resolveVoiceAssistantTurn(ut);var turnLanguage=turnResolution.language;lastVoiceUserRequestRef.current=ut;appendVoiceMessage(ut,confidence);if(pendingActionsRef.current.length&&isYes(ut)){confirmPending("");return;}if((pendingActionsRef.current.length||operationDraftRef.current)&&isNo(ut)){cancelPending("");return;}var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(ut,turnLanguage);var check=normalized(ut);var hearingCheck=/^(mi senti|mi stai sentendo|riesci a sentirmi|mi ascolti|ci sei|can you hear me|do you hear me|tu m'entends|vous m'entendez|me escuchas|puedes oirme|kannst du mich horen|consegues ouvir-me|slyszysz mnie|hoor je mij|ma auzi|με ακους)[?.! ]*$/.test(check);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else if(localHelpAnswer)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with the following verified fAInance help text, without adding anything:\n"+localHelpAnswer);else{if(consumePlanFeature)consumePlanFeature("aiReply",1);if(handleLocalMovementTurn(ut,turnResolution))return;else if(hearingCheck)sendRealtimeModelResponse(turnResolution,"Reply exactly and only: "+assistantHearingReply(turnLanguage));else if(operationDraftRef.current||activeAttachmentRef.current||isMovementCorrectionText(ut)||looksLikeDirectAppAction(ut)){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});callAssistant(ut,turnResolution);}else sendRealtimeModelResponse(turnResolution);}}return;}
     if(type==="response.output_audio_transcript.delta"){var ad=String(event.delta||"");realtimeAssistantDraftRef.current+=ad;setRealtimeAssistantDraft(realtimeAssistantDraftRef.current);return;}
     if(type==="response.output_audio_transcript.done"){clearVoiceNotice();var at=String(event.transcript||realtimeAssistantDraftRef.current||"").trim();realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");if(at){lastRealtimeAssistantTranscriptRef.current=at;appendMessage("assistant",at);}return;}
     if(type==="output_audio_buffer.started"){
@@ -14514,7 +14582,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     try{var outSource=realtimeAudioSourceRef.current;if(outSource)outSource.disconnect();}catch(e){}realtimeAudioSourceRef.current=null;
     try{var outGain=realtimeGainRef.current;if(outGain)outGain.disconnect();}catch(e){}realtimeGainRef.current=null;
     try{var outCtx=realtimeAudioContextRef.current;if(outCtx&&outCtx.state!=="closed")Promise.resolve(outCtx.close()).catch(function(){});}catch(e){}realtimeAudioContextRef.current=null;
-    realtimeAssistantDraftRef.current="";realtimeUserDraftRef.current="";realtimeManualResponseConfiguredRef.current=false;setRealtimeAssistantDraft("");setRealtimeUserDraft("");setRealtimeStatus(nextStatus||"idle");setRealtimeMicEnabled(true);setVoiceListening(false);setSpeaking(false);setBusy(false);
+    realtimeAssistantDraftRef.current="";realtimeUserDraftRef.current="";realtimeInputItemsRef.current.clear();realtimeCompletedInputRef.current.clear();realtimeManualResponseConfiguredRef.current=false;setRealtimeAssistantDraft("");setRealtimeUserDraft("");setRealtimeStatus(nextStatus||"idle");setRealtimeMicEnabled(true);setVoiceListening(false);setSpeaking(false);setBusy(false);
   }
   
   async function connectRealtime(){
@@ -14532,7 +14600,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       await ensureRealtimeMicrophonePermission();
       var mediaPromise=(async function(){try{var supported:any=navigator.mediaDevices.getSupportedConstraints?navigator.mediaDevices.getSupportedConstraints():{};var iosNative=nativePlatformName()==="ios";var audioConstraints:any=iosNative?{echoCancellation:true,noiseSuppression:true,autoGainControl:true}:{echoCancellation:{ideal:true},noiseSuppression:{ideal:true},autoGainControl:{ideal:true},channelCount:{ideal:1},sampleRate:{ideal:48000},sampleSize:{ideal:16},googEchoCancellation:true,googNoiseSuppression:true,googHighpassFilter:true,googTypingNoiseDetection:true,googAutoGainControl:true};if(!iosNative&&supported.voiceIsolation)audioConstraints.voiceIsolation={ideal:true};var acquired=await navigator.mediaDevices.getUserMedia({audio:audioConstraints,video:false});try{acquired.getAudioTracks().forEach(function(track:any){track.enabled=true;try{track.contentHint="speech";}catch(e){}if(!iosNative){try{var extra:any={echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1};if(supported.voiceIsolation)extra.voiceIsolation=true;Promise.resolve(track.applyConstraints(extra)).catch(function(){});}catch(e){}}});}catch(e){}realtimeStreamRef.current=acquired;return await prepareNoiseFilteredMicrophone(acquired);}catch(mediaError){var mediaName=String((mediaError&&mediaError.name)||"").toLowerCase(),mediaMessage=String((mediaError&&mediaError.message)||"").toLowerCase();if(mediaName.indexOf("notallowed")>=0||mediaName.indexOf("permission")>=0||mediaMessage.indexOf("permission")>=0||mediaMessage.indexOf("denied")>=0)throw new Error(realtimePermissionDeniedMessage());throw mediaError;}})();
       phase="session";
-      var sessionPromise=(async function(){var realtimeSessionPayload=buildRealtimeSessionRequest({interfaceLanguage:lang||"it",languageState:assistantLanguageStateRef.current,aiDataAccess:aiDataAccess||"summary",financeContext:contextForRealtime,chatHistory:(aiChat||[]).slice(-8).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var response=await authenticatedAiFetch(AI_REALTIME_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify(realtimeSessionPayload)});var payload:any={};try{payload=await response.json();}catch(e){}if(response.ok&&payload.value)return payload;statusCode=response.status;serverMessage=String((payload&&payload.error)||"");var err:any=new Error(serverMessage||("Errore sessione "+response.status));err.httpStatus=response.status;err.serverMessage=serverMessage;throw err;})();
+      var sessionPromise=(async function(){var realtimeSessionPayload=buildRealtimeSessionRequest({interfaceLanguage:lang||"it",languageState:assistantLanguageStateRef.current,aiDataAccess:aiDataAccess||"summary",financeContext:contextForRealtime,chatHistory:(aiChat||[]).filter(m=>!m.localOnly).slice(-8).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var response=await authenticatedAiFetch(AI_REALTIME_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify(realtimeSessionPayload)});var payload:any={};try{payload=await response.json();}catch(e){}if(response.ok&&payload.value)return payload;statusCode=response.status;serverMessage=String((payload&&payload.error)||"");var err:any=new Error(serverMessage||("Errore sessione "+response.status));err.httpStatus=response.status;err.serverMessage=serverMessage;throw err;})();
       var peerPromise=(async function(){var stream=await mediaPromise;phase="webrtc";var pc=new RTCPeerConnection();realtimePeerRef.current=pc;pc.ontrack=function(e){var remote=(e.streams&&e.streams[0])?e.streams[0]:new MediaStream([e.track]);attachRealtimeAudioStream(remote).catch(function(){showTemporaryVoiceNotice(assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"audioFailed"),6200);});};pc.onconnectionstatechange=function(){var st=String(pc.connectionState||"");if(st==="connected"){setRealtimeStatus("connected");setBusy(false);setVoiceError("");}else if(st==="failed"){setRealtimeStatus("error");showTemporaryVoiceNotice(assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"unavailable"),6200);}else if(st==="disconnected"){showTemporaryVoiceNotice(assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"interrupted"),5200);}};stream.getAudioTracks().forEach(function(track){pc.addTrack(track,stream);});var dc=pc.createDataChannel("oai-events");realtimeChannelRef.current=dc;realtimeHandledCallsRef.current=new Set();dc.onopen=function(){if(connectionTimer)clearTimeout(connectionTimer);realtimeConnectionAbortRef.current=null;setRealtimeStatus("connected");setBusy(false);setVoiceError("");};dc.onmessage=function(ev){handleRealtimeEvent(ev.data);};dc.onerror=function(ev:any){setRealtimeStatus("error");showTemporaryVoiceNotice(realtimeFailureMessage(new Error(conciseTechnicalMessage(ev&&ev.message)||"Data channel error"),"datachannel"),6200);};dc.onclose=function(){if(mountedRef.current&&voiceModal)setRealtimeStatus(function(current){return current==="error"?current:"idle";});};var offer=await pc.createOffer();await pc.setLocalDescription(offer);return{pc:pc,offer:offer};})();
       var pair=await Promise.all([peerPromise,sessionPromise]),peerData:any=pair[0],tokenData:any=pair[1];
       phase="webrtc";
@@ -14545,7 +14613,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     }
   }
   function toggleRealtimeMicrophone(){var stream=realtimeStreamRef.current;if(!stream)return;var next=!realtimeMicEnabled;stream.getAudioTracks().forEach(function(t){t.enabled=next;});try{var processed=microphoneProcessedStreamRef.current;if(processed)processed.getAudioTracks().forEach(function(t){t.enabled=next;});}catch(e){}setRealtimeMicEnabled(next);setVoiceListening(false);}
-  function sendRealtimeText(q:string,providedResolution?:any){var clean=String(q||"");var turnResolution:any=providedResolution||resolveVoiceAssistantTurn(clean);lastVoiceUserRequestRef.current=clean;if(looksLikeDirectAppAction(clean)){callAssistant(clean,turnResolution);return true;}if(!sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:clean}]}}))return false;var languageControlReply=assistantLanguageControlReply(turnResolution);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else sendRealtimeModelResponse(turnResolution);setBusy(true);return true;}
+  function sendRealtimeText(q:string,providedResolution?:any){var clean=String(q||"");var turnResolution:any=providedResolution||resolveVoiceAssistantTurn(clean);lastVoiceUserRequestRef.current=clean;if(handleLocalMovementTurn(clean,turnResolution))return true;if(operationDraftRef.current||isMovementCorrectionText(clean)||looksLikeDirectAppAction(clean)){callAssistant(clean,turnResolution);return true;}if(!sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:clean}]}}))return false;var languageControlReply=assistantLanguageControlReply(turnResolution);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else sendRealtimeModelResponse(turnResolution);setBusy(true);return true;}
   function isCurrentAssistantTurn(turn){return mountedRef.current&&turn===assistantTurnRef.current;}
   function interruptAssistantTurn(){
     assistantTurnRef.current+=1;
@@ -14725,6 +14793,10 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     var accessPolicy = assistantDataAccessPolicy(aiDataAccess);
     var ctx: any = {
       app: "fAInance",
+      operationDraft: operationDraftRef.current,
+      agentCapabilitiesVersion: 4,
+      lastReferencedMovement: lastReferencedMovementRef.current?.ownerUid===String(assistantLiveContextRef.current.userId||"")?{kind:lastReferencedMovementRef.current.kind,selected:true}:null,
+      automaticRules: (c.financeEvolution?.rules||[]).filter(r=>r.kind==="automatic-v1").map(r=>aiDataAccess==="full"?structuredClone(r):{id:r.id,name:r.name,enabled:r.enabled,trigger:r.trigger,revision:r.revision,conditions:(r.conditions||[]).map((condition,index)=>({index,field:condition.field,operator:condition.operator})),actions:(r.actions||[]).map(a=>({field:a.field,kind:a.kind}))}),
       accountingPeriod: { ...accountingPeriod.forKey(curMonthKey), ...accountingPeriod.settings },
       today: todayStr(),
       language: lang || "it",
@@ -15058,6 +15130,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
             description: x.desc || "",
             category: cat ? cat.name : "",
             method: met ? met.name : "",
+            id: x.id,createdAt: x.createdAt,
           };
         }),
         incomes: (incomes || []).slice(0, 300).map(function (x) {
@@ -15107,6 +15180,9 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       desc:a.description||cat.name,date:validISODate(a.date,false),rateizzato:!!a.rateizzato,rate:Math.max(1,Number(a.rate)||1)};
   }
   function actionSummary(a){
+    if(a?.action==="update_movement")return movementUpdateSummary(a,{...movementLiveContext(),lang:lastAssistantUserLanguageRef.current||lang});
+    if(a&&assistantRuleActions.includes(a.action))return ruleRequestSummary(a,{...c,lang:lastAssistantUserLanguageRef.current||lang});
+    if(a&&a.action==="recategorize_expenses")return recategorizationText(lastAssistantUserLanguageRef.current||lang,"preview",{count:a.changed,matched:a.matched,filter:a.descriptionFilter,category:a.categoryName,matchMode:a.matchMode});
     if(a&&a.action==="create_expense"){
       var expenseCat=String(a.categoryName||((cats||[]).find(function(x){return String(x.id)===String(defaultExpenseCat);})||{}).name||"Predefinita");
       var expenseMethod=String(a.methodName||((methods||[]).find(function(x){return String(x.id)===String(defaultExpenseMethod);})||{}).name||"Predefinito");
@@ -15143,6 +15219,23 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     }
   }
   function executeActionUntracked(a){
+    if(a.action==="update_movement"){
+      var live=movementLiveContext(),setter=a.movementKind==="income"?live.setIncomes:live.setExpenses;
+      setter(current=>applyMovementUpdate(current,live,a));operationDraftRef.current=null;
+      lastReferencedMovementRef.current={kind:a.movementKind,id:a.movementId,ownerUid:String(live.userId||"")};
+      return assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");
+    }
+    if(assistantRuleActions.includes(a.action)){
+      if(a._ownerUid!==String(userId||""))throw Object.assign(new Error("RULE_CONFLICT"),{code:"RULE_CONFLICT"});
+      c.setFinanceEvolution(previous=>applyRuleRequest(previous,{...c,currentPlan},a));operationDraftRef.current=null;
+      return assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");
+    }
+    if(a.action==="recategorize_expenses"){
+      if(a._ownerUid!==String(userId||""))throw Object.assign(new Error("conflict"),{code:"conflict"});
+      var count=0;c.setExpenses(function(current){var result=applyRecategorization(current,cats,a);count=result.count;return result.rows;});
+      operationDraftRef.current=null;
+      return recategorizationText(lastAssistantUserLanguageRef.current||lang,"done",{count:count,category:a.categoryName});
+    }
     var shareSignal=[a&&a.summary,a&&a.description,a&&a.projectName].join(" ").toLowerCase();if(a&&a.action==="create_expense"&&/(spesa condivisa|spesa share|share expense|shared expense|split expense|divid|nel progetto|progetto share)/i.test(shareSignal))return executeAction({...a,action:"create_share_expense"});
     if(a.action==="create_expense"){var ok=addExpenses([assistantExpenseDraft(a)],"assistant");if(ok===false)throw new Error("Non è stato possibile aggiungere l’uscita.");return actionSummary(a);}
     if(a.action==="create_income"){var amount2=Number(a.amount)||0;if(amount2<=0)throw new Error("Importo non valido.");var it=findNamed(incomeTypes,a.incomeTypeName,defaultIncomeType);if(!it)throw new Error("Tipo di entrata non trovato o ambiguo.");var ok2=addIncomes([{id:Date.now()+Math.random(),amount:amount2,type:it.id,_ruleDefaultFields:[!a.incomeTypeName?"type":null,!a.description?"desc":null].filter(Boolean),desc:a.description||it.name,date:validISODate(a.date,false),rateizzato:!!a.rateizzato,rate:Math.max(1,Number(a.rate)||1)}],"assistant");if(ok2===false)throw new Error("Non è stato possibile aggiungere l’entrata.");return actionSummary(a);}
@@ -15200,11 +15293,12 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     return "";
   }
   function openSection(a){var sec=normalized(a.section||"").replace(/ /g,"");var map:any={home:"home",expenses:"spese",expense:"spese",uscite:"spese",incomes:"spese",income:"spese",entrate:"spese",recurring:"tools",ricorrenti:"tools",automaticrules:"tools",regoleautomatiche:"tools",history:"history",storico:"history",statistics:"stats",statistiche:"stats",budget:"budget",goals:"goals",obiettivi:"goals",alerts:"alerts",alert:"alerts",patrimonio:"patrimonio",assets:"patrimonio",debtcredits:"debtCredits",debiti:"debtCredits",crediti:"debtCredits",shopping:"shopping",spesa:"shopping",share:"share",appunti:"appunti",notes:"appunti",settings:"settings",impostazioni:"settings",ai:"consulenteAI",assistant:"voice"};var target=map[sec]||"home";if(target==="voice")return;setTab(target);setSettingsPage(null);setMobileMenu(false);if(target==="spese"){setSpeseSubTab("add");setAddType(sec==="incomes"||sec==="income"||sec==="entrate"?"income":"expense");setAddSubTab("single");}if(target==="tools"&&(sec==="recurring"||sec==="ricorrenti"||sec==="automaticrules"||sec==="regoleautomatiche")){setTimeout(function(){window.dispatchEvent(new CustomEvent("fainance:open-tool",{detail:{page:(sec==="automaticrules"||sec==="regoleautomatiche")?"automaticRules":"recurring"}}));},0);}if(target==="history")setHistoryTab("expenses");setVoiceModal(false);}
-  function isYes(q){return /^(si|sì|ok|okay|confermo|conferma|vai|procedi|yes|confirm|dale|vale|oui|ja|sim|tak|da|ναι)\b/i.test(String(q||"").trim());}
-  function isNo(q){return /^(no|annulla|annullo|cancel|cancelar|non|nein|não|nie|nu|όχι)\b/i.test(String(q||"").trim());}
-  function confirmPending(userText){if(String(userText||"").trim())appendMessage("user",userText);try{pendingActions.forEach(function(a){executeAction(a);});updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");appendMessage("assistant",msg);speak(msg,true);}catch(e){var msg2=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error");appendMessage("assistant",msg2);speak(msg2,true);}}
-  function cancelPending(userText){appendMessage("user",userText||V.cancel);updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"cancelled");appendMessage("assistant",msg);speak(msg,true);}
+  function isYes(q){return /^(si|sì|ok|okay|confermo|conferma|vai|procedi|yes|confirm|dale|vale|oui|ja|sim|tak|da|ναι)[.!?\s]*$/i.test(String(q||"").trim());}
+  function isNo(q){return /^(no|annulla|annullo|cancel|cancelar|nein|não|nie|nu|όχι)[.!?\s]*$/i.test(String(q||"").trim());}
+  function confirmPending(userText){if(String(userText||"").trim())appendMessage("user",userText);var actions=pendingActionsRef.current.slice();if(!actions.length)return;pendingActionsRef.current=[];setPendingActions([]);try{var results=actions.map(function(a){return executeAction(a);});operationDraftRef.current=null;var msg=actions.length===1&&actions[0].action==="recategorize_expenses"?results[0]:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");appendMessage("assistant",msg);speak(msg,true);}catch(e){var msg2=actions.some(a=>a.action==="update_movement")?movementUpdateError(lastAssistantUserLanguageRef.current||lang,String(e&&e.code||"conflict")):actions.some(a=>assistantRuleActions.includes(a.action))?assistantRuleError(lastAssistantUserLanguageRef.current||lang,String(e&&e.code||e&&e.message||"")):e&&e.code?recategorizationText(lastAssistantUserLanguageRef.current||lang,String(e.code)):assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error");appendMessage("assistant",msg2);speak(msg2,true);}}
+  function cancelPending(userText){operationDraftRef.current=null;appendMessage("user",userText||V.cancel);updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"cancelled");appendMessage("assistant",msg);speak(msg,true);}
   async function callAssistant(q,providedResolution?:any){
+    if(handleLocalMovementTurn(q,providedResolution||currentVoiceLanguageResolution()))return;
     var turn=assistantTurnRef.current;
     var ctrl=new AbortController();assistantRequestAbortRef.current=ctrl;
     var timer=setTimeout(function(){ctrl.abort();},70000);
@@ -15216,7 +15310,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       var token="";if(fbAuth.currentUser)token=await fbAuth.currentUser.getIdToken();
       if(!isCurrentAssistantTurn(turn))return;
       var headers:any={"Content-Type":"application/json"};if(token)headers.Authorization="Bearer "+token;
-      var assistantRequest=buildAssistantRequestPayload({question:q,languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(),chatHistory:(aiChat||[]).filter(function(m){return m&&(m.role==="user"||m.role==="assistant");}).slice(-16).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
+      var assistantRequest=buildAssistantRequestPayload({question:q,languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(),chatHistory:(aiChat||[]).filter(function(m){return m&&!m.localOnly&&(m.role==="user"||m.role==="assistant");}).slice(-16).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
       var attachment=activeAttachmentRef.current;
       if(attachment){
         if(attachment.isImage){requestPayload.imageDataUrl=attachment.dataUrl;requestPayload.imageName=attachment.name||"allegato.jpg";}
@@ -15228,11 +15322,11 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       if(!isCurrentAssistantTurn(turn))return;
       if(!res.ok){var assistantHttpError:any=new Error((data&&data.error)||("Il servizio AI ha restituito l’errore "+res.status+"."));assistantHttpError.httpStatus=res.status;throw assistantHttpError;}
       var answer=String((data&&data.answer)||"").trim()||assistantRuntimeText(assistantLang,"noAnswer");
-      if(assistantAnswerNeedsTranslation(answer,assistantLang)){try{var translateResponse=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(buildAssistantTranslationPayload(answer,assistantLang))});var translateData:any=await translateResponse.json();var corrected=String((translateData&&translateData.answer)||"").trim();if(corrected)answer=corrected;}catch(e){}}answer=compactAssistantAnswer(answer,assistantLang,1400);
+      if(assistantAnswerNeedsTranslation(answer,assistantLang)){try{var translateResponse=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(buildAssistantTranslationPayload(answer,assistantLang))});var translateData:any=await translateResponse.json();var corrected=String((translateData&&translateData.answer)||"").trim();if(corrected)answer=corrected;}catch(e){}}answer=stripPreparationAnnouncements(compactAssistantAnswer(answer,assistantLang,600))||assistantRuntimeText(assistantLang,"noValidAction");
       if(!isCurrentAssistantTurn(turn))return;
       var actions=realtimeActionsFrom(data&&data.actions).filter(function(a){return a&&a.action&&a.action!=="none";}),openActions=actions.filter(function(a){return a.action==="open_section";}),writeActions=actions.filter(function(a){return a.action!=="open_section";});
       finishAnalyticsFlow("ai_request", "completed");
-      if(writeActions.length){updatePendingActions(writeActions);return;}
+      if(writeActions.length){var ready=updatePendingActions(writeActions);if(ready&&pendingActionsRef.current.length===1){var pendingPreview=pendingActionsRef.current[0];if(pendingPreview.action==="update_movement")speak(movementUpdateSummary(pendingPreview,{...movementLiveContext(),lang:lastAssistantUserLanguageRef.current||lang},true),true);else if(pendingPreview.action==="recategorize_expenses")speak(actionSummary(pendingPreview),true);else if(assistantRuleActions.includes(pendingPreview.action))speak(ruleRequestSummary(pendingPreview,{...c,lang:lastAssistantUserLanguageRef.current||lang},true),true);}return;}
       appendMessage("assistant",answer);
       if(openActions.length){setToast({text:answer,type:"success",icon:"✨"});openSection(openActions[0]);return;}
       speak(answer,true);
@@ -15243,7 +15337,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       var msg=realtimeFailureMessage(e,"assistant",Number((e&&e.httpStatus)||0));setVoiceError(msg);appendMessage("assistant",msg);
     }finally{clearTimeout(timer);if(assistantRequestAbortRef.current===ctrl)assistantRequestAbortRef.current=null;if(isCurrentAssistantTurn(turn)){setBusy(false);setAiLoading(false);}}
   }
-  function sendMessage(forced){var q=String(forced!==undefined?forced:input||"").trim();if(!q||documentLoading||realtimeStatus==="connecting")return;interruptAssistantTurn();setInput("");stopListening(false);if(pendingActions.length&&isYes(q)){confirmPending(q);return;}if(pendingActions.length&&isNo(q)){cancelPending(q);return;}var turnResolution:any=resolveVoiceAssistantTurn(q);var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(q,turnResolution.language);if(localHelpAnswer){appendMessage("user",q);appendMessage("assistant",localHelpAnswer);speak(localHelpAnswer,true);return;}if(realtimeStatus==="connected"){appendMessage("user",q);if(!languageControlReply&&consumePlanFeature)consumePlanFeature("aiReply",1);if(!sendRealtimeText(q,turnResolution))setVoiceError(assistantRuntimeText(turnResolution.language,"notReady"));return;}if(languageControlReply){appendMessage("user",q);appendMessage("assistant",languageControlReply);speak(languageControlReply,true);return;}if(!aiExternalConsent){setVoiceError(V.consentTitle);return;}function run(){appendMessage("user",q);if(consumePlanFeature)consumePlanFeature("aiReply",1);callAssistant(q,turnResolution);}if(activeAttachmentRef.current){if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();return;}if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();}
+  function sendMessage(forced){var q=String(forced!==undefined?forced:input||"").trim();if(!q||documentLoading||realtimeStatus==="connecting")return;interruptAssistantTurn();setInput("");stopListening(false);if(pendingActions.length&&isYes(q)){confirmPending(q);return;}if((pendingActions.length||operationDraftRef.current)&&isNo(q)){cancelPending(q);return;}var turnResolution:any=resolveVoiceAssistantTurn(q);var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(q,turnResolution.language);if(localHelpAnswer){appendMessage("user",q);appendMessage("assistant",localHelpAnswer);speak(localHelpAnswer,true);return;}if(realtimeStatus==="connected"){appendMessage("user",q);if(!languageControlReply&&consumePlanFeature)consumePlanFeature("aiReply",1);if(!sendRealtimeText(q,turnResolution))setVoiceError(assistantRuntimeText(turnResolution.language,"notReady"));return;}if(languageControlReply){appendMessage("user",q);appendMessage("assistant",languageControlReply);speak(languageControlReply,true);return;}if(!aiExternalConsent){setVoiceError(V.consentTitle);return;}function run(){appendMessage("user",q);if(consumePlanFeature)consumePlanFeature("aiReply",1);callAssistant(q,turnResolution);}if(activeAttachmentRef.current){if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();return;}if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();}
   useEffect(function () {
     mountedRef.current = true;
     return function () {

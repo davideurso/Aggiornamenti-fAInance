@@ -1,3 +1,4 @@
+import {assistantRuleError} from "../finance/assistantAutomaticRules";
 import { readableDarkText } from '../ui/textContrast';
 import {useRef,useState} from 'react';
 import {useApp} from '../core';
@@ -14,6 +15,7 @@ export function AutomaticRulesPanel(){
   const ctx:any=useApp();
   const [draft,setDraft]=useState<any>(null),[error,setError]=useState(false),[test,setTest]=useState<any>(null),[result,setResult]=useState<any>(null),[editorTab,setEditorTab]=useState<'when'|'if'|'then'>('when'),[probeOnly,setProbeOnly]=useState(false);
   const drag=useRef<any>(null);
+  const [saveErrorCode,setSaveErrorCode]=useState('');
   const T=(key:any)=>key==='recurring'?translateFainanceText('Ricorrente',ctx.lang||'it'):rulesText(ctx.lang||'it',key);
   const D=(key:any)=>ruleDiagnosticText(ctx.lang||'it',key);
   const E=(key:any)=>ruleEditorText(ctx.lang||'it',key);
@@ -24,10 +26,10 @@ export function AutomaticRulesPanel(){
   const limit=ruleLimit(ctx.currentPlan);
   const theme:any={'--rule-text':ctx.textC,'--rule-sub':ctx.subC||(ctx.dark?'#b8bdc8':'#69727c'),'--rule-card':ctx.cardBg,'--rule-border':ctx.borderC,'--rule-primary':ctx.confirmButtonColor||'#378ADD','--rule-link':readableDarkText(ctx.confirmButtonColor||'#378ADD',ctx.dark),'--rule-on-primary':readableDarkText('#fff',ctx.dark,ctx.confirmButtonColor||'#378ADD'),'--rule-on-expense':readableDarkText('#fff',ctx.dark,ctx.expenseColor||'#E35B5B'),'--rule-on-income':readableDarkText('#fff',ctx.dark,ctx.incomeColor||'#2FA66A'),'--rule-soft':ctx.dark?'#263444':'#edf5fc','--rule-input':ctx.inp?.background||ctx.cardBg,'--rule-radius':`${ctx.btnRadius??12}px`,'--rule-expense':ctx.expenseColor||'#E35B5B','--rule-income':ctx.incomeColor||'#2FA66A'};
   function limitNotice(){ctx.setToast({text:T('limit'),type:'warning',color:'#FFF8E1',textColor:'#856404',icon:'🔒',actionLabel:L('Piani'),actionPage:'plans_settings',duration:7000});}
-  function apply(fn){try{ctx.setFinanceEvolution(fn);setError(false);return true;}catch(e){if(e.message==='RULE_LIMIT')limitNotice();else setError(true);return false;}}
+  function apply(fn){try{ctx.setFinanceEvolution(fn);setError(false);setSaveErrorCode('');return true;}catch(e){setSaveErrorCode(String(e.message||''));if(e.message==='RULE_LIMIT')limitNotice();setError(true);return false;}}
   function open(rule?,duplicate=false,probe=false){
     if((!rule||duplicate)&&rules.length>=limit){limitNotice();return;}
-    setEditorTab(probe?'then':'when');
+    setSaveErrorCode('');setEditorTab(probe?'then':'when');
     setProbeOnly(!!probe);
     setDraft(rule?{...automaticRuleForEditor(rule),id:duplicate?crypto.randomUUID():rule.id,expectedRevision:duplicate?undefined:rule.revision}:{id:crypto.randomUUID(),kind:'automatic-v1',name:'',enabled:true,revision:0,priority:rules.length,trigger:'expense',categoryFilter:null,match:'all',conditions:[{field:'description',operator:'contains',value:''}],actions:[{field:'category',value:''}],alert:null});
     setTest(probe?{desc:'',amount:'',direction:rule.categoryFilter?.direction||(rule.trigger==='income'?'income':'expense'),source:'manual',transactionType:'single',category:rule.categoryFilter?.value||'',payment:'',defaults:true}:null);setResult(null);setError(false);
@@ -56,8 +58,14 @@ export function AutomaticRulesPanel(){
   const actionName=a=>a.field==='alert'?E(a.kind==='confirmation'?'confirmationAction':'informationAction'):T(a.field);
   function showTest(){setTest({desc:'',amount:'',direction:draft.categoryFilter?.direction||(draft.trigger==='income'?'income':'expense'),source:'manual',transactionType:'single',category:draft.categoryFilter?.value||'',payment:'',defaults:true});setResult(null);}
   const probeLabel=U('testRule');
-  function runTest(){try{validateAutomaticRule(draft);if(!String(test.amount).trim()||!Number.isFinite(Number(test.amount))||Number(test.amount)<0)throw new Error('INVALID_AMOUNT');setResult(evaluateAutomaticRules([{...draft,enabled:true}],{desc:test.desc,amount:Number(test.amount),catId:test.category,type:test.category,methodId:test.payment,rateizzato:test.transactionType==='installment',receipt:test.transactionType==='receipt',_ruleDefaultFields:test.defaults?['catId','type','methodId']:[]},test.direction,test.source,{plan:'premium',cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes}));setError(false);}catch{setError(true);}}
-  function closeEditor(){setDraft(null);setEditorTab('when');setProbeOnly(false);setError(false);setTest(null);setResult(null);}
+  function runTest(){setSaveErrorCode('');try{validateAutomaticRule(draft);if(!String(test.amount).trim()||!Number.isFinite(Number(test.amount))||Number(test.amount)<0)throw new Error('INVALID_AMOUNT');setResult(evaluateAutomaticRules([{...draft,enabled:true}],{desc:test.desc,amount:Number(test.amount),catId:test.category,type:test.category,methodId:test.payment,rateizzato:test.transactionType==='installment',receipt:test.transactionType==='receipt',_ruleDefaultFields:test.defaults?['catId','type','methodId']:[]},test.direction,test.source,{plan:'premium',cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes}));setError(false);}catch{setError(true);}}
+  function closeEditor(){setSaveErrorCode('');setDraft(null);setEditorTab('when');setProbeOnly(false);setError(false);setTest(null);setResult(null);}
+  function saveDraft(e){
+    e.preventDefault();
+    if(probeOnly){runTest();return;}
+    if(!String(draft.name||'').trim()){setSaveErrorCode('missingName');setError(true);setEditorTab('when');return;}
+    if(apply(p=>saveAutomaticRule(p,draft,ctx.currentPlan)))closeEditor();
+  }
   return <section aria-label={T('title')} className="fainance-rules" data-dark={ctx.dark ? "true" : "false"} style={theme}>
     <div className="rule-screen">
     {rules.length>limit&&<p role="note" className="rule-notice">{T('limit')}</p>}
@@ -89,10 +97,11 @@ export function AutomaticRulesPanel(){
         </div>
       </article>)}
     </>}
-    {draft&&<div className="rule-editor-overlay" role="dialog" aria-modal="true" onMouseDown={e=>{if(e.target===e.currentTarget){closeEditor()}}}><form className="rule-editor-shell rule-goal-like" onMouseDown={e=>e.stopPropagation()} onSubmit={e=>{e.preventDefault();if(probeOnly){runTest();return;}if(apply(p=>saveAutomaticRule(p,draft,ctx.currentPlan))){closeEditor();}}}>
+    {draft&&<div className="rule-editor-overlay" role="dialog" aria-modal="true" onMouseDown={e=>{if(e.target===e.currentTarget){closeEditor()}}}><form noValidate className="rule-editor-shell rule-goal-like" onMouseDown={e=>e.stopPropagation()} onSubmit={saveDraft}>
       <div className="rule-editor-header"><div className="rule-editor-title">{probeOnly?probeLabel:(draft.expectedRevision!==undefined?L('Modifica')+' · '+U('ruleSingular'):U('createRule'))}</div><button type="button" className="rule-editor-close" aria-label={L('Chiudi')} onClick={()=>{closeEditor()}}>×</button></div>
       {!probeOnly&&<div className="rule-editor-tabs"><button type="button" className={"rule-editor-tab"+(editorTab==='when'?' active':'')} onClick={()=>setEditorTab('when')}><span aria-hidden="true">📅</span><b>{T('when')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='if'?' active':'')} onClick={()=>setEditorTab('if')}><span aria-hidden="true">🔎</span><b>{T('if')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='then'?' active':'')} onClick={()=>setEditorTab('then')}><span aria-hidden="true">⚡</span><b>{T('then')}</b></button></div>}
       <div className="rule-editor-body">
+      {error&&<p role="alert" className="rule-notice">{saveErrorCode?assistantRuleError(ctx.lang||'it',saveErrorCode):T('error')}</p>}
       {!probeOnly&&conflictNotice(draft)}
       {!probeOnly&&editorTab==='when'&&<section className="rule-card" aria-label={T('when')}>
         <div className="rule-name-card"><label>{L('Nome')}<input required maxLength={120} value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label></div>
@@ -134,7 +143,7 @@ export function AutomaticRulesPanel(){
       {probeOnly?<div className="rule-editor-footer rule-probe-footer"><button type="button" className="rule-secondary" onClick={closeEditor}>{L('Chiudi')}</button></div>:<div className={"rule-editor-footer tab-"+editorTab}>
         {editorTab==='when'&&<><span className="rule-footer-spacer" aria-hidden="true"/><button type="button" className="rule-primary" onClick={()=>setEditorTab('if')}>{L('Avanti')}</button></>}
         {editorTab==='if'&&<><button type="button" className="rule-secondary" onClick={()=>setEditorTab('when')}>{L('Indietro')}</button><button type="button" className="rule-primary" onClick={()=>setEditorTab('then')}>{L('Avanti')}</button></>}
-        {editorTab==='then'&&<><button type="button" className="rule-secondary rule-test-footer" onClick={()=>{if(!test)showTest();else runTest();}}>{probeLabel}</button><button type="submit" className="rule-primary rule-save-footer" disabled={automaticRuleCategoryConflict(draft)}>{L('Salva')}</button><button type="button" className="rule-secondary rule-back-footer" onClick={()=>setEditorTab('if')}>{L('Indietro')}</button><span className="rule-footer-spacer" aria-hidden="true"/></>}
+        {editorTab==='then'&&<><button type="button" className="rule-secondary rule-test-footer" onClick={()=>{if(!test)showTest();else runTest();}}>{probeLabel}</button><button type="submit" className="rule-primary rule-save-footer">{L('Salva')}</button><button type="button" className="rule-secondary rule-back-footer" onClick={()=>setEditorTab('if')}>{L('Indietro')}</button><span className="rule-footer-spacer" aria-hidden="true"/></>}
       </div>}
     </form></div>}
     </div>

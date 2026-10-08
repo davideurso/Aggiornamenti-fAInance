@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { SavingsGoalPanel } from './SavingsGoalPanel';
 import { goalSavedAmount } from '../finance/savingsGoals';
 import { useEffect, useRef, useState } from 'react';
-import { useApp } from '../core';
+import { useApp, smallDecimalNode } from '../core';
 import { createSavingsBucket, updateSavingsBucket } from '../finance/savingsBuckets';
 import { savingsText } from '../i18n/savingsTranslations';
 import { savingsPlanSummary, setSavingsPlanAmount } from '../finance/savingsPlan';
@@ -83,7 +83,7 @@ export function SavingsBucketsPanel({periodKey, scope, plan}: {periodKey:string;
   const completionBucket = buckets.find(bucket=>{const goal=(ctx.goals || []).find(item=>String(item.id)===bucket.goalId);return goal && Number(goal.target)>0 && goalSavedAmount(ctx.financeEvolution,goal,ctx.currency)>=Number(goal.target);});
   const close = () => { setEditing(null); setName(''); setAmountId(null); setError(null); };
   const summary = savingsPlanSummary(plan);
-  const money = (value:number) => new Intl.NumberFormat(ctx.lang || 'it',{style:'currency',currency:plan?.savingsPlanCurrency || ctx.currency || 'EUR',maximumFractionDigits:2}).format(value);
+  const money = (value:number) => smallDecimalNode(new Intl.NumberFormat(ctx.lang || 'it',{style:'currency',currency:plan?.savingsPlanCurrency || ctx.currency || 'EUR',maximumFractionDigits:2}).format(value),ctx.lang||'it');
   function apply(operation: (previous: any) => any) {
     try {
       ctx.setFinanceEvolution(operation);

@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-import {useApp,todayStr} from '../core';
+import {useApp,todayStr,smallDecimalNode} from '../core';
 import {closurePreview,closeSavingsPeriod,coverSavingsDeficit,deficitRemaining,distributeSavings} from '../finance/savingsClosure';
 import {periodLabel,shiftPeriodKey} from '../finance/periodEngine';
 import {closureText} from '../i18n/savingsClosureTranslations';
@@ -13,7 +13,7 @@ export function SavingsClosurePanel({periodKey}:{periodKey:string}) {
   const today=todayStr(),currency=ctx.currency||'EUR';
   if(ctx.accountingPeriod.forKey(periodKey).end>=ctx.accountingPeriod.forDate(today).start)return null;
   const T=(key:Parameters<typeof closureText>[1])=>closureText(ctx.lang||'it',key);
-  const money=(n:number)=>new Intl.NumberFormat(ctx.lang||'it',{style:'currency',currency}).format(n/100);
+  const money=(n:number)=>smallDecimalNode(new Intl.NumberFormat(ctx.lang||'it',{style:'currency',currency}).format(n/100),ctx.lang||'it');
   let preview:any;
   try{preview=closurePreview(ctx.financeEvolution,ctx.legacyBudgetPlan,ctx.countedExpensesForAnalysis||ctx.expensesForAnalysis||ctx.expenses,ctx.countedIncomes||ctx.incomes,periodKey,currency,today);}
   catch{return <p role="note">{T('overlap')}</p>;}
@@ -60,7 +60,7 @@ export function SavingsDeficitsPanel(){
   }
   return <section aria-label={T('deficits')} style={{padding:14,marginTop:12,border:`1px solid ${ctx.borderC}`,borderRadius:14,background:ctx.cardBg,color:ctx.textC}}>
     <h3 style={{fontSize:16,margin:'0 0 10px'}}>{T('deficits')}</h3>
-    {deficits.map(d=>{const money=(n:number)=>new Intl.NumberFormat(ctx.lang||'it',{style:'currency',currency:d.currency}).format(n/100);return <article key={d.id} style={{padding:'10px 0',borderTop:`1px solid ${ctx.borderC}`}}>
+    {deficits.map(d=>{const money=(n:number)=>smallDecimalNode(new Intl.NumberFormat(ctx.lang||'it',{style:'currency',currency:d.currency}).format(n/100),ctx.lang||'it');return <article key={d.id} style={{padding:'10px 0',borderTop:`1px solid ${ctx.borderC}`}}>
       <strong>{periodLabel(d.periodKey,ctx.lang||'it')} · {money(-d.originalMinor)}</strong><div>{T(d.status)}</div>
       <div>{T('remaining')}: {money(deficitRemaining(savings,d))}</div>
       {d.status!=='covered'&&draft?.deficitId!==d.id&&<button type="button" style={{...button,marginTop:8}} onClick={()=>edit(d)}>{T('cover')}</button>}
