@@ -1,7 +1,7 @@
 import {useEffect,useState} from 'react';
 import {useApp,todayStr,smallDecimalNode} from '../core';
 import {closurePreview,closeSavingsPeriod,coverSavingsDeficit,deficitRemaining,distributeSavings} from '../finance/savingsClosure';
-import {periodLabel,shiftPeriodKey} from '../finance/periodEngine';
+import {periodLabel} from '../finance/periodEngine';
 import {closureText} from '../i18n/savingsClosureTranslations';
 import {savingsText} from '../i18n/savingsTranslations';
 
@@ -75,9 +75,7 @@ export function SavingsDeficitsPanel(){
 }
 
 export function SavingsHomeClosing(){
-  const ctx:any=useApp();
-  if(!ctx.financeEvolution||!ctx.accountingPeriod)return null;
-  const key=shiftPeriodKey(ctx.accountingPeriod.forDate(todayStr()).key,-1);
-  const active=ctx.financeEvolution.savings.buckets.some(b=>b.active!==false&&b.currency===ctx.currency);
-  return <>{active&&<details><summary style={{cursor:'pointer',fontWeight:700}}>{closureText(ctx.lang||'it','title')} · {periodLabel(key,ctx.lang||'it')}</summary><SavingsClosurePanel periodKey={key}/></details>}<SavingsDeficitsPanel/></>;
+  // La chiusura del periodo non occupa più la Home: appare nel Centro notifiche.
+  // Gli eventuali deficit continuano invece a richiedere attenzione nella Home.
+  return <SavingsDeficitsPanel/>;
 }

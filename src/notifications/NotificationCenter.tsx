@@ -1,4 +1,11 @@
+import { NotificationMediaView, openNotificationDestination } from "./NotificationMedia.tsx";
 import { readableDarkText } from '../ui/textContrast';
+import { closurePreview } from "../finance/savingsClosure";
+import { shiftPeriodKey, periodLabel } from "../finance/periodEngine";
+import { closureText } from "../i18n/savingsClosureTranslations";
+import { SavingsClosurePanel } from "../sections/SavingsClosurePanel";
+import { todayStr } from "../core";
+import { periodClosureNoticeId, periodClosureNoticeVisible, periodClosureNoticeRead, periodClosureNoticeText, updatePeriodClosureNotice } from "./periodClosureNotice.mjs";
 import { useEffect, useMemo, useState } from "react";
 import { useApp } from "../core";
 import { PopupCloseButton } from "../widget";
@@ -26,6 +33,7 @@ function notificationIcon(item: AppNotificationRecord): string {
   if (item.type === "share_invite_accepted") return "✅";
   if (item.type === "share_project_deleted") return "🗂️";
   if (item.type === "recurring_confirmation") return "🔁";
+  if (item.type === "period_closure") return "📅";
   if (item.severity === "critical") return "🚨";
   if (item.severity === "warning") return "⚠️";
   if (item.severity === "success") return "✅";
@@ -154,6 +162,61 @@ function useRecurringNotificationItems(userId: string): AppNotificationRecord[] 
   ]);
 }
 
+function usePeriodClosureNotice(userId: string): AppNotificationRecord[] {
+  const ctx: any = useApp();
+  return useMemo(() => {
+    if (!userId || !ctx.financeEvolution || !ctx.accountingPeriod
+      || !ctx.notifPrefs || ctx.notifPrefs.periodClosureActive === false) return [];
+    const currency = String(ctx.currency || "EUR");
+    const activeBuckets = Array.isArray(ctx.financeEvolution?.savings?.buckets)
+      && ctx.financeEvolution.savings.buckets.some((bucket: any) =>
+        bucket.active !== false && bucket.currency === currency);
+    if (!activeBuckets) return [];
+    try {
+      const today = todayStr();
+      const current = ctx.accountingPeriod.forDate(today);
+      const periodKey = shiftPeriodKey(current.key, -1);
+      const previous = ctx.accountingPeriod.forKey(periodKey);
+      if (previous.end >= current.start) return [];
+      const id = periodClosureNoticeId(periodKey, currency);
+      if (!periodClosureNoticeVisible(ctx.notifPrefs, id)) return [];
+      const preview = closurePreview(
+        ctx.financeEvolution, ctx.legacyBudgetPlan,
+        ctx.countedExpensesForAnalysis || ctx.expensesForAnalysis || ctx.expenses || [],
+        ctx.countedIncomes || ctx.incomes || [],
+        periodKey, currency, today,
+      );
+      if (preview.existing || !preview.snapshot) return [];
+      const summary = preview.snapshot;
+      if (![summary.realMinor, summary.depositedMinor, summary.availableMinor].every(Number.isFinite)) return [];
+      const money = (n: number) => new Intl.NumberFormat(
+        String(ctx.lang || "it"), { style: "currency", currency },
+      ).format(n / 100);
+      const title = closureText(ctx.lang || "it", "title") + " · " + periodLabel(periodKey, ctx.lang || "it");
+      const message = closureText(ctx.lang || "it", "real") + ": " + money(summary.realMinor)
+        + " · " + closureText(ctx.lang || "it", "deposited") + ": " + money(summary.depositedMinor)
+        + " · " + closureText(ctx.lang || "it", "available") + ": " + money(summary.availableMinor);
+      const createdAt = current.start + "T09:00:00";
+      return [{
+        id, targetUid: userId, type: "period_closure", title, message,
+        severity: "info", actionType: "open_period_closure", actionValue: periodKey,
+        source: "period_closure", virtual: true,
+        createdAt, createdAtMs: new Date(createdAt).getTime(),
+        read: periodClosureNoticeRead(ctx.notifPrefs, id), status: "active",
+      }];
+    } catch (_error) { return []; }
+  }, [
+    userId, ctx.financeEvolution, ctx.accountingPeriod, ctx.legacyBudgetPlan,
+    ctx.countedExpensesForAnalysis, ctx.expensesForAnalysis, ctx.expenses,
+    ctx.countedIncomes, ctx.incomes, ctx.currency, ctx.lang, ctx.notifPrefs,
+  ]);
+}
+
+function updateClosureNotification(ctx: any, item: AppNotificationRecord, action: "read" | "dismiss") {
+  if (item.type !== "period_closure" || typeof ctx.setNotifPrefs !== "function") return;
+  ctx.setNotifPrefs((previous: any) => updatePeriodClosureNotice(previous, item.id, action));
+}
+
 function EmployeeProfileIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -180,10 +243,10 @@ function NotificationRows({
   const L = (text: string) =>
     ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
   const dark = !!ctx.dark;
-  const textC = ctx.textC || (dark ? "#f5f5f5" : "#232323");
-  const subC = ctx.subC || (dark ? "#a9a9b5" : "#777");
-  const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
-  const primary = ctx.confirmButtonColor || "#378ADD";
+  const textC = ctx.textC || (dark ? "#F4F7FB" : "#14263D");
+  const subC = ctx.subC || (dark ? "#B3C0CE" : "#5D6B7C");
+  const borderC = ctx.borderC || (dark ? "#29455F" : "#D8E1EA");
+  const primary = dark ? "#8CC6FF" : "#052A5F";
   const [deletingId, setDeletingId] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [confirmingId, setConfirmingId] = useState("");
@@ -202,7 +265,8 @@ function NotificationRows({
     setDeleteError("");
     setDeletingId(item.id);
     try {
-      await deleteAppNotification(userId, item.id);
+      if (item.type === "period_closure") updateClosureNotification(ctx, item, "dismiss");
+      else await deleteAppNotification(userId, item.id);
     } catch (_deleteError: any) {
       // FAINANCE V113: never expose raw Firebase/provider text in a different language.
       setDeleteError(L("Eliminazione notifica non riuscita."));
@@ -249,21 +313,29 @@ function NotificationRows({
             style={{
               width: "100%",
               display: "flex",
+              flexWrap: "wrap",
               alignItems: "flex-start",
               gap: 7,
               padding: compact ? 7 : 8,
               marginBottom: 8,
               borderRadius: 15,
               border: "1px solid " + (!item.read ? primary + "66" : borderC),
-              background: !item.read ? primary + "12" : dark ? "#252535" : "#F8FAFC",
+              background: !item.read ? primary + "12" : dark ? "#031A3D" : "#F7F9FC",
               boxSizing: "border-box",
             }}
           >
             <button
               type="button"
               onClick={async () => {
-                if (!item.read && !item.virtual) await markAppNotificationRead(userId, item.id, true).catch(() => undefined);
-                onOpen?.(item);
+                if (item.type === "period_closure") {
+                  if (!item.read) updateClosureNotification(ctx, item, "read");
+                  window.dispatchEvent(new CustomEvent("fainance:open-period-closure", {
+                    detail: { periodKey: String(item.actionValue || "") },
+                  }));
+                } else {
+                  if (!item.read && !item.virtual) await markAppNotificationRead(userId, item.id, true).catch(() => undefined);
+                  onOpen?.(item);
+                }
               }}
               style={{
                 flex: 1,
@@ -282,12 +354,14 @@ function NotificationRows({
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: 13, fontWeight: item.read ? 750 : 950 }}>{display.title}</span>
                 <span style={{ display: "block", fontSize: 12, lineHeight: 1.42, color: readableDarkText(subC, dark, "transparent"), marginTop: 3 }}>{display.message}</span>
+                {item.type === "period_closure" && <span style={{ display: "block", color: primary, fontSize: 12, marginTop: 5, fontWeight: 800 }}>{periodClosureNoticeText(ctx.lang || "it", "open")} →</span>}
                 <span style={{ display: "block", fontSize: 10, color: readableDarkText(subC, dark, "transparent"), marginTop: 6 }}>
                   {item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}
                 </span>
               </span>
               {!item.read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: primary, marginTop: 5, flexShrink: 0 }} />}
             </button>
+            {item.media && <NotificationMediaView value={item.media} dark={dark} L={L} onNavigate={() => { openNotificationDestination(item.media); onOpen?.({ ...item, actionType: "open_media_destination" }); }} />}
             {item.type === "recurring_confirmation" ? (
               <button
                 type="button"
@@ -352,21 +426,24 @@ function NotificationRows({
 
 export function NotificationInboxSettingsCard({ userId }: { userId: string }) {
   const ctx: any = useApp();
-  const [items, setItems] = useNotificationItems(userId);
+  const [storedItems, setStoredItems] = useNotificationItems(userId);
+  const closureItems = usePeriodClosureNotice(userId);
+  const items = useMemo(() => [...closureItems, ...storedItems].sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)), [closureItems, storedItems]);
   const L = (text: string) =>
     ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
   const dark = !!ctx.dark;
-  const cardBg = ctx.cardBg || (dark ? "#1f1f2e" : "#fff");
-  const textC = ctx.textC || (dark ? "#f5f5f5" : "#232323");
-  const subC = ctx.subC || (dark ? "#a9a9b5" : "#777");
-  const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
-  const primary = ctx.confirmButtonColor || "#378ADD";
+  const cardBg = ctx.cardBg || (dark ? "#10243A" : "#fff");
+  const textC = ctx.textC || (dark ? "#F4F7FB" : "#14263D");
+  const subC = ctx.subC || (dark ? "#B3C0CE" : "#5D6B7C");
+  const borderC = ctx.borderC || (dark ? "#29455F" : "#D8E1EA");
+  const primary = dark ? "#8CC6FF" : "#052A5F";
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
   if (!userId) return null;
 
   async function markAllRead() {
-    const pending = unread.slice();
-    setItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
+    const pending = unread.filter((item) => item.type !== "period_closure");
+    closureItems.filter((item) => !item.read).forEach((item) => updateClosureNotification(ctx, item, "read"));
+    setStoredItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
     await Promise.all(pending.map((item) => markAppNotificationRead(userId, item.id, true).catch(() => undefined)));
   }
 
@@ -406,10 +483,10 @@ function MundelyLinkRequestRows({
   const ctx: any = useApp();
   const L = (text: string) => ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
   const dark = !!ctx.dark;
-  const textC = ctx.textC || (dark ? "#f5f5f5" : "#232323");
-  const subC = ctx.subC || (dark ? "#a9a9b5" : "#777");
-  const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
-  const primary = ctx.confirmButtonColor || "#378ADD";
+  const textC = ctx.textC || (dark ? "#F4F7FB" : "#14263D");
+  const subC = ctx.subC || (dark ? "#B3C0CE" : "#5D6B7C");
+  const borderC = ctx.borderC || (dark ? "#29455F" : "#D8E1EA");
+  const primary = dark ? "#8CC6FF" : "#052A5F";
   if (!requests.length) return null;
   return (
     <div style={{ marginBottom: 10 }}>
@@ -463,24 +540,41 @@ export function NotificationCenter({
   const ctx: any = useApp();
   const [storedItems, setStoredItems] = useNotificationItems(userId);
   const recurringItems = useRecurringNotificationItems(userId);
+  const closureItems = usePeriodClosureNotice(userId);
   const items = useMemo(
-    () => [...recurringItems, ...storedItems].sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)),
-    [recurringItems, storedItems],
+    () => [...closureItems, ...recurringItems, ...storedItems].sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)),
+    [closureItems, recurringItems, storedItems],
   );
   const [open, setOpen] = useState(false);
+  const [closurePeriodKey, setClosurePeriodKey] = useState("");
   const [mundelyRequests, setMundelyRequests] = useState<MundelyLinkRequest[]>([]);
   const [mundelyBusyId, setMundelyBusyId] = useState("");
   const L = (text: string) =>
     ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
   const dark = !!ctx.dark;
-  const cardBg = ctx.cardBg || (dark ? "#1f1f2e" : "#fff");
-  const textC = ctx.textC || (dark ? "#f5f5f5" : "#232323");
-  const subC = ctx.subC || (dark ? "#a9a9b5" : "#777");
-  const borderC = ctx.borderC || (dark ? "#3a3a49" : "#e6e6ec");
-  const primary = ctx.confirmButtonColor || "#378ADD";
+  const cardBg = ctx.cardBg || (dark ? "#10243A" : "#fff");
+  const textC = ctx.textC || (dark ? "#F4F7FB" : "#14263D");
+  const subC = ctx.subC || (dark ? "#B3C0CE" : "#5D6B7C");
+  const borderC = ctx.borderC || (dark ? "#29455F" : "#D8E1EA");
+  const primary = dark ? "#8CC6FF" : "#052A5F";
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
   const unreadStored = useMemo(() => storedItems.filter((item) => !item.read), [storedItems]);
   const notificationCount = unread.length + mundelyRequests.length;
+  useEffect(() => {
+    const onPeriodClosure = (event: Event) => {
+      const key = String((event as CustomEvent).detail?.periodKey || "");
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(key)) return;
+      setOpen(false);
+      setClosurePeriodKey(key);
+    };
+    const showNotifications = () => setOpen(true);
+    window.addEventListener("fainance:open-notifications", showNotifications);
+    window.addEventListener("fainance:open-period-closure", onPeriodClosure);
+    return () => {
+      window.removeEventListener("fainance:open-notifications", showNotifications);
+      window.removeEventListener("fainance:open-period-closure", onPeriodClosure);
+    };
+  }, []);
   useEffect(() => {
     if (!userId || !isMundelyBridgeEnabled()) {
       setMundelyRequests([]);
@@ -536,7 +630,7 @@ export function NotificationCenter({
     };
   }, [userId]);
   // Le azioni globali restano disponibili anche nella chat dell'Agente AI.
-  const hideFloatingActions = false;
+  const hideFloatingActions = !!ctx.isMobile && ctx.tab === "spese";
   const iosNative = (() => {
     try {
       const cap: any = (window as any).Capacitor;
@@ -584,6 +678,7 @@ export function NotificationCenter({
 
   async function markAllRead() {
     const pending = unreadStored.slice();
+    closureItems.filter((item) => !item.read).forEach((item) => updateClosureNotification(ctx, item, "read"));
     setStoredItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
     await Promise.all(pending.map((item) => markAppNotificationRead(userId, item.id, true).catch(() => undefined)));
   }
@@ -607,6 +702,7 @@ export function NotificationCenter({
   return (
     <>
       <style>{`
+        .notification-media { flex: 1 0 100%; min-width: 0; }
         [role="dialog"][aria-modal="true"] {
           padding-top: max(82px, calc(env(safe-area-inset-top, 0px) + 72px)) !important;
           box-sizing: border-box !important;
@@ -640,7 +736,7 @@ export function NotificationCenter({
                 <div style={{ color: textC, fontSize: 18, fontWeight: 950 }}>{L("Notifiche")}</div>
                 <div style={{ color: subC, fontSize: 11 }}>{L("Inviti Share e comunicazioni importanti")}</div>
               </div>
-              {unreadStored.length > 0 && (
+              {unread.length > 0 && (
                 <button type="button" onClick={markAllRead} style={{ border: 0, background: "transparent", color: readableDarkText(primary, dark, "transparent"), fontWeight: 850, cursor: "pointer", fontSize: 11 }}>
                   {L("Segna tutte come lette")}
                 </button>
@@ -650,6 +746,38 @@ export function NotificationCenter({
             <MundelyLinkRequestRows requests={mundelyRequests} busyId={mundelyBusyId} onDecision={decideMundelyLink} />
             <NotificationRows items={items} userId={userId} onOpen={openItem} />
           </section>
+        </div>
+      )}
+      {closurePeriodKey && (
+        <div
+          role="dialog" aria-modal="true"
+          aria-label={periodClosureNoticeText(ctx.lang || "it", "settingTitle")}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setClosurePeriodKey("");
+          }}
+          style={{
+            position: "fixed", inset: 0, zIndex: 10060,
+            background: "rgba(3,26,61,.72)", display: "flex",
+            alignItems: "flex-start", justifyContent: "center",
+            padding: "max(70px,env(safe-area-inset-top,0px)) 12px 24px",
+            overflowY: "auto", boxSizing: "border-box",
+          }}
+        >
+          <div style={{
+            background: cardBg, color: textC, border: "1px solid " + borderC,
+            borderRadius: 16, padding: 16, width: "min(100%,520px)", minWidth: 0,
+          }}>
+            <div style={{
+              display: "flex", alignItems: "center",
+              justifyContent: "space-between", gap: 12,
+            }}>
+              <strong style={{ fontSize: 17 }}>
+                {periodClosureNoticeText(ctx.lang || "it", "open")}
+              </strong>
+              <PopupCloseButton onClick={() => setClosurePeriodKey("")} dark={dark} label={L("Chiudi")} />
+            </div>
+            <SavingsClosurePanel periodKey={closurePeriodKey} />
+          </div>
         </div>
       )}
     </>

@@ -34,7 +34,10 @@ function nextYearDate(){const d=new Date();d.setFullYear(d.getFullYear()+1);retu
 export function ToolsPanel(){
   const ctx:any=useApp(),T=(key:any)=>toolsText(ctx.lang||'it',key),L=(s:string)=>translateFainanceText(s,ctx.lang||'it');
   const pair=ctx.financeEvolution.tools.lastCurrencyPair||[ctx.currency,ctx.secondaryCurrency&&ctx.secondaryCurrency!==ctx.currency?ctx.secondaryCurrency:(ctx.currency==='USD'?'EUR':'USD')];
-  const [page,setPage]=useState('calculator'),[seed,setSeed]=useState({value:'',key:0}),[calc,setCalc]=useState<number|null>(null);
+  const [page,setPage]=useState(()=>{
+    try{return (sessionStorage.getItem('fainance_rule_ai_editor_draft_once')||sessionStorage.getItem('fainance_rule_ai_target_tool_once'))?'automaticRules':'calculator';}
+    catch{return 'calculator';}
+  }),[seed,setSeed]=useState({value:'',key:0}),[calc,setCalc]=useState<number|null>(null);
   const [from,setFrom]=useState(pair[0]),[to,setTo]=useState(pair[1]),[amount,setAmount]=useState(''),[quote,setQuote]=useState<any>(null);
   const [picker,setPicker]=useState<string|null>(null),[search,setSearch]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(false),[saved,setSaved]=useState(false);
   const [transaction,setTransaction]=useState<any>(null),[direction,setDirection]=useState('expense'),[project,setProject]=useState<string|null>(null),[sharePicker,setSharePicker]=useState(false);
@@ -47,13 +50,22 @@ export function ToolsPanel(){
   const request=useRef(0),abort=useRef<AbortController|null>(null);
   useEffect(()=>()=>{request.current++;abort.current?.abort();},[]);
   useEffect(()=>{
+    try{if(sessionStorage.getItem('fainance_rule_ai_target_tool_once')==='automaticRules'){
+      sessionStorage.removeItem('fainance_rule_ai_target_tool_once');
+      setPage('automaticRules');
+    }}catch{}
+  },[]);
+  useEffect(()=>{
     const id=requestAnimationFrame(()=>{try{const active=document.activeElement as HTMLElement|null;if(active&&typeof active.blur==='function')active.blur();}catch{}});
     return()=>cancelAnimationFrame(id);
   },[page]);
   useEffect(()=>{
     const openToolPage=(event:any)=>{
       const target=String(event?.detail?.page||'');
-      if(['calculator','converter','savings','buyVsSave','inflation','recurring','automaticRules'].includes(target)) changePage(target);
+      if(['calculator','converter','savings','buyVsSave','inflation','recurring','automaticRules','anomalies'].includes(target)){
+        if(target==='automaticRules')try{sessionStorage.removeItem('fainance_rule_ai_target_tool_once');}catch{}
+        changePage(target);
+      }
     };
     window.addEventListener('fainance:open-tool',openToolPage as EventListener);
     return()=>window.removeEventListener('fainance:open-tool',openToolPage as EventListener);
@@ -104,7 +116,14 @@ export function ToolsPanel(){
     }catch{if(id===request.current)setError(true);}finally{clearTimeout(timer);if(id===request.current)setBusy(false);}
   }
   function resultActions(){return <div className="tool-followups"><div className="tool-action-row"><button className="tool-main-action" disabled={!result||result.amount<=0||busy} onClick={()=>prepare('transaction')}>＋ {T('create')}</button><button className="tool-main-action" disabled={!result||result.amount<=0||busy||!projects.length} onClick={()=>setSharePicker(true)}>🤝 {T('share')}</button></div>{!projects.length&&<p className="tool-muted">{T('noProject')}</p>}</div>;}
-  function changePage(value){invalidate();setPage(value);setPicker(null);setTransaction(null);setCalc(null);setSeed(p=>({value:'',key:p.key+1}));setAmount('');setQuote(null);}
+  function changePage(value){
+    if(value==='anomalies'){
+      ctx.setAiTab('anomalie');
+      ctx.setTab('consulenteAI');
+      return;
+    }
+    invalidate();setPage(value);setPicker(null);setTransaction(null);setCalc(null);setSeed(p=>({value:'',key:p.key+1}));setAmount('');setQuote(null);
+  }
   function openHistory(section,row){changePage(section);if(section==='calculator')setSeed(p=>({value:String(row.result),key:p.key+1}));else{setFrom(row.from);setTo(row.to);setAmount(String(row.amount));convert(row.from,row.to,String(row.amount),false);}}
   function clearHistory(section){if(!window.confirm(T('clearConfirm')))return;try{ctx.setFinanceEvolution(p=>({...p,tools:{...p.tools,[section]:[]}}));setError(false);}catch{setError(true);}}
   function inlineHistory(section){const rows=(tools[section]||[]).filter(r=>r.kind==='tool-v1');return <div className="tool-inline-history"><div className="tool-history-heading"><h4>◷ {L('Storico')}</h4><button disabled={!rows.length} onClick={()=>clearHistory(section)}>{T('clear')}</button></div><p className="tool-muted">{T('retention')}</p>{!rows.length&&<p className="tool-muted">{T('empty')}</p>}{rows.map(row=><button className="tool-history-row" key={row.id} onClick={()=>openHistory(section,row)}>{section==='calculator'?smallDecimalNode(number(row.result),ctx.lang||'it'):<>{smallDecimalNode(money(row.amount,row.from),ctx.lang||'it')} {row.from} → {smallDecimalNode(money(row.result,row.to),ctx.lang||'it')} {row.to}</>} <span>›</span></button>)}</div>;}
@@ -164,14 +183,15 @@ export function ToolsPanel(){
   const automationTabs=[
     {id:'recurring',icon:'🔁',label:T('recurringShort')},
     {id:'automaticRules',icon:'⚙️',label:rulesText(ctx.lang||'it','title')},
+    {id:'anomalies',icon:'🔎',label:L('Anomalie')},
   ];
 
   return <section className="fainance-tools" data-dark={ctx.dark ? "true" : "false"} style={style} aria-label={T('title')}>
-    <header className="tool-heading"><span>🧰</span><div><h2>{T('title')}</h2><p>{T('utilities')} · {T('simulators')} · {T('automations')}</p></div></header>
+    <header className="tool-heading"><span>🧰</span><div><h2>{T('title')}</h2><p>{T('utilities')} · {T('automations')} · {T('simulators')}</p></div></header>
     <nav className="tool-main-navigation" aria-label={T('title')}>
       <div className="tool-nav-group"><span className="tool-nav-label">{T('utilities')}</span><div className="tool-tabs tool-main-tabs tool-main-tabs-utilities">{utilityTabs.map(item=><button key={item.id} aria-pressed={page===item.id} onClick={()=>changePage(item.id)}><span className="tool-tab-icon">{item.icon}</span><span>{item.label}</span></button>)}</div></div>
+      <div className="tool-nav-group"><span className="tool-nav-label">{T('automations')}</span><div className="tool-tabs tool-main-tabs tool-main-tabs-automations" style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>{automationTabs.map(item=><button key={item.id} aria-pressed={page===item.id} onClick={()=>changePage(item.id)} style={{width:'100%'}}><span className="tool-tab-icon">{item.icon}</span><span>{item.label}</span></button>)}</div></div>
       <div className="tool-nav-group"><span className="tool-nav-label">{T('simulators')}</span><div className="tool-tabs tool-main-tabs tool-main-tabs-simulators">{simulatorTabs.map(item=><button key={item.id} aria-pressed={page===item.id} onClick={()=>changePage(item.id)}><span className="tool-tab-icon">{item.icon}</span><span>{item.label}</span></button>)}</div></div>
-      <div className="tool-nav-group"><span className="tool-nav-label">{T('automations')}</span><div className="tool-tabs tool-main-tabs tool-main-tabs-automations">{automationTabs.map(item=><button key={item.id} aria-pressed={page===item.id} onClick={()=>changePage(item.id)}><span className="tool-tab-icon">{item.icon}</span><span>{item.label}</span></button>)}</div></div>
     </nav>
     {error&&<p role="alert" className="tool-error">{T('error')}</p>}
     {busy&&<p role="status">{T('busy')}</p>}

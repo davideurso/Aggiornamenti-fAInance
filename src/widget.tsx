@@ -1,4 +1,8 @@
+import { installMovementEntryFocus } from './ui/movementEntryFocus';
+import { useId } from 'react';
+import { openMovementDatePicker } from './ui/movementDatePicker';
 import { readableDarkText } from './ui/textContrast';
+import {calculatorInputPlaceholder} from './i18n/calculatorTranslations';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import { savingsGoalText } from './i18n/savingsGoalsTranslations';
@@ -1744,7 +1748,7 @@ export function AmountCalculatorButton({
                 }
               }}
               inputMode="decimal"
-              placeholder={L("Inserisci un calcolo")}
+              placeholder={calculatorInputPlaceholder(ctx.lang||"it")}
               style={{
                 width: "100%",
                 boxSizing: "border-box",
@@ -3944,6 +3948,13 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
   var [dateTouched, setDateTouched] = useState(!!initialValue);
   var [amountFocused, setAmountFocused] = useState(false);
   var amountInputRef = useRef(null);
+  var entryFormRef = useRef(null);
+  var entrySpacerRef = useRef(null);
+  var entryFieldId = useId();
+  useEffect(function () {
+    if (!isMobile || ctx.tab !== 'spese') return;
+    return installMovementEntryFocus(entryFormRef.current, entrySpacerRef.current);
+  }, [isMobile, ctx.tab, type]);
   useEffect(
     function () {
       focusFainanceInput(amountInputRef, 120);
@@ -4148,7 +4159,9 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
     );
   }
   return (
+    <>
     <div
+      ref={entryFormRef}
       className="fainance-entry-form"
       style={{
         background: dark ? "#181827" : "#fff",
@@ -4163,18 +4176,6 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         gap: isMobile ? 10 : 14,
       }}
     >
-      <div style={{ textAlign: "center", padding: "0 2px 2px" }}>
-        <div
-          style={{
-            fontSize: isMobile ? 18.6 : 22,
-            fontWeight: 950,
-            color: tc,
-            letterSpacing: 0.1,
-          }}
-        >
-          {type === "expense" ? TL("Nuova uscita") : TL("Nuova entrata")}
-        </div>
-      </div>
       <div
         className="fainance-entry-amount"
         style={{
@@ -4206,8 +4207,10 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           iconSize={isMobile ? 34 : 46}
         />
         <div className="fainance-entry-amount-main" style={{ minWidth: 0, textAlign: "center" }}>
-          <div
+          <label
+            htmlFor={entryFieldId + "-amount"}
             style={{
+              display: "block",
               fontSize: isMobile ? 12.6 : 14,
               fontWeight: 850,
               textTransform: "uppercase",
@@ -4217,7 +4220,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             }}
           >
             {t.amount}
-          </div>
+          </label>
           <div
             className="fainance-entry-amount-value"
             style={{
@@ -4257,6 +4260,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
               )}
               <input
                 ref={amountInputRef}
+                id={entryFieldId + "-amount"}
                 autoFocus
                 type="text"
                 inputMode="decimal"
@@ -4335,7 +4339,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            gap: isMobile ? 3 : 6,
+            gap: isMobile ? 7 : 9,
             paddingLeft: isMobile ? 12 : 16,
           }}
         >
@@ -4407,7 +4411,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           <div
             style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
           >
-            <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
+            <label htmlFor={entryFieldId + "-description"} style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
               {t.category}
             </label>
             <div style={{ position: "relative", minWidth: 0 }}>
@@ -4549,6 +4553,8 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           {t.description}
         </label>
         <textarea
+          id={entryFieldId + "-description"}
+          data-entry-focus="true"
           placeholder={TL("Aggiungi una descrizione (opzionale)")}
           value={f.desc}
           onChange={function (e) {
@@ -4637,6 +4643,8 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             <span style={{ pointerEvents: "none", fontSize: 17 }}>📅</span>
             <input
               type="date"
+              aria-label={t.date}
+              onClick={openMovementDatePicker}
               value={f.date}
               onChange={function (e) {
                 setDateTouched(true);
@@ -4647,6 +4655,11 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
               style={{
                 position: "absolute",
                 inset: 0,
+                width: "100%",
+                height: "100%",
+                margin: 0,
+                padding: 0,
+                border: 0,
                 opacity: 0,
                 cursor: "pointer",
               }}
@@ -4677,6 +4690,8 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         {type === "expense" ? TL("Salva Uscita") : TL("Salva Entrata")}
       </button>
     </div>
+    <div ref={entrySpacerRef} aria-hidden="true" style={{ height: 0, flexShrink: 0 }} />
+    </>
   );
 }
 
@@ -6921,7 +6936,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                   <label style={{ ...mobileDateBtnStyle(false), display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: "0 5px", gap: 4 }}>
                     <span style={{ pointerEvents: "none", fontWeight: 850 }}>{fmtDate(r.date, ctx.dateFmt || "dd/mm/yyyy")}</span>
                     <span style={{ pointerEvents: "none", fontSize: 17 }}>📅</span>
-                    <input type="date" value={r.date} onChange={function (e) { upd(r._id, "date", e.target.value); }} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer" }} />
+                    <input type="date" aria-label={ctx.t.date} onClick={openMovementDatePicker} value={r.date} onChange={function (e) { upd(r._id, "date", e.target.value); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", margin: 0, padding: 0, border: 0, opacity: 0, cursor: "pointer" }} />
                   </label>
                 </div>
               </div>
@@ -14204,6 +14219,7 @@ export function DeleteDataPanel() {
   var [selIds, setSelIds] = useState([]);
   var [sections, setSections] = useState([]);
   var [confirmDel, setConfirmDel] = useState(false);
+  var [deletingData, setDeletingData] = useState(false);
   var [showPreview, setShowPreview] = useState(false);
   var lang = ctx.lang || "it";
   var t = TRANSLATIONS[lang] || TRANSLATIONS.it;
@@ -14499,14 +14515,31 @@ export function DeleteDataPanel() {
       })
       .slice(0, 80);
   }
-  function doDelete() {
-    sectionOptions
-      .filter(function (s) {
-        return sections.includes(s.id);
-      })
-      .forEach(function (s) {
-        s.clear();
-      });
+  async function doDelete() {
+    if (deletingData) return;
+    const expense = sections.includes('expenses');
+    const income = sections.includes('incomes');
+    setDeletingData(true);
+    try {
+      if (expense || income) {
+        if (typeof ctx.replaceAccountMovementsV2 !== 'function') throw new Error('SYNC_V2_ONLINE_REQUIRED');
+        await ctx.replaceAccountMovementsV2({
+          ...(expense ? { expense: [] } : {}),
+          ...(income ? { income: [] } : {}),
+        });
+      }
+      sectionOptions
+        .filter(function (s) {
+          return sections.includes(s.id) && s.id !== 'expenses' && s.id !== 'incomes';
+        })
+        .forEach(function (s) { s.clear(); });
+    } catch (error) {
+      console.error('DeleteDataPanel failed', error);
+      alert(L('Operazione non completata. Alcune voci potrebbero essere già state aggiornate. Verifica i dati prima di riprovare.'));
+      setDeletingData(false);
+      return;
+    }
+    setDeletingData(false);
     setSections([]);
     setSelCats([]);
     setSelIncomeTypes([]);
@@ -15025,6 +15058,7 @@ export function DeleteDataPanel() {
           <div style={{ display: "flex", gap: 10 }}>
             <Btn
               onClick={doDelete}
+              disabled={deletingData}
               bg="#E24B4A"
               style={{ flex: 1, padding: 11, fontSize: 14, fontWeight: 600 }}
             >
@@ -15495,6 +15529,8 @@ export function ImportData(props: any = {}) {
   var [importSuccess, setImportSuccess] = useState<any>(null);
   var [importLoading, setImportLoading] = useState<any>(null);
   var [pendingDataImportMode, setPendingDataImportMode] = useState<any>(null);
+  var importApplyBusyRef = useRef(false);
+  var [importApplyBusy, setImportApplyBusy] = useState(false);
   var [unknowns, setUnknowns] = useState<any>({
     expenseCategory: [],
     paymentMethod: [],
@@ -17196,7 +17232,8 @@ export function ImportData(props: any = {}) {
       };
     });
   }
-  function executeDataImport(mode) {
+  async function executeDataImport(mode) {
+    if (importApplyBusyRef.current) return;
     var finalPreview = resolvePreviewRows();
     if (!finalPreview.length) {
       setPendingDataImportMode(null);
@@ -17205,13 +17242,29 @@ export function ImportData(props: any = {}) {
     }
     var replaceExisting = mode === "replace";
     var importedOk = true;
-    if (importType === "expense") {
+    if (replaceExisting && (importType === 'expense' || importType === 'income')) {
+      if (importApplyBusyRef.current) return;
+      importApplyBusyRef.current = true;
+      setImportApplyBusy(true);
+      try {
+        if (typeof ctx.replaceAccountMovementsV2 !== 'function') throw new Error('SYNC_V2_ONLINE_REQUIRED');
+        const importedRows = importedMovementRows(finalPreview);
+        const type = importType === 'expense' ? 'expense' : 'income';
+        await ctx.replaceAccountMovementsV2({ [type]: importedRows }, undefined, 'import');
+      } catch (error) {
+        console.error('Import replacement failed', error);
+        setMsg(L('Operazione non completata. Alcune voci potrebbero essere già state aggiornate. Verifica i dati prima di riprovare.'));
+        setPendingDataImportMode(null);
+        return;
+      } finally {
+        importApplyBusyRef.current = false;
+        setImportApplyBusy(false);
+      }
+    } else if (importType === "expense") {
       var expenseRows = importedMovementRows(finalPreview);
-      if (replaceExisting && setExpenses) setExpenses([]);
       importedOk = addExpenses(expenseRows, "import");
     } else if (importType === "income") {
       var incomeRows = importedMovementRows(finalPreview);
-      if (replaceExisting && setIncomes) setIncomes([]);
       importedOk = addIncomes(incomeRows, "import");
     } else if (importType === "patrimonio") {
       var byMonth: any = {};
@@ -18188,7 +18241,7 @@ export function ImportData(props: any = {}) {
         open={!!pendingDataImportMode}
         title={L("Come vuoi importare i dati?")}
         onClose={function () {
-          setPendingDataImportMode(null);
+          if (!importApplyBusyRef.current) setPendingDataImportMode(null);
         }}
         zIndex={12150}
       >
@@ -18207,6 +18260,7 @@ export function ImportData(props: any = {}) {
             onClick={function () {
               executeDataImport("merge");
             }}
+            disabled={importApplyBusy}
             style={{
               border: "none",
               borderRadius: 12,
@@ -18225,6 +18279,7 @@ export function ImportData(props: any = {}) {
             onClick={function () {
               executeDataImport("replace");
             }}
+            disabled={importApplyBusy}
             style={{
               border: "1px solid #E24B4A",
               borderRadius: 12,

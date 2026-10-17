@@ -500,3 +500,75 @@
 
 .fainance-rules[data-dark=true] .rule-step { background:var(--rule-soft); }
 .fainance-rules[data-dark=true] .rule-icon-button { color:var(--rule-link); }
+/* Additional rule conditions and read-only historical preview */
+.fainance-rules .rule-add-condition.at-limit { background:#D8E1EA!important; color:#5D6B7C!important; border-color:#D8E1EA!important; box-shadow:none!important; cursor:pointer; }
+.fainance-rules[data-dark=true] .rule-add-condition.at-limit { background:#29455F!important; color:#B3C0CE!important; border-color:#29455F!important; }
+.fainance-rules .rule-join select { min-width:90px; max-width:100%; font-weight:800; text-align:center; border:1px solid var(--rule-border); border-radius:10px; padding:8px; background:var(--rule-card); color:var(--rule-text); }
+.fainance-rules .rule-range-input { display:grid; grid-template-columns:1fr 1fr; gap:8px; min-width:0; }
+.fainance-rules .rule-range-input label { display:grid; gap:3px; min-width:0; }
+.fainance-rules .rule-range-input input { width:100%; min-width:0; }
+.fainance-rules .rule-edit-optin { display:flex; gap:10px; align-items:center; margin:12px 0 4px; color:var(--rule-text); }
+.fainance-rules .rule-history-test { display:grid; gap:10px; }
+.fainance-rules .rule-history-test .rule-result { display:block; }
+
+/* 2.1.12 corrective: modal containment and bracketed condition builder */
+.fainance-rules .rule-editor-overlay .rule-goal-like { min-width:0!important; width:min(620px,100%)!important; max-width:calc(100vw - 24px)!important; overflow-x:hidden!important; }
+.fainance-rules .rule-editor-body, .fainance-rules .rule-editor-body > .rule-card { min-width:0!important; max-width:100%; overflow-wrap:anywhere; }
+.fainance-rules .rule-edit-optin { display:grid!important; grid-template-columns:20px minmax(0,1fr)!important; align-items:start!important; justify-content:start!important; width:100%!important; min-width:0!important; gap:10px!important; }
+.fainance-rules .rule-edit-optin input[type=checkbox] { width:18px!important; height:18px!important; margin:0!important; min-width:18px!important; max-width:18px!important; position:static!important; transform:none!important; }
+.fainance-rules .rule-edit-optin span { display:block!important; min-width:0!important; width:auto!important; white-space:normal!important; overflow-wrap:anywhere!important; text-align:left!important; }
+.fainance-rules .rule-group-builder { display:grid; gap:8px; min-width:0; padding:12px; border:1px solid var(--rule-border); border-radius:14px; background:var(--rule-soft); }
+.fainance-rules .rule-group-controls { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; min-width:0; }
+.fainance-rules .rule-group-controls > button { grid-column:1 / -1; }
+.fainance-rules .rule-group-chip { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:5px 10px; border-radius:10px; border:1px solid var(--rule-border); background:var(--rule-card); }
+.fainance-rules .rule-group-chip button { min-height:32px; }
+.fainance-rules .rule-expression { margin:6px 0; width:100%; min-width:0; padding:10px; border-radius:10px; border:1px solid var(--rule-border); background:var(--rule-card); color:var(--rule-text); line-height:1.55; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.fainance-rules .rule-limit-inline { padding:10px 12px; border-radius:10px; background:var(--rule-soft); border:1px solid var(--rule-border); font-size:13px; font-weight:700; color:var(--rule-text); }
+.fainance-rules .rule-explanation { min-width:0; padding:0 8px; }
+.fainance-rules .rule-explanation p { font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.fainance-rules .rule-join select { border:2px solid var(--rule-primary); font-weight:800; }
+
+/* Rule builder v3: inline parenthesization, AI composer and responsive grouping */
+.fainance-rules .rule-inline-brackets {display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:flex-start; min-width:0;}
+.fainance-rules .rule-inline-brackets button {font-size:12px; min-height:36px; padding:7px 10px;}
+.fainance-rules .rule-group-pending {border:2px solid var(--rule-primary);}
+.fainance-rules .rule-group-list {display:grid; gap:6px;}
+.fainance-rules .rule-cancel-bracket {justify-self:start;}
+.fainance-rules .rule-ai-prompt-open {width:100%; background:var(--rule-soft); color:var(--rule-link); text-align:center; border:1px solid var(--rule-border);}
+.fainance-rules .rule-ai-prompt-dialog {width:min(540px,calc(100vw - 24px))!important; max-width:calc(100vw - 24px)!important; min-width:0!important;}
+.fainance-rules .rule-ai-prompt-content {display:grid; gap:12px; min-width:0; padding:6px 16px 20px;}
+.fainance-rules .rule-ai-prompt-content textarea {width:100%; min-height:140px; resize:vertical;}
+.fainance-rules .rule-ai-prompt-dialog .rule-editor-footer {display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between;}
+.fainance-rules .rule-ai-prompt-dialog .rule-editor-footer button {flex:1 1 130px; white-space:normal;}
+
+/* Rule formula wizard (V5): use existing fAInance tokens and component surfaces. */
+.fainance-rules .rule-formula-wizard {min-width:0;max-width:100%;}
+.fainance-rules .rule-formula-steps {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.fainance-rules .rule-formula-steps button {min-width:0;min-height:32px;padding:4px 8px;border-radius:12px;border:1px solid var(--rule-border);background:var(--rule-soft);color:var(--rule-text);font-weight:700;font-size:13px;}
+.fainance-rules .rule-formula-steps button.active {background:var(--rule-primary);color:var(--rule-on-primary);border-color:var(--rule-primary);}
+.fainance-rules .rule-formula-content {display:grid;gap:12px;min-width:0;}
+.fainance-rules .rule-formula-expression {display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-height:62px;padding:12px;background:var(--rule-card);border:2px solid var(--rule-border);border-radius:14px;}
+.fainance-rules .rule-formula-token {min-width:27px;min-height:30px;display:inline-flex;align-items:center;justify-content:center;padding:3px 7px;font-size:16px;font-weight:800;border-radius:9px;color:var(--rule-text);}
+.fainance-rules .rule-formula-token.number {background:var(--rule-soft);color:var(--rule-link);}
+.fainance-rules .rule-formula-keypad {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;min-width:0;}
+.fainance-rules .rule-formula-keypad button {min-width:0;min-height:48px;padding:6px;border:1px solid var(--rule-border);border-radius:12px;background:var(--rule-card);color:var(--rule-text);font-size:16px;font-weight:800;box-shadow:none;}
+.fainance-rules .rule-formula-keypad button:disabled {opacity:.35;cursor:not-allowed;}
+.fainance-rules .rule-formula-keypad .rule-formula-number {color:var(--rule-link);background:var(--rule-soft);}
+.fainance-rules .rule-formula-keypad .rule-formula-operator {background:var(--rule-primary);color:var(--rule-on-primary);}
+.fainance-rules .rule-formula-keypad .rule-formula-clear {color:var(--rule-text);}
+.fainance-rules .rule-formula-available,.fainance-rules .rule-formula-preview {min-width:0;padding:12px;border-radius:12px;border:1px solid var(--rule-border);background:var(--rule-card);}
+.fainance-rules .rule-formula-available {display:grid;gap:6px;}
+.fainance-rules .rule-formula-available p {display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere;margin:0;color:var(--rule-text);font-size:13px;}
+.fainance-rules .rule-formula-available-number {flex:0 0 28px;display:inline-flex;justify-content:center;align-items:center;min-height:28px;border-radius:100%;background:var(--rule-soft);color:var(--rule-link);font-weight:800;}
+.fainance-rules .rule-formula-preview {display:grid;gap:8px;}
+.fainance-rules .rule-formula-preview p {margin:0;line-height:1.5;overflow-wrap:anywhere;color:var(--rule-text);}
+.fainance-rules .rule-formula-valid {color:var(--fainance-success,#18794E);font-weight:800;}
+.fainance-rules .rule-formula-invalid {color:var(--fainance-error,#B63B45);font-weight:800;}
+.fainance-rules[data-dark=true] .rule-formula-valid {color:#79D5A8;}
+.fainance-rules[data-dark=true] .rule-formula-invalid {color:#FF9AA3;}
+
+/* Direct AI rule composition: prompt over standard editor; no alternative review page. */
+.fainance-rules .rule-ai-direct-overlay { z-index:10030; }
+.fainance-rules .rule-ai-rephrase { display:block; width:calc(100% - 32px); margin:0 16px 10px; min-height:36px; padding:6px 12px; background:var(--rule-soft); border:1px solid var(--rule-border); border-radius:12px; color:var(--rule-link); font-size:13px; font-weight:700; }
+.fainance-rules .rule-ai-rephrase:focus-visible { outline:2px solid var(--rule-primary); outline-offset:2px; }
+.fainance-rules[data-dark=true] .rule-ai-rephrase { background:var(--rule-soft); color:var(--rule-text); }

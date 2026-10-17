@@ -1,3 +1,5 @@
+import { INTERNAL_DESTINATIONS, readNotificationMedia } from "./notifications/notificationMedia.mjs";
+import { mergeIncomingMovements } from "./data/incomingMovements";
 import { DarkTextDefaults } from './ui/DarkTextDefaults';
 import { readableDarkText } from './ui/textContrast';
 import { getDocFromCache, getDocFromServer } from "firebase/firestore";
@@ -228,6 +230,7 @@ import { ShoppingPanel } from "./sections/ShoppingPanel";
 import { PatrimonioPanel } from "./sections/PatrimonioPanel";
 import { SharePanel } from "./sections/SharePanel";
 import { MorePanel } from "./sections/MorePanel";
+import { FinancialCalendarPanel } from "./sections/FinancialCalendarPanel";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import { AdminCenterPanel } from "./admin/AdminCenterPanel";
 import { resolveAdminSession, type AdminSession } from "./admin/session";
@@ -286,6 +289,8 @@ import {
   movementSyncV2AccountStatus,
   watchMovementSyncV2,
   writeMovementDiffV2,
+  replaceMovementSetsV2,
+  readMovementSetsV2,
 } from "./data/movementSyncCleanV2";
 import {
   bulkMovementRowLimit,
@@ -808,6 +813,39 @@ function AppWithLogin() {
 
 function StableNestedPanelHost({ render }: { render: () => any }) {
   return render();
+}
+
+// Progress belongs to this small component, not the financial app shell.
+// Updating the shell on every acknowledgement recalculates thousands of rows.
+function MovementBulkProgressOverlay({ dark, L, movementBulkCancelRef, progressRef }) {
+  const [movementBulkProgress, setMovementBulkProgress] = useState(() => progressRef.current);
+  useEffect(() => {
+    const update = () => setMovementBulkProgress(progressRef.current);
+    window.addEventListener('fainance-movement-bulk-progress', update);
+    update();
+    return () => window.removeEventListener('fainance-movement-bulk-progress', update);
+  }, [progressRef]);
+  return (<div role="alertdialog" aria-modal="true" aria-label={L('Sincronizzazione in corso, attendi...')}
+        tabIndex={-1} ref={node => { if (node) node.focus(); }}
+        onKeyDown={event => { if (event.key === 'Tab') event.preventDefault(); }}
+        style={{ position: 'fixed', inset: 0, zIndex: 200000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: dark ? '#081522' : '#F7F9FC', color: dark ? '#F4F7FB' : '#14263D', padding: 24, textAlign: 'center' }}>
+        <div role="status" aria-live="polite">
+          <strong>{L('Sincronizzazione in corso, attendi...')}</strong>
+          {movementBulkProgress.phase === 'pending' && <>
+            <p>{L('Attendo la conferma delle modifiche precedenti. Nessuna nuova cancellazione o sostituzione è iniziata.')}</p>
+            <p>{L('Movimenti ancora da sincronizzare')}: {movementBulkProgress.done}</p>
+            <button type="button" onClick={() => movementBulkCancelRef.current?.()}
+              style={{ padding: '12px 20px', borderRadius: 12, border: '1px solid currentColor', background: 'transparent', color: 'inherit' }}>
+              {L('Annulla')}
+            </button>
+          </>}
+          {movementBulkProgress.phase === 'checking' && <p>{L('Verifica della sincronizzazione')}</p>}
+          {movementBulkProgress.phase === 'reading' && <p>{L('Lettura dei movimenti confermati')}</p>}
+          {movementBulkProgress.phase === 'verifying' && <p>{L('Verifica finale dei movimenti')}</p>}
+          {movementBulkProgress.phase !== 'pending' && movementBulkProgress.total > 0 && <p>{movementBulkProgress.done}/{movementBulkProgress.total}</p>}
+        </div>
+      </div>);
 }
 
 function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
@@ -2699,6 +2737,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // the engine has passed isolated tests and a separate migration is added.
   var movementSyncV2InitiallyActive = isMovementSyncV2LocallyActive(userId);
   var movementSyncV2ActiveRef = useRef(movementSyncV2InitiallyActive);
+  var movementBulkInProgressRef = useRef(false);
+  var movementBulkCancelRef = useRef(null);
+  var [movementBulkBusy, setMovementBulkBusy] = useState(false);
+  var movementBulkProgressRef = useRef({ done: 0, total: 0, phase: 'checking' });
+  var movementBulkLatestSnapshotRef = useRef(null);
+  var movementBulkSnapshotSequenceRef = useRef(0);
+  var movementAccountUidRef = useRef(userId);
+  movementAccountUidRef.current = userId;
   // During migration the UI stays on the legacy state, but every live movement
   // change is mirrored to V2. This keeps the app fully usable while the old
   // archive is copied in the background.
@@ -3361,6 +3407,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var expensesRef = useRef(expenses);
   expensesRef.current = expenses;
   function setExpenses(nextValue, fromCloud = false) {
+    if (movementBulkInProgressRef.current && !fromCloud)
+      throw new Error('SYNC_V2_BULK_OPERATION_BUSY');
     var current = Array.isArray(expensesRef.current) ? expensesRef.current : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
@@ -3384,6 +3432,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (v2WriteThroughNow && !fromCloud) {
       writeMovementDiffV2(userId, "expense", current, prepared, function (error) {
         console.error("Movement Sync V2 expense write failed", error);
+        if (movementAccountUidRef.current === userId)
+          setToast({ text: L('Sincronizzazione non completata. Verifica i dati e la connessione.'), type: 'error' });
       });
     }
     if (!fromCloud && !v2ActiveNow) {
@@ -3396,6 +3446,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var incomesRef = useRef(incomes);
   incomesRef.current = incomes;
   function setIncomes(nextValue, fromCloud = false) {
+    if (movementBulkInProgressRef.current && !fromCloud)
+      throw new Error('SYNC_V2_BULK_OPERATION_BUSY');
     var current = Array.isArray(incomesRef.current) ? incomesRef.current : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
@@ -3414,6 +3466,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (v2WriteThroughNow && !fromCloud) {
       writeMovementDiffV2(userId, "income", current, prepared, function (error) {
         console.error("Movement Sync V2 income write failed", error);
+        if (movementAccountUidRef.current === userId)
+          setToast({ text: L('Sincronizzazione non completata. Verifica i dati e la connessione.'), type: 'error' });
       });
     }
     if (!fromCloud && !v2ActiveNow) {
@@ -3421,6 +3475,75 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
     incomesRef.current = prepared;
     return setIncomesRaw(prepared);
+  }
+  // Bulk operations use the existing per-record V2 identities and tombstones.
+  // They never change migration markers or switch accounts to a new sync path.
+  async function replaceAccountMovementsV2(replacements, onProgress, source = 'backup') {
+    if (movementBulkInProgressRef.current) throw new Error('SYNC_V2_BULK_OPERATION_BUSY');
+    if (!userId || !movementSyncV2ActiveRef.current || movementSyncV2MigrationRunningRef.current)
+      throw new Error('SYNC_V2_WAIT_FOR_MIGRATION');
+    const owner = userId;
+    const prepared = { ...replacements };
+    if (source === 'import') {
+      ['expense', 'income'].forEach(function (kind) {
+        if (!Array.isArray(prepared[kind])) return;
+        prepared[kind] = prepared[kind].map(function (row) {
+          return { ...(kind === 'expense' ? expenseWithMethodSnapshot(row) : row),
+            amount: Math.abs(parseMoney(row.amount)),
+            createdAt: row.createdAt || new Date().toISOString() };
+        }).filter(function (row) { return row.amount > 0; });
+      });
+    }
+    const bulkAbort = new AbortController();
+    let lastBulkProgressAt = 0;
+    let lastBulkProgressPhase = '';
+    movementBulkCancelRef.current = () => bulkAbort.abort();
+    movementBulkInProgressRef.current = true;
+    setMovementBulkBusy(true);
+    movementBulkProgressRef.current = { done: 0, total: 0, phase: 'checking' };
+    movementBulkLatestSnapshotRef.current = null;
+    try {
+      return await replaceMovementSetsV2(owner, prepared, function (done, total, phase) {
+          const now = Date.now();
+          // Re-rendering the entire app for every commit makes large imports
+          // compete with Firestore's acknowledgement processing on Android.
+          if (phase === 'writing' && phase === lastBulkProgressPhase &&
+              done < total && now - lastBulkProgressAt < 500) return;
+          lastBulkProgressAt = now;
+          lastBulkProgressPhase = phase;
+          movementBulkProgressRef.current = { done, total, phase };
+          window.dispatchEvent(new CustomEvent('fainance-movement-bulk-progress'));
+          if (onProgress) onProgress(done, total, phase);
+        },
+        function () { return movementAccountUidRef.current === owner; }, bulkAbort.signal);
+    } finally {
+      // A failed operation may have committed some records. Re-read the real
+      // state; never copy the pre-operation arrays back over committed changes.
+      const readSequence = movementBulkSnapshotSequenceRef.current;
+      try {
+        const server = await readMovementSetsV2(owner);
+        if (movementAccountUidRef.current === owner) {
+          const buffered = movementBulkLatestSnapshotRef.current;
+          const latest = buffered && movementBulkSnapshotSequenceRef.current > readSequence
+            ? movementStateFromV2(buffered) : server;
+          setExpenses(latest.expenses, true);
+          setIncomes(latest.incomes, true);
+        }
+      } catch (refreshError) {
+        const buffered = movementBulkLatestSnapshotRef.current;
+        if (buffered && movementAccountUidRef.current === owner) {
+          const latest = movementStateFromV2(buffered);
+          setExpenses(latest.expenses, true);
+          setIncomes(latest.incomes, true);
+        }
+        console.error('Movement refresh unavailable; realtime listener remains active', refreshError);
+      } finally {
+        movementBulkLatestSnapshotRef.current = null;
+        movementBulkInProgressRef.current = false;
+        movementBulkCancelRef.current = null;
+        setMovementBulkBusy(false);
+      }
+    }
   }
   var [cats, setCatsRaw] = useStorage(userKey("cats_v10"), DEFAULT_CATS);
   function setCats(nextCats) {
@@ -4552,6 +4675,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     recurring,
   ]);
   useEffect(function () {
+    if (movementBulkInProgressRef.current) return;
     if (!Array.isArray(recurring) || !recurring.length) return;
     var catalogRepair = repairRecurringRuleReferencesFromCatalogs(recurring, cats, methods);
     if (catalogRepair.repaired) {
@@ -4565,7 +4689,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
     var movementRepair = repairRecurringExpenseMovementReferences(expensesRef.current, recurring);
     if (movementRepair.repaired) setExpenses(movementRepair.expenses);
-  }, [recurring, expenses, cats, methods]);
+  }, [recurring, expenses, cats, methods, movementBulkBusy]);
   var [toolShareDraft,setToolShareDraft]=useState<any>(null);
   useEffect(()=>{setToolShareDraft(null);},[userId]);
   var financeEvolutionRef = useRef(financeEvolution);
@@ -5167,6 +5291,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     "consulenteAI",
     "patrimonio",
     "budget",
+    "calendar",
     "share",
     "debtCredits",
     "shopping",
@@ -5213,6 +5338,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           out.push(id);
         }
       });
+      // Il Calendario resta una voce autonoma, immediatamente dopo Budget.
+      // Migra anche i vecchi menu che lo avevano inserito dopo Storico.
+      var calendarIndex = out.indexOf("calendar");
+      if (calendarIndex >= 0) out.splice(calendarIndex, 1);
+      var budgetIndex = out.indexOf("budget");
+      out.splice(budgetIndex >= 0 ? budgetIndex + 1 : out.length, 0, "calendar");
       var toolsIndex = out.indexOf("tools");
       var notesIndex = out.indexOf("appunti");
       if (toolsIndex >= 0 && notesIndex >= 0 && toolsIndex > notesIndex) {
@@ -5533,10 +5664,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     useStorage(userKey("widget_debt_credits_auto_update_v1"), true);
 
   var [tab, setTabRaw] = useState(() => restoreResumeTab(localStorage, userKey("resume_tab_v1")));
+  var lastNonHomeTabRef = useRef(
+    String(tab || "") && String(tab || "") !== "home" ? String(tab) : ""
+  );
+  var androidBackPreviewReturnRef = useRef(0);
   useEffect(() => {
     try { localStorage.setItem(userKey("resume_tab_v1"), String(tab)); } catch (_) {}
   }, [userId, tab]);
   useEffect(() => { trackAnalyticsSection(tab); }, [tab]);
+  useEffect(() => {
+    if (String(tab || "") && String(tab || "") !== "home")
+      lastNonHomeTabRef.current = String(tab);
+  }, [tab]);
   function setTab(nextTab) {
     var requestedTab = String(nextTab || "");
     if (requestedTab === "debtCredits" && currentPlan !== "premium") {
@@ -5581,6 +5720,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     stipendioHour: "18:00",
     stipendioDay: 0,
     spesaRicorrente: true,
+    periodClosureActive: true,
   });
   var [customNotifs, setCustomNotifsRaw] = useStorage(
     userKey("custom_notifs_v1"),
@@ -6919,6 +7059,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           setMovementSyncV2Mode(String(result.reason || "legacy"));
 
           var migrationReason = String(result.reason || "");
+          if (migrationReason === "status-check-unavailable") {
+            if (!isOffline) scheduleMigrationRetry();
+            return;
+          }
           var shouldMirror = migrationReason === "migration-running" || migrationReason === "device-catchup-required";
           if (shouldMirror) movementSyncV2WriteThroughRef.current = true;
 
@@ -6989,10 +7133,19 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
   useEffect(
     function () {
+      // Bulk transactions read/guard each document and finish with a full
+      // server verification. Suspend the expensive realtime collection target
+      // until that refresh completes; normal offline writes remain unchanged.
       if (!movementSyncV2Active || !userId) return;
+      if (movementBulkBusy) return;
       return watchMovementSyncV2(
         userId,
         function (records) {
+          if (movementBulkInProgressRef.current) {
+            movementBulkLatestSnapshotRef.current = records;
+            movementBulkSnapshotSequenceRef.current += 1;
+            return;
+          }
           var state = movementStateFromV2(records);
           var repairedRecurringExpenses = repairRecurringExpenseMovementReferences(
             state.expenses,
@@ -7009,7 +7162,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         }
       );
     },
-    [movementSyncV2Active, userId]
+    [movementSyncV2Active, userId, movementBulkBusy]
   );
 
   function currentHomeSyncValue() {
@@ -8011,6 +8164,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var cloudUserStateAuthorityV6: any = null;
               try {
                 d = await fainanceExpandAccountCloudDataV5(rawCloud);
+                if (cancelled) return;
 
                 // V6 is loaded from the ordinary private-backup path using the
                 // exact schema already supported by the app/rules.
@@ -8313,20 +8467,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 : [];
               var cloudGoals = Array.isArray(d.goals) ? d.goals : [];
               var cloudAlerts = Array.isArray(d.alerts) ? d.alerts : [];
-              var mergedExpenses = mergeSyncRecords(
-                latestLocalExpenses,
-                cloudExpenses,
-                mergedAccountDeleted,
-                expenseKey,
-                true
-              );
-              var mergedIncomes = mergeSyncRecords(
-                latestLocalIncomes,
-                cloudIncomes,
-                mergedAccountDeleted,
-                incomeKey,
-                true
-              );
+              var mergedMovements = mergeIncomingMovements({
+                expenses: latestLocalExpenses, incomes: latestLocalIncomes, deleted: mergedAccountDeleted,
+              }, { expenses: cloudExpenses, incomes: cloudIncomes });
+              var mergedExpenses = mergedMovements.expenses;
+              var mergedIncomes = mergedMovements.incomes;
               var mergedRecurringBase = mergeSyncRecords(
                 latestLocalRecurring,
                 cloudRecurring,
@@ -20192,6 +20337,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               });
               return;
             }
+            var lastVisitedTab = String(lastNonHomeTabRef.current || "");
+            if (
+              lastVisitedTab &&
+              lastVisitedTab !== "home" &&
+              nowBack - Number(androidBackPreviewReturnRef.current || 0) > 2500
+            ) {
+              androidBackPreviewReturnRef.current = nowBack;
+              setTab(lastVisitedTab);
+              setMobileMenu(false);
+              return;
+            }
             if (nowBack - Number(androidBackLastPressRef.current || 0) < 1800) {
               if (CapApp.exitApp) CapApp.exitApp();
               return;
@@ -22704,18 +22860,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
 
   var balanceViewMode = homeBalanceView === "reale" ? "reale" : "rateizzato";
-  var curMonthExp = totalForMonth(
-    countedExpensesForAnalysis,
-    curMonthKey,
-    balanceViewMode,
-    accountingPeriod.settings
-  );
-  var curMonthInc = totalForMonth(
-    countedIncomes,
-    curMonthKey,
-    balanceViewMode,
-    accountingPeriod.settings
-  );
+  // La barra superiore usa lo stesso motore del periodo finanziario della Home.
+  // Il periodo e' quello salvato in financeEvolution.period (non le preferenze legacy).
+  var curMonthExp = accountingPeriod.total(countedExpensesForAnalysis, curMonthKey, balanceViewMode);
+  var curMonthInc = accountingPeriod.total(countedIncomes, curMonthKey, balanceViewMode);
   var curMonthBalance = curMonthInc - curMonthExp;
   var yearExp = countedExpensesForAnalysis
     .filter(function (e) {
@@ -23005,11 +23153,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     if (!ids.length) return null;
     var sid = String(typeId || "");
-    return ids.includes("income:" + sid) || ids.includes(sid);
+    return ids.includes("income:" + sid);
   }
   var filteredExpenses = useMemo(
     function () {
-      var q = searchQuery.toLowerCase();
+      var q = String(searchQuery || "").trim().toLowerCase();
       var minAmt = filterAmtMin ? parseMoney(filterAmtMin) : null;
       var maxAmt = filterAmtMax ? parseMoney(filterAmtMax) : null;
       var personalSource = filterAreaPersonal ? expenses : [];
@@ -23073,8 +23221,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           )
             return false;
           if (filterMethods && filterMethods.length && isShare) return false;
-          if (filterDateFrom && e.date < filterDateFrom) return false;
-          if (filterDateTo && e.date > filterDateTo) return false;
+          var day = String(e.date || "").slice(0, 10);
+          if (filterDateFrom && day < filterDateFrom) return false;
+          if (filterDateTo && day > filterDateTo) return false;
           if (minAmt !== null && e.amount < minAmt) return false;
           if (maxAmt !== null && e.amount > maxAmt) return false;
           return true;
@@ -23112,11 +23261,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
   var filteredIncomes = useMemo(
     function () {
-      var q = searchQuery.toLowerCase();
+      var q = String(searchQuery || "").trim().toLowerCase();
       var minAmt = filterAmtMin ? parseMoney(filterAmtMin) : null;
       var maxAmt = filterAmtMax ? parseMoney(filterAmtMax) : null;
       return sortHistoryItems(
         incomes.filter(function (i) {
+          if (!filterAreaPersonal || (filterGroup && filterGroup !== "all") || (filterCat && filterCat !== "all")) return false;
           var it = getIT(i.type);
           var txt = (
             (i.desc || "") +
@@ -23148,8 +23298,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             var selected = filterCatMatchesIncomeId(i.type);
             if (filterCatExclude ? selected : !selected) return false;
           }
-          if (filterDateFrom && i.date < filterDateFrom) return false;
-          if (filterDateTo && i.date > filterDateTo) return false;
+          var day = String(i.date || "").slice(0, 10);
+          if (filterDateFrom && day < filterDateFrom) return false;
+          if (filterDateTo && day > filterDateTo) return false;
           if (minAmt !== null && i.amount < minAmt) return false;
           if (maxAmt !== null && i.amount > maxAmt) return false;
           return true;
@@ -23158,6 +23309,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     },
     [
       incomes,
+      filterAreaPersonal,
+      filterGroup,
+      filterCat,
       filterYear,
       filterMonth,
       filterMonths,
@@ -23234,9 +23388,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // banner nativo a ogni giro. Con hook e valori calcolati qui, TopAdBox non ha piu'
   // hook propri e puo' essere invocata come funzione: nessun rimontaggio.
   var topAdVisible = shouldShowTopAdBox();
+  // Come le icone superiori, nascondi il riepilogo mentre si inserisce un movimento.
+  var mobileSummaryVisible = !!showAppSummaryHeader && tab !== "spese";
   var topAdNativeBanner = isNativeMobileApp();
   var topAdBoxRef = useRef(null);
-  var topAdSlotHeight = showAppSummaryHeader ? 68 : 74;
+  var topAdSlotHeight = mobileSummaryVisible ? 68 : 74;
   useEffect(
     function () {
       var ads = nativePlugin("FainanceAds");
@@ -23253,7 +23409,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             // che in alcune build vengono ignorate e fanno sparire l'annuncio.
             top = Math.max(
               0,
-              Math.round(r.top + Math.max(0, (r.height - 50) / 2) - 6)
+              Math.round(r.top + Math.max(0, (r.height - 50) / 2))
             );
           }
         } catch (e) {}
@@ -23268,7 +23424,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               y: top,
               top: top,
               placement: "inline-slot",
-              headerVisible: !!showAppSummaryHeader,
+              headerVisible: mobileSummaryVisible,
             })
             .catch(function (e) {
               console.warn("Banner AdMob non disponibile", e);
@@ -23320,7 +23476,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         style={{
           position: "relative",
           height: topAdSlotHeight,
-          margin: showAppSummaryHeader ? "8px 0 12px" : "16px 0 12px",
+          margin: mobileSummaryVisible ? "16px 0 12px" : "20px 0 12px",
           background: topAdNativeBanner
             ? dark
               ? "#171725"
@@ -25943,13 +26099,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Home",
         spese: "Movimenti",
         history: "Storico",
+        calendar: "Calendario",
         stats: "Statistiche",
         appunti: "Appunti",
         voice: "Voce",
         share: "Share",
         debtCredits: "Debiti / Crediti",
         shopping: "Spesa",
-        consulenteAI: "Agente AI",
+        consulenteAI: "Agente",
         patrimonio: "Patrimonio",
         budget: "Budget",
         goals: "Obiettivi",
@@ -25961,13 +26118,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Home",
         spese: "Movements",
         history: "History",
+        calendar: "Calendar",
         stats: "Statistics",
         appunti: "Notes",
         voice: "Voice",
         share: "Share",
         debtCredits: "Debts / Credits",
         shopping: "Shopping",
-        consulenteAI: "AI Agent",
+        consulenteAI: "Agent",
         patrimonio: "Assets",
         budget: "Budget",
         goals: "Goals",
@@ -25979,13 +26137,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Inicio",
         spese: "Movimientos",
         history: "Historial",
+        calendar: "Calendario",
         stats: "Estadísticas",
         appunti: "Notas",
         voice: "Voz",
         share: "Share",
         debtCredits: "Deudas / Créditos",
         shopping: "Compra",
-        consulenteAI: "Agente IA",
+        consulenteAI: "Agente",
         patrimonio: "Patrimonio",
         budget: "Presupuesto",
         goals: "Objetivos",
@@ -25997,13 +26156,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Accueil",
         spese: "Mouvements",
         history: "Historique",
+        calendar: "Calendrier",
         stats: "Statistiques",
         appunti: "Notes",
         voice: "Voix",
         share: "Share",
         debtCredits: "Dettes / Créances",
         shopping: "Courses",
-        consulenteAI: "Agent IA",
+        consulenteAI: "Agent",
         patrimonio: "Patrimoine",
         budget: "Budget",
         goals: "Objectifs",
@@ -26015,13 +26175,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Startseite",
         spese: "Buchungen",
         history: "Verlauf",
+        calendar: "Kalender",
         stats: "Statistiken",
         appunti: "Notizen",
         voice: "Stimme",
         share: "Share",
         debtCredits: "Schulden / Forderungen",
         shopping: "Einkauf",
-        consulenteAI: "KI-Agent",
+        consulenteAI: "Agent",
         patrimonio: "Vermögen",
         budget: "Budget",
         goals: "Ziele",
@@ -26033,13 +26194,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Início",
         spese: "Movimentos",
         history: "Histórico",
+        calendar: "Calendário",
         stats: "Estatísticas",
         appunti: "Apontamentos",
         voice: "Voz",
         share: "Share",
         debtCredits: "Dívidas / Créditos",
         shopping: "Compras",
-        consulenteAI: "Agente de IA",
+        consulenteAI: "Agente",
         patrimonio: "Património",
         budget: "Orçamento",
         goals: "Objetivos",
@@ -26051,13 +26213,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Start",
         spese: "Ruchy",
         history: "Historia",
+        calendar: "Kalendarz",
         stats: "Statystyki",
         appunti: "Notatki",
         voice: "Głos",
         share: "Share",
         debtCredits: "Długi / Należności",
         shopping: "Zakupy",
-        consulenteAI: "Agent AI",
+        consulenteAI: "Agent",
         patrimonio: "Majątek",
         budget: "Budżet",
         goals: "Cele",
@@ -26069,13 +26232,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Home",
         spese: "Mutaties",
         history: "Geschiedenis",
+        calendar: "Kalender",
         stats: "Statistieken",
         appunti: "Notities",
         voice: "Stem",
         share: "Share",
         debtCredits: "Schulden / Tegoeden",
         shopping: "Boodschappen",
-        consulenteAI: "AI-agent",
+        consulenteAI: "Agent",
         patrimonio: "Vermogen",
         budget: "Budget",
         goals: "Doelen",
@@ -26087,13 +26251,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Acasă",
         spese: "Mișcări",
         history: "Istoric",
+        calendar: "Calendar",
         stats: "Statistici",
         appunti: "Notițe",
         voice: "Voce",
         share: "Share",
         debtCredits: "Datorii / Creanțe",
         shopping: "Cumpărături",
-        consulenteAI: "Agent AI",
+        consulenteAI: "Agent",
         patrimonio: "Patrimoniu",
         budget: "Buget",
         goals: "Obiective",
@@ -26105,13 +26270,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Αρχική",
         spese: "Κινήσεις",
         history: "Ιστορικό",
+        calendar: "Ημερολόγιο",
         stats: "Στατιστικά",
         appunti: "Σημειώσεις",
         voice: "Φωνή",
         share: "Share",
         debtCredits: "Χρέη / Πιστώσεις",
         shopping: "Αγορές",
-        consulenteAI: "Πράκτορας AI",
+        consulenteAI: "Πράκτορας",
         patrimonio: "Περιουσία",
         budget: "Προϋπολογισμός",
         goals: "Στόχοι",
@@ -26132,6 +26298,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         label: sectionLabel("spese"),
       },
       history: { id: "history", icon: "📋", label: sectionLabel("history") },
+      calendar: { id: "calendar", icon: "🗓️", label: sectionLabel("calendar") },
       stats: { id: "stats", icon: "📊", label: sectionLabel("stats") },
       appunti: { id: "appunti", icon: "📝", label: sectionLabel("appunti") },
       voice: { id: "voice", icon: "🎙️", label: sectionLabel("voice") },
@@ -26278,6 +26445,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     "consulenteAI",
     "patrimonio",
     "budget",
+    "calendar",
     "share",
     "debtCredits",
     "shopping",
@@ -26797,6 +26965,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (tab === "home") return <HomePanel />;
     if (tab === "spese") return <SpesePanel />;
     if (tab === "history") return <HistoryPanel />;
+    if (tab === "calendar") return <FinancialCalendarPanel />;
     if (tab === "more") return <MorePanel />;
     if (tab === "share")
       return <StableNestedPanelHost key="share" render={SharePanel} />;
@@ -27164,6 +27333,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var cleanupPush = function () {};
       if (!userId) return function () {};
 
+      const onMediaDestination = function (event) {
+        const destination = event.detail && event.detail.destination;
+        if (typeof destination === "string" && Object.prototype.hasOwnProperty.call(INTERNAL_DESTINATIONS, destination)) {
+          setTab(destination); setMobileMenu(false);
+        }
+      };
+      window.addEventListener("fainance:notification-destination", onMediaDestination);
+
       syncNotificationProfile(String(userId), String(lang || "en")).catch(function (error) {
         try { console.warn("Notification profile sync failed", error); } catch (_logProfile) {}
       });
@@ -27173,6 +27350,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         language: String(lang || "en"),
         onAction: function (data) {
           if (!alive || !data) return;
+          if (data.type === "admin_campaign") {
+            const media = readNotificationMedia(data.media);
+            if (media && media.destination) { setTab(media.destination); setMobileMenu(false); }
+            else window.dispatchEvent(new CustomEvent("fainance:open-notifications"));
+            return;
+          }
           if (data.projectId) setShareSelectedProjectId(String(data.projectId));
           if (data.type === "share_invite" || data.actionType === "open_share_invite") {
             setTab("share");
@@ -27200,6 +27383,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
       return function () {
         alive = false;
+        window.removeEventListener("fainance:notification-destination", onMediaDestination);
         try { cleanupPush(); } catch (_cleanupPush) {}
       };
     },
@@ -27241,6 +27425,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setIncomes,
     movementSyncV2Active,
     movementSyncV2Mode,
+    replaceAccountMovementsV2,
     sym,
     fmt,
     dark,
@@ -27942,7 +28127,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } as any),
           }}
         >
-          {showAppSummaryHeader && (
+          {mobileSummaryVisible && (
               <div
                 className="fainance-mobile-summary"
                 style={{
@@ -28050,6 +28235,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               return (
                 <button
                   key={item.id}
+                  aria-label={item.label}
+                  title={typeof item.label === "string" ? item.label : undefined}
                   onClick={function () {
                     if (item.id === "voice") {
                       openVoiceModal();
@@ -28097,7 +28284,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   <span style={{ fontSize: 17, height: 32, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>{item.icon}</span>
                   <span
                     style={{
-                      fontSize: 9,
+                      fontSize: "clamp(8px,2.2vw,10px)",
+                      width: "100%",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                       fontWeight:
                         tab === item.id ||
                         (item.id === "more" && tab === "more") ||
@@ -28351,12 +28542,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   return;
                 }
                 var nextList = current.slice();
-                nextList[matchedIndex] = editedRow(current[matchedIndex]);
+                var proposedEdit = editedRow(current[matchedIndex]);
+                // Only rules explicitly opted in for edits are eligible. Values
+                // changed by the user in this edit are never overwritten.
+                var untouchedRuleFields = ['catId','type','methodId','desc','tags','note'].filter(function (field) {
+                  return JSON.stringify(proposedEdit[field]) === JSON.stringify(current[matchedIndex][field]);
+                });
+                var editRuleResult;
+                try {
+                  editRuleResult = evaluateAutomaticRules(
+                    financeEvolutionRef.current.rules,
+                    { ...proposedEdit, _ruleDefaultFields: untouchedRuleFields },
+                    editingItem.isExp ? 'expense' : 'income',
+                    String(proposedEdit.source || 'manual'),
+                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes }
+                  );
+                } catch (e) {
+                  setToast({text:rulesText(lang,'error'),type:'error'});
+                  return;
+                }
+                nextList[matchedIndex] = editRuleResult.item;
                 // Legacy duplicates of the same recurring occurrence receive the same edit,
                 // so a stale duplicate cannot immediately reappear after synchronization.
                 if (nextList[matchedIndex].recurringOccurrenceId || nextList[matchedIndex].recurringRuleId) {
                   nextList = nextList.map(function (row, index) {
-                    return index !== matchedIndex && isSameEditedMovement(row) ? editedRow(row) : row;
+                    return index !== matchedIndex && isSameEditedMovement(row)
+                      ? { ...editedRow(row), ...Object.fromEntries(editRuleResult.changed.map(function (field) { return [field,editRuleResult.item[field]]; })) }
+                      : row;
                   });
                 }
                 if (editingItem.isExp) {
@@ -28639,12 +28851,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   return;
                 }
                 var nextList = current.slice();
-                nextList[matchedIndex] = editedRow(current[matchedIndex]);
+                var proposedEdit = editedRow(current[matchedIndex]);
+                // Only rules explicitly opted in for edits are eligible. Values
+                // changed by the user in this edit are never overwritten.
+                var untouchedRuleFields = ['catId','type','methodId','desc','tags','note'].filter(function (field) {
+                  return JSON.stringify(proposedEdit[field]) === JSON.stringify(current[matchedIndex][field]);
+                });
+                var editRuleResult;
+                try {
+                  editRuleResult = evaluateAutomaticRules(
+                    financeEvolutionRef.current.rules,
+                    { ...proposedEdit, _ruleDefaultFields: untouchedRuleFields },
+                    editingItem.isExp ? 'expense' : 'income',
+                    String(proposedEdit.source || 'manual'),
+                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes }
+                  );
+                } catch (e) {
+                  setToast({text:rulesText(lang,'error'),type:'error'});
+                  return;
+                }
+                nextList[matchedIndex] = editRuleResult.item;
                 // Legacy duplicates of the same recurring occurrence receive the same edit,
                 // so a stale duplicate cannot immediately reappear after synchronization.
                 if (nextList[matchedIndex].recurringOccurrenceId || nextList[matchedIndex].recurringRuleId) {
                   nextList = nextList.map(function (row, index) {
-                    return index !== matchedIndex && isSameEditedMovement(row) ? editedRow(row) : row;
+                    return index !== matchedIndex && isSameEditedMovement(row)
+                      ? { ...editedRow(row), ...Object.fromEntries(editRuleResult.changed.map(function (field) { return [field,editRuleResult.item[field]]; })) }
+                      : row;
                   });
                 }
                 if (editingItem.isExp) {
@@ -28666,7 +28899,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       {shareDeletionPrompt && ShareDeletionDecisionModal()}
       <GlobalToastHost />
       <GlobalNumericInputAssist />
-      {firestoreReady && firestoreHydratedRef.current && userId && !appLocked && termsAccepted && privacyAccepted &&
+      {movementBulkBusy && <MovementBulkProgressOverlay dark={dark} L={L}
+        movementBulkCancelRef={movementBulkCancelRef} progressRef={movementBulkProgressRef} />}
+      {firestoreReady && firestoreHydratedRef.current && financeCloudReceipt?.uid === userId && userId && !appLocked && termsAccepted && privacyAccepted &&
         !initialSetupOpen && !onboardingGuideOpen && !financeEvolution.periodIntroductionSeen &&
         <PeriodPreferences introduction />}
       {onboardingGuideOpen &&

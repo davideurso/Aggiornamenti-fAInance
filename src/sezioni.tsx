@@ -1,5 +1,7 @@
 import {categoryCorrectionMentioned, isVoicePromptEcho, requestedMovementField, isReferencedMovementQuestion, latestPersonalMovement, isLatestMovementQuestion, isMovementCorrectionText, methodMentioned, mergeMovementUpdate, previewMovementUpdate, applyMovementUpdate, movementLabel, movementUpdateError, movementUpdateSummary, stripPreparationAnnouncements} from "./finance/assistantMovementUpdate";
-import {assistantRuleActions, mergeRuleRequest, previewRuleRequest, applyRuleRequest, assistantRuleError, ruleRequestSummary} from "./finance/assistantAutomaticRules";
+import {assistantRuleActions, mergeRuleRequest, combineBuilderRuleProposals, previewRuleRequest, applyRuleRequest, assistantRuleError, ruleRequestSummary} from "./finance/assistantAutomaticRules";
+import {assistantHistory,contextualizeFollowUp,isLikelyVoiceNoise,lastMeaningfulUserTurn,isContinuationRequest} from "./finance/assistantConversationContinuity";
+import {ruleBuilderText} from "./i18n/ruleBuilderTranslations";
 import { mergeRecategorization, previewRecategorization, applyRecategorization, recategorizationText } from "./finance/assistantRecategorization";
 import { readableDarkText } from './ui/textContrast';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
@@ -8,6 +10,8 @@ import { assistantUsesDefaultPayment } from './finance/assistantRuleDefaults';
 import { evaluateAutomaticRules } from './finance/automaticRules';
 import { SavingsHomeClosing } from './sections/SavingsClosurePanel';
 import { useState, useEffect, useRef, useMemo } from "react";
+import { detectFinancialAnomalies, anomaliesForAssistant } from "./finance/anomalyDetection.mjs";
+import { AnomaliesPanel, anomalySectionTitle } from "./sections/AnomaliesPanel";
 import { CatalogLabel } from "./icons/CatalogLabel";
 import { averageBudgetForPeriods, plannedSavings } from './finance/budgetEngine';
 import { registerPlugin } from "@capacitor/core";
@@ -168,6 +172,17 @@ import { pickFainanceContact } from "./native/contacts";
 // I pannelli Patrimonio/Share/Spesa/Debiti/Appunti/More sono in src/sections/*.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// Stable component identity: re-renders must not remount inputs/selects
+// while configuring any Home worklet (Fidelity included).
+function HomeWorkletField(props: any) {
+  return (
+    <label style={{ display: "block", fontSize: 12, fontWeight: 900, color: props.subColor }}>
+      {L(props.label)}
+      <div style={{ marginTop: 7 }}>{props.children}</div>
+    </label>
+  );
+}
+
 export function HomePanel() {
   var ctx: any = useApp();
   const accountingPeriod = ctx.accountingPeriod;
@@ -260,9 +275,8 @@ export function HomePanel() {
         return String(d.getFullYear()) + "-" + String(d.getMonth() + 1).padStart(2, "0");
       }
       function total(items: any[], key: any) {
-        return (items || []).reduce(function (sum: number, item: any) {
-          return sum + amountForBalancePeriodMonth(item, key, homeBalanceView, balancePeriodMode, financialMonthStartDay);
-        }, 0);
+        // Coerenza con barra superiore e scelta Mese finanziario in Impostazioni.
+        return accountingPeriod.total(items || [], key, homeBalanceView === "reale" ? "reale" : "rateizzato");
       }
       var previousKey = shiftKey(curMonthKey, -1);
       var prevExp = total(countedExpenses || [], previousKey);
@@ -274,7 +288,7 @@ export function HomePanel() {
       }
       return { prevMonthExp: prevExp, prevMonthInc: prevInc, prevMonthBal: prevInc - prevExp, prev12Balance: prev12 };
     },
-    [countedExpenses, countedIncomes, curMonthKey, homeBalanceView, balancePeriodMode, financialMonthStartDay]
+    [countedExpenses, countedIncomes, curMonthKey, homeBalanceView, accountingPeriod]
   );
   var t = TRANSLATIONS[lang] || TRANSLATIONS.it;
   // Traduzioni esatte della Home: evitano frasi ibride quando il traduttore generico
@@ -1863,7 +1877,7 @@ export function HomePanel() {
         goal: { goalId: (goals && goals[0] && goals[0].id) || "" },
         expenses_by_area: { range: 12, valueMode: "percent" },
         expenses_by_category: { range: 12, valueMode: "percent" },
-        monthlyized_expenses: { range: 12 },
+        monthlyized_expenses: { range: 12, showDecimals: false },
         monthlyized_expenses_by_area: { range: 12 },
         monthlyized_expenses_by_category: { range: 12 },
         incomes_by_type: { range: 12 },
@@ -2769,11 +2783,11 @@ export function HomePanel() {
             display: "grid",
             gridTemplateColumns: "repeat(17,1fr)",
             gap: 1,
-            width: "min(160px,100%)",
+            width: "min(100px,100%)",
             aspectRatio: "1 / 1",
-            margin: "10px auto 0",
+            margin: "6px auto 0",
             background: "#fff",
-            padding: 10,
+            padding: 8,
             borderRadius: 12,
             boxSizing: "border-box",
           }}
@@ -2787,41 +2801,55 @@ export function HomePanel() {
       );
     }
     var bars = homeBarcodeBars(c && c.code);
+    var codeText = String((c && c.code) || "").trim();
+    var barCount = bars.length;
     return (
       <div
         style={{
-          marginTop: 12,
-          background: "#fff",
-          borderRadius: 12,
-          padding: "12px 10px",
-          overflow: "hidden",
+          marginTop: 0,
+          width: "100%",
+          height: "100%",
+          minWidth: 0,
+          minHeight: 0,
+          flex: "1 1 auto",
+          background: "#FFFFFF",
+          borderRadius: 10,
+          padding: "5px 7px",
           boxSizing: "border-box",
+          overflow: "hidden",
+          textAlign: "center",
+          display: "flex",
+          alignItems: "stretch",
+          justifyContent: "center",
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "stretch",
-            height: 68,
-            gap: 0,
-            width: "100%",
-            justifyContent: "center",
-          }}
-        >
-          {bars.map(function (b, i) {
-            return (
-              <div
-                key={i}
-                style={{
-                  background: b.on ? "#050505" : "transparent",
-                  height: "100%",
-                  flex: "1 1 0",
-                  minWidth: 0,
-                }}
-              />
-            );
-          })}
-        </div>
+        {barCount > 0 ? (
+          <svg
+            role="img"
+            aria-label={"Codice a barre " + codeText}
+            viewBox={"0 0 " + barCount + " 82"}
+            preserveAspectRatio="none"
+            width="100%"
+            height="100%"
+            style={{
+              display: "block",
+              width: "100%",
+              height: "100%",
+              minHeight: 0,
+              minWidth: 0,
+              shapeRendering: "crispEdges",
+            }}
+          >
+            <rect width={barCount} height="82" fill="#FFFFFF" />
+            {bars.map(function (bar, index) {
+              return bar.on ? <rect key={index} x={index} y="0" width="1" height="82" fill="#090909" /> : null;
+            })}
+          </svg>
+        ) : (
+          <div style={{color:"#14263D",fontSize:13,padding:"30px 0"}}>
+            {L("Codice non disponibile")}
+          </div>
+        )}
       </div>
     );
   }
@@ -3212,18 +3240,8 @@ export function HomePanel() {
         return yy + "-" + mm;
       }
       function sumPeriod(items: any[], monthKey: any) {
-        return (items || []).reduce(function (acc: number, item: any) {
-          return (
-            acc +
-            amountForBalancePeriodMonth(
-              item,
-              monthKey,
-              homeBalanceView,
-              balancePeriodMode,
-              financialMonthStartDay
-            )
-          );
-        }, 0);
+        // Non usare il vecchio mese calendario per i confronti della Home.
+        return accountingPeriod.total(items || [], monthKey, homeBalanceView === "reale" ? "reale" : "rateizzato");
       }
       function sumTrailingPeriods(items: any[], endMonthKey: any, periods: number) {
         var total = 0;
@@ -3568,24 +3586,44 @@ export function HomePanel() {
     }
     if (w.type === "monthlyized_expenses") {
       var monthlyExpenseAverage = totalInKeys(countedExpenses, keys) / Math.max(1, keys.length);
+      // Calendar month just closed, independent of the selected accounting period.
+      var closedMonthDate = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1, 12);
+      var closedMonthKey = closedMonthDate.getFullYear() + "-" + String(closedMonthDate.getMonth() + 1).padStart(2, "0");
+      var closedMonthAmounts = (countedExpenses || []).map(function (item) {
+        return amountForBalancePeriodMonth(item, closedMonthKey, homeBalanceView === "reale" ? "reale" : "rateizzato", "calendar", 1);
+      });
+      var closedMonthExpense = closedMonthAmounts.reduce(function (sum, value) { return sum + Math.round(safeNum(value) * 100); }, 0) / 100;
+      var monthlyDifference = (Math.round(closedMonthExpense * 100) - Math.round(monthlyExpenseAverage * 100)) / 100;
+      var monthlyDifferencePct = monthlyExpenseAverage > 0 ? monthlyDifference / monthlyExpenseAverage * 100 : null;
+      var monthlyComparisonColor = monthlyDifference === 0 ? subC : monthlyDifference > 0 ? expenseColor : incomeColor;
+      var closedMonthHasData = (countedExpenses || []).some(function (item, index) {
+        return closedMonthAmounts[index] !== 0 || String(item.date || "").slice(0, 7) === closedMonthKey;
+      });
+      var closedMonthLabel = closedMonthDate.toLocaleDateString(({it:"it-IT",en:"en-US",es:"es-ES",fr:"fr-FR",de:"de-DE",pt:"pt-PT",pl:"pl-PL",nl:"nl-NL",ro:"ro-RO",el:"el-GR"} as any)[lang] || "it-IT", { month: "long", year: "numeric" });
+      var monthlyShowDecimals = !(w.params && w.params.showDecimals === false);
+      function monthlyAmount(value) {
+        if (monthlyShowDecimals) return <span style={{ whiteSpace: "nowrap" }}>{smallDecimalNode(fmt(value), lang)}</span>;
+        return fmt(Math.round(value)).replace(/[.,]\d{2}(?=\D*$)/, "");
+      }
+      var monthlyAccent = dark ? "#8CC6FF" : "#052A5F";
+      var monthlyPctLabel = monthlyDifferencePct === null ? H("Media pari a zero") : (monthlyDifferencePct > 0 ? "+" : "") + formatNumber(monthlyDifferencePct, lang, { maximumFractionDigits: 1 }) + "%";
       return (
-        <div
-          style={{
-            minHeight: compact ? 82 : 96,
-            height: doubleSize ? "100%" : undefined,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 5,
-            textAlign: "center",
-          }}
-        >
-          <div style={{ fontSize: compact ? 21 : doubleSize ? 34 : 27, fontWeight: 950, color: readableDarkText(expenseColor, dark, "#35354a") }}>
-            {smallDecimalNode(fmt(monthlyExpenseAverage), lang)}
+        <div style={{ height: "100%", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: compact ? 6 : doubleSize ? 10 : 3, textAlign: "center" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)", gap: compact ? 6 : 12, alignItems: "start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: compact ? 10 : 12, color: subC, minHeight: compact ? 24 : 28, marginBottom: 4 }}>{H("Media mensile delle uscite")}</div>
+              <div style={{ fontSize: compact ? (monthlyShowDecimals ? 14 : 17) : doubleSize ? 28 : 20, fontWeight: 900, color: monthlyAccent, overflowWrap: "anywhere", lineHeight: 1.15 }}>{monthlyAmount(monthlyExpenseAverage)}</div>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: compact ? 10 : 12, color: subC, minHeight: compact ? 24 : 28, marginBottom: 4 }}>{closedMonthLabel}</div>
+              <div style={{ fontSize: compact ? (monthlyShowDecimals ? 14 : 17) : doubleSize ? 28 : 20, fontWeight: 900, color: monthlyAccent, overflowWrap: "anywhere", lineHeight: 1.15 }}>{monthlyAmount(closedMonthExpense)}</div>
+            </div>
           </div>
-          <div style={{ fontSize: compact ? 10 : 11, color: subC }}>
-            {H("Media mensile delle uscite")}
+          <div style={{ alignSelf: "center", maxWidth: "100%", padding: compact ? "3px 7px" : "4px 10px", borderRadius: 12, background: monthlyAccent + "12", color: monthlyAccent, fontWeight: 850, fontSize: compact ? 12 : doubleSize ? 18 : 15, lineHeight: 1.3, overflowWrap: "anywhere" }}>
+            {monthlyDifference > 0 ? "↑ +" : monthlyDifference < 0 ? "↓ −" : "= "}{monthlyAmount(Math.abs(monthlyDifference))} · {monthlyPctLabel}
+          </div>
+          <div style={{ color: subC, fontSize: compact ? 9 : 11, lineHeight: 1.3 }}>
+            {closedMonthHasData ? H("Rispetto alla media mensile") : H("Nessuna uscita registrata nel mese")}
           </div>
         </div>
       );
@@ -4649,20 +4687,20 @@ export function HomePanel() {
     if (w.type === "fidelity_card") {
       var card = selectedCard(w);
       if (!card) return emptyBox("Nessuna carta Fidelity");
-      var bg = card.color || "#0F9F76";
       return (
         <div
           style={{
-            background: "linear-gradient(135deg," + bg + ",#101828 82%)",
-            borderRadius: 18,
-            padding: 16,
-            color: "#fff",
-            minHeight: doubleSize ? 260 : compact ? 150 : 170,
+            width: "100%",
+            height: "100%",
+            minHeight: 0,
+            minWidth: 0,
+            boxSizing: "border-box",
+            display: "flex",
+            alignItems: "stretch",
+            justifyContent: "center",
+            overflow: "hidden",
           }}
         >
-          <div style={{ fontSize: 18, fontWeight: 950 }}>
-            {card.name || L("Carta")}
-          </div>
           {homeCardCodePreview(card)}
         </div>
       );
@@ -5347,6 +5385,13 @@ export function HomePanel() {
       targetH = Math.max(targetH, summaryRequiredHeight);
       if (size === "2x" && isMobile) targetH = Math.max(targetH, homeShowTitle(w) ? 388 : 350);
     }
+    if (!available && w.type === "monthlyized_expenses") {
+      targetH = (compact ? 142 : size === "2x" ? 202 : 160) - (homeShowTitle(w) ? 0 : 24);
+    }
+    // Fidelity: dimensioni compatte per mostrare tutto il codice senza scroll.
+    if (!available && w.type === "fidelity_card") {
+      targetH = size === "2x" ? 202 : compact ? 142 : 160;
+    }
     var rowSpan = Math.max(3, Math.ceil((targetH + 14) / (8 + 14)));
     var payload = available
       ? { source: "library", type: w.type }
@@ -5675,7 +5720,10 @@ export function HomePanel() {
                   ? 1
                   : "0 0 auto",
               minWidth: 0,
+              minHeight: w.type === "fidelity_card" || w.type === "monthlyized_expenses" ? 0 : undefined,
               overflowY:
+                w.type === "fidelity_card" ||
+                w.type === "monthlyized_expenses" ||
                 isGraphWorklet(w.type) ||
                 w.type === "quick_actions" ||
                 assistantType
@@ -5743,7 +5791,7 @@ export function HomePanel() {
         ? homeCountDraftRef.current[k]
         : String((w.params && w.params.count) || 5);
     return (
-      <Field label={label}>
+      <HomeWorkletField subColor={subC} label={label}>
         <input
           type="text"
           inputMode="numeric"
@@ -5765,7 +5813,7 @@ export function HomePanel() {
           }}
           style={{ ...inputStyle, width: "100%" }}
         />
-      </Field>
+      </HomeWorkletField>
     );
   }
   function popupParams(w) {
@@ -5792,7 +5840,7 @@ export function HomePanel() {
       ].indexOf(type) >= 0;
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <Field label="Intervallo">
+          <HomeWorkletField subColor={subC} label="Intervallo">
             {seg(
               [1, 3, 6, 12].map(function (n) {
                 return {
@@ -5805,9 +5853,14 @@ export function HomePanel() {
                 updateDraftParams({ range: Number(v) });
               }
             )}
-          </Field>
+          </HomeWorkletField>
+          {type === "monthlyized_expenses" && (
+            <HomeWorkletField subColor={subC} label="Visualizza decimali">
+              {seg([{ id: "yes", label: "Sì" }, { id: "no", label: "No" }], w.params && w.params.showDecimals === false ? "no" : "yes", function (v) { updateDraftParams({ showDecimals: v === "yes" }); })}
+            </HomeWorkletField>
+          )}
           {supportsValueMode && (
-            <Field label="Visualizzazione">
+            <HomeWorkletField subColor={subC} label="Visualizzazione">
               {seg(
                 [
                   { id: "percent", label: "Percentuale" },
@@ -5818,14 +5871,14 @@ export function HomePanel() {
                   updateDraftParams({ valueMode: v });
                 }
               )}
-            </Field>
+            </HomeWorkletField>
           )}
         </div>
       );
     }
     if (type === "summary")
       return (
-        <Field label="Visualizza decimali">
+        <HomeWorkletField subColor={subC} label="Visualizza decimali">
           {seg(
             [
               { id: "yes", label: "Sì" },
@@ -5836,11 +5889,11 @@ export function HomePanel() {
               updateDraftParams({ showDecimals: v === "yes" });
             }
           )}
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "monthly_balance")
       return (
-        <Field label="Intervallo">
+        <HomeWorkletField subColor={subC} label="Intervallo">
           {seg(
             [
               { id: 6, label: "Ultimi 6 mesi" },
@@ -5851,7 +5904,7 @@ export function HomePanel() {
               updateDraftParams({ range: Number(v) });
             }
           )}
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "latest_expenses" || type === "latest_incomes")
       return countField("Numero elementi", w);
@@ -5864,7 +5917,7 @@ export function HomePanel() {
             gap: 10,
           }}
         >
-          <Field label="Progetto Share">
+          <HomeWorkletField subColor={subC} label="Progetto Share">
             <select
               value={(w.params && w.params.projectId) || ""}
               onChange={function (e) {
@@ -5883,13 +5936,13 @@ export function HomePanel() {
                 );
               })}
             </select>
-          </Field>
+          </HomeWorkletField>
           {countField("Numero transazioni", w)}
         </div>
       );
     if (type === "share_balance")
       return (
-        <Field label="Progetto Share">
+        <HomeWorkletField subColor={subC} label="Progetto Share">
           <select
             value={(w.params && w.params.projectId) || ""}
             onChange={function (e) {
@@ -5908,11 +5961,11 @@ export function HomePanel() {
               );
             })}
           </select>
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "fidelity_card")
       return (
-        <Field label="Carta">
+        <HomeWorkletField subColor={subC} label="Carta">
           <select
             value={(w.params && w.params.cardId) || ""}
             onChange={function (e) {
@@ -5931,11 +5984,11 @@ export function HomePanel() {
               );
             })}
           </select>
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "goal")
       return (
-        <Field label="Obiettivo">
+        <HomeWorkletField subColor={subC} label="Obiettivo">
           <select
             value={(w.params && w.params.goalId) || ""}
             onChange={function (e) {
@@ -5954,11 +6007,11 @@ export function HomePanel() {
               );
             })}
           </select>
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "note_widget")
       return (
-        <Field label="Nota">
+        <HomeWorkletField subColor={subC} label="Nota">
           <select
             value={(w.params && w.params.noteId) || ""}
             onChange={function (e) {
@@ -5977,11 +6030,11 @@ export function HomePanel() {
               );
             })}
           </select>
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "bank_coord_widget")
       return (
-        <Field label="Coordinata bancaria">
+        <HomeWorkletField subColor={subC} label="Coordinata bancaria">
           <select
             value={(w.params && w.params.bankId) || ""}
             onChange={function (e) {
@@ -6000,11 +6053,11 @@ export function HomePanel() {
               );
             })}
           </select>
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "credit_card_widget")
       return (
-        <Field label="Carta di Credito">
+        <HomeWorkletField subColor={subC} label="Carta di Credito">
           <select
             value={(w.params && w.params.creditCardId) || ""}
             onChange={function (e) {
@@ -6023,11 +6076,11 @@ export function HomePanel() {
               );
             })}
           </select>
-        </Field>
+        </HomeWorkletField>
       );
     if (type === "shopping_list_widget")
       return (
-        <Field label="Lista della spesa">
+        <HomeWorkletField subColor={subC} label="Lista della spesa">
           <select
             value={
               (w.params && w.params.listId) ||
@@ -6050,22 +6103,12 @@ export function HomePanel() {
               );
             })}
           </select>
-        </Field>
+        </HomeWorkletField>
       );
     return (
       <div style={{ fontSize: 12, color: subC }}>
         {L("Questo worklet non richiede parametri specifici.")}
       </div>
-    );
-  }
-  function Field(props) {
-    return (
-      <label
-        style={{ display: "block", fontSize: 12, fontWeight: 900, color: subC }}
-      >
-        {L(props.label)}
-        <div style={{ marginTop: 7 }}>{props.children}</div>
-      </label>
     );
   }
   var inputStyle = {
@@ -6294,7 +6337,7 @@ export function HomePanel() {
             <PopupCloseButton onClick={function () { setEditDraft(null); }} dark={dark} label={L("Chiudi")} />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            <Field label="Titolo">
+            <HomeWorkletField subColor={subC} label="Titolo">
               {seg(
                 [
                   { id: "show", label: "Mostra titolo" },
@@ -6305,8 +6348,8 @@ export function HomePanel() {
                   updateDraftParams({ showTitle: v !== "hide" });
                 }
               )}
-            </Field>
-            <Field label="Titolo personalizzato">
+            </HomeWorkletField>
+            <HomeWorkletField subColor={subC} label="Titolo personalizzato">
               <input
                 key={draftTitleKey(editDraft)}
                 type="text"
@@ -6331,9 +6374,9 @@ export function HomePanel() {
                 placeholder={item.label}
                 style={{ ...inputStyle, width: "100%" }}
               />
-            </Field>
+            </HomeWorkletField>
             {popupParams(editDraft)}
-            <Field label="Grandezza del worklet">
+            <HomeWorkletField subColor={subC} label="Grandezza del worklet">
               {seg(
                 editDraft.type === "assistant_voice_widget"
                   ? [
@@ -6352,15 +6395,15 @@ export function HomePanel() {
                   updateDraft({ size: v });
                 }
               )}
-            </Field>
-            <Field label="Colore di sfondo">
+            </HomeWorkletField>
+            <HomeWorkletField subColor={subC} label="Colore di sfondo">
               <AppColorSelector
                 value={editDraft.color || "#FFFFFF"}
                 onChange={function (color) {
                   updateDraft({ color: color });
                 }}
               />
-            </Field>
+            </HomeWorkletField>
             <div
               style={{
                 display: "flex",
@@ -7365,7 +7408,7 @@ export function SpesePanel() {
     };
   }
   return (
-    <div>
+    <div className="fainance-movement-entry" style={{ paddingTop: isMobile ? 8 : 0 }}>
       <div
         style={{
           display: "flex",
@@ -8076,15 +8119,8 @@ export function HistoryPanel() {
       : historyTab !== "expenses";
   }
   function toggleHistoryKind(kind) {
-    var ex = historyTab !== "incomes";
-    var inc = historyTab !== "expenses";
-    if (kind === "expenses") ex = !ex;
-    else inc = !inc;
-    if (!ex && !inc) {
-      ex = true;
-      inc = true;
-    }
-    setHistoryTab(ex && inc ? "all" : ex ? "expenses" : "incomes");
+    if (kind !== "expenses" && kind !== "incomes") return;
+    setHistoryTab(historyTab === kind ? "all" : kind);
   }
 
   var historyRows = useMemo(
@@ -8339,6 +8375,8 @@ export function HistoryPanel() {
               key={mk}
               onClick={function () {
                 setFilterMonth("");
+                setFilterDateFrom("");
+                setFilterDateTo("");
                 setFilterMonths(function (list) {
                   return (list || []).includes(mk)
                     ? list.filter(function (x) {
@@ -8738,6 +8776,9 @@ export function HistoryPanel() {
                   onChange={function (e) {
                     setFilterYear(e.target.value);
                     setFilterMonth("");
+                    setFilterMonths([]);
+                    setFilterDateFrom("");
+                    setFilterDateTo("");
                   }}
                   style={{ ...inp, width: "100%", marginTop: 5 }}
                 >
@@ -8757,6 +8798,8 @@ export function HistoryPanel() {
                   onChange={function (e) {
                     setFilterMonth(e.target.value);
                     setFilterMonths([]);
+                    setFilterDateFrom("");
+                    setFilterDateTo("");
                   }}
                   style={{ ...inp, width: "100%", marginTop: 5 }}
                 >
@@ -8793,6 +8836,9 @@ export function HistoryPanel() {
                   value={filterDateFrom}
                   onChange={function (e) {
                     setFilterDateFrom(e.target.value);
+                    setFilterYear("all");
+                    setFilterMonth("");
+                    setFilterMonths([]);
                   }}
                   style={{ ...inp, width: "100%", marginTop: 5 }}
                 />
@@ -8804,6 +8850,9 @@ export function HistoryPanel() {
                   value={filterDateTo}
                   onChange={function (e) {
                     setFilterDateTo(e.target.value);
+                    setFilterYear("all");
+                    setFilterMonth("");
+                    setFilterMonths([]);
                   }}
                   style={{ ...inp, width: "100%", marginTop: 5 }}
                 />
@@ -8822,6 +8871,7 @@ export function HistoryPanel() {
                 onClick={function () {
                   setFilterDateFrom("");
                   setFilterDateTo("");
+                  setFilterYear("all");
                   setFilterMonth(curMonthKey);
                   setFilterMonths([]);
                 }}
@@ -8832,6 +8882,7 @@ export function HistoryPanel() {
               <button
                 type="button"
                 onClick={function () {
+                  setFilterYear("all");
                   setFilterMonth("");
                   setFilterMonths([]);
                   setFilterDateFrom(dateOffset(30));
@@ -9880,6 +9931,244 @@ export function ConsulenteAIPanel() {
     addExpenses,
   }: any = _c;
   var countedIncomes: any[] = _c.countedIncomes || incomes || [];
+  const detectedAnomalies: any[] = useMemo(function () {
+    return detectFinancialAnomalies({
+      expenses: countedExpenses, incomes: countedIncomes, categories: cats, incomeTypes, recurring,
+      today: todayStr(),
+      keyForDate: accountingPeriod.keyForDate,
+      shiftKey: accountingPeriod.shiftKey,
+    });
+  }, [countedExpenses, countedIncomes, cats, incomeTypes, recurring, accountingPeriod]);
+  var [dismissedAnomalyIds, setDismissedAnomalyIds] = useStorage(
+    _c.userKey ? _c.userKey("dismissed_anomalies_v2") : "dismissed_anomalies_v2",
+    []
+  );
+  // One-time migration from V3's device-wide key to the current account.
+  useEffect(function () {
+    if (!_c.userId || !_c.userKey) return;
+    try {
+      var legacy = localStorage.getItem("fainance_dismissed_anomalies_v1");
+      if (!legacy) return;
+      var parsed = JSON.parse(legacy);
+      if (!Array.isArray(parsed)) return;
+      setDismissedAnomalyIds(function (prev) {
+        return [...new Set([...(Array.isArray(prev) ? prev : []), ...parsed.map(String)])].slice(-500);
+      });
+      localStorage.removeItem("fainance_dismissed_anomalies_v1");
+    } catch (_err) {}
+  }, [_c.userId]);
+  const visibleDetectedAnomalies: any[] = useMemo(function () {
+    var hidden = Array.isArray(dismissedAnomalyIds)
+      ? dismissedAnomalyIds.map(function (id) {
+          return String(id);
+        })
+      : [];
+    return (detectedAnomalies || []).filter(function (item) {
+      return hidden.indexOf(String(item && item.id)) < 0;
+    });
+  }, [detectedAnomalies, dismissedAnomalyIds]);
+  function anomalyNorm(value) {
+    return String(value == null ? "" : value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+  function anomalyStableId(row) {
+    if (!row) return "";
+    return String(
+      row.id != null
+        ? row.id
+        : row._id != null
+        ? row._id
+        : row.recurringOccurrenceId != null
+        ? row.recurringOccurrenceId
+        : `${row.date || ""}:${row.catId || ""}:${row.amount || ""}:${anomalyNorm(row.desc || row.description || "")}`
+    );
+  }
+  function anomalyExpenseMatches(row, target) {
+    if (!row || !target) return false;
+    if (target.id != null && row.id != null)
+      return String(target.id) === String(row.id);
+    return anomalyStableId(row) === anomalyStableId(target);
+  }
+  function anomalyCategoryName(row) {
+    var byId = cats.find(function (c) {
+      return String(c.id) === String(row && row.catId);
+    });
+    return (
+      (byId && byId.name) ||
+      row.categoryName ||
+      row.catName ||
+      row.category ||
+      ""
+    );
+  }
+  function anomalyMethodName(row) {
+    var byId = methods.find(function (m) {
+      return String(m.id) === String(row && row.methodId);
+    });
+    return (byId && byId.name) || row.methodName || row.method || "";
+  }
+  function anomalyTransactionsFor(signal) {
+    var ids = Array.isArray(signal && signal.transactionIds)
+      ? signal.transactionIds.map(function (id) { return String(id); }) : [];
+    if (!ids.length) return [];
+    var incomeKind = signal && signal.kind === "income";
+    var raw = incomeKind ? incomes : rawExpenses;
+    var counted = incomeKind ? countedIncomes : countedExpenses;
+    var observed = Array.isArray(counted) ? counted : [];
+    return ids.map(function (id) {
+      var registered = (Array.isArray(raw) ? raw : []).find(function (row) {
+        return anomalyStableId(row) === id;
+      });
+      var derived = registered || observed.find(function (row) {
+        return anomalyStableId(row) === id;
+      });
+      if (!derived) return null;
+      var isShare = !!derived._share || !!derived.shareProjectId || !!derived._shareExpenseId;
+      var category = incomeKind
+        ? (derived.typeName || derived.incomeTypeName || derived.categoryName || derived.type || "Entrata")
+        : anomalyCategoryName(derived);
+      return {
+        ...derived, _stableId: id,
+        _sourceEditable: !!registered && !isShare,
+        _sourceKind: incomeKind ? "income" : "expense",
+        categoryName: category || (incomeKind ? "Entrata · tipo non indicato" : "Categoria non indicata"),
+        methodName: anomalyMethodName(derived) || "Metodo non indicato",
+      };
+    }).filter(Boolean);
+  }
+  function anomalyDeleteExpense(row) {
+    if (!row || !row._sourceEditable) return;
+    var mutate = row._sourceKind === "income" ? setIncomes : setExpenses;
+    mutate(function (prev) {
+      return (prev || []).filter(function (item) {
+        return !anomalyExpenseMatches(item, row);
+      });
+    });
+    setToast && setToast({ text: "Movimento eliminato", type: "success" });
+  }
+  function anomalyInlineAnswer(signal, question) {
+    var q = anomalyNorm(question || "cosa devo controllare");
+    var txs = anomalyTransactionsFor(signal);
+    var facts = signal && signal.facts ? signal.facts : {};
+    var first = txs[0] || {};
+    var amountText = fmt(Number(facts.current) || Number(first.amount) || 0);
+    var baselineText = fmt(Number(facts.baseline) || 0);
+    var percentText = String(facts.percent || 0) + "%";
+    var sameDate = facts.firstDate && facts.secondDate && facts.firstDate === facts.secondDate;
+    var why = "";
+    var checks = "";
+    var action = "";
+    if (signal.type === "possible_duplicate") {
+      var matches = (facts.matchFields || []).map(function (field) {
+        return ({amount:"importo",description:"descrizione",category:"categoria",payment_method:"metodo di pagamento",date:"data"})[field] || field;
+      });
+      var differs = (facts.differentFields || []).map(function (field) {
+        return ({amount:"importo",description:"descrizione",category:"categoria",payment_method:"metodo di pagamento",date:"data"})[field] || field;
+      });
+      why = [
+        "• Coincidono: " + (matches.length ? matches.join(", ") : "importo") + ".",
+        "• Differiscono: " + (differs.length ? differs.join(", ") : "nessuno dei campi confrontati") + ".",
+        "• Sono due registrazioni con identificativi diversi: questo non prova che siano due addebiti bancari.",
+      ].join("\n");
+      checks = [
+        "1. Confronta le due operazioni elencate qui sotto.",
+        "2. Verifica sulla banca se risulta un solo addebito o due.",
+        "3. Se hai due ricevute reali, possono essere entrambe corrette.",
+      ].join("\n");
+      action = [
+        "• Se è una registrazione doppia, elimina solo quella superflua.",
+        "• Se una categoria è errata, modifica il movimento corretto.",
+        "• Se entrambe sono reali, seleziona Non è un’anomalia.",
+      ].join("\n");
+    } else if (signal.type === "missing_recurring") {
+      why = [
+        "• Dai movimenti precedenti risulta un’" + (facts.direction === "income" ? "entrata" : "uscita") + " ricorrente: " + String(facts.merchant || "movimento") + ".",
+        "• Era attesa intorno al " + String(facts.expectedDate || "") + ", con un importo indicativo di " + baselineText + ".",
+        "• Non compare alcuna registrazione corrispondente: il ritardo stimato è di " + String(facts.daysOverdue || 0) + " giorni.",
+      ].join("\n");
+      checks = [
+        "1. Controlla estratto conto e movimenti non ancora sincronizzati.",
+        "2. Verifica se la data di accredito o addebito è stata spostata.",
+        "3. Se esiste, registra o correggi il movimento mancante.",
+      ].join("\n");
+      action = [
+        "• Se il movimento è arrivato, registralo: il controllo si aggiornerà.",
+        "• Se la ricorrenza non esiste più, puoi escludere la segnalazione.",
+      ].join("\n");
+    } else if (signal.type === "recurring_change") {
+      why = [
+        "• L’ultima spesa" + (facts.date ? " del " + facts.date : "") + " è di " + amountText + ".",
+        "• Il valore abituale delle spese simili è circa " + baselineText + ".",
+        "• La variazione rilevata è del " + percentText + (facts.merchant ? ' per "' + facts.merchant + '".' : "."),
+      ].join("\n");
+      checks = [
+        "1. Verifica se il prezzo è cambiato davvero.",
+        "2. Controlla se c’è un conguaglio, una promozione finita o un costo extra.",
+        "3. Se l’importo non ti torna, apri la transazione e correggila.",
+      ].join("\n");
+      action = [
+        "• Se il nuovo importo è corretto, puoi ignorare la segnalazione.",
+        "• Se è un errore, modifica o elimina il movimento direttamente da qui.",
+        "• Se non vuoi più vederla, premi \"Non è un’anomalia\".",
+      ].join("\n");
+    } else if (signal.type === "category_spike") {
+      why = [
+        "• In " + String(facts.period || "questo periodo") + " hai speso " + amountText + " nella categoria " + String(facts.category || "") + ".",
+        "• In passato la media era circa " + baselineText + ".",
+        "• L’aumento stimato è del " + percentText + ".",
+      ].join("\n");
+      checks = [
+        "1. Guarda le transazioni collegate per capire quali movimenti stanno alzando la categoria.",
+        "2. Verifica se ci sono spese eccezionali o movimenti duplicati.",
+        "3. Controlla che la categoria assegnata sia giusta.",
+      ].join("\n");
+      action = [
+        "• Correggi o elimina i movimenti sbagliati.",
+        "• Se l’aumento è reale, puoi lasciare tutto così.",
+        "• Se non vuoi più ricevere questo avviso, premi \"Non è un’anomalia\".",
+      ].join("\n");
+    } else {
+      why = [
+        "• Questa spesa è di " + amountText + (facts.date ? " del " + facts.date : "") + ".",
+        "• Per la categoria " + String(facts.category || "") + " il valore tipico è circa " + baselineText + ".",
+        "• Lo scostamento stimato è del " + percentText + ".",
+      ].join("\n");
+      checks = [
+        "1. Verifica se l’importo è giusto o se c’è uno zero in più.",
+        "2. Controlla se la spesa andava divisa in più movimenti.",
+        "3. Verifica che la categoria scelta sia corretta.",
+      ].join("\n");
+      action = [
+        "• Se il movimento è corretto, puoi lasciarlo così o escludere l’anomalia.",
+        "• Se è sbagliato, modifica o elimina la transazione direttamente da qui.",
+      ].join("\n");
+    }
+    if (q.indexOf("perch") >= 0 || q.indexOf("why") >= 0) return why;
+    if (q.indexOf("cosa") >= 0 || q.indexOf("controll") >= 0 || q.indexOf("check") >= 0) return checks;
+    if (
+      q.indexOf("come") >= 0 ||
+      q.indexOf("risolv") >= 0 ||
+      q.indexOf("fix") >= 0 ||
+      q.indexOf("disattiv") >= 0 ||
+      q.indexOf("non e") >= 0
+    )
+      return action;
+    if (q.indexOf("grave") >= 0 || q.indexOf("errore") >= 0 || q.indexOf("frode") >= 0)
+      return [
+        "• È una segnalazione statistica, non una prova di errore o frode.",
+        checks,
+        action,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    return [why, checks, action].filter(Boolean).join("\n\n");
+  }
+
   var {
     addIncomes,
     confirmRecurring,
@@ -10948,6 +11237,8 @@ export function ConsulenteAIPanel() {
       },
       topExpenseCategories: topCats,
     };
+    ctx.anomalySignals = anomaliesForAssistant(visibleDetectedAnomalies, accessPolicy.level);
+    ctx.anomalyDetectionNote = "Local, heuristic signals; possible duplicates are not confirmed double charges. If there is no baseline or the privacy level hides supporting transactions, state the limitation.";
     if (aiDataAccess === "full") {
       ctx.userProfile = buildAssistantProfileContext(currentUser);
       ctx.totals = {
@@ -11144,7 +11435,7 @@ export function ConsulenteAIPanel() {
         }),
       scopeInstruction: AI_AGENT_SCOPE_INSTRUCTION,
       financialInstruction:
-        "Respect dataAccessPolicy exactly: summary may use only aggregated expense summaries; areas may also use expense rows limited to date, amount, category and area plus area aggregates, but never descriptions, payment methods or profile data; full may use the supplied detailed fAInance data and userProfile. Use trend, budgetRisks, dataQuality and activeAdvice only when those fields are actually present. Use estimated amounts only when they derive from supplied data. Never invent hidden or missing personal data. The privacy level restricts reads only and must never restrict available app actions. Present scenarios, risks and assumptions rather than absolute certainty.",
+        "Respect dataAccessPolicy exactly: summary may use only aggregated expense summaries; areas may also use expense rows limited to date, amount, category and area plus area aggregates, but never descriptions, payment methods or profile data; full may use the supplied detailed fAInance data and userProfile. Use trend, budgetRisks, dataQuality and activeAdvice only when those fields are actually present. Use estimated amounts only when they derive from supplied data. When the user asks about unusual spending, recurring changes or duplicate charges, explain anomalySignals as potential issues only, quote the calculated comparison and limitations, and never claim fraud. Never invent hidden or missing personal data. The privacy level restricts reads only and must never restrict available app actions. Present scenarios, risks and assumptions rather than absolute certainty.",
     });
     if (req && req.languageState)
       aiConversationLanguageRef.current = req.languageState;
@@ -11424,6 +11715,36 @@ export function ConsulenteAIPanel() {
       ? L("analisi media: spese + aree, senza descrizioni")
       : L("analisi limitata: solo riepilogo delle spese");
   var chatMenuText = assistantChatMenuText(lang || "it");
+  if (aiTab === "anomalie") {
+    return <AnomaliesPanel
+      anomalies={visibleDetectedAnomalies}
+      language={lang || "it"}
+      fmt={fmt}
+      dark={!!dark}
+      onBack={function () { setAiAdviceFilter("all"); setAiTab("consigli"); }}
+      getTransactions={function (signal) {
+        return anomalyTransactionsFor(signal);
+      }}
+      onEditTransaction={function (tx) {
+        if (tx && tx._sourceEditable) setEditingItem({ item: tx, isExp: tx._sourceKind !== "income" });
+      }}
+      onDeleteTransaction={function (tx) {
+        anomalyDeleteExpense(tx);
+      }}
+      onDismiss={function (signal) {
+        if (!signal || !signal.id) return;
+        setDismissedAnomalyIds(function (prev) {
+          var next = Array.isArray(prev) ? prev.slice() : [];
+          if (next.indexOf(String(signal.id)) < 0) next.push(String(signal.id));
+          return next;
+        });
+        setToast && setToast({ text: "Anomalia esclusa", type: "success" });
+      }}
+      onAsk={function (signal, question) {
+        return anomalyInlineAnswer(signal, question);
+      }}
+    />;
+  }
   var aiChatSectionActive = aiTab === "chat";
   if (aiChatSectionActive)
     return (
@@ -11503,6 +11824,28 @@ export function ConsulenteAIPanel() {
         >
           💬
         </button>
+        <button
+          type="button"
+          aria-label={anomalySectionTitle(lang)}
+          title={anomalySectionTitle(lang)}
+          onClick={function () { setAiTab("anomalie"); }}
+          style={{
+            minHeight: 40,
+            border: "none",
+            borderRadius: 12,
+            padding: "0 12px",
+            background: dark ? "#031A3D" : "#EEF4FA",
+            color: dark ? "#F4F7FB" : "#052A5F",
+            fontWeight: 800,
+            fontSize: 13,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+          }}
+        >
+          🔎 {anomalySectionTitle(lang)} ({visibleDetectedAnomalies.length})
+        </button>
       </div>
       <div
         style={{
@@ -11563,6 +11906,22 @@ export function ConsulenteAIPanel() {
               }}
             >
               💬 {L("Conversa con l'Assistente")}
+            </button>
+            <button
+              type="button"
+              onClick={function () { setAiTab("anomalie"); }}
+              style={{
+                background: dark ? "#FAAE12" : "#052A5F",
+                color: dark ? "#031A3D" : "#FFFFFF",
+                border: "none",
+                borderRadius: btnRadius,
+                padding: "10px 14px",
+                fontSize: 13,
+                fontWeight: 850,
+                cursor: "pointer",
+              }}
+            >
+              🔎 {anomalySectionTitle(lang)} ({visibleDetectedAnomalies.length})
             </button>
           </div>
         </div>
@@ -13417,9 +13776,9 @@ export function VoiceEntryModal(props?: any) {
 function assistantVoiceUiText(code) {
   var dict: any = {
     it: {
-      title: "Agente AI",
+      title: "Agente",
       sub: "Parla con fAInance, fai domande e chiedi di eseguire operazioni",
-      homeShort: "Parla con il tuo Agente AI",
+      homeShort: "Parla con il tuo Agente",
       listening: "Sto ascoltando...",
       speak: "Parla",
       stop: "Interrompi e parla",
@@ -13434,7 +13793,7 @@ function assistantVoiceUiText(code) {
       confirm: "Operazione pronta",
       execute: "Esegui",
       cancel: "Annulla",
-      consentTitle: "Autorizza l’assistente AI",
+      consentTitle: "Autorizza l’Agente",
       consentText:
         "Per rispondere e interpretare le operazioni, fAInance invia a OpenAI la tua richiesta e i dati finanziari consentiti nelle impostazioni. Non vengono inviati password, dati biometrici o dati completi delle carte.",
       accept: "Accetto e continuo",
@@ -13445,9 +13804,9 @@ function assistantVoiceUiText(code) {
       error: "Non riesco a contattare l’assistente in questo momento.",
     },
     en: {
-      title: "AI Agent",
+      title: "Agent",
       sub: "Talk to fAInance, ask questions and request actions",
-      homeShort: "Talk to your AI Agent",
+      homeShort: "Talk to your Agent",
       listening: "Listening...",
       speak: "Speak",
       stop: "Stop",
@@ -13462,7 +13821,7 @@ function assistantVoiceUiText(code) {
       confirm: "Action ready",
       execute: "Run",
       cancel: "Cancel",
-      consentTitle: "Authorise the AI assistant",
+      consentTitle: "Authorise the Agent",
       consentText:
         "To answer and interpret actions, fAInance sends OpenAI your request and the financial data allowed in settings. Passwords, biometric data and full card details are not sent.",
       accept: "Accept and continue",
@@ -13473,9 +13832,9 @@ function assistantVoiceUiText(code) {
       error: "I cannot contact the assistant right now.",
     },
     es: {
-      title: "Agente IA",
+      title: "Agente",
       sub: "Habla con fAInance, haz preguntas y solicita acciones",
-      homeShort: "Habla con tu Agente IA",
+      homeShort: "Habla con tu Agente",
       listening: "Escuchando...",
       speak: "Hablar",
       stop: "Interrumpir",
@@ -13490,7 +13849,7 @@ function assistantVoiceUiText(code) {
       confirm: "Operación lista",
       execute: "Ejecutar",
       cancel: "Cancelar",
-      consentTitle: "Autoriza el asistente de IA",
+      consentTitle: "Autoriza al Agente",
       consentText:
         "Para responder e interpretar operaciones, fAInance envía a OpenAI tu solicitud y los datos financieros permitidos en los ajustes. No se envían contraseñas, datos biométricos ni datos completos de tarjetas.",
       accept: "Acepto y continúo",
@@ -13501,9 +13860,9 @@ function assistantVoiceUiText(code) {
       error: "No puedo contactar con el asistente ahora.",
     },
     fr: {
-      title: "Agent IA",
+      title: "Agent",
       sub: "Parlez à fAInance, posez des questions et demandez des actions",
-      homeShort: "Parlez à votre Agent IA",
+      homeShort: "Parlez à votre Agent",
       listening: "J’écoute...",
       speak: "Parler",
       stop: "Interrompre",
@@ -13518,7 +13877,7 @@ function assistantVoiceUiText(code) {
       confirm: "Opération prête",
       execute: "Exécuter",
       cancel: "Annuler",
-      consentTitle: "Autoriser l’assistant IA",
+      consentTitle: "Autoriser l’Agent",
       consentText:
         "Pour répondre et interpréter les actions, fAInance envoie à OpenAI votre demande et les données financières autorisées dans les réglages. Les mots de passe, données biométriques et données complètes des cartes ne sont pas envoyés.",
       accept: "J’accepte et je continue",
@@ -13529,9 +13888,9 @@ function assistantVoiceUiText(code) {
       error: "Impossible de contacter l’assistant actuellement.",
     },
     de: {
-      title: "KI-Agent",
+      title: "Agent",
       sub: "Sprich mit fAInance, stelle Fragen und fordere Aktionen an",
-      homeShort: "Sprich mit deinem KI-Agenten",
+      homeShort: "Sprich mit deinem Agenten",
       listening: "Ich höre zu...",
       speak: "Sprechen",
       stop: "Unterbrechen",
@@ -13546,7 +13905,7 @@ function assistantVoiceUiText(code) {
       confirm: "Aktion bereit",
       execute: "Ausführen",
       cancel: "Abbrechen",
-      consentTitle: "KI-Assistenten autorisieren",
+      consentTitle: "Agenten autorisieren",
       consentText:
         "Für Antworten und Aktionen sendet fAInance deine Anfrage und die in den Einstellungen erlaubten Finanzdaten an OpenAI. Passwörter, biometrische Daten und vollständige Kartendaten werden nicht gesendet.",
       accept: "Akzeptieren und fortfahren",
@@ -13557,9 +13916,9 @@ function assistantVoiceUiText(code) {
       error: "Der Assistent ist derzeit nicht erreichbar.",
     },
     pt: {
-      title: "Agente de IA",
+      title: "Agente",
       sub: "Fale com o fAInance, faça perguntas e peça ações",
-      homeShort: "Fale com o seu Agente de IA",
+      homeShort: "Fale com o seu Agente",
       listening: "A ouvir...",
       speak: "Falar",
       stop: "Interromper",
@@ -13574,7 +13933,7 @@ function assistantVoiceUiText(code) {
       confirm: "Operação pronta",
       execute: "Executar",
       cancel: "Cancelar",
-      consentTitle: "Autorizar o assistente de IA",
+      consentTitle: "Autorizar o Agente",
       consentText:
         "Para responder e interpretar ações, o fAInance envia à OpenAI o seu pedido e os dados financeiros permitidos nas definições. Não são enviados dados biométricos, palavras-passe ou dados completos de cartões.",
       accept: "Aceito e continuo",
@@ -13585,9 +13944,9 @@ function assistantVoiceUiText(code) {
       error: "Não consigo contactar o assistente agora.",
     },
     pl: {
-      title: "Agent AI",
+      title: "Agent",
       sub: "Rozmawiaj z fAInance, zadawaj pytania i zlecaj działania",
-      homeShort: "Porozmawiaj ze swoim Agentem AI",
+      homeShort: "Porozmawiaj ze swoim Agentem",
       listening: "Słucham...",
       speak: "Mów",
       stop: "Przerwij",
@@ -13602,7 +13961,7 @@ function assistantVoiceUiText(code) {
       confirm: "Działanie gotowe",
       execute: "Wykonaj",
       cancel: "Anuluj",
-      consentTitle: "Zezwól na asystenta AI",
+      consentTitle: "Zezwól na Agenta",
       consentText:
         "Aby odpowiadać i interpretować działania, fAInance wysyła do OpenAI Twoje polecenie i dane finansowe dozwolone w ustawieniach. Hasła, dane biometryczne i pełne dane kart nie są wysyłane.",
       accept: "Akceptuję i kontynuuję",
@@ -13613,9 +13972,9 @@ function assistantVoiceUiText(code) {
       error: "Nie można teraz połączyć się z asystentem.",
     },
     nl: {
-      title: "AI-agent",
+      title: "Agent",
       sub: "Praat met fAInance, stel vragen en vraag acties",
-      homeShort: "Praat met je AI-agent",
+      homeShort: "Praat met je Agent",
       listening: "Ik luister...",
       speak: "Spreken",
       stop: "Onderbreken",
@@ -13630,7 +13989,7 @@ function assistantVoiceUiText(code) {
       confirm: "Actie klaar",
       execute: "Uitvoeren",
       cancel: "Annuleren",
-      consentTitle: "AI-assistent toestaan",
+      consentTitle: "Agent toestaan",
       consentText:
         "Om antwoorden en acties te verwerken stuurt fAInance je verzoek en de in de instellingen toegestane financiële gegevens naar OpenAI. Wachtwoorden, biometrische gegevens en volledige kaartgegevens worden niet verzonden.",
       accept: "Accepteren en doorgaan",
@@ -13641,9 +14000,9 @@ function assistantVoiceUiText(code) {
       error: "De assistent is nu niet bereikbaar.",
     },
     ro: {
-      title: "Agent AI",
+      title: "Agent",
       sub: "Vorbește cu fAInance, pune întrebări și solicită acțiuni",
-      homeShort: "Vorbește cu Agentul tău AI",
+      homeShort: "Vorbește cu Agentul tău",
       listening: "Ascult...",
       speak: "Vorbește",
       stop: "Întrerupe",
@@ -13658,7 +14017,7 @@ function assistantVoiceUiText(code) {
       confirm: "Operațiune pregătită",
       execute: "Execută",
       cancel: "Anulează",
-      consentTitle: "Autorizează asistentul AI",
+      consentTitle: "Autorizează Agentul",
       consentText:
         "Pentru răspunsuri și acțiuni, fAInance trimite către OpenAI solicitarea și datele financiare permise în setări. Nu sunt trimise parole, date biometrice sau date complete ale cardurilor.",
       accept: "Accept și continui",
@@ -13669,9 +14028,9 @@ function assistantVoiceUiText(code) {
       error: "Asistentul nu poate fi contactat acum.",
     },
     el: {
-      title: "Πράκτορας AI",
+      title: "Πράκτορας",
       sub: "Μιλήστε με το fAInance, κάντε ερωτήσεις και ζητήστε ενέργειες",
-      homeShort: "Μιλήστε με τον Πράκτορα AI",
+      homeShort: "Μιλήστε με τον Πράκτορα",
       listening: "Ακούω...",
       speak: "Μιλήστε",
       stop: "Διακοπή",
@@ -13686,7 +14045,7 @@ function assistantVoiceUiText(code) {
       confirm: "Η ενέργεια είναι έτοιμη",
       execute: "Εκτέλεση",
       cancel: "Ακύρωση",
-      consentTitle: "Εξουσιοδότηση βοηθού AI",
+      consentTitle: "Εξουσιοδότηση πράκτορα",
       consentText:
         "Για απαντήσεις και ενέργειες, το fAInance στέλνει στην OpenAI το αίτημά σας και τα οικονομικά δεδομένα που επιτρέπονται στις ρυθμίσεις. Δεν αποστέλλονται κωδικοί, βιομετρικά ή πλήρη στοιχεία καρτών.",
       accept: "Αποδοχή και συνέχεια",
@@ -14037,6 +14396,15 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   var expenses: any[] = c.expensesForAnalysis || rawVoiceExpenses || [];
   var countedExpenses: any[] = c.countedExpensesForAnalysis || expenses;
   var countedIncomes: any[] = c.countedIncomes || incomes || [];
+  const detectedVoiceAnomalies: any[] = useMemo(function () {
+    return detectFinancialAnomalies({
+      expenses: countedExpenses, incomes: countedIncomes, categories: cats, incomeTypes, recurring,
+      today: todayStr(),
+      keyForDate: accountingPeriod.keyForDate,
+      shiftKey: accountingPeriod.shiftKey,
+    });
+  }, [countedExpenses, countedIncomes, cats, incomeTypes, recurring, accountingPeriod]);
+
   var {
     patrimonioValues,
     setPatrimonioValues,
@@ -14163,11 +14531,15 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     secondaryButtonColor,
     setSecondaryButtonColor,
   }: any = c;
+  const aiChatRef=useRef<any[]>(Array.isArray(aiChat)?aiChat:[]);
+  aiChatRef.current=Array.isArray(aiChat)?aiChat:aiChatRef.current;
   var embeddedView = !!embedded;
   var V = assistantVoiceUiText(lang || "it");
   var RT = assistantRealtimeUiText(lang || "it");
   var readyPlaceholder = assistantVoiceReadyPlaceholder(lang || "it");
   var [input, setInput] = useState("");
+  var [autoRulePrompt,setAutoRulePrompt] = useState<string|null>(null);
+  var autoRulePromptHandledRef=useRef(false);
   var aiComposerInputRef = useRef<any>(null);
   function resizeAiComposerInput() {
     var el = aiComposerInputRef.current;
@@ -14191,7 +14563,15 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
         localStorage.getItem("fainance_voice_assistant_prefill_once") || "";
       localStorage.removeItem("fainance_voice_assistant_prefill_once");
     } catch (e) {}
-    if (prefill) setInput(prefill);
+    if (prefill) {
+      setInput(prefill);
+      try{
+        if(sessionStorage.getItem('fainance_rule_ai_autosend_once')===prefill){
+          sessionStorage.removeItem('fainance_rule_ai_autosend_once');
+          setAutoRulePrompt(prefill);
+        }
+      }catch{}
+    }
   }, []);
   var [busy, setBusy] = useState(false);
   var [speaking, setSpeaking] = useState(false);
@@ -14477,7 +14857,11 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     ].filter(Boolean).join(" ");
   }
   function sendRealtimeModelResponse(resolution:any,extraInstruction?:string){
-    var directive=realtimeTurnDirective(resolution,extraInstruction);
+    var lastTopic=lastMeaningfulUserTurn(aiChatRef.current,lastVoiceUserRequestRef.current);
+    var focus=isContinuationRequest(lastVoiceUserRequestRef.current)&&lastTopic
+      ?' The user is continuing the earlier topic: '+lastTopic.slice(0,650)+'. Maintain conversational context; do not restart with a greeting. If an action needs confirmation, do not claim it was already confirmed.'
+      :' Maintain the last conversational topic and do not reset after speech recognition noise.';
+    var directive=realtimeTurnDirective(resolution,(extraInstruction||'')+focus);
     var systemSent=sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"system",content:[{type:"input_text",text:directive}]}});
     if(!systemSent)return false;
     stopSpeaking();
@@ -14492,6 +14876,19 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   }
   function realtimeActionsFrom(value:any){var allowed=["update_movement",...assistantRuleActions,"recategorize_expenses","open_section","create_expense","create_income","create_recurring","create_goal","update_goal_saved","create_alert","set_category_budget","create_debt_credit","update_debt_credit","delete_debt_credit","set_patrimonio_value","create_note","add_shopping_items","create_shopping_list","create_shopping_unit","create_share_project","create_share_expense","create_share_settlement","create_expense_category","create_payment_method","set_setting"];return (Array.isArray(value)?value:[]).map(function(raw){var a={...(raw||{})},signal=[lastVoiceUserRequestRef.current,a.summary,a.description,a.projectName,a.holder,a.entityName].join(" ").toLowerCase();if(a.action==="create_expense"&&/(spesa condivisa|spesa share|share expense|shared expense|split expense|divid|nel progetto|progetto share)/i.test(signal))a.action="create_share_expense";if(a.action==="update_debt_credit"&&/(elimina|cancella|rimuovi|chiudi definitivamente|delete|remove|erase)/i.test(signal)){a.action="delete_debt_credit";a.amount=null;a.initialAmount=null;}return a;}).filter(function(a){return a&&allowed.indexOf(String(a.action||""))>=0;}).slice(0,16).map(function(a){return {...a,action:String(a.action||""),summary:String(a.summary||"").slice(0,500),items:Array.isArray(a.items)?a.items.slice(0,100):[],shareParticipants:Array.isArray(a.shareParticipants)?a.shareParticipants.slice(0,50):[]};});}
   function updatePendingActions(next:any[]){
+    const builderStarted=Number(sessionStorage.getItem('fainance_rule_ai_builder_flow')||0);
+    const fromBuilder=builderStarted>0&&Date.now()-builderStarted<1800000;
+    // A natural-language Rule Builder request must never silently produce multiple rules.
+    // Combine alternate branches only when their destinations and actions agree.
+    if(fromBuilder&&Array.isArray(next)&&next.length){
+      try{next=[combineBuilderRuleProposals(next)];}
+      catch(error){
+        pendingActionsRef.current=[];setPendingActions([]);operationDraftRef.current=null;
+        const code=String(error&&error.code||error&&error.message||'INVALID_RULE_BUILDER_ACTIONS');
+        const message=assistantRuleError(lastAssistantUserLanguageRef.current||lang,code);
+        appendMessage('assistant',message);speak(message,true);return false;
+      }
+    }
     var prepared:any[]=[];
     var projectedFinance=c.financeEvolution;
     var liveMovementContext=movementLiveContext();
@@ -14516,7 +14913,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   function sendRealtimeToolResult(callId:string,payload:any,createResponse?:boolean){var sent=sendRealtimeEvent({type:"conversation.item.create",item:{type:"function_call_output",call_id:callId,output:JSON.stringify(payload||{})}});if(sent&&createResponse!==false){var turn=assistantTurnRef.current;setTimeout(function(){if(isCurrentAssistantTurn(turn))sendRealtimeModelResponse(currentVoiceLanguageResolution());},20);}}
   async function handleRealtimeFunctionCall(event:any){var callId=String(event&&event.call_id||"");if(!callId||realtimeHandledCallsRef.current.has(callId))return;realtimeHandledCallsRef.current.add(callId);var args:any={};try{args=JSON.parse(String(event.arguments||"{}"));}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"invalidArguments")});return;}var name=String(event.name||"");
     if(name==="propose_fainance_actions"){var actions=realtimeActionsFrom(args.actions),opens=actions.filter(function(a){return a.action==="open_section";}),writes=actions.filter(function(a){return a.action!=="open_section";});if(writes.length){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});var preamble=lastRealtimeAssistantTranscriptRef.current;lastRealtimeAssistantTranscriptRef.current="";if(preamble)setAiChat(function(p){var list=[...(p||[])];var last=list[list.length-1];if(last&&last.role==="assistant"&&last.source==="voice-assistant"&&String(last.text||"").trim()===preamble)list.pop();return list;});realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");setSpeaking(false);setBusy(false);var ready=updatePendingActions(writes);sendRealtimeToolResult(callId,{status:ready?"confirmation_required":"clarification_required",summaries:pendingActionsRef.current.map(a=>a.action==="update_movement"?movementUpdateSummary(a,{...movementLiveContext(),lang:lastAssistantUserLanguageRef.current||lang},true):assistantRuleActions.includes(a.action)?ruleRequestSummary(a,{...c,lang:lastAssistantUserLanguageRef.current||lang},true):actionSummary(a)),operationDraft:operationDraftRef.current,uiConfirmation:ready},false);if(ready&&pendingActionsRef.current.length===1){var pendingPreview=pendingActionsRef.current[0];if(pendingPreview.action==="update_movement")speak(movementUpdateSummary(pendingPreview,{...movementLiveContext(),lang:lastAssistantUserLanguageRef.current||lang},true),true);else if(pendingPreview.action==="recategorize_expenses")speak(actionSummary(pendingPreview),true);else if(assistantRuleActions.includes(pendingPreview.action))speak(ruleRequestSummary(pendingPreview,{...c,lang:lastAssistantUserLanguageRef.current||lang},true),true);}return;}if(opens.length){sendRealtimeToolResult(callId,{status:"completed",result:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"sectionOpened")},false);setTimeout(function(){openSection(opens[0]);},80);return;}sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"noValidAction")});return;}
-    if(name==="confirm_pending_actions"){if(!isYes(lastVoiceUserRequestRef.current)){sendRealtimeToolResult(callId,{status:"confirmation_required"},false);return;}var pending=pendingActionsRef.current.slice();if(!pending.length){sendRealtimeToolResult(callId,{status:"nothing_to_confirm"});return;}var results:any[]=[];try{pending.forEach(function(a){var r=executeAction(a);if(r)results.push(r);});updatePendingActions([]);sendRealtimeToolResult(callId,{status:"completed",results:results});}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error")});}return;}
+    if(name==="confirm_pending_actions"){if(!isYes(lastVoiceUserRequestRef.current)){sendRealtimeToolResult(callId,{status:"confirmation_required"},false);return;}var pending=pendingActionsRef.current.slice();if(!pending.length){sendRealtimeToolResult(callId,{status:"nothing_to_confirm"});return;}var results:any[]=[];try{const started=Number(sessionStorage.getItem('fainance_rule_ai_builder_flow')||0);if(started>0&&Date.now()-started<1800000){confirmPending('');sendRealtimeToolResult(callId,{status:"review_required"},false);return;}pending.forEach(function(a){var r=executeAction(a);if(r)results.push(r);});updatePendingActions([]);sendRealtimeToolResult(callId,{status:"completed",results:results});}catch(e){sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error")});}return;}
     if(name==="cancel_pending_actions"){operationDraftRef.current=null;updatePendingActions([]);sendRealtimeToolResult(callId,{status:"cancelled"});return;}
     sendRealtimeToolResult(callId,{status:"error",error:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"toolUnavailable")});
   }
@@ -14544,7 +14941,12 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     if(type==="input_audio_buffer.committed"){var itemId=String(event.item_id||"");if(itemId){if(realtimeInputItemsRef.current.size>=64)realtimeInputItemsRef.current.delete(realtimeInputItemsRef.current.keys().next().value);realtimeInputItemsRef.current.set(itemId,{turn:assistantTurnRef.current,text:""});}return;}
     if(type==="conversation.item.input_audio_transcription.delta"){var id=String(event.item_id||"");if(!id||realtimeCompletedInputRef.current.has(id))return;var item=realtimeInputItemsRef.current.get(id)||{turn:assistantTurnRef.current,text:""};item.text+=String(event.delta||"");realtimeInputItemsRef.current.set(id,item);return;}
     if(type==="conversation.item.input_audio_transcription.failed"){if(event.item_id&&realtimeCompletedInputRef.current.has(String(event.item_id)))return;var failedItem=realtimeInputItemsRef.current.get(String(event.item_id||""));realtimeInputItemsRef.current.delete(String(event.item_id||""));if(failedItem&&failedItem.turn!==assistantTurnRef.current)return;setBusy(false);setVoiceListening(false);var failureNotice=realtimeServerFailure(event.error||{});if(failureNotice)showTemporaryVoiceNotice(failureNotice,4500);return;}
-    if(type==="conversation.item.input_audio_transcription.completed"){var id=String(event.item_id||""),item=id?realtimeInputItemsRef.current.get(id):null;if(id&&realtimeCompletedInputRef.current.has(id))return;if(id){if(realtimeCompletedInputRef.current.size>=128)realtimeCompletedInputRef.current.delete(realtimeCompletedInputRef.current.values().next().value);realtimeCompletedInputRef.current.add(id);realtimeInputItemsRef.current.delete(id);}if(item&&item.turn!==assistantTurnRef.current)return;var ut=String(event.transcript||(item&&item.text)||"").trim();if(!ut||isVoicePromptEcho(ut)){if(id)sendRealtimeEvent({type:"conversation.item.delete",item_id:id});realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();setBusy(false);setVoiceListening(false);return;}realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();if(ut){var probs=Array.isArray(event.logprobs)?event.logprobs:[];var avgLogProb=probs.length?probs.reduce(function(sum,p){var lp=Number(p&&p.logprob);return sum+(Number.isFinite(lp)?lp:-4);},0)/probs.length:null;var confidence=avgLogProb===null?null:Math.exp(Math.max(-12,Math.min(0,avgLogProb)));var turnResolution:any=resolveVoiceAssistantTurn(ut);var turnLanguage=turnResolution.language;lastVoiceUserRequestRef.current=ut;appendVoiceMessage(ut,confidence);if(pendingActionsRef.current.length&&isYes(ut)){confirmPending("");return;}if((pendingActionsRef.current.length||operationDraftRef.current)&&isNo(ut)){cancelPending("");return;}var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(ut,turnLanguage);var check=normalized(ut);var hearingCheck=/^(mi senti|mi stai sentendo|riesci a sentirmi|mi ascolti|ci sei|can you hear me|do you hear me|tu m'entends|vous m'entendez|me escuchas|puedes oirme|kannst du mich horen|consegues ouvir-me|slyszysz mnie|hoor je mij|ma auzi|με ακους)[?.! ]*$/.test(check);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else if(localHelpAnswer)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with the following verified fAInance help text, without adding anything:\n"+localHelpAnswer);else{if(consumePlanFeature)consumePlanFeature("aiReply",1);if(handleLocalMovementTurn(ut,turnResolution))return;else if(hearingCheck)sendRealtimeModelResponse(turnResolution,"Reply exactly and only: "+assistantHearingReply(turnLanguage));else if(operationDraftRef.current||activeAttachmentRef.current||isMovementCorrectionText(ut)||looksLikeDirectAppAction(ut)){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});callAssistant(ut,turnResolution);}else sendRealtimeModelResponse(turnResolution);}}return;}
+    if(type==="conversation.item.input_audio_transcription.completed"){var id=String(event.item_id||""),item=id?realtimeInputItemsRef.current.get(id):null;if(id&&realtimeCompletedInputRef.current.has(id))return;if(id){if(realtimeCompletedInputRef.current.size>=128)realtimeCompletedInputRef.current.delete(realtimeCompletedInputRef.current.values().next().value);realtimeCompletedInputRef.current.add(id);realtimeInputItemsRef.current.delete(id);}if(item&&item.turn!==assistantTurnRef.current)return;var ut=String(event.transcript||(item&&item.text)||"").trim();if(!ut||isVoicePromptEcho(ut)){if(id)sendRealtimeEvent({type:"conversation.item.delete",item_id:id});realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();setBusy(false);setVoiceListening(false);return;}realtimeUserDraftRef.current="";setRealtimeUserDraft("");clearVoiceNotice();if(ut){var probs=Array.isArray(event.logprobs)?event.logprobs:[];var avgLogProb=probs.length?probs.reduce(function(sum,p){var lp=Number(p&&p.logprob);return sum+(Number.isFinite(lp)?lp:-4);},0)/probs.length:null;var confidence=avgLogProb===null?null:Math.exp(Math.max(-12,Math.min(0,avgLogProb)));
+      if(isLikelyVoiceNoise(ut,confidence,lastAssistantUserLanguageRef.current||lang)){
+        if(id)sendRealtimeEvent({type:'conversation.item.delete',item_id:id});
+        setBusy(false);setVoiceListening(false);return;
+      }
+      var turnResolution:any=resolveVoiceAssistantTurn(ut);var turnLanguage=turnResolution.language;lastVoiceUserRequestRef.current=ut;appendVoiceMessage(ut,confidence);if(pendingActionsRef.current.length&&isYes(ut)){confirmPending("");return;}if((pendingActionsRef.current.length||operationDraftRef.current)&&isNo(ut)){cancelPending("");return;}var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(ut,turnLanguage);var check=normalized(ut);var hearingCheck=/^(mi senti|mi stai sentendo|riesci a sentirmi|mi ascolti|ci sei|can you hear me|do you hear me|tu m'entends|vous m'entendez|me escuchas|puedes oirme|kannst du mich horen|consegues ouvir-me|slyszysz mnie|hoor je mij|ma auzi|με ακους)[?.! ]*$/.test(check);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else if(localHelpAnswer)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with the following verified fAInance help text, without adding anything:\n"+localHelpAnswer);else{if(consumePlanFeature)consumePlanFeature("aiReply",1);if(handleLocalMovementTurn(ut,turnResolution))return;else if(hearingCheck)sendRealtimeModelResponse(turnResolution,"Reply exactly and only: "+assistantHearingReply(turnLanguage));else if(operationDraftRef.current||activeAttachmentRef.current||isMovementCorrectionText(ut)||looksLikeDirectAppAction(ut)){sendRealtimeEvent({type:"response.cancel"});sendRealtimeEvent({type:"output_audio_buffer.clear"});callAssistant(ut,turnResolution);}else sendRealtimeModelResponse(turnResolution);}}return;}
     if(type==="response.output_audio_transcript.delta"){var ad=String(event.delta||"");realtimeAssistantDraftRef.current+=ad;setRealtimeAssistantDraft(realtimeAssistantDraftRef.current);return;}
     if(type==="response.output_audio_transcript.done"){clearVoiceNotice();var at=String(event.transcript||realtimeAssistantDraftRef.current||"").trim();realtimeAssistantDraftRef.current="";setRealtimeAssistantDraft("");if(at){lastRealtimeAssistantTranscriptRef.current=at;appendMessage("assistant",at);}return;}
     if(type==="output_audio_buffer.started"){
@@ -14600,7 +15002,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       await ensureRealtimeMicrophonePermission();
       var mediaPromise=(async function(){try{var supported:any=navigator.mediaDevices.getSupportedConstraints?navigator.mediaDevices.getSupportedConstraints():{};var iosNative=nativePlatformName()==="ios";var audioConstraints:any=iosNative?{echoCancellation:true,noiseSuppression:true,autoGainControl:true}:{echoCancellation:{ideal:true},noiseSuppression:{ideal:true},autoGainControl:{ideal:true},channelCount:{ideal:1},sampleRate:{ideal:48000},sampleSize:{ideal:16},googEchoCancellation:true,googNoiseSuppression:true,googHighpassFilter:true,googTypingNoiseDetection:true,googAutoGainControl:true};if(!iosNative&&supported.voiceIsolation)audioConstraints.voiceIsolation={ideal:true};var acquired=await navigator.mediaDevices.getUserMedia({audio:audioConstraints,video:false});try{acquired.getAudioTracks().forEach(function(track:any){track.enabled=true;try{track.contentHint="speech";}catch(e){}if(!iosNative){try{var extra:any={echoCancellation:true,noiseSuppression:true,autoGainControl:true,channelCount:1};if(supported.voiceIsolation)extra.voiceIsolation=true;Promise.resolve(track.applyConstraints(extra)).catch(function(){});}catch(e){}}});}catch(e){}realtimeStreamRef.current=acquired;return await prepareNoiseFilteredMicrophone(acquired);}catch(mediaError){var mediaName=String((mediaError&&mediaError.name)||"").toLowerCase(),mediaMessage=String((mediaError&&mediaError.message)||"").toLowerCase();if(mediaName.indexOf("notallowed")>=0||mediaName.indexOf("permission")>=0||mediaMessage.indexOf("permission")>=0||mediaMessage.indexOf("denied")>=0)throw new Error(realtimePermissionDeniedMessage());throw mediaError;}})();
       phase="session";
-      var sessionPromise=(async function(){var realtimeSessionPayload=buildRealtimeSessionRequest({interfaceLanguage:lang||"it",languageState:assistantLanguageStateRef.current,aiDataAccess:aiDataAccess||"summary",financeContext:contextForRealtime,chatHistory:(aiChat||[]).filter(m=>!m.localOnly).slice(-8).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var response=await authenticatedAiFetch(AI_REALTIME_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify(realtimeSessionPayload)});var payload:any={};try{payload=await response.json();}catch(e){}if(response.ok&&payload.value)return payload;statusCode=response.status;serverMessage=String((payload&&payload.error)||"");var err:any=new Error(serverMessage||("Errore sessione "+response.status));err.httpStatus=response.status;err.serverMessage=serverMessage;throw err;})();
+      var sessionPromise=(async function(){var realtimeSessionPayload=buildRealtimeSessionRequest({interfaceLanguage:lang||"it",languageState:assistantLanguageStateRef.current,aiDataAccess:aiDataAccess||"summary",financeContext:contextForRealtime,chatHistory:assistantHistory(aiChatRef.current,16)});var response=await authenticatedAiFetch(AI_REALTIME_ENDPOINT,{method:"POST",headers:{"Content-Type":"application/json"},signal:controller.signal,body:JSON.stringify(realtimeSessionPayload)});var payload:any={};try{payload=await response.json();}catch(e){}if(response.ok&&payload.value)return payload;statusCode=response.status;serverMessage=String((payload&&payload.error)||"");var err:any=new Error(serverMessage||("Errore sessione "+response.status));err.httpStatus=response.status;err.serverMessage=serverMessage;throw err;})();
       var peerPromise=(async function(){var stream=await mediaPromise;phase="webrtc";var pc=new RTCPeerConnection();realtimePeerRef.current=pc;pc.ontrack=function(e){var remote=(e.streams&&e.streams[0])?e.streams[0]:new MediaStream([e.track]);attachRealtimeAudioStream(remote).catch(function(){showTemporaryVoiceNotice(assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"audioFailed"),6200);});};pc.onconnectionstatechange=function(){var st=String(pc.connectionState||"");if(st==="connected"){setRealtimeStatus("connected");setBusy(false);setVoiceError("");}else if(st==="failed"){setRealtimeStatus("error");showTemporaryVoiceNotice(assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"unavailable"),6200);}else if(st==="disconnected"){showTemporaryVoiceNotice(assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"interrupted"),5200);}};stream.getAudioTracks().forEach(function(track){pc.addTrack(track,stream);});var dc=pc.createDataChannel("oai-events");realtimeChannelRef.current=dc;realtimeHandledCallsRef.current=new Set();dc.onopen=function(){if(connectionTimer)clearTimeout(connectionTimer);realtimeConnectionAbortRef.current=null;setRealtimeStatus("connected");setBusy(false);setVoiceError("");};dc.onmessage=function(ev){handleRealtimeEvent(ev.data);};dc.onerror=function(ev:any){setRealtimeStatus("error");showTemporaryVoiceNotice(realtimeFailureMessage(new Error(conciseTechnicalMessage(ev&&ev.message)||"Data channel error"),"datachannel"),6200);};dc.onclose=function(){if(mountedRef.current&&voiceModal)setRealtimeStatus(function(current){return current==="error"?current:"idle";});};var offer=await pc.createOffer();await pc.setLocalDescription(offer);return{pc:pc,offer:offer};})();
       var pair=await Promise.all([peerPromise,sessionPromise]),peerData:any=pair[0],tokenData:any=pair[1];
       phase="webrtc";
@@ -14613,7 +15015,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     }
   }
   function toggleRealtimeMicrophone(){var stream=realtimeStreamRef.current;if(!stream)return;var next=!realtimeMicEnabled;stream.getAudioTracks().forEach(function(t){t.enabled=next;});try{var processed=microphoneProcessedStreamRef.current;if(processed)processed.getAudioTracks().forEach(function(t){t.enabled=next;});}catch(e){}setRealtimeMicEnabled(next);setVoiceListening(false);}
-  function sendRealtimeText(q:string,providedResolution?:any){var clean=String(q||"");var turnResolution:any=providedResolution||resolveVoiceAssistantTurn(clean);lastVoiceUserRequestRef.current=clean;if(handleLocalMovementTurn(clean,turnResolution))return true;if(operationDraftRef.current||isMovementCorrectionText(clean)||looksLikeDirectAppAction(clean)){callAssistant(clean,turnResolution);return true;}if(!sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:clean}]}}))return false;var languageControlReply=assistantLanguageControlReply(turnResolution);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else sendRealtimeModelResponse(turnResolution);setBusy(true);return true;}
+  function sendRealtimeText(q:string,providedResolution?:any){var clean=String(q||"");var turnResolution:any=providedResolution||resolveVoiceAssistantTurn(clean);lastVoiceUserRequestRef.current=clean;var resolved= contextualizeFollowUp(clean,aiChatRef.current);if(handleLocalMovementTurn(clean,turnResolution))return true;if(operationDraftRef.current||isMovementCorrectionText(clean)||looksLikeDirectAppAction(clean)){callAssistant(clean,turnResolution);return true;}if(!sendRealtimeEvent({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:resolved}]}}))return false;var languageControlReply=assistantLanguageControlReply(turnResolution);if(languageControlReply)sendRealtimeModelResponse(turnResolution,"Reply exactly and only with this text: "+languageControlReply);else sendRealtimeModelResponse(turnResolution);setBusy(true);return true;}
   function isCurrentAssistantTurn(turn){return mountedRef.current&&turn===assistantTurnRef.current;}
   function interruptAssistantTurn(){
     assistantTurnRef.current+=1;
@@ -14667,7 +15069,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       await audio.play();
     }catch(e){speechAbortRef.current=null;if(!mountedRef.current||cycle!==speechCycleRef.current)return;setSpeaking(false);await speakFallback(clean,resume,cycle);}
   }
-  function finishListening(text){var q=String(text||"").trim();setVoiceListening(false);if(q){setInput(q);setTimeout(function(){sendMessage(q);},60);}}
+  function finishListening(text){var q=String(text||"").trim();setVoiceListening(false);if(q&&!isLikelyVoiceNoise(q,null,lastAssistantUserLanguageRef.current||lang)){setInput(q);setTimeout(function(){sendMessage(q);},60);}}
   function isIgnorableSpeechRecognitionError(data: any) {
     var raw = [
       data && data.code,
@@ -14936,6 +15338,16 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
         createUnitOnlyWhenExplicitlyRequested: true,
       },
     };
+    var voiceVisibleAnomalies = detectedVoiceAnomalies;
+    try {
+      var dismissedKey = c.userKey ? c.userKey("dismissed_anomalies_v2") : "dismissed_anomalies_v2";
+      var excluded = JSON.parse(localStorage.getItem(dismissedKey) || "[]");
+      if (Array.isArray(excluded)) voiceVisibleAnomalies = detectedVoiceAnomalies.filter(function (signal) {
+        return excluded.indexOf(String(signal.id)) < 0;
+      });
+    } catch (_err) {}
+    ctx.anomalySignals = anomaliesForAssistant(voiceVisibleAnomalies, accessPolicy.level);
+    ctx.anomalyDetectionNote = "Signals are local statistical hints, not proof of errors or fraud. Explain anomalies using supplied comparisons only, respect dataAccessPolicy, and state insufficient evidence clearly.";
     if (aiDataAccess === "areas" || aiDataAccess === "full") {
       var byCat: any = {},
         byArea: any = {};
@@ -15292,11 +15704,45 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       else throw new Error("Questa impostazione è sensibile o non è modificabile dall’assistente.");return actionSummary(a);}
     return "";
   }
-  function openSection(a){var sec=normalized(a.section||"").replace(/ /g,"");var map:any={home:"home",expenses:"spese",expense:"spese",uscite:"spese",incomes:"spese",income:"spese",entrate:"spese",recurring:"tools",ricorrenti:"tools",automaticrules:"tools",regoleautomatiche:"tools",history:"history",storico:"history",statistics:"stats",statistiche:"stats",budget:"budget",goals:"goals",obiettivi:"goals",alerts:"alerts",alert:"alerts",patrimonio:"patrimonio",assets:"patrimonio",debtcredits:"debtCredits",debiti:"debtCredits",crediti:"debtCredits",shopping:"shopping",spesa:"shopping",share:"share",appunti:"appunti",notes:"appunti",settings:"settings",impostazioni:"settings",ai:"consulenteAI",assistant:"voice"};var target=map[sec]||"home";if(target==="voice")return;setTab(target);setSettingsPage(null);setMobileMenu(false);if(target==="spese"){setSpeseSubTab("add");setAddType(sec==="incomes"||sec==="income"||sec==="entrate"?"income":"expense");setAddSubTab("single");}if(target==="tools"&&(sec==="recurring"||sec==="ricorrenti"||sec==="automaticrules"||sec==="regoleautomatiche")){setTimeout(function(){window.dispatchEvent(new CustomEvent("fainance:open-tool",{detail:{page:(sec==="automaticrules"||sec==="regoleautomatiche")?"automaticRules":"recurring"}}));},0);}if(target==="history")setHistoryTab("expenses");setVoiceModal(false);}
+  function openSection(a){var sec=normalized(a.section||"").replace(/ /g,"");if(sec==="anomalies"||sec==="anomalie"){setAiTab("anomalie");setTab("consulenteAI");setMobileMenu(false);setVoiceModal(false);return;}var map:any={home:"home",expenses:"spese",expense:"spese",uscite:"spese",incomes:"spese",income:"spese",entrate:"spese",recurring:"tools",ricorrenti:"tools",automaticrules:"tools",regoleautomatiche:"tools",history:"history",storico:"history",statistics:"stats",statistiche:"stats",budget:"budget",goals:"goals",obiettivi:"goals",alerts:"alerts",alert:"alerts",patrimonio:"patrimonio",assets:"patrimonio",debtcredits:"debtCredits",debiti:"debtCredits",crediti:"debtCredits",shopping:"shopping",spesa:"shopping",share:"share",appunti:"appunti",notes:"appunti",settings:"settings",impostazioni:"settings",ai:"consulenteAI",assistant:"voice"};var target=map[sec]||"home";if(target==="voice")return;setTab(target);setSettingsPage(null);setMobileMenu(false);if(target==="spese"){setSpeseSubTab("add");setAddType(sec==="incomes"||sec==="income"||sec==="entrate"?"income":"expense");setAddSubTab("single");}if(target==="tools"&&(sec==="recurring"||sec==="ricorrenti"||sec==="automaticrules"||sec==="regoleautomatiche")){setTimeout(function(){window.dispatchEvent(new CustomEvent("fainance:open-tool",{detail:{page:(sec==="automaticrules"||sec==="regoleautomatiche")?"automaticRules":"recurring"}}));},0);}if(target==="history")setHistoryTab("expenses");setVoiceModal(false);}
   function isYes(q){return /^(si|sì|ok|okay|confermo|conferma|vai|procedi|yes|confirm|dale|vale|oui|ja|sim|tak|da|ναι)[.!?\s]*$/i.test(String(q||"").trim());}
   function isNo(q){return /^(no|annulla|annullo|cancel|cancelar|nein|não|nie|nu|όχι)[.!?\s]*$/i.test(String(q||"").trim());}
-  function confirmPending(userText){if(String(userText||"").trim())appendMessage("user",userText);var actions=pendingActionsRef.current.slice();if(!actions.length)return;pendingActionsRef.current=[];setPendingActions([]);try{var results=actions.map(function(a){return executeAction(a);});operationDraftRef.current=null;var msg=actions.length===1&&actions[0].action==="recategorize_expenses"?results[0]:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");appendMessage("assistant",msg);speak(msg,true);}catch(e){var msg2=actions.some(a=>a.action==="update_movement")?movementUpdateError(lastAssistantUserLanguageRef.current||lang,String(e&&e.code||"conflict")):actions.some(a=>assistantRuleActions.includes(a.action))?assistantRuleError(lastAssistantUserLanguageRef.current||lang,String(e&&e.code||e&&e.message||"")):e&&e.code?recategorizationText(lastAssistantUserLanguageRef.current||lang,String(e.code)):assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error");appendMessage("assistant",msg2);speak(msg2,true);}}
-  function cancelPending(userText){operationDraftRef.current=null;appendMessage("user",userText||V.cancel);updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"cancelled");appendMessage("assistant",msg);speak(msg,true);}
+  function confirmPending(userText){
+    if(String(userText||"").trim())appendMessage("user",userText);
+    var actions=pendingActionsRef.current.slice();if(!actions.length)return;
+    try{
+      const started=Number(sessionStorage.getItem('fainance_rule_ai_builder_flow')||0);
+      const fromBuilder=started>0&&Date.now()-started<1800000;
+      if(fromBuilder&&actions.length!==1)throw new Error('INVALID_RULE_BUILDER_ACTIONS');
+      if(fromBuilder&&actions.length===1&&actions[0].action==='create_automatic_rule'){
+        const proposal=actions[0];
+        if(proposal._ownerUid!==String(userId||'')||!proposal._preparedRule)throw new Error('RULE_CONFLICT');
+        // Recheck the proposal against current rules before handing it to the editor.
+        const currentPreview=previewRuleRequest(c.financeEvolution,{...c,currentPlan},operationDraftRef.current||proposal,()=>proposal._ruleId);
+        sessionStorage.setItem('fainance_rule_ai_editor_draft_once',JSON.stringify({rule:currentPreview._preparedRule,ownerUid:String(userId||''),createdAt:Date.now()}));
+        sessionStorage.setItem('fainance_rule_ai_target_tool_once','automaticRules');
+        sessionStorage.removeItem('fainance_rule_ai_builder_flow');
+        pendingActionsRef.current=[];setPendingActions([]);operationDraftRef.current=null;
+        setAiTab('consigli');setSettingsPage(null);setTab('tools');
+        // Existing and newly mounted ToolsPanel instances must both receive the draft.
+        for(const delay of [80,260])setTimeout(function(){
+          window.dispatchEvent(new CustomEvent('fainance:open-tool',{detail:{page:'automaticRules'}}));
+          window.dispatchEvent(new Event('fainance:review-ai-rule'));
+        },delay);
+        return;
+      }
+    }catch(e){
+      var reviewError=assistantRuleError(lastAssistantUserLanguageRef.current||lang,String(e&&e.code||e&&e.message||''));
+      appendMessage('assistant',reviewError);speak(reviewError,true);return;
+    }
+    pendingActionsRef.current=[];setPendingActions([]);
+    try{var results=actions.map(function(a){return executeAction(a);});operationDraftRef.current=null;var msg=actions.length===1&&actions[0].action==="recategorize_expenses"?results[0]:assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"done");appendMessage("assistant",msg);speak(msg,true);}catch(e){var msg2=actions.some(a=>a.action==="update_movement")?movementUpdateError(lastAssistantUserLanguageRef.current||lang,String(e&&e.code||"conflict")):actions.some(a=>assistantRuleActions.includes(a.action))?assistantRuleError(lastAssistantUserLanguageRef.current||lang,String(e&&e.code||e&&e.message||"")):e&&e.code?recategorizationText(lastAssistantUserLanguageRef.current||lang,String(e.code)):assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"error");appendMessage("assistant",msg2);speak(msg2,true);}
+  }
+  function cancelPending(userText){
+    if(pendingActionsRef.current.some(a=>a.action==='create_automatic_rule')){
+      try{sessionStorage.removeItem('fainance_rule_ai_builder_flow');}catch{}
+    }
+    operationDraftRef.current=null;appendMessage("user",userText||V.cancel);updatePendingActions([]);var msg=assistantRuntimeText(lastAssistantUserLanguageRef.current||lang,"cancelled");appendMessage("assistant",msg);speak(msg,true);}
   async function callAssistant(q,providedResolution?:any){
     if(handleLocalMovementTurn(q,providedResolution||currentVoiceLanguageResolution()))return;
     var turn=assistantTurnRef.current;
@@ -15310,7 +15756,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       var token="";if(fbAuth.currentUser)token=await fbAuth.currentUser.getIdToken();
       if(!isCurrentAssistantTurn(turn))return;
       var headers:any={"Content-Type":"application/json"};if(token)headers.Authorization="Bearer "+token;
-      var assistantRequest=buildAssistantRequestPayload({question:q,languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(),chatHistory:(aiChat||[]).filter(function(m){return m&&!m.localOnly&&(m.role==="user"||m.role==="assistant");}).slice(-16).map(function(m){return{role:m.role,text:m.rawText||m.text};})});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
+      var assistantRequest=buildAssistantRequestPayload({question:contextualizeFollowUp(q,aiChatRef.current),languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(),chatHistory:assistantHistory(aiChatRef.current,16)});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Use recent chat history to maintain coherent follow-ups; a failed/noisy speech transcription never cancels a prior topic or authorization gate. Do not restart with generic greetings when the user asks to continue. Never execute an unconfirmed action. Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
       var attachment=activeAttachmentRef.current;
       if(attachment){
         if(attachment.isImage){requestPayload.imageDataUrl=attachment.dataUrl;requestPayload.imageName=attachment.name||"allegato.jpg";}
@@ -15338,6 +15784,13 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
     }finally{clearTimeout(timer);if(assistantRequestAbortRef.current===ctrl)assistantRequestAbortRef.current=null;if(isCurrentAssistantTurn(turn)){setBusy(false);setAiLoading(false);}}
   }
   function sendMessage(forced){var q=String(forced!==undefined?forced:input||"").trim();if(!q||documentLoading||realtimeStatus==="connecting")return;interruptAssistantTurn();setInput("");stopListening(false);if(pendingActions.length&&isYes(q)){confirmPending(q);return;}if((pendingActions.length||operationDraftRef.current)&&isNo(q)){cancelPending(q);return;}var turnResolution:any=resolveVoiceAssistantTurn(q);var languageControlReply=assistantLanguageControlReply(turnResolution);var localHelpAnswer=getFainanceHelpAnswer(q,turnResolution.language);if(localHelpAnswer){appendMessage("user",q);appendMessage("assistant",localHelpAnswer);speak(localHelpAnswer,true);return;}if(realtimeStatus==="connected"){appendMessage("user",q);if(!languageControlReply&&consumePlanFeature)consumePlanFeature("aiReply",1);if(!sendRealtimeText(q,turnResolution))setVoiceError(assistantRuntimeText(turnResolution.language,"notReady"));return;}if(languageControlReply){appendMessage("user",q);appendMessage("assistant",languageControlReply);speak(languageControlReply,true);return;}if(!aiExternalConsent){setVoiceError(V.consentTitle);return;}function run(){appendMessage("user",q);if(consumePlanFeature)consumePlanFeature("aiReply",1);callAssistant(q,turnResolution);}if(activeAttachmentRef.current){if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();return;}if(handleRewardedFeature){handleRewardedFeature("aiReply",1,run);return;}if(canUsePlanFeature&&!canUsePlanFeature("aiReply",1)){setToast({text:upgradeMessage?upgradeMessage("aiReply"):"Limite AI raggiunto",type:"warning",color:"#EF9F27",icon:"⚠️"});return;}run();}
+  useEffect(function(){
+    if(!autoRulePrompt||!aiExternalConsent||documentLoading||realtimeStatus==='connecting'||autoRulePromptHandledRef.current)return;
+    autoRulePromptHandledRef.current=true;
+    const question=autoRulePrompt;
+    setAutoRulePrompt(null);
+    sendMessage(question);
+  },[autoRulePrompt,aiExternalConsent,documentLoading,realtimeStatus]);
   useEffect(function () {
     mountedRef.current = true;
     return function () {
@@ -15957,7 +16410,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
                         fontSize: 13,
                       }}
                     >
-                      ✓ {V.execute || "Esegui"}
+                      ✓ {pendingActions.length===1&&pendingActions[0]?.action==='create_automatic_rule'&&(()=>{try{return !!sessionStorage.getItem('fainance_rule_ai_builder_flow');}catch{return false;}})()?ruleBuilderText(lang||'it','reviewAction'):(V.execute || "Esegui")}
                     </button>
                     <button
                       onClick={function () {

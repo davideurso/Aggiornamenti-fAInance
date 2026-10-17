@@ -25,6 +25,7 @@ export interface AppNotificationRecord {
   source?: string;
   sourceUid?: string;
   campaignId?: string;
+  media?: import("./NotificationMedia.tsx").NotificationMedia;
   language?: string;
   messageArgs?: Record<string, string>;
   createdAt?: string;

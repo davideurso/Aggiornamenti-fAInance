@@ -490,6 +490,7 @@ export function SharePanel() {
   var [splitDraft, setSplitDraft] = useState({});
   var [shareSplitTouched, setShareSplitTouched] = useState(false);
   var [shareParticipantIds, setShareParticipantIds] = useState([]);
+  var [shareParticipantsTouched, setShareParticipantsTouched] = useState(false);
   var [shareEditingActivityId, setShareEditingActivityId] = useState(null);
   var [shareCategoryId, setShareCategoryId] = useState("");
   var [newShareCategoryName, setNewShareCategoryName] = useState("");
@@ -700,7 +701,7 @@ export function SharePanel() {
         var clean = (list || []).filter(function (id) {
           return ids.includes(id);
         });
-        return clean.length ? clean : ids;
+        return !shareEditingActivityId && !shareParticipantsTouched ? ids : clean;
       });
     },
     [
@@ -725,6 +726,8 @@ export function SharePanel() {
     return !!selected && !selectedShareArchived;
   }
   function resetShareExpenseForm() {
+    setShareParticipantsTouched(false);
+    setSplitMode("equal");
     try {
       localStorage.removeItem("fainance_share_receipt_draft_v2");
       localStorage.removeItem("fainance_share_receipt_flow_v2");
@@ -797,6 +800,8 @@ export function SharePanel() {
       openNewSettlementPopup();
       return;
     }
+    resetShareExpenseForm();
+    setSharePaidBy(String(currentShareMemberId || "me"));
     setShareExpenseMode(mode || "simple");
     setShareReceiptOpen(false);
     setShareExpenseFormOpen(true);
@@ -2740,7 +2745,7 @@ export function SharePanel() {
     return Math.round((Number(v) || 0) * 100) / 100;
   }
   function shareNum(v) {
-    return parseMoney(String(v || "").replace(",", "."));
+    return parseMoney(v);
   }
   function shareAccountingAmount() {
     return String(shareFx.currency || _c.currency) !== String(_c.currency) && Number(shareFx.baseAmount) > 0
@@ -2752,13 +2757,25 @@ export function SharePanel() {
       return p.id;
     });
     return (
-      shareParticipantIds && shareParticipantIds.length
-        ? shareParticipantIds
-        : activeIds
+      Array.isArray(shareParticipantIds) ? shareParticipantIds : activeIds
     ).filter(function (id) {
       return activeIds.includes(id);
     });
   }
+  function defaultShareSplitDraft(mode, ids = selectedShareIds()) {
+    var draft = {}, totalUnits = mode === "percent" ? 10000 : Math.round(shareAccountingAmount() * 100);
+    if (!ids.length) return draft;
+    var base = Math.floor(totalUnits / ids.length);
+    ids.forEach(function (id, index) {
+      draft[id] = ((index === ids.length - 1 ? totalUnits - base * (ids.length - 1) : base) / 100).toFixed(2);
+    });
+    return draft;
+  }
+  useEffect(function () {
+    if (shareExpenseFormOpen && !shareEditingActivityId && !shareSplitTouched && splitMode !== "equal") {
+      setSplitDraft(defaultShareSplitDraft(splitMode));
+    }
+  }, [shareExpenseFormOpen, shareEditingActivityId, shareSplitTouched, splitMode, shareAmount, shareFx.baseAmount, shareFx.currency, shareParticipantIds.join("|"), activeParticipants.map(function (p) { return p.id; }).join("|")]);
   function computeShares() {
     var amount = shareAccountingAmount();
     var ids = selectedShareIds();
@@ -2773,14 +2790,18 @@ export function SharePanel() {
         remaining = shareRound(remaining - value);
       });
     } else if (splitMode === "percent") {
-      ids.forEach(function (id) {
-        shares[id] = shareRound(
-          amount * ((parseFloat(splitDraft[id]) || 0) / 100)
-        );
+      var assignedCents = 0, totalCents = Math.round(amount * 100);
+      var pctTotal = ids.reduce(function (sum, id) { return sum + (parseFloat(splitDraft[id]) || 0); }, 0);
+      ids.forEach(function (id, index) {
+        var cents = index === ids.length - 1 && Math.abs(pctTotal - 100) < 0.009
+          ? totalCents - assignedCents
+          : Math.round(totalCents * ((parseFloat(splitDraft[id]) || 0) / 100));
+        shares[id] = cents / 100;
+        assignedCents += cents;
       });
     } else {
       ids.forEach(function (id) {
-        shares[id] = shareRound(parseFloat(splitDraft[id]) || 0);
+        shares[id] = Math.round(shareNum(splitDraft[id]) * 100) / 100;
       });
     }
     return shares;
@@ -2848,10 +2869,15 @@ export function SharePanel() {
       }
     }
     if (splitMode === "amount") {
-      var sum = ids.reduce(function (a, id) {
-        return a + shareRound(parseFloat(splitDraft[id]) || 0);
+      var invalidAmount = ids.some(function (id) {
+        var raw = String(splitDraft[id] == null ? "" : splitDraft[id]).trim();
+        return raw !== "" && (!/^(?:\d+(?:[.,]\d{1,2})?|[.,]\d{1,2})$/.test(raw) || !Number.isSafeInteger(Math.round(shareNum(raw) * 100)));
+      });
+      if (invalidAmount) return { ok: false, blocking: true, message: L("Inserisci importi validi con al massimo due decimali.") };
+      var sumCents = ids.reduce(function (a, id) {
+        return a + Math.round(shareNum(splitDraft[id]) * 100);
       }, 0);
-      var diff = shareRound(amount - sum);
+      var diff = (Math.round(amount * 100) - sumCents) / 100;
       if (Math.abs(diff) > 0.009)
         return {
           ok: false,
@@ -5693,7 +5719,7 @@ export function SharePanel() {
                                   key={m.id}
                                   onClick={function () {
                                     setSplitMode(m.id);
-                                    setSplitDraft({});
+                                    setSplitDraft(m.id === "equal" ? {} : defaultShareSplitDraft(m.id));
                                     setShareSplitTouched(false);
                                   }}
                                   style={{
@@ -5772,6 +5798,7 @@ export function SharePanel() {
                                   ) {
                                     return p.id;
                                   });
+                                  setShareParticipantsTouched(true);
                                   setShareParticipantIds(
                                     shareParticipantIds.length === all.length
                                       ? []
@@ -5817,6 +5844,7 @@ export function SharePanel() {
                                     type="checkbox"
                                     checked={checked}
                                     onChange={function () {
+                                      setShareParticipantsTouched(true);
                                       setShareParticipantIds(function (list) {
                                         return list.includes(p.id)
                                           ? list.filter(function (x) {

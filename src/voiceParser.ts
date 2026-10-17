@@ -257,7 +257,7 @@ export function parseFainanceShareVoiceCommand(rawInput:any, participantsInput:F
 
   // Regola Davide: se non viene specificata una divisione, divide equamente tra tutti gli appartenenti al gruppo.
   var participantIds:string[];
-  if(mode==="equal"){
+  if(mode==="equal" || (mode==="amount" ? Object.keys(splitDraft) : Object.keys(percentDraft)).length===0){
     participantIds=participants.map(function(p){return String(p.id);});
   }else{
     participantIds=mentioned.length?mentioned.slice():participants.map(function(p){return String(p.id);});

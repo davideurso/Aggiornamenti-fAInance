@@ -7,7 +7,10 @@ import { useApp, smallDecimalNode } from '../core';
 import { createSavingsBucket, updateSavingsBucket } from '../finance/savingsBuckets';
 import { savingsText } from '../i18n/savingsTranslations';
 import { savingsPlanSummary, setSavingsPlanAmount } from '../finance/savingsPlan';
-import { periodLabel } from '../finance/periodEngine';
+import { periodLabel, shiftPeriodKey } from '../finance/periodEngine';
+import { SavingsClosurePanel } from './SavingsClosurePanel';
+import { closureText } from '../i18n/savingsClosureTranslations';
+import { todayStr } from '../core';
 import { budgetText } from '../i18n/budgetTranslations';
 import { SavingsLedgerPanel } from './SavingsLedgerPanel';
 
@@ -170,6 +173,12 @@ export function SavingsBucketsPanel({periodKey, scope, plan}: {periodKey:string;
         </form>}
       {error && <div role="alert" style={{color:readableDarkText(ctx.expColor || '#B42318', ctx.dark, ctx.cardBg),fontSize:12,marginTop:10}}>{T(error)}</div>}
       {saved && <div role="status" style={{color:readableDarkText('#1D9E75', ctx.dark, ctx.cardBg),fontSize:12,marginTop:10,fontWeight:700}}>{T('saved')}</div>}
+      {scope === 'month' && ctx.accountingPeriod && <details style={{marginTop:14}}>
+        <summary style={{cursor:'pointer',fontSize:13,fontWeight:750,color:ctx.textC}}>
+          {closureText(ctx.lang || 'it','title')}
+        </summary>
+        <SavingsClosurePanel periodKey={shiftPeriodKey(ctx.accountingPeriod.forDate(todayStr()).key,-1)}/>
+      </details>}
     </div>}
   </section>;
 }

@@ -1,4 +1,5 @@
 import { readableDarkText } from '../ui/textContrast';
+import { periodClosureNoticeText } from '../notifications/periodClosureNotice.mjs';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from '../analytics/useAnalyticsFlow';
 import { AutomaticRulesPanel } from '../sections/AutomaticRulesPanel';
@@ -204,6 +205,30 @@ function StableImportDataAccordionCard(props: any) {
 
 export function SettingsPanel() {
   var _c: any = useApp();
+  var replaceAccountMovementsV2 = _c.replaceAccountMovementsV2;
+  function movementOperationError(error) {
+    if (String(error?.message || '') === 'SYNC_V2_CANCELLED_BEFORE_WRITES')
+      return L('Operazione annullata prima di modificare i dati. Le sincronizzazioni precedenti continuano.');
+    if (/DUPLICATE_OR_MISSING_ID|INVALID_ROW|INVALID_REPLACEMENT/.test(String(error?.message || '')))
+      return L('Operazione annullata: il backup contiene identificativi duplicati o movimenti non validi. Nessun movimento è stato modificato.');
+    if (/AMBIGUOUS_RESTORE|RESTORE_ID_COLLISION/.test(String(error?.message || '')))
+      return L('Operazione annullata: gli identificativi del backup sono ambigui. Nessun movimento è stato modificato.');
+    return L('Operazione non completata. Alcune voci potrebbero essere già state aggiornate. Verifica i dati e la connessione prima di riprovare.');
+  }
+  var [movementDataBusy, setMovementDataBusy] = useState(false);
+  var [movementDataProgress, setMovementDataProgress] = useState('');
+  var [movementDataLastError, setMovementDataLastError] = useState('');
+  var movementDataLastProgressRef = useRef('');
+  function movementDataDiagnostic(error: any, operation: 'IMPORT' | 'DELETE'): string {
+    // Diagnostica essenziale: non visualizzare descrizioni, UID, percorsi o dati finanziari.
+    var rawCode = String(error?.code || error?.cause?.code || '').slice(0, 80);
+    var message = String(error?.message || '');
+    var known = message.match(/SYNC_V2_[A-Z0-9_]+|AMBIGUOUS_RESTORE|RESTORE_ID_COLLISION|permission-denied|resource-exhausted|deadline-exceeded|failed-precondition|unavailable|unauthenticated|aborted|cancelled|invalid-argument|internal|not-found/i);
+    var code = /^[a-zA-Z0-9_./-]{1,80}$/.test(rawCode) ? rawCode : known ? known[0] : 'unknown';
+    var committed = Number.isFinite(error?.completed) && Number.isFinite(error?.total)
+      ? `${error.completed}/${error.total}` : movementDataLastProgressRef.current || '0/?';
+    return `SYNCV2-${operation} / ${code} / ${committed}`;
+  }
   // Backups serialize the original fallback plus the separately versioned Budget.
   var budgetPlan = _c.legacyBudgetPlan;
   var setBudgetPlan = _c.setLegacyBudgetPlan;
@@ -9326,6 +9351,31 @@ export function SettingsPanel() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               <div
                 style={{
+                  display: "flex", justifyContent: "space-between", alignItems: "center",
+                  gap: 12, padding: "10px 12px", borderRadius: 10,
+                  background: dark ? "#10243A" : "#EEF4FA",
+                  border: "1px solid " + borderC,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: textC }}>
+                    {periodClosureNoticeText(lang, "settingTitle")}
+                  </div>
+                  <div style={{ fontSize: 12, color: subC, marginTop: 3 }}>
+                    {periodClosureNoticeText(lang, "settingDescription")}
+                  </div>
+                </div>
+                <Toggle
+                  label=""
+                  color={confirmButtonColor}
+                  checked={np.periodClosureActive !== false}
+                  onChange={function () {
+                    setNp("periodClosureActive", np.periodClosureActive === false);
+                  }}
+                />
+              </div>
+              <div
+                style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
@@ -10490,7 +10540,6 @@ export function SettingsPanel() {
               value={String(mobileNavIconCount || 5)}
               onChange={function (v) {
                 setMobileNavIconCount(parseInt(v, 10));
-                setToast(L("Impostazioni aggiornate"));
               }}
             />
             <div
@@ -11827,12 +11876,29 @@ export function SettingsPanel() {
     else
       setToast({ text: L("Backup integrato correttamente"), type: "success", icon: "✅" });
   }
-  function applyBackupData(d, mode) {
+  async function applyBackupData(d, mode) {
     if (!d || typeof d !== "object") return;
     // Validate the complete finance document before any other backup field changes.
     const nextFinance = d.financeEvolution === undefined ? undefined : mode === 'merge'
       ? mergeFinanceEvolution(financeEvolution, d.financeEvolution)
       : migrateFinanceEvolution(d.financeEvolution);
+    if (mode !== 'merge') {
+      const nextMovements: any = {};
+      if (Array.isArray(d.expenses)) nextMovements.expense = d.expenses;
+      if (Array.isArray(d.incomes)) nextMovements.income = d.incomes;
+      if (Object.keys(nextMovements).length) {
+        if (typeof replaceAccountMovementsV2 !== 'function') throw new Error('SYNC_V2_ONLINE_REQUIRED');
+        await replaceAccountMovementsV2(nextMovements, (done, total, phase) => {
+          const value = phase === 'pending'
+            ? L('In attesa delle modifiche precedenti') + ' (' + done + ')'
+            : total > 0 ? `${done}/${total}` : '';
+          movementDataLastProgressRef.current = phase === 'pending' ? `pending:${done}` : value;
+          // The global overlay owns write progress. Keep diagnostic refs fresh
+          // without recalculating the hidden settings screen for every commit.
+          if (phase !== 'writing') setMovementDataProgress(value);
+        });
+      }
+    }
     if (nextFinance !== undefined) setFinanceEvolution(nextFinance);
     if (mode === "merge") {
       applyBackupDataIntegrated(d);
@@ -11840,8 +11906,8 @@ export function SettingsPanel() {
     }
     if (d.accountDeletedRecords && typeof d.accountDeletedRecords === "object")
       setAccountDeletedRecordsRaw(d.accountDeletedRecords);
-    if (Array.isArray(d.expenses)) setExpenses(d.expenses);
-    if (Array.isArray(d.incomes)) setIncomes(d.incomes);
+    // Movements already persisted and verified with Sync V2 above.
+
     if (Array.isArray(d.cats)) setCats(d.cats);
     if (Array.isArray(d.methods)) setMethods(d.methods);
     if (Array.isArray(d.expenseGroups)) setExpenseGroups(d.expenseGroups);
@@ -12131,16 +12197,28 @@ export function SettingsPanel() {
       setBackupImportBusy(false);
     }
   }
-  function confirmPendingBackupImport(mode) {
-    if (!pendingBackupImport || !pendingBackupImport.data) return;
+  async function confirmPendingBackupImport(mode) {
+    if (movementDataBusy || !pendingBackupImport || !pendingBackupImport.data) return;
     var data = pendingBackupImport.data;
+    setMovementDataBusy(true);
+    setMovementDataProgress('');
+    movementDataLastProgressRef.current = '';
+    setMovementDataLastError('');
     try {
       startAnalyticsFlow("backup_import", { method: "backup" });
-      applyBackupData(data, mode === "merge" ? "merge" : "replace");
+      await applyBackupData(data, mode === "merge" ? "merge" : "replace");
       finishAnalyticsFlow("backup_import", "completed", { operation: mode === "merge" ? "merge" : "replace" });
       setPendingBackupImport(null);
     } catch (error) {
-      showBackupImportError(error);
+      console.error('Backup replacement failed', error);
+      const diagnostic = movementDataDiagnostic(error, 'IMPORT');
+      setMovementDataLastError(diagnostic);
+      setToast({ text: movementOperationError(error) + '\n' + diagnostic,
+        type: 'error', icon: '⚠️', color: dark ? '#FF9AA3' : '#B63B45' });
+      finishAnalyticsFlow('backup_import', 'failed', { reason: 'sync-v2' });
+    } finally {
+      setMovementDataBusy(false);
+      setMovementDataProgress('');
     }
   }
   function dataTitle(label) {
@@ -12745,40 +12823,58 @@ export function SettingsPanel() {
       return;
     }
   }
-  function runDataDelete() {
+  async function runDataDelete() {
+    if (movementDataBusy) return;
     var opts = selectedDeleteOptions();
     if (!opts.length) {
-      setToast({
-        text: L("Seleziona cosa eliminare"),
-        type: "warning",
-        icon: "⚠️",
-        color: "#EF9F27",
-      });
+      setToast({ text: L('Seleziona cosa eliminare'), type: 'warning' });
       return;
     }
-    var msg =
-      L("Confermi l’eliminazione dei dati selezionati?") +
-      "\n" +
-      opts
-        .map(function (opt) {
-          return (
-            String(opt.label) + " · " + String(opt.count || 0) + " " + L("voci")
-          );
-        })
-        .join("\n");
+    var msg = L('Confermi l’eliminazione dei dati selezionati?') + '\n' +
+      opts.map(function (opt) { return String(opt.label) + ' · ' + String(opt.count || 0) + ' ' + L('voci'); }).join('\n');
     if (!window.confirm(msg)) return;
-    opts.forEach(function (opt) {
-      try {
-        opt.clear && opt.clear();
-      } catch (e) {}
-    });
-    setDataDeleteSelection([]);
-    setToast({
-      text: L("Cancellazione completata"),
-      type: "success",
-      icon: "✅",
-      color: confirmButtonColor,
-    });
+    const requested = Array.isArray(dataDeleteSelection) ? dataDeleteSelection : [];
+    const all = requested.includes('all');
+    const expense = all || requested.includes('expenses');
+    const income = all || requested.includes('incomes');
+    setMovementDataBusy(true);
+    setMovementDataProgress('');
+    movementDataLastProgressRef.current = '';
+    setMovementDataLastError('');
+    try {
+      // SERVER FIRST: never show locally empty data until tombstones are confirmed.
+      if (expense || income) {
+        if (typeof replaceAccountMovementsV2 !== 'function') throw new Error('SYNC_V2_ONLINE_REQUIRED');
+        const replacements: any = {};
+        if (expense) replacements.expense = [];
+        if (income) replacements.income = [];
+        await replaceAccountMovementsV2(replacements, (done, total, phase) => {
+          const value = phase === 'pending'
+            ? L('In attesa delle modifiche precedenti') + ' (' + done + ')'
+            : total > 0 ? `${done}/${total}` : '';
+          movementDataLastProgressRef.current = phase === 'pending' ? `pending:${done}` : value;
+          // The global overlay owns write progress. Keep diagnostic refs fresh
+          // without recalculating the hidden settings screen for every commit.
+          if (phase !== 'writing') setMovementDataProgress(value);
+        });
+      }
+      const items = deleteDataOptions().filter(function (option) {
+        return option.id !== 'all' && option.id !== 'expenses' && option.id !== 'incomes' &&
+          (all || requested.includes(option.id));
+      });
+      items.forEach(function (item) { item.clear && item.clear(); });
+      setDataDeleteSelection([]);
+      setToast({ text: L('Cancellazione completata'), type: 'success', icon: '✅' });
+    } catch (error) {
+      console.error('Delete data aborted', error);
+      const diagnostic = movementDataDiagnostic(error, 'DELETE');
+      setMovementDataLastError(diagnostic);
+      setToast({ text: movementOperationError(error) + '\n' + diagnostic,
+        type: 'error', icon: '⚠️', color: dark ? '#FF9AA3' : '#B63B45' });
+    } finally {
+      setMovementDataBusy(false);
+      setMovementDataProgress('');
+    }
   }
 
   if (settingsPage === "data" || settingsPage === "delete")
@@ -12786,46 +12882,6 @@ export function SettingsPanel() {
       <div>
         <PageHeader title="Dati" />
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div
-            style={{
-              background: cardBg,
-              borderRadius: 14,
-              border: "1px solid " + borderC,
-              padding: 14,
-            }}
-          >
-            <div style={{ fontSize: 13, fontWeight: 900, color: textC }}>
-              Sync movimenti V2
-            </div>
-            <div
-              style={{
-                marginTop: 5,
-                fontSize: 12,
-                fontWeight: 800,
-                color: readableDarkText(movementSyncV2Active ? "#1D9E75" : movementSyncV2Mode === "checking" ? "#EF9F27" : subC, dark, cardBg),
-              }}
-            >
-              {movementSyncV2Active
-                ? String(movementSyncV2Mode || "").indexOf("migrated") >= 0
-                  ? "Migrazione movimenti completata - Sync V2 attivo"
-                  : movementSyncV2Mode === "clean" || movementSyncV2Mode === "new-clean-account"
-                    ? "ATTIVO - account Test pulito"
-                    : movementSyncV2Mode === "local-marker-offline"
-                      ? "Sync V2 attivo - verifica cloud al ritorno online"
-                      : "Sync V2 attivo"
-                : String(movementSyncV2Mode || "").indexOf("migration-running:") === 0
-                  ? "Migrazione movimenti in background - " + String(movementSyncV2Mode || "").split(":")[1]
-                  : String(movementSyncV2Mode || "").indexOf("device-catchup:") === 0
-                    ? "Allineamento di questo dispositivo - " + String(movementSyncV2Mode || "").split(":")[1]
-                    : movementSyncV2Mode === "migration-error"
-                      ? "Migrazione in pausa - nuovo tentativo automatico"
-                      : movementSyncV2Mode === "checking"
-                        ? "Verifica account in corso..."
-                        : movementSyncV2Mode === "legacy-migration-required"
-                          ? "Migrazione pronta - l'app resta utilizzabile"
-                          : "Sync movimenti V2 in preparazione"}
-            </div>
-          </div>
           <StableImportDataAccordionCard
             icon="📥"
             title={dataTitle("Importa dati")}
@@ -12943,7 +12999,7 @@ export function SettingsPanel() {
                   overflowY: "auto",
                 }}
                 onClick={function () {
-                  setPendingBackupImport(null);
+                  if (!movementDataBusy) setPendingBackupImport(null);
                 }}
               >
                 <div
@@ -12980,6 +13036,9 @@ export function SettingsPanel() {
                   <div style={{ fontSize: 12, lineHeight: 1.5, color: subC, marginTop: 8 }}>
                     {L("Puoi integrare il backup con i dati già presenti oppure sostituire completamente i dati esistenti con quelli del JSON.")}
                   </div>
+                  {movementDataBusy && <div role="status" aria-live="polite" style={{ marginTop: 10, fontWeight: 700, color: textC }}>
+                    {L('Sincronizzazione in corso, attendi...')} {movementDataProgress}
+                  </div>}
                   <div
                     style={{
                       display: "grid",
@@ -12991,6 +13050,7 @@ export function SettingsPanel() {
                     <button
                       type="button"
                       onClick={function () { confirmPendingBackupImport("merge"); }}
+                      disabled={movementDataBusy}
                       style={{
                         border: "none",
                         minHeight: 46,
@@ -13006,6 +13066,7 @@ export function SettingsPanel() {
                     <button
                       type="button"
                       onClick={function () { confirmPendingBackupImport("replace"); }}
+                      disabled={movementDataBusy}
                       style={{
                         border: "1px solid #E24B4A",
                         minHeight: 46,
@@ -13265,6 +13326,7 @@ export function SettingsPanel() {
             </div>
             <Btn
               onClick={runDataDelete}
+              disabled={movementDataBusy}
               bg="#E24B4A"
               style={{
                 padding: "12px 18px",
@@ -13274,7 +13336,7 @@ export function SettingsPanel() {
                 width: isMobile ? "100%" : "fit-content",
               }}
             >
-              {L("Elimina")}
+              {movementDataBusy ? L('Sincronizzazione in corso, attendi...') + ' ' + movementDataProgress : L('Elimina')}
             </Btn>
           </DataAccordionCard>
         </div>
