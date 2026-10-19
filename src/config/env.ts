@@ -26,7 +26,7 @@ function env(name: string): string {
 
 const productionDefaults: FirebaseConfigShape = {
   apiKey: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To",
-  authDomain: "fainance-a7794.firebaseapp.com",
+  authDomain: "auth.fainanceapp.it",
   projectId: "fainance-a7794",
   storageBucket: "fainance-a7794.firebasestorage.app",
   messagingSenderId: "739607555867",

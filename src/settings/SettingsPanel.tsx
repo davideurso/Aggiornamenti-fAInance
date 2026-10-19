@@ -110,6 +110,10 @@ function StableNestedPanelHost({ render }: { render: () => any }) {
   return render();
 }
 
+function StableNestedFormHost({ render, formProps }: any) {
+  return render(formProps);
+}
+
 // fAInance 2.0 - import stabile.
 // IMPORTANTE: questo contenitore deve restare a livello di modulo.
 // In passato l'accordion dell'import era dichiarato dentro SettingsPanel: ad ogni
@@ -4029,21 +4033,12 @@ export function SettingsPanel() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <WidgetGenericStylePanel
-          key={
-            "shop_" +
+        <StableNestedFormHost key={"shop_" +
             widgetShoppingListBgColor +
             "_" +
             widgetShoppingListBgAlpha +
             "_" +
-            widgetShoppingListTextSize
-          }
-          kind="shoppingList"
-          showIntro={false}
-          icon="🧺"
-          title="Aspetto lista spesa"
-          description="Personalizza testo, colori e aggiornamento del widget."
-          values={{
+            widgetShoppingListTextSize} render={WidgetGenericStylePanel} formProps={{"kind":("shoppingList"),"showIntro":(false),"icon":("🧺"),"title":("Aspetto lista spesa"),"description":("Personalizza testo, colori e aggiornamento del widget."),"values":({
             textSize: widgetShoppingListTextSize,
             bgColor: widgetShoppingListBgColor,
             bgAlpha: widgetShoppingListBgAlpha,
@@ -4051,8 +4046,7 @@ export function SettingsPanel() {
             titleColor: widgetShoppingListTitleColor,
             textColor: widgetShoppingListTextColor,
             autoUpdate: widgetShoppingListAutoUpdate,
-          }}
-          setters={{
+          }),"setters":({
             setTextSize: setWidgetShoppingListTextSize,
             setBgColor: setWidgetShoppingListBgColor,
             setBgAlpha: setWidgetShoppingListBgAlpha,
@@ -4060,9 +4054,7 @@ export function SettingsPanel() {
             setTitleColor: setWidgetShoppingListTitleColor,
             setTextColor: setWidgetShoppingListTextColor,
             setAutoUpdate: setWidgetShoppingListAutoUpdate,
-          }}
-          onSave={save}
-        />
+          }),"onSave":(save)}} />
       </div>
     );
   }
@@ -4085,13 +4077,7 @@ export function SettingsPanel() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <WidgetGenericStylePanel
-          kind="fidelity"
-          showIntro={false}
-          icon="💳"
-          title="Aspetto Fidelity card"
-          description="Personalizza testo, colori e aggiornamento del widget."
-          values={{
+        <StableNestedFormHost key={"stable-WidgetGenericStylePanel"} render={WidgetGenericStylePanel} formProps={{"kind":("fidelity"),"showIntro":(false),"icon":("💳"),"title":("Aspetto Fidelity card"),"description":("Personalizza testo, colori e aggiornamento del widget."),"values":({
             textSize: widgetFidelityTextSize,
             bgColor: widgetFidelityBgColor,
             bgAlpha: widgetFidelityBgAlpha,
@@ -4099,8 +4085,7 @@ export function SettingsPanel() {
             titleColor: widgetFidelityTitleColor,
             textColor: widgetFidelityTextColor,
             autoUpdate: widgetFidelityAutoUpdate,
-          }}
-          setters={{
+          }),"setters":({
             setTextSize: setWidgetFidelityTextSize,
             setBgColor: setWidgetFidelityBgColor,
             setBgAlpha: setWidgetFidelityBgAlpha,
@@ -4108,9 +4093,7 @@ export function SettingsPanel() {
             setTitleColor: setWidgetFidelityTitleColor,
             setTextColor: setWidgetFidelityTextColor,
             setAutoUpdate: setWidgetFidelityAutoUpdate,
-          }}
-          onSave={save}
-        />
+          }),"onSave":(save)}} />
       </div>
     );
   }
@@ -4132,30 +4115,21 @@ export function SettingsPanel() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <WidgetGenericStylePanel
-          kind="debtCredits"
-          showIntro={false}
-          icon="📉"
-          title="Aspetto Debiti / Crediti"
-          description="Personalizza testo, colori e aggiornamento del widget."
-          values={{
+        <StableNestedFormHost key={"stable-WidgetGenericStylePanel"} render={WidgetGenericStylePanel} formProps={{"kind":("debtCredits"),"showIntro":(false),"icon":("📉"),"title":("Aspetto Debiti / Crediti"),"description":("Personalizza testo, colori e aggiornamento del widget."),"values":({
             textSize: widgetDebtCreditsTextSize,
             bgAlpha: widgetDebtCreditsBgAlpha,
             iconColor: widgetDebtCreditsIconColor,
             titleColor: widgetDebtCreditsTitleColor,
             textColor: widgetDebtCreditsTextColor,
             autoUpdate: widgetDebtCreditsAutoUpdate,
-          }}
-          setters={{
+          }),"setters":({
             setTextSize: setWidgetDebtCreditsTextSize,
             setBgAlpha: setWidgetDebtCreditsBgAlpha,
             setIconColor: setWidgetDebtCreditsIconColor,
             setTitleColor: setWidgetDebtCreditsTitleColor,
             setTextColor: setWidgetDebtCreditsTextColor,
             setAutoUpdate: setWidgetDebtCreditsAutoUpdate,
-          }}
-          onSave={save}
-        />
+          }),"onSave":(save)}} />
       </div>
     );
   }
@@ -8614,19 +8588,11 @@ export function SettingsPanel() {
   }
 
   if (settingsPage === "shopping_settings_units")
-    return <ShoppingUnitsSettingsPage />;
+    return <StableNestedFormHost key={"stable-ShoppingUnitsSettingsPage"} render={ShoppingUnitsSettingsPage} formProps={{}} />;
 
   if (settingsPage === "shopping_settings_areas")
     return (
-      <GroupSettingsPanel
-        title="Spesa / Aree"
-        desc="Gestisci le aree della spesa: lista, riordino e area default."
-        items={shoppingAreaSettingsItems()}
-        setItems={setShoppingAreaSettingsItems}
-        defaultValue={shoppingDefaultArea}
-        setDefaultValue={setShoppingDefaultArea}
-        withIcon
-      />
+      <StableNestedFormHost key={"stable-GroupSettingsPanel"} render={GroupSettingsPanel} formProps={{"title":("Spesa / Aree"),"desc":("Gestisci le aree della spesa: lista, riordino e area default."),"items":(shoppingAreaSettingsItems()),"setItems":(setShoppingAreaSettingsItems),"defaultValue":(shoppingDefaultArea),"setDefaultValue":(setShoppingDefaultArea),"withIcon":(true)}} />
     );
 
   if (settingsPage === "sections_income")
@@ -8683,14 +8649,7 @@ export function SettingsPanel() {
 
   if (settingsPage === "sections_income_areas")
     return (
-      <GroupSettingsPanel
-        title="Entrate / Aree"
-        desc="Gestisci le aree delle entrate: lista, riordino e area default."
-        items={incomeGroups || DEFAULT_INCOME_GROUPS}
-        setItems={setIncomeGroups}
-        defaultValue={defaultIncomeArea}
-        setDefaultValue={setDefaultIncomeArea}
-      />
+      <StableNestedFormHost key={"stable-GroupSettingsPanel"} render={GroupSettingsPanel} formProps={{"title":("Entrate / Aree"),"desc":("Gestisci le aree delle entrate: lista, riordino e area default."),"items":(incomeGroups || DEFAULT_INCOME_GROUPS),"setItems":(setIncomeGroups),"defaultValue":(defaultIncomeArea),"setDefaultValue":(setDefaultIncomeArea)}} />
     );
   if (settingsPage === "sections_income_categories")
     return (
@@ -8703,14 +8662,7 @@ export function SettingsPanel() {
     );
   if (settingsPage === "sections_expense_areas")
     return (
-      <GroupSettingsPanel
-        title="Uscite / Aree"
-        desc="Gestisci le aree delle uscite: lista, riordino e area default."
-        items={expenseGroups || DEFAULT_EXPENSE_GROUPS}
-        setItems={setExpenseGroups}
-        defaultValue={defaultExpenseArea}
-        setDefaultValue={setDefaultExpenseArea}
-      />
+      <StableNestedFormHost key={"stable-GroupSettingsPanel"} render={GroupSettingsPanel} formProps={{"title":("Uscite / Aree"),"desc":("Gestisci le aree delle uscite: lista, riordino e area default."),"items":(expenseGroups || DEFAULT_EXPENSE_GROUPS),"setItems":(setExpenseGroups),"defaultValue":(defaultExpenseArea),"setDefaultValue":(setDefaultExpenseArea)}} />
     );
   if (settingsPage === "sections_expense_categories")
     return (
@@ -11246,7 +11198,7 @@ export function SettingsPanel() {
     return (
       <div>
         <PageHeader title={L("Aspetto / Icone personali")} />
-        <CustomIconAppearancePanel />
+        <StableNestedFormHost key={"stable-CustomIconAppearancePanel"} render={CustomIconAppearancePanel} formProps={{}} />
       </div>
     );
 
@@ -11261,28 +11213,28 @@ export function SettingsPanel() {
     return (
       <div>
         <PageHeader title="Aggiunta Rapida" />
-        <WidgetQuickAddSettingsPanel />
+        <StableNestedFormHost key={"stable-WidgetQuickAddSettingsPanel"} render={WidgetQuickAddSettingsPanel} formProps={{}} />
       </div>
     );
   if (settingsPage === "appearance_widget_calculator")
     return (
       <div>
         <PageHeader title="Calcolatrice" />
-        <WidgetToolAppearanceSettingsPanel key="calculator" kind="calculator" />
+        <StableNestedFormHost key={"calculator"} render={WidgetToolAppearanceSettingsPanel} formProps={{"kind":("calculator")}} />
       </div>
     );
   if (settingsPage === "appearance_widget_converter")
     return (
       <div>
         <PageHeader title="Convertitore valuta" />
-        <WidgetToolAppearanceSettingsPanel key="converter" kind="converter" />
+        <StableNestedFormHost key={"converter"} render={WidgetToolAppearanceSettingsPanel} formProps={{"kind":("converter")}} />
       </div>
     );
   if (settingsPage === "appearance_widget_ai")
     return (
       <div>
         <PageHeader title="Agente AI" />
-        <WidgetToolAppearanceSettingsPanel key="ai" kind="ai" />
+        <StableNestedFormHost key={"ai"} render={WidgetToolAppearanceSettingsPanel} formProps={{"kind":("ai")}} />
       </div>
     );
   if (settingsPage === "appearance_widget_note") {
@@ -11300,7 +11252,7 @@ export function SettingsPanel() {
     return (
       <div>
         <PageHeader title="Nota / Coordinata / Carta" />
-        <WidgetNoteSettingsPanel />
+        <StableNestedFormHost key={"stable-WidgetNoteSettingsPanel"} render={WidgetNoteSettingsPanel} formProps={{}} />
       </div>
     );
   }
@@ -11319,7 +11271,7 @@ export function SettingsPanel() {
     return (
       <div>
         <PageHeader title="Obiettivo" />
-        <WidgetGoalSettingsPanel />
+        <StableNestedFormHost key={"stable-WidgetGoalSettingsPanel"} render={WidgetGoalSettingsPanel} formProps={{}} />
       </div>
     );
   }
@@ -11395,7 +11347,7 @@ export function SettingsPanel() {
     return (
       <div>
         <PageHeader title="Share" />
-        <WidgetShareSettingsPanel />
+        <StableNestedFormHost key={"stable-WidgetShareSettingsPanel"} render={WidgetShareSettingsPanel} formProps={{}} />
       </div>
     );
   }

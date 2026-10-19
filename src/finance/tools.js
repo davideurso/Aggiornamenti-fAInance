@@ -1,3 +1,4 @@
+import {exchangeRateResponse} from './exchangeRateTransport.js';
 export const TOOL_HISTORY_MS=7*24*60*60*1000;
 const currency=code=>typeof code==='string'&&/^[A-Z]{3}$/.test(code);
 export function currencyDigits(code){return new Intl.NumberFormat('en',{style:'currency',currency:code}).resolvedOptions().maximumFractionDigits;}
@@ -28,13 +29,21 @@ export function orderedToolCurrencies(rows,base,secondary,recent=[]){
   return rows.slice().sort((a,b)=>{const ai=preferred.indexOf(a.code),bi=preferred.indexOf(b.code);return ai>=0||bi>=0?(ai<0?999:ai)-(bi<0?999:bi):a.code.localeCompare(b.code);});
 }
 export function toolCurrencyAllowed(code,base,secondary,plan){return code===base||plan==='premium'||(['base'].includes(plan)&&code===secondary);}
-export async function fetchToolRate(from,to,fetcher=fetch,signal){
+export async function fetchToolRate(from,to,fetcher=exchangeRateResponse,signal=undefined){
   if(!currency(from)||!currency(to))throw new Error('INVALID_TOOL_CURRENCY');
   if(from===to)return 1;
-  const response=await fetcher('https://api.exchangerate-api.com/v4/latest/'+from,{signal});
-  if(!response.ok)throw new Error('FX_UNAVAILABLE');
-  const data=await response.json(),rate=Number(data?.rates?.[to]);
-  if(!Number.isFinite(rate)||rate<=0)throw new Error('FX_UNAVAILABLE');return rate;
+  let lastError;
+  for(const endpoint of ['https://api.exchangerate-api.com/v4/latest/','https://open.er-api.com/v6/latest/']){
+    if(signal?.aborted)throw new Error('FX_ABORTED');
+    try{
+      const response=await fetcher(endpoint+from,{signal});
+      if(!response.ok)throw new Error('FX_UNAVAILABLE');
+      const data=await response.json(),rate=Number(data?.rates?.[to]);
+      if(!Number.isFinite(rate)||rate<=0)throw new Error('FX_UNAVAILABLE');
+      return rate;
+    }catch(error){lastError=error;if(signal?.aborted)throw error;}
+  }
+  throw lastError||new Error('FX_UNAVAILABLE');
 }
 export function invertToolQuote(quote){return {from:quote.to,to:quote.from,amount:quote.result,result:quote.amount,rate:1/quote.rate};}
 

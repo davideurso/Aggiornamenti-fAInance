@@ -1593,7 +1593,7 @@ export function AppuntiPanel() {
               {L("Nuovo Appunto")}
             </Btn>
           </div>
-          
+
           {(!appuntiNotes || appuntiNotes.length === 0) && (
             <div
               style={{
@@ -1753,7 +1753,7 @@ export function AppuntiPanel() {
               {L("Nuova Coordinata")}
             </Btn>
           </div>
-          
+
           {(!bankCoords || bankCoords.length === 0) && (
             <div
               style={{
@@ -1899,7 +1899,7 @@ export function AppuntiPanel() {
               {L("Nuova Carta")}
             </Btn>
           </div>
-          
+
           {(!creditCards || creditCards.length === 0) && (
             <div
               style={{

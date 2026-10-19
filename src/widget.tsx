@@ -1,3 +1,6 @@
+import { financeMessage } from "./i18n/financeMessages";
+import { focusFainanceInput } from "./utils/appRuntime";
+import { fetchToolRate } from "./finance/tools";
 import { installMovementEntryFocus } from './ui/movementEntryFocus';
 import { useId } from 'react';
 import { openMovementDatePicker } from './ui/movementDatePicker';
@@ -75,6 +78,7 @@ import { TRANSLATIONS, translateFainanceText } from "./traduzioni";
 import {
   FainanceIcon,
   customIconValue,
+  ensureCustomIconSelection,
   isCustomIconValue,
   useCustomIconLibrary,
 } from "./icons/customIconLibrary";
@@ -143,21 +147,6 @@ function startFainanceImportRestoreBridge() {
 }
 startFainanceImportRestoreBridge();
 
-function focusFainanceInput(ref: any, delay?: number) {
-  try {
-    setTimeout(
-      function () {
-        try {
-          var el = ref && ref.current ? ref.current : null;
-          if (!el || !el.focus) return;
-          el.focus({ preventScroll: true });
-          if (el.select) el.select();
-        } catch (e) {}
-      },
-      delay == null ? 90 : delay
-    );
-  } catch (e) {}
-}
 
 const GOOGLE_PICKER_CLIENT_ID =
   "739607555867-i5uhrj1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com";
@@ -1011,6 +1000,8 @@ export function PopupCloseButton({ onClick, dark, label }) {
 
     function keepBelowHeader() {
       try {
+        // Repositioning the overlay while a native select is open closes its menu.
+        if (document.activeElement && document.activeElement.tagName === "SELECT" && overlay.contains(document.activeElement)) return;
         var computed = window.getComputedStyle(overlay);
         var currentTop = Math.max(0, parseFloat(computed.paddingTop || "0") || 0);
         overlay.setAttribute("data-fainance-popup-overlay", "true");
@@ -1028,22 +1019,8 @@ export function PopupCloseButton({ onClick, dark, label }) {
 
     keepBelowHeader();
     var raf = window.requestAnimationFrame(keepBelowHeader);
-    window.addEventListener("resize", keepBelowHeader);
-    window.addEventListener("orientationchange", keepBelowHeader);
-    var vv: any = (window as any).visualViewport;
-    if (vv) {
-      vv.addEventListener("resize", keepBelowHeader);
-      vv.addEventListener("scroll", keepBelowHeader);
-    }
-    return function () {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener("resize", keepBelowHeader);
-      window.removeEventListener("orientationchange", keepBelowHeader);
-      if (vv) {
-        vv.removeEventListener("resize", keepBelowHeader);
-        vv.removeEventListener("scroll", keepBelowHeader);
-      }
-    };
+    // CSS env()/viewport units adapt the safe area without moving an open picker.
+    return function () { window.cancelAnimationFrame(raf); };
   }, []);
   return (
     <button
@@ -1354,7 +1331,7 @@ export function FainancePickerModal({
   var borderC = dark ? "#444" : "#E4E6EC";
   if (!open) return null;
   var modalSurface = fainancePopupSurfaceStyle(dark, "modal");
-  return (
+  var modal = (
     <div
       role="dialog"
       aria-modal="true"
@@ -1433,6 +1410,7 @@ export function FainancePickerModal({
       </div>
     </div>
   );
+  return typeof document !== "undefined" ? createPortal(modal, document.body) : modal;
 }
 
 export function calculateAmountExpression(raw: any) {
@@ -1896,8 +1874,12 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
     isCustomIconValue(value) ? "custom" : "standard"
   );
   var customLibrary = useCustomIconLibrary();
+  var customSelectionRef = useRef(0);
+  var [customSelectionBusy, setCustomSelectionBusy] = useState(false);
+  useEffect(function () { return function () { customSelectionRef.current++; }; }, []);
   useEffect(
     function () {
+      if (!open) { customSelectionRef.current++; setCustomSelectionBusy(false); }
       if (open) {
         setSearch("");
         setTheme("all");
@@ -2146,6 +2128,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                         key={item.id || icon}
                         title={item.label || icon}
                         onClick={function () {
+                          customSelectionRef.current++;
                           onChange(icon);
                           onClose();
                         }}
@@ -2215,7 +2198,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                 padding: 10,
               }}
             >
-              {customLibrary.loading ? (
+              {(customLibrary.loading || customSelectionBusy) ? (
                 <div
                   style={{
                     textAlign: "center",
@@ -2245,9 +2228,19 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                         type="button"
                         key={item.id}
                         title={item.label || L2("Icona personale")}
-                        onClick={function () {
-                          onChange(ref);
-                          onClose();
+                        disabled={customSelectionBusy}
+                        onClick={async function () {
+                          const request = ++customSelectionRef.current;
+                          setCustomSelectionBusy(true);
+                          try {
+                            await ensureCustomIconSelection(item);
+                            if (customSelectionRef.current !== request) return;
+                            onChange(ref);
+                            onClose();
+                          } catch (_) {
+                            const notify = (ctx as any).setToast;
+                            if (customSelectionRef.current === request && typeof notify === "function") notify({ text: financeMessage(lang, "sync"), type: "error" });
+                          } finally { if (customSelectionRef.current === request) setCustomSelectionBusy(false); }
                         }}
                         style={{
                           width: "100%",
@@ -3491,8 +3484,8 @@ export function AlertPopup({ newAlerts, onClose }) {
 }
 
 // ── FORMS ────────────────────────────────────────────────────────────────────
-export function MultiCurrencyField({ value, onChange, amount, compact, inline }: any) {
-  var ctx = useApp();
+export function MultiCurrencyField({ value, onChange, amount, compact, inline, inlineColor }: any) {
+  var ctx: any = useApp();
   var base = String(ctx.currency || "EUR").toUpperCase();
   var secondary = String(ctx.secondaryCurrency || "").toUpperCase();
   var plan = String(ctx.currentPlan || "free").toLowerCase();
@@ -3551,14 +3544,9 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
       return;
     }
     setLoading(true);
-    fetch("https://api.exchangerate-api.com/v4/latest/" + base)
-      .then(function (r) {
-        if (!r.ok) throw new Error("FX_HTTP_" + r.status);
-        return r.json();
-      })
-      .then(function (data) {
-        var units = Number(data && data.rates && data.rates[code]);
-        if (!units) throw new Error("FX_RATE_MISSING");
+    fetchToolRate(code, base)
+      .then(function (fx) {
+        var units = 1 / fx;
         var original = parseMoney(amount);
         onChange({
           currency: code,
@@ -3567,7 +3555,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
           baseAmount: Math.round((original / units) * 100) / 100,
           exchangeRate: 1 / units,
           exchangeRateDate: String(
-            data.date || new Date().toISOString().slice(0, 10)
+            new Date().toISOString().slice(0, 10)
           ),
           exchangeRateSource: "exchangerate-api.com",
         });
@@ -3611,10 +3599,12 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         border: inline ? "none" : "1px solid " + bc,
         borderRadius: inline ? 0 : 14,
         padding: inline ? 0 : compact ? 9 : 12,
+        width: inlineColor ? "100%" : undefined,
       }}
     >
       <button
         type="button"
+        aria-label={L("Valuta") + ": " + selected}
         onClick={function () {
           if (!basePlan) {
             if (ctx.setToast)
@@ -3630,14 +3620,15 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
           setOpen(true);
         }}
         style={{
-          width: inline ? "auto" : "100%",
+          width: inline && !inlineColor ? "auto" : "100%",
+          minHeight: inlineColor ? 42 : undefined,
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: inlineColor ? "center" : "space-between",
           gap: 10,
           border: "none",
           background: "transparent",
-          color: readableDarkText(inline ? "#8FD3FF" : tc, dark, "transparent"),
+          color: readableDarkText(inline ? (inlineColor || "#8FD3FF") : tc, dark, "transparent"),
           cursor: "pointer",
           padding: 0,
         }}
@@ -3653,7 +3644,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         <span
           style={{
             fontWeight: 900,
-            color: readableDarkText(inline ? "#8FD3FF" : (ctx as any).secondaryButtonColor || "#5FAFE5", dark, "transparent"),
+            color: readableDarkText(inline ? (inlineColor || "#8FD3FF") : (ctx as any).secondaryButtonColor || "#5FAFE5", dark, "transparent"),
             fontSize: inline ? 12 : undefined,
             letterSpacing: inline ? 0.6 : undefined,
           }}
@@ -3692,8 +3683,9 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
               border: "1px solid " + bc,
               borderRadius: 22,
               padding: 16,
-              width: "100%",
-              maxWidth: 480,
+              maxWidth: 380,
+              boxSizing: "border-box",
+              width: "calc(100% - 24px)",
               maxHeight: "80vh",
               overflowY: "auto",
             }}
@@ -3714,22 +3706,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
                   {L("Il tasso viene salvato nella transazione")}
                 </div>
               </div>
-              <button
-                onClick={function () {
-                  setOpen(false);
-                }}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 12,
-                  border: "1px solid #FFD0D0",
-                  background: "#FFF0F0",
-                  color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
-                  fontSize: 22,
-                }}
-              >
-                x
-              </button>
+              <PopupCloseButton onClick={function () { setOpen(false); }} dark={dark} label={L("Chiudi")} />
             </div>
             {full && (
               <input
@@ -3790,6 +3767,455 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         </div>
       )}
     </div>
+  );
+}
+
+export function MovementInstalmentSwitch({ checked, onChange, isMobile, activeColor }) {
+  var ctx: any = useApp();
+  var TL = function (text) { return translateFainanceText(text, ctx.lang || "it"); };
+    return (
+      <button
+        type="button"
+        aria-label={TL("Rateizza")}
+        aria-pressed={!!checked}
+        onClick={function () {
+          onChange();
+        }}
+        style={{
+          width: isMobile ? 34 : 42,
+          height: isMobile ? 19 : 23,
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,.45)",
+          background: checked
+            ? "rgba(255,255,255,.88)"
+            : "rgba(255,255,255,.24)",
+          padding: 2,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: checked ? "flex-end" : "flex-start",
+          transition: "all .18s ease",
+          boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
+        }}
+      >
+        <span
+          style={{
+            width: isMobile ? 15 : 19,
+            height: isMobile ? 15 : 19,
+            borderRadius: "50%",
+            background: checked ? activeColor : "#fff",
+            display: "block",
+            boxShadow: "0 2px 7px rgba(0,0,0,.20)",
+          }}
+        />
+      </button>
+    );
+  }
+
+
+export function MovementAmountPanel({ value, setValue, type, inputRef, fieldId, focused, setFocused, recurring = false }: any) {
+  var ctx: any = useApp();
+  var f = value, setF = setValue, amountInputRef = inputRef, entryFieldId = fieldId, amountFocused = focused, setAmountFocused = setFocused;
+  var dark = ctx.dark, isMobile = !!ctx.isMobile, t = ctx.t;
+  var btnC = type === "expense" ? ctx.expenseColor : ctx.incomeColor;
+  var amountGradient = type === "expense" ? "linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)" : "linear-gradient(135deg,#062F49 0%,#075C83 55%,#041F33 100%)";
+  var whiteSoft = "rgba(255,255,255,.70)";
+  var amountHasValue = !!String(f.amount || "").trim(), showAmountPlaceholder = !amountHasValue && !amountFocused;
+  function TL(text) { return translateFainanceText(text, ctx.lang || "it"); }
+  function toggleSwitch() { return <MovementInstalmentSwitch checked={!!f.rateizzato} onChange={function () { setF(function (p) { return { ...p, rateizzato: !p.rateizzato }; }); }} isMobile={isMobile} activeColor={btnC} />; }
+  return (
+      <div
+        className="fainance-entry-amount" data-recurring-amount-row={recurring ? true : undefined}
+        style={{
+          background: amountGradient,
+          borderRadius: 18,
+          padding: isMobile ? "16px clamp(9px,3.6vw,14px)" : "22px 26px",
+          display: "grid",
+          gridTemplateColumns: isMobile
+            ? "clamp(36px,11vw,44px) minmax(0,1fr) clamp(98px,29vw,108px)"
+            : "58px minmax(0,1fr) 128px",
+          gap: isMobile ? "clamp(3px,1.5vw,6px)" : 14,
+          alignItems: "center",
+          color: readableDarkText("#fff", dark, amountGradient),
+          boxShadow: dark
+            ? "0 12px 28px rgba(0,0,0,.20)"
+            : "0 14px 30px rgba(83,74,183,.22)",
+        }}
+      >
+        <AmountCalculatorButton
+          value={f.amount}
+          onApply={function (next) {
+            setF(function (p) {
+              return { ...p, amount: next };
+            });
+          }}
+          inverse
+          compact
+          iconOnly
+          iconSize={isMobile ? 34 : 46}
+        />
+        <div className="fainance-entry-amount-main" style={{ minWidth: 0, textAlign: "center" }}>
+          <label
+            htmlFor={entryFieldId + "-amount"}
+            style={{
+              display: "block",
+              fontSize: isMobile ? 12.6 : 14,
+              fontWeight: 850,
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+              color: readableDarkText(whiteSoft, dark, amountGradient),
+              marginBottom: 2,
+            }}
+          >
+            {t.amount}
+          </label>
+          <div
+            className="fainance-entry-amount-value"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: isMobile ? 6 : 9,
+              maxWidth: "100%",
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                flex: "0 1 auto",
+                minWidth: 0,
+                maxWidth: "calc(100% - 48px)",
+              }}
+            >
+              {showAmountPlaceholder && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
+                    fontWeight: 950,
+                    color: readableDarkText("#fff", dark, amountGradient),
+                    lineHeight: 1,
+                    pointerEvents: "none",
+                    textShadow: "0 2px 10px rgba(0,0,0,.12)",
+                  }}
+                >
+                  _,__
+                </div>
+              )}
+              <input
+                ref={amountInputRef}
+                id={entryFieldId + "-amount"}
+                autoFocus
+                type="text"
+                inputMode="decimal"
+                placeholder=""
+                value={f.amount}
+                onFocus={function () { setAmountFocused(true); }}
+                onBlur={function () { setAmountFocused(false); }}
+                onChange={function (e) {
+                  setF(function (p) {
+                    return { ...p, amount: e.target.value };
+                  });
+                }}
+                style={{
+                  width: amountHasValue
+                    ? Math.min(
+                        Math.max(String(f.amount || "").length + 0.5, 2),
+                        isMobile ? 7.5 : 10.5
+                      ) + "ch"
+                    : isMobile
+                    ? 70
+                    : 104,
+                  maxWidth: "100%",
+                  display: "block",
+                  margin: 0,
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  textAlign: "center",
+                  fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
+                  fontWeight: 950,
+                  color: readableDarkText("#fff", dark, "transparent"),
+                  WebkitTextFillColor: "#fff",
+                  outline: "none",
+                  lineHeight: 1,
+                  textShadow: "0 2px 10px rgba(0,0,0,.12)",
+                }}
+              />
+            </div>
+            <MultiCurrencyField
+              inline
+              compact
+              value={f}
+              amount={f.amount}
+              onChange={function (patch) {
+                setF(function (p) {
+                  return { ...p, ...patch };
+                });
+              }}
+            />
+          </div>
+          {showAmountPlaceholder && (
+            <div
+              style={{
+                fontSize: isMobile ? 14.6 : 16,
+                color: readableDarkText(whiteSoft, dark, amountGradient),
+                fontWeight: 600,
+                marginTop: 4,
+              }}
+            >
+              {TL("Inserisci l'importo")}
+            </div>
+          )}
+          {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
+            <div style={{ fontSize: isMobile ? 11.6 : 12, color: readableDarkText(whiteSoft, dark, amountGradient), marginTop: 3 }}>
+              ≈ {smallDecimalNode(formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
+            </div>
+          )}
+        </div>
+        <div
+          className="fainance-entry-instalment"
+          style={{
+            height: "100%",
+            minHeight: isMobile ? 52 : 66,
+            borderLeft: "1px solid rgba(255,255,255,.32)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: isMobile ? 7 : 9,
+            paddingLeft: isMobile ? 12 : 16,
+          }}
+        >
+          <div
+            style={{
+              fontSize: isMobile ? "clamp(7.4px,2.35vw,8.6px)" : 10.5,
+              fontWeight: 950,
+              textTransform: "uppercase",
+              letterSpacing: 0.35,
+              color: readableDarkText("#fff", dark, amountGradient),
+              lineHeight: 0.95,
+              textAlign: "center",
+            }}
+          >
+            {t.instalment}
+          </div>
+          {toggleSwitch()}
+        </div>
+      </div>
+  );
+}
+
+export function MovementInstallmentsPanel({ value, setValue }: any) {
+  var ctx: any = useApp();
+  var f = value, setF = setValue, dark = ctx.dark, isMobile = !!ctx.isMobile, t = ctx.t;
+  var selectedCurrency = CURRENCIES.find(function (item) { return item.code === String(f.currency || ctx.currency); });
+  var sym = selectedCurrency ? selectedCurrency.symbol : ctx.sym;
+  return (<>
+      {f.rateizzato && (
+        <div data-movement-installments
+          style={{
+            background: dark ? "#24213a" : "#F0EDFF",
+            border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
+            borderRadius: 14,
+            padding: isMobile ? 10 : 13,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
+              marginBottom: 7,
+              fontWeight: 800,
+            }}
+          >
+            {t.instalmentIn} {f.rate} {t.months} -{" "}
+            {smallDecimalNode(fmtAmt(
+              parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
+              sym
+            ), ctx.lang)}{" "}
+            {t.perMonth}
+          </div>
+          <RatePicker
+            value={f.rate}
+            direction={f.rateDirection || "forward"}
+            onChange={function (n) {
+              setF(function (p) {
+                return { ...p, rate: n };
+              });
+            }}
+            onDirectionChange={function (d) {
+              setF(function (p) {
+                return { ...p, rateDirection: d };
+              });
+            }}
+          />
+        </div>
+      )}
+  </>);
+}
+
+export function MovementExpenseSelectors({ value: f, setValue: setF, categories: sCats, methods: sMethods, fieldId: entryFieldId }: any) {
+  var ctx: any = useApp(), dark = ctx.dark, isMobile = !!ctx.isMobile;
+  var mainButtonC = ctx.confirmButtonColor || "#378ADD";
+  var t = TRANSLATIONS[ctx.lang || "it"] || TRANSLATIONS.it;
+  function TL(text) { return translateFainanceText(text, ctx.lang || "it"); }
+  var tc = dark ? "#eee" : "#333";
+  var sc = dark ? "#aaa" : "#777";
+  var borderC = dark ? "#444" : "#e8e8ee";
+  var panelBg = dark
+    ? "linear-gradient(160deg,#252535 0%,#1e1e30 100%)"
+    : "linear-gradient(160deg,#ffffff 0%,#faf9ff 100%)";
+  var fieldBg = dark ? "#1e1e30" : "#fff";
+  var inp = {
+    width: "100%",
+    borderRadius: 10,
+    border: "1px solid " + borderC,
+    padding: isMobile ? "6px 8px" : "10px 12px",
+    fontSize: 14,
+    background: fieldBg,
+    color: tc,
+    boxSizing: "border-box",
+    outline: "none",
+  };
+  var fieldCard = {
+    background: fieldBg,
+    border: "1px solid " + borderC,
+    borderRadius: 14,
+    padding: isMobile ? "7px 8px" : "11px 13px",
+    boxShadow: dark
+      ? "0 6px 16px rgba(0,0,0,.16)"
+      : "0 6px 18px rgba(31,60,120,.08), inset 0 1px 0 rgba(255,255,255,.86)",
+  };
+  var label = {
+    fontSize: isMobile ? 11.8 : 10,
+    color: sc,
+    display: "block",
+    marginBottom: 4,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  };
+  return (
+        <div
+          className="fainance-entry-fields"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: isMobile ? "clamp(5px,2vw,8px)" : 12,
+          }}
+        >
+          <div
+            style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
+          >
+            <label htmlFor={entryFieldId + "-description"} style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
+              {t.category}
+            </label>
+            <div style={{ position: "relative", minWidth: 0 }}>
+              <select
+                value={f.catId}
+                onChange={function (e) {
+                  setF(function (p) {
+                    return { ...p, catId: e.target.value, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=='catId') };
+                  });
+                }}
+                style={{
+                  ...inp,
+                  padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
+                  paddingLeft: isMobile ? 2 : 4,
+                  paddingRight: isMobile ? 3 : 6,
+                  fontSize: isMobile ? "clamp(13.2px,4.05vw,14.8px)" : 16,
+                  fontWeight: 750,
+                  border: "none",
+                  background: "transparent",
+                  height: isMobile ? 39 : 44,
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                }}
+              >
+                {sCats.map(function (c) {
+                  return (
+                    <option key={c.id} value={c.id}>
+                      {iconTextValue(c.icon)} {c.name}
+                    </option>
+                  );
+                })}
+              </select>
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: 1,
+                  top: -12,
+                  pointerEvents: "none",
+                  color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"),
+                  fontSize: 21,
+                  fontWeight: 950,
+                  lineHeight: 1,
+                }}
+              >
+                ▾
+              </span>
+            </div>
+          </div>
+          <div
+            style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
+          >
+            <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
+              {TL("Pagamento")}
+            </label>
+            <div style={{ position: "relative", minWidth: 0 }}>
+              <select
+                value={f.methodId}
+                onChange={function (e) {
+                  setF(function (p) {
+                    return { ...p, methodId: e.target.value, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=='methodId') };
+                  });
+                }}
+                style={{
+                  ...inp,
+                  padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
+                  paddingLeft: isMobile ? 2 : 4,
+                  paddingRight: isMobile ? 3 : 6,
+                  fontSize: isMobile ? "clamp(13.2px,4.05vw,14.8px)" : 16,
+                  fontWeight: 750,
+                  border: "none",
+                  background: "transparent",
+                  height: isMobile ? 39 : 44,
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                }}
+              >
+                {sMethods.map(function (m) {
+                  return (
+                    <option key={m.id} value={m.id}>
+                      {iconTextValue(m.icon)} {m.name}
+                    </option>
+                  );
+                })}
+              </select>
+              <span
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: 1,
+                  top: -12,
+                  pointerEvents: "none",
+                  color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"),
+                  fontSize: 21,
+                  fontWeight: 950,
+                  lineHeight: 1,
+                }}
+              >
+                ▾
+              </span>
+            </div>
+          </div>
+        </div>
   );
 }
 
@@ -4119,44 +4545,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
     };
   }
   function toggleSwitch() {
-    return (
-      <button
-        type="button"
-        aria-label={TL("Rateizza")}
-        onClick={function () {
-          setF(function (p) {
-            return { ...p, rateizzato: !p.rateizzato };
-          });
-        }}
-        style={{
-          width: isMobile ? 34 : 42,
-          height: isMobile ? 19 : 23,
-          borderRadius: 999,
-          border: "1px solid rgba(255,255,255,.45)",
-          background: f.rateizzato
-            ? "rgba(255,255,255,.88)"
-            : "rgba(255,255,255,.24)",
-          padding: 2,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: f.rateizzato ? "flex-end" : "flex-start",
-          transition: "all .18s ease",
-          boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
-        }}
-      >
-        <span
-          style={{
-            width: isMobile ? 15 : 19,
-            height: isMobile ? 15 : 19,
-            borderRadius: "50%",
-            background: f.rateizzato ? btnC : "#fff",
-            display: "block",
-            boxShadow: "0 2px 7px rgba(0,0,0,.20)",
-          }}
-        />
-      </button>
-    );
+    return <MovementInstalmentSwitch checked={!!f.rateizzato} onChange={function () { setF(function (p) { return { ...p, rateizzato: !p.rateizzato }; }); }} isMobile={!!isMobile} activeColor={btnC} />;
   }
   return (
     <>
@@ -4176,345 +4565,10 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         gap: isMobile ? 10 : 14,
       }}
     >
-      <div
-        className="fainance-entry-amount"
-        style={{
-          background: amountGradient,
-          borderRadius: 18,
-          padding: isMobile ? "16px clamp(9px,3.6vw,14px)" : "22px 26px",
-          display: "grid",
-          gridTemplateColumns: isMobile
-            ? "clamp(36px,11vw,44px) minmax(0,1fr) clamp(98px,29vw,108px)"
-            : "58px minmax(0,1fr) 128px",
-          gap: isMobile ? "clamp(3px,1.5vw,6px)" : 14,
-          alignItems: "center",
-          color: readableDarkText("#fff", dark, amountGradient),
-          boxShadow: dark
-            ? "0 12px 28px rgba(0,0,0,.20)"
-            : "0 14px 30px rgba(83,74,183,.22)",
-        }}
-      >
-        <AmountCalculatorButton
-          value={f.amount}
-          onApply={function (next) {
-            setF(function (p) {
-              return { ...p, amount: next };
-            });
-          }}
-          inverse
-          compact
-          iconOnly
-          iconSize={isMobile ? 34 : 46}
-        />
-        <div className="fainance-entry-amount-main" style={{ minWidth: 0, textAlign: "center" }}>
-          <label
-            htmlFor={entryFieldId + "-amount"}
-            style={{
-              display: "block",
-              fontSize: isMobile ? 12.6 : 14,
-              fontWeight: 850,
-              textTransform: "uppercase",
-              letterSpacing: 0.8,
-              color: readableDarkText(whiteSoft, dark, amountGradient),
-              marginBottom: 2,
-            }}
-          >
-            {t.amount}
-          </label>
-          <div
-            className="fainance-entry-amount-value"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: isMobile ? 6 : 9,
-              maxWidth: "100%",
-            }}
-          >
-            <div
-              style={{
-                position: "relative",
-                flex: "0 1 auto",
-                minWidth: 0,
-                maxWidth: "calc(100% - 48px)",
-              }}
-            >
-              {showAmountPlaceholder && (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
-                    fontWeight: 950,
-                    color: readableDarkText("#fff", dark, amountGradient),
-                    lineHeight: 1,
-                    pointerEvents: "none",
-                    textShadow: "0 2px 10px rgba(0,0,0,.12)",
-                  }}
-                >
-                  _,__
-                </div>
-              )}
-              <input
-                ref={amountInputRef}
-                id={entryFieldId + "-amount"}
-                autoFocus
-                type="text"
-                inputMode="decimal"
-                placeholder=""
-                value={f.amount}
-                onFocus={function () { setAmountFocused(true); }}
-                onBlur={function () { setAmountFocused(false); }}
-                onChange={function (e) {
-                  setF(function (p) {
-                    return { ...p, amount: e.target.value };
-                  });
-                }}
-                style={{
-                  width: amountHasValue
-                    ? Math.min(
-                        Math.max(String(f.amount || "").length + 0.5, 2),
-                        isMobile ? 7.5 : 10.5
-                      ) + "ch"
-                    : isMobile
-                    ? 70
-                    : 104,
-                  maxWidth: "100%",
-                  display: "block",
-                  margin: 0,
-                  border: "none",
-                  background: "transparent",
-                  padding: 0,
-                  textAlign: "center",
-                  fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
-                  fontWeight: 950,
-                  color: readableDarkText("#fff", dark, "transparent"),
-                  WebkitTextFillColor: "#fff",
-                  outline: "none",
-                  lineHeight: 1,
-                  textShadow: "0 2px 10px rgba(0,0,0,.12)",
-                }}
-              />
-            </div>
-            <MultiCurrencyField
-              inline
-              compact
-              value={f}
-              amount={f.amount}
-              onChange={function (patch) {
-                setF(function (p) {
-                  return { ...p, ...patch };
-                });
-              }}
-            />
-          </div>
-          {showAmountPlaceholder && (
-            <div
-              style={{
-                fontSize: isMobile ? 14.6 : 16,
-                color: readableDarkText(whiteSoft, dark, amountGradient),
-                fontWeight: 600,
-                marginTop: 4,
-              }}
-            >
-              {TL("Inserisci l'importo")}
-            </div>
-          )}
-          {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
-            <div style={{ fontSize: isMobile ? 11.6 : 12, color: readableDarkText(whiteSoft, dark, amountGradient), marginTop: 3 }}>
-              ≈ {smallDecimalNode(formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
-            </div>
-          )}
-        </div>
-        <div
-          className="fainance-entry-instalment"
-          style={{
-            height: "100%",
-            minHeight: isMobile ? 52 : 66,
-            borderLeft: "1px solid rgba(255,255,255,.32)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: isMobile ? 7 : 9,
-            paddingLeft: isMobile ? 12 : 16,
-          }}
-        >
-          <div
-            style={{
-              fontSize: isMobile ? "clamp(7.4px,2.35vw,8.6px)" : 10.5,
-              fontWeight: 950,
-              textTransform: "uppercase",
-              letterSpacing: 0.35,
-              color: readableDarkText("#fff", dark, amountGradient),
-              lineHeight: 0.95,
-              textAlign: "center",
-            }}
-          >
-            {t.instalment}
-          </div>
-          {toggleSwitch()}
-        </div>
-      </div>
-      {f.rateizzato && (
-        <div
-          style={{
-            background: dark ? "#24213a" : "#F0EDFF",
-            border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
-            borderRadius: 14,
-            padding: isMobile ? 10 : 13,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
-              marginBottom: 7,
-              fontWeight: 800,
-            }}
-          >
-            {t.instalmentIn} {f.rate} {t.months} -{" "}
-            {smallDecimalNode(fmtAmt(
-              parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
-              sym
-            ), ctx.lang)}{" "}
-            {t.perMonth}
-          </div>
-          <RatePicker
-            value={f.rate}
-            direction={f.rateDirection || "forward"}
-            onChange={function (n) {
-              setF(function (p) {
-                return { ...p, rate: n };
-              });
-            }}
-            onDirectionChange={function (d) {
-              setF(function (p) {
-                return { ...p, rateDirection: d };
-              });
-            }}
-          />
-        </div>
-      )}
+      <MovementAmountPanel value={f} setValue={setF} type={type} inputRef={amountInputRef} fieldId={entryFieldId} focused={amountFocused} setFocused={setAmountFocused} />
+      <MovementInstallmentsPanel value={f} setValue={setF} />
       {type === "expense" ? (
-        <div
-          className="fainance-entry-fields"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: isMobile ? "clamp(5px,2vw,8px)" : 12,
-          }}
-        >
-          <div
-            style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
-          >
-            <label htmlFor={entryFieldId + "-description"} style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
-              {t.category}
-            </label>
-            <div style={{ position: "relative", minWidth: 0 }}>
-              <select
-                value={f.catId}
-                onChange={function (e) {
-                  setF(function (p) {
-                    return { ...p, catId: e.target.value, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=='catId') };
-                  });
-                }}
-                style={{
-                  ...inp,
-                  padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
-                  paddingLeft: isMobile ? 2 : 4,
-                  paddingRight: isMobile ? 3 : 6,
-                  fontSize: isMobile ? "clamp(13.2px,4.05vw,14.8px)" : 16,
-                  fontWeight: 750,
-                  border: "none",
-                  background: "transparent",
-                  height: isMobile ? 39 : 44,
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                }}
-              >
-                {sCats.map(function (c) {
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {iconTextValue(c.icon)} {c.name}
-                    </option>
-                  );
-                })}
-              </select>
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  right: 1,
-                  top: -12,
-                  pointerEvents: "none",
-                  color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"),
-                  fontSize: 21,
-                  fontWeight: 950,
-                  lineHeight: 1,
-                }}
-              >
-                ▾
-              </span>
-            </div>
-          </div>
-          <div
-            style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
-          >
-            <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
-              {TL("Pagamento")}
-            </label>
-            <div style={{ position: "relative", minWidth: 0 }}>
-              <select
-                value={f.methodId}
-                onChange={function (e) {
-                  setF(function (p) {
-                    return { ...p, methodId: e.target.value, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=='methodId') };
-                  });
-                }}
-                style={{
-                  ...inp,
-                  padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
-                  paddingLeft: isMobile ? 2 : 4,
-                  paddingRight: isMobile ? 3 : 6,
-                  fontSize: isMobile ? "clamp(13.2px,4.05vw,14.8px)" : 16,
-                  fontWeight: 750,
-                  border: "none",
-                  background: "transparent",
-                  height: isMobile ? 39 : 44,
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                }}
-              >
-                {sMethods.map(function (m) {
-                  return (
-                    <option key={m.id} value={m.id}>
-                      {iconTextValue(m.icon)} {m.name}
-                    </option>
-                  );
-                })}
-              </select>
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  right: 1,
-                  top: -12,
-                  pointerEvents: "none",
-                  color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"),
-                  fontSize: 21,
-                  fontWeight: 950,
-                  lineHeight: 1,
-                }}
-              >
-                ▾
-              </span>
-            </div>
-          </div>
-        </div>
+        <MovementExpenseSelectors value={f} setValue={setF} categories={sCats} methods={sMethods} fieldId={entryFieldId} />
       ) : (
         <div style={fieldCard}>
           <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
@@ -6685,38 +6739,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
       };
     }
     function bulkToggleSwitch(r) {
-      return (
-        <button
-          type="button"
-          aria-label={L("Rateizza")}
-          onClick={function () { upd(r._id, "rateizzato", !r.rateizzato); }}
-          style={{
-            width: 34,
-            height: 19,
-            borderRadius: 999,
-            border: "1px solid rgba(255,255,255,.45)",
-            background: r.rateizzato ? "rgba(255,255,255,.88)" : "rgba(255,255,255,.24)",
-            padding: 2,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: r.rateizzato ? "flex-end" : "flex-start",
-            transition: "all .18s ease",
-            boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
-          }}
-        >
-          <span
-            style={{
-              width: 15,
-              height: 15,
-              borderRadius: "50%",
-              background: r.rateizzato ? btnC : "#fff",
-              display: "block",
-              boxShadow: "0 2px 7px rgba(0,0,0,.20)",
-            }}
-          />
-        </button>
-      );
+      return <MovementInstalmentSwitch checked={!!r.rateizzato} onChange={function () { upd(r._id, "rateizzato", !r.rateizzato); }} isMobile={true} activeColor={btnC} />;
     }
     return (
       <div>
@@ -7241,7 +7264,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
   );
 }
 export function RecurringManager() {
-  var ctx = useApp();
+  var ctx: any = useApp();
   function L(v) {
     return translateFainanceText(v, ctx.lang || "it");
   }
@@ -7326,8 +7349,12 @@ export function RecurringManager() {
       incomeTypes[0] || { id: "salario" };
     return {
       name: "",
+      rateDirection: "forward",
       icon: "🔁",
       amount: "",
+      currency: String(ctx.currency || "EUR"),
+      baseCurrency: String(ctx.currency || "EUR"),
+      exchangeRate: 1,
       catId: dc.id,
       methodId: dm.id,
       rtype: "expense",
@@ -7339,10 +7366,14 @@ export function RecurringManager() {
       frequency: "monthly",
     };
   }
+  var [formStep, setFormStep] = useState(1);
+  var [amountFocused, setAmountFocused] = useState(false);
+  var entryFieldId = useId();
+  var isMobile = !!ctx.isMobile;
   var [showForm, setShowForm] = useState(false);
   var [editingId, setEditingId] = useState(null);
   var [deleteId, setDeleteId] = useState(null);
-  var [form, setForm] = useState(makeBlank());
+  var [form, setForm] = useState<any>(makeBlank());
   var [toast, setToast] = useState(null);
   var recurringAmountInputRef = useRef(null);
   useEffect(
@@ -7462,7 +7493,9 @@ export function RecurringManager() {
       id: editingId || Date.now(),
       icon: icon,
       name: String(form.name || "").trim(),
-      amount: parseMoney(form.amount),
+      amount: String(form.currency || ctx.currency) !== String(ctx.currency) ? Number(form.baseAmount) : parseMoney(form.amount),
+      originalAmount: String(form.currency || ctx.currency) !== String(ctx.currency) ? parseMoney(form.amount) : null,
+      baseAmount: String(form.currency || ctx.currency) !== String(ctx.currency) ? Number(form.baseAmount) : parseMoney(form.amount),
       catId: form.rtype === "expense" ? form.catId : null,
       methodId: form.rtype === "expense" ? form.methodId : null,
       categoryNameSnapshot: selectedCategory ? String(selectedCategory.name || "") : String(form.categoryNameSnapshot || ""),
@@ -7482,12 +7515,14 @@ export function RecurringManager() {
     };
   }
   function startCreate() {
+    setFormStep(1);
     setEditingId(null);
     setForm(makeBlank());
     setShowForm(true);
     setDeleteId(null);
   }
   function startEdit(r) {
+    setFormStep(1);
     var base = makeBlank();
     var annualMonth = recurringMonth(r);
     var day = recurringDay(r);
@@ -7514,23 +7549,31 @@ export function RecurringManager() {
       icon: r.icon || autoIcon(r.name) || (r.rtype === "income" ? "💰" : "💸"),
       annualMonth: annualMonth,
       dayOfMonth: day,
-      amount: String(r.amount || ""),
+      amount: String(r.originalAmount != null && String(r.currency || ctx.currency) !== String(ctx.currency) ? r.originalAmount : (r.amount || "")),
     });
     setShowForm(false);
     setDeleteId(null);
   }
   function cancelForm() {
+    setFormStep(1);
     setShowForm(false);
     setEditingId(null);
     setForm(makeBlank());
   }
+  var recurringDetailsValid =
+    !!String(form.name || "").trim() && parseMoney(form.amount) > 0 &&
+    (String(form.currency || ctx.currency) === String(ctx.currency) || (Number(form.exchangeRate) > 0 && Number(form.baseAmount) > 0)) &&
+    (form.rtype === "income" ? !!String(form.incomeType || "").trim() : !!String(form.catId || "").trim() && !!String(form.methodId || "").trim());
   var recurringFormValid =
     !!String(form.name || "").trim() &&
     parseMoney(form.amount) > 0 &&
-    Number(form.dayOfMonth) >= 0 &&
+    (String(form.currency || ctx.currency) === String(ctx.currency) || (Number(form.exchangeRate) > 0 && Number(form.baseAmount) > 0)) &&
+    Number.isInteger(Number(form.dayOfMonth)) &&
+    Number(form.dayOfMonth) >= (form.frequency === "annual" ? 1 : 0) &&
     Number(form.dayOfMonth) <= 31 &&
     (form.frequency !== "annual" ||
       (Number(form.annualMonth) >= 1 && Number(form.annualMonth) <= 12)) &&
+    (!form.rateizzato || (Number.isInteger(Number(form.rate)) && Number(form.rate) >= 1 && Number(form.rate) <= 240)) &&
     (form.rtype === "income"
       ? !!String(form.incomeType || "").trim()
       : !!String(form.catId || "").trim() &&
@@ -7754,113 +7797,69 @@ export function RecurringManager() {
     );
   }
   function formBox(inline) {
+    var amountGradient = form.rtype === "expense"
+      ? "linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)"
+      : "linear-gradient(135deg,#062F49 0%,#075C83 55%,#041F33 100%)";
+    var whiteSoft = "rgba(255,255,255,.70)";
+    var amountHasValue = !!String(form.amount || "").trim();
+    var showAmountPlaceholder = !amountHasValue && !amountFocused;
+  function toggleSwitch() {
+    return <MovementInstalmentSwitch checked={!!form.rateizzato} onChange={function () { setField("rateizzato", !form.rateizzato); }} isMobile={isMobile} activeColor={form.rtype === "expense" ? ctx.expenseColor : ctx.incomeColor} />;
+  }
     return (
-      <div
-        style={{
-          background: inline
-            ? dark
-              ? "#202033"
-              : "#FAFBFF"
-            : dark
-            ? "#1e1e30"
-            : "#f9f9ff",
-          borderRadius: 18,
-          border: "1.5px solid " + (editingId ? "#7F77DD" : borderC),
-          padding: 16,
-          boxShadow: dark ? "none" : "0 6px 20px rgba(127,119,221,0.08)",
-          marginTop: inline ? 12 : 0,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: tc }}>
-              {editingId ? L("Modifica ricorrente") : L("Nuova ricorrente")}
-            </div>
-            <div style={{ fontSize: 12, color: sc }}>
-              {L("Non modifica le voci già presenti nello storico.")}
-            </div>
-          </div>
+      <div className="fainance-entry-form" data-recurring-form data-recurring-step={formStep} style={{ background: dark ? "#1e1e30" : "#fff", borderRadius: 18, border: "1px solid " + borderC, padding: isMobile ? 12 : 18, marginTop: inline ? 12 : 0, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+          <div><div style={{ fontSize: 18, fontWeight: 900, color: tc }}>{editingId ? L("Modifica ricorrente") : L("Nuova ricorrente")}</div>
+          <div style={{ fontSize: 11, color: sc, marginTop: 4 }}>{L("Non modifica le voci già presenti nello storico.")}</div></div>
           <PopupCloseButton onClick={cancelForm} dark={dark} label={L("Chiudi")} />
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "auto 1fr 1fr",
-              gap: 10,
-              alignItems: "end",
-            }}
-          >
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Icona")}
-              </label>
-              <EmojiPicker
-                value={form.icon || autoIcon(form.name) || "🔁"}
-                onChange={function (v) {
-                  setField("icon", v);
-                }}
-              />
-            </div>
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Nome")}
-              </label>
-              <input
-                value={form.name}
-                onChange={function (e) {
-                  setField("name", e.target.value);
-                }}
-                style={inp}
-              />
-            </div>
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Importo")}
-              </label>
-              <input
-                ref={recurringAmountInputRef}
-                autoFocus
-                type="text"
-                inputMode="decimal"
-                placeholder="_,__"
-                value={form.amount}
-                onChange={function (e) {
-                  setField("amount", e.target.value);
-                }}
-                style={inp}
-              />
-            </div>
+        <div role="group" aria-label={L("Passaggi")} style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, background: dark ? "#252535" : "#f5f5f5", marginBottom: 16 }}>
+          {[1, 2].map(function (step) { return <button key={step} type="button" aria-pressed={formStep === step} disabled={step === 2 && !recurringDetailsValid} onClick={function () { setFormStep(step); }} style={{ flex: 1, minWidth: 0, border: "none", borderRadius: 9, padding: "11px 5px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: step === 2 && !recurringDetailsValid ? .55 : 1, background: formStep === step ? secondaryButtonColor : "transparent", color: formStep === step ? "#fff" : tc }}>{step + " · " + (step === 1 ? L("Dettagli") : L("Calendario"))}</button>; })}
+        </div>
+        <div hidden={formStep !== 1} data-recurring-details style={{ display: formStep === 1 ? "flex" : "none", flexDirection: "column", gap: 12 }}>
+          <div data-recurring-identity-row style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: 12, alignItems: "center", border: "1px solid " + borderC, borderRadius: 16, padding: 12, background: dark ? "#252535" : "#F7F9FC" }}>
+            <div aria-label={L("Icona")} style={{ padding: 4, borderRadius: 12, background: dark ? "#1e1e30" : "#fff" }}><EmojiPicker value={form.icon || autoIcon(form.name) || "🔁"} onChange={function (v) { setField("icon", v); }} /></div>
+            <label style={{ fontSize: 11, color: sc, minWidth: 0 }}>{L("Nome")}
+              <input aria-label={L("Nome")} value={form.name} placeholder={L("Nome")} onChange={function (e) { setField("name", e.target.value); }} style={{ ...inp, minWidth: 0, boxSizing: "border-box" as const, height: 44, marginTop: 5, fontSize: 16, fontWeight: 700 }} />
+            </label>
           </div>
+          <MovementAmountPanel recurring value={form} setValue={setForm} type={form.rtype} inputRef={recurringAmountInputRef} fieldId={entryFieldId} focused={amountFocused} setFocused={setAmountFocused} />
+          <MovementInstallmentsPanel value={form} setValue={setForm} />
           {typeSegment()}
+          {form.rtype === "expense" ? (
+            <MovementExpenseSelectors value={form} setValue={setForm} categories={sCats} methods={sMethods} fieldId={entryFieldId} />
+          ) : (
+            <div>
+              <label
+                style={{
+                  fontSize: 11,
+                  color: sc,
+                  display: "block",
+                  marginBottom: 4,
+                }}
+              >
+                {L("Tipo entrata")}
+              </label>
+              <select
+                value={form.incomeType}
+                onChange={function (e) {
+                  setField("incomeType", e.target.value);
+                }}
+                style={inp}
+              >
+                {incomeTypes.map(function (it) {
+                  return (
+                    <option key={it.id} value={it.id}>
+                      {iconTextValue(it.icon)} {L(it.name)}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
+        </div>
+        <div hidden={formStep !== 2} data-recurring-calendar style={{ display: formStep === 2 ? "flex" : "none", flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: tc }}>{L("Frequenza")}</div>
           <div
             style={{
               display: "flex",
@@ -8001,142 +8000,17 @@ export function RecurringManager() {
               />
             </div>
           </div>
-          {form.rtype === "expense" ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 10,
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    fontSize: 11,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
-                  {L("Categoria")}
-                </label>
-                <select
-                  value={form.catId}
-                  onChange={function (e) {
-                    setField("catId", e.target.value);
-                  }}
-                  style={inp}
-                >
-                  {sCats.map(function (c) {
-                    return (
-                      <option key={c.id} value={c.id}>
-                        {iconTextValue(c.icon)} {c.name}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: 11,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
-                  {L("Metodo")}
-                </label>
-                <select
-                  value={form.methodId}
-                  onChange={function (e) {
-                    setField("methodId", e.target.value);
-                  }}
-                  style={inp}
-                >
-                  {sMethods.map(function (m) {
-                    return (
-                      <option key={m.id} value={m.id}>
-                        {iconTextValue(m.icon)} {m.name}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Tipo entrata")}
-              </label>
-              <select
-                value={form.incomeType}
-                onChange={function (e) {
-                  setField("incomeType", e.target.value);
-                }}
-                style={inp}
-              >
-                {incomeTypes.map(function (it) {
-                  return (
-                    <option key={it.id} value={it.id}>
-                      {iconTextValue(it.icon)} {L(it.name)}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
-          <div
-            style={{
-              background: dark ? "#252535" : "#fff",
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 12,
-            }}
-          >
-            <Toggle
-              label={L("Rateizza")}
-              checked={!!form.rateizzato}
-              onChange={function () {
-                setField("rateizzato", !form.rateizzato);
-              }}
-            />
-            {form.rateizzato && (
-              <RatePicker
-                value={form.rate || 12}
-                onChange={function (n) {
-                  setField("rate", n);
-                }}
-              />
-            )}
+          <div aria-live="polite" style={{ borderRadius: 12, padding: 12, background: dark ? "#252535" : "#f5f8fc", color: tc, fontSize: 13, lineHeight: 1.5, overflowWrap: "anywhere" }}>
+            <strong>{form.name}</strong><br />
+            {form.amount} {String(form.currency || ctx.currency)} · {form.frequency === "annual" ? L("Annuale") : L("Mensile")}<br />
+            {L("Giorno")}: {Number(form.dayOfMonth) === 0 ? L("Ultimo giorno del mese") : Number(form.dayOfMonth)}{form.frequency === "annual" ? " · " + L(MONTHS_FULL[Number(form.annualMonth || 1) - 1]) : ""}
+            {form.rateizzato && <div>{Number(form.rate || 12)} {L("mesi")} · {formatNumber(parseMoney(form.amount) / Math.max(1, Number(form.rate || 12)), lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {String(form.currency || ctx.currency)}</div>}
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <Btn
-              onClick={saveRecurring}
-              disabled={!recurringFormValid}
-              bg={
-                recurringFormValid ? confirmButtonColor || "#378ADD" : "#A8A8A8"
-              }
-              style={{ flex: 1, padding: 12, fontWeight: 900 }}
-            >
-              {editingId ? L("Salva modifiche") : L("Crea ricorrente")}
-            </Btn>
-            <Btn
-              onClick={cancelForm}
-              bg={dark ? "#333" : "#f0f0f0"}
-              color={tc}
-              style={{ padding: "12px 16px" }}
-            >
-              {L("Annulla")}
-            </Btn>
-          </div>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
+          {formStep === 2 && <Btn onClick={function () { setFormStep(1); }} disabled={false} bg={dark ? "#333" : "#f0f0f0"} color={tc} style={{ padding: "12px 14px" }}>{L("Indietro")}</Btn>}
+          <Btn onClick={function () { if (formStep === 1) { if (recurringDetailsValid) setFormStep(2); } else saveRecurring(); }} disabled={formStep === 1 ? !recurringDetailsValid : !recurringFormValid} color="#fff" bg={(formStep === 1 ? recurringDetailsValid : recurringFormValid) ? confirmButtonColor : "#A8A8A8"} style={{ flex: 1, minWidth: 120, padding: 12, fontWeight: 900 }}>{formStep === 1 ? L("Continua") : editingId ? L("Salva modifiche") : L("Crea ricorrente")}</Btn>
+          {formStep === 1 && <Btn onClick={cancelForm} disabled={false} bg={dark ? "#333" : "#f0f0f0"} color={tc} style={{ padding: "12px 14px" }}>{L("Annulla")}</Btn>}
         </div>
       </div>
     );
@@ -8203,7 +8077,7 @@ export function RecurringManager() {
                     marginTop: 2,
                   }}
                 >
-                  {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)}
+                  {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
                 </div>
               </div>
               <span
@@ -8456,7 +8330,7 @@ export function RecurringManager() {
                     {r.name}
                   </div>
                   <div style={{ fontSize: 12, color: sc }}>
-                    {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)} · {cat.icon} {L(cat.name)} ·{" "}
+                    {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)} · {cat.icon} {L(cat.name)} ·{" "}
                     {occurrenceDateText(r)}
                   </div>
                 </div>
@@ -12689,15 +12563,17 @@ export function SettingsList({
                         toggleArchive(item.id);
                       }}
                       title={item.archived ? L("Ripristina") : L("Archivia")}
+                      aria-label={item.archived ? L("Ripristina") : L("Archivia")}
                       style={{
-                        background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "none",
-                        border: baseBlocked ? "1px solid " + (dark ? "#4B4B58" : "#D1D5DB") : "none",
+                        background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : (dark ? "#302B48" : "#F0EDFF"),
+                        border: baseBlocked ? "1px solid " + (dark ? "#4B4B58" : "#D1D5DB") : ("1px solid " + (dark ? "#51476C" : "#D8D0F2")),
                         borderRadius: 8,
                         cursor: "pointer",
                         fontSize: 15,
-                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#bbb", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "none"),
+                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : (dark ? "#CEC5F0" : "#6554A4"), dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "none"),
                         padding: "5px 8px",
                         marginLeft: -5,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
                       }}
                     >
                       {item.archived ? "📂" : "🗂"}
@@ -18129,7 +18005,7 @@ export function ImportData(props: any = {}) {
                               fontWeight: 500,
                             }}
                           >
-                            {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)}
+                            {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
                           </td>
                           <td
                             style={{
@@ -18174,7 +18050,7 @@ export function ImportData(props: any = {}) {
                               fontWeight: 500,
                             }}
                           >
-                            {smallDecimalNode(fmtAmt(r.amount, sym), ctx.lang)}
+                            {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
                           </td>
                           <td style={{ padding: "6px 10px", color: tc }}>
                             {r.desc}

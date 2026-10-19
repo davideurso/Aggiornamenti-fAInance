@@ -1,4 +1,5 @@
-import { NotificationMediaView, openNotificationDestination } from "./NotificationMedia.tsx";
+import { RichNotification } from "./RichNotification";
+import { NotificationMediaView, openNotificationDestination } from "./NotificationMedia";
 import { readableDarkText } from '../ui/textContrast';
 import { closurePreview } from "../finance/savingsClosure";
 import { shiftPeriodKey, periodLabel } from "../finance/periodEngine";
@@ -353,7 +354,7 @@ function NotificationRows({
               <span style={{ fontSize: compact ? 20 : 23 }}>{notificationIcon(item)}</span>
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: 13, fontWeight: item.read ? 750 : 950 }}>{display.title}</span>
-                <span style={{ display: "block", fontSize: 12, lineHeight: 1.42, color: readableDarkText(subC, dark, "transparent"), marginTop: 3 }}>{display.message}</span>
+                <span style={{ display: "block", fontSize: 12, lineHeight: 1.42, color: readableDarkText(subC, dark, "transparent"), marginTop: 3 }}>{!item.richContent && display.message}</span>
                 {item.type === "period_closure" && <span style={{ display: "block", color: primary, fontSize: 12, marginTop: 5, fontWeight: 800 }}>{periodClosureNoticeText(ctx.lang || "it", "open")} →</span>}
                 <span style={{ display: "block", fontSize: 10, color: readableDarkText(subC, dark, "transparent"), marginTop: 6 }}>
                   {item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}
@@ -361,6 +362,7 @@ function NotificationRows({
               </span>
               {!item.read && <span style={{ width: 8, height: 8, borderRadius: "50%", background: primary, marginTop: 5, flexShrink: 0 }} />}
             </button>
+            {item.richContent && <RichNotification value={item.richContent} />}
             {item.media && <NotificationMediaView value={item.media} dark={dark} L={L} onNavigate={() => { openNotificationDestination(item.media); onOpen?.({ ...item, actionType: "open_media_destination" }); }} />}
             {item.type === "recurring_confirmation" ? (
               <button

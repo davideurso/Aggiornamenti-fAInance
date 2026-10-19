@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, deleteDoc, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc } from "firebase/firestore";
 import { fbAuth, fbDb } from "../firebase/client";
 import { writeTechnicalLog } from "../observability/technicalLogs";
 
@@ -20,6 +20,7 @@ type Listener = () => void;
 const cache = new Map<string, CustomIconRecord>();
 const loadedOwners = new Set<string>();
 const loadingRefs = new Set<string>();
+const referenceVersions = new Map<string, number>();
 const listeners = new Set<Listener>();
 
 function localIconStorageKey(uid: string): string {
@@ -101,11 +102,12 @@ export async function loadCustomIconReference(value: unknown): Promise<CustomIco
   if (cache.has(key)) return cache.get(key) || null;
   if (loadingRefs.has(key)) return null;
   loadingRefs.add(key);
+  const version = referenceVersions.get(key) || 0;
   try {
     const snapshot = await getDoc(doc(fbDb, "users", parsed.ownerUid, "customIcons", parsed.id));
     if (!snapshot.exists()) return null;
     const row = recordFromSnapshot(parsed.ownerUid, parsed.id, snapshot.data());
-    if (row) { cache.set(key, row); emit(); }
+    if (row && version === (referenceVersions.get(key) || 0)) { cache.set(key, row); emit(); }
     return row;
   } catch {
     return null;
@@ -123,8 +125,11 @@ export async function loadCurrentUserCustomIcons(force = false): Promise<CustomI
     return Array.from(cache.values()).filter((row) => row.ownerUid === uid).sort((a,b) => String(b.createdAt).localeCompare(String(a.createdAt)));
   }
   try {
+    const versions = new Map(referenceVersions);
     const snapshot = await getDocs(collection(fbDb, "users", uid, "customIcons"));
     snapshot.docs.forEach((row) => {
+      const key=cacheKey(uid,row.id);
+      if((referenceVersions.get(key)||0)!==(versions.get(key)||0))return;
       const parsed = recordFromSnapshot(uid, row.id, row.data());
       if (parsed) cache.set(cacheKey(uid, row.id), parsed);
     });
@@ -300,10 +305,63 @@ export async function uploadCustomIcon(file: File): Promise<CustomIconRecord> {
 export async function deleteCustomIconRecord(id: string): Promise<void> {
   const user = fbAuth.currentUser;
   if (!user?.uid || !id) throw new Error("CUSTOM_ICON_AUTH_REQUIRED");
+  const key=cacheKey(user.uid,id);referenceVersions.set(key,(referenceVersions.get(key)||0)+1);
   cache.delete(cacheKey(user.uid, id));
   removeLocalIconRow(user.uid, id);
   emit();
   await deleteDoc(doc(fbDb, "users", user.uid, "customIcons", id)).catch(() => undefined);
+}
+
+// A user explicitly selecting an old local-only image publishes that image
+// before its catalog reference. Loading the gallery never revives deleted rows.
+export async function ensureCustomIconSelection(row: CustomIconRecord): Promise<CustomIconRecord> {
+  const uid=String(fbAuth.currentUser?.uid || "");
+  if(!uid || row.ownerUid!==uid || !row.id)throw new Error("CUSTOM_ICON_AUTH_REQUIRED");
+  const ref=doc(fbDb,"users",uid,"customIcons",row.id);
+  const key=cacheKey(uid,row.id),version=referenceVersions.get(key)||0;
+  let timer:any;
+  const job=runTransaction(fbDb,async transaction=>{
+    const snapshot=await transaction.get(ref);
+    if(snapshot.exists()) {
+      const current=recordFromSnapshot(uid,row.id,snapshot.data());
+      if(!current)throw new Error("CUSTOM_ICON_INVALID");
+      return current;
+    }
+    if(!/^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/.test(row.dataUrl) || row.dataUrl.length>CUSTOM_ICON_MAX_DATA_URL_LENGTH)throw new Error("CUSTOM_ICON_INVALID");
+    const now=new Date().toISOString();
+    const current:CustomIconRecord={id:row.id,ownerUid:uid,label:String(row.label||"Icona").slice(0,60),dataUrl:row.dataUrl,createdAt:String(row.createdAt||now).slice(0,40),updatedAt:String(row.updatedAt||now).slice(0,40)};
+    transaction.set(ref,current);return current;
+  });
+  try {
+    const current=await Promise.race([job,new Promise<CustomIconRecord>((_,reject)=>{timer=setTimeout(()=>reject(new Error("CUSTOM_ICON_SYNC_TIMEOUT")),15000)})]);
+    if((referenceVersions.get(key)||0)!==version) {
+      const latest=cache.get(key);if(!latest)throw new Error("CUSTOM_ICON_CHANGED_DURING_SELECTION");return latest;
+    }
+    cache.set(key,current);upsertLocalIconRow(current);emit();return current;
+  } finally { clearTimeout(timer); }
+}
+
+// A shared subscription per reference updates every mounted consumer without
+// requiring a reload. Read errors retain the last usable offline image.
+const liveReferences = new Map<string, { users: number; stop: () => void }>();
+function watchCustomIcon(value: unknown): () => void {
+  const parsed = parseCustomIconValue(value);
+  if (!parsed) return () => {};
+  const key = cacheKey(parsed.ownerUid, parsed.id);
+  let live = liveReferences.get(key);
+  if (!live) {
+    const stop = onSnapshot(doc(fbDb, "users", parsed.ownerUid, "customIcons", parsed.id), snapshot => {
+      if (snapshot.metadata.fromCache && !snapshot.exists()) return;
+      referenceVersions.set(key,(referenceVersions.get(key) || 0)+1);
+      const row = snapshot.exists() ? recordFromSnapshot(parsed.ownerUid, parsed.id, snapshot.data()) : null;
+      if (row) { cache.set(key, row); upsertLocalIconRow(row); }
+      else if (!snapshot.exists()) { cache.delete(key); removeLocalIconRow(parsed.ownerUid, parsed.id); }
+      emit();
+    }, () => {});
+    live = { users: 0, stop }; liveReferences.set(key, live);
+  }
+  live.users++;
+  return () => { if (--live!.users === 0) { live!.stop(); liveReferences.delete(key); } };
 }
 
 export function useCustomIconLibrary() {
@@ -315,7 +373,17 @@ export function useCustomIconLibrary() {
     listeners.add(listener);
     setLoading(true);
     loadCurrentUserCustomIcons().catch((e:any) => setError(String(e?.message || "CUSTOM_ICON_LOAD_ERROR"))).finally(() => setLoading(false));
-    return () => { listeners.delete(listener); };
+    const owner = String(fbAuth.currentUser?.uid || "");
+    const stop = owner ? onSnapshot(collection(fbDb, "users", owner, "customIcons"), snapshot => {
+      for (const change of snapshot.docChanges()) {
+        const id = change.doc.id, key = cacheKey(owner, id);
+        referenceVersions.set(key,(referenceVersions.get(key)||0)+1);
+        if (change.type === "removed") { cache.delete(key); removeLocalIconRow(owner, id); }
+        else { const row = recordFromSnapshot(owner, id, change.doc.data()); if (row) { cache.set(key, row); upsertLocalIconRow(row); } }
+      }
+      emit();
+    }, () => {}) : () => {};
+    return () => { stop(); listeners.delete(listener); };
   }, [String(fbAuth.currentUser?.uid || "")]);
   const items = useMemo(() => {
     const uid = String(fbAuth.currentUser?.uid || "");
@@ -333,10 +401,11 @@ export function FainanceIcon({ value, size = 24, alt = "", style }: { value: unk
     const listener = () => setVersion((v) => v + 1);
     listeners.add(listener);
     void loadCustomIconReference(value);
-    return () => { listeners.delete(listener); };
+    const stop = watchCustomIcon(value);
+    return () => { stop(); listeners.delete(listener); };
   }, [String(value || "")]);
   if (!parsed) return <span aria-hidden="true" style={{ fontSize:size, lineHeight:1, display:"inline-flex", alignItems:"center", justifyContent:"center", ...style }}>{String(value || "")}</span>;
   const row = cache.get(cacheKey(parsed.ownerUid, parsed.id));
-  if (!row) return <span aria-hidden="true" style={{ fontSize:Math.max(14, Math.round(size * .72)), lineHeight:1, opacity:.55, ...style }}>▧</span>;
+  if (!row) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity:.55, ...style }}><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m5 17 5-5 4 4 3-3 3 3M8 8h.01"/></svg>;
   return <img src={row.dataUrl} alt={alt || row.label || ""} draggable={false} style={{ width:size, height:size, objectFit:"cover", borderRadius:Math.max(4, Math.round(size * .22)), display:"block", ...style }}/>
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { INTERNAL_DESTINATIONS, readNotificationMedia, safeMediaUrl } from './notificationMedia.mjs';
+import { INTERNAL_DESTINATIONS, readNotificationMedia, safeMediaUrl } from '../../functions/notificationMedia.mjs';
 
 export type NotificationMedia = { videoUrl?: string; screenshotUrl?: string; previewUrl?: string; destination?: string };
 

@@ -1,6 +1,20 @@
 import WidgetKit
 import SwiftUI
 
+
+private func canonicalIconName(_ value: String) -> String {
+    switch value {
+    case "+": return "canonical_2795"
+    case "◆": return "canonical_1f4b3"
+    case "🛒": return "canonical_1f6d2"
+    case "✎": return "canonical_1f4dd"
+    case "◎": return "canonical_1f3af"
+    case "⇄": return "canonical_1f91d"
+    case "≡": return "canonical_1f4b3"
+    default: return "canonical_1f4dd"
+    }
+}
+
 struct FainanceEntry: TimelineEntry {
     let date: Date
     let title: String
@@ -47,9 +61,10 @@ struct FainanceCardView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
-                    Text(entry.icon)
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
+                    Image(canonicalIconName(entry.icon))
+                        .resizable()
+                        .scaledToFit()
+                        .padding(5)
                         .frame(width: 28, height: 28)
                         .background(Color.white.opacity(0.18))
                         .cornerRadius(8)

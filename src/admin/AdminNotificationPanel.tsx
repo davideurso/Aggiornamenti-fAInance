@@ -1,5 +1,5 @@
-import { NotificationMediaEditor, type NotificationMedia } from "../notifications/NotificationMedia.tsx";
-import { normalizeNotificationMedia } from "../notifications/notificationMedia.mjs";
+import { NotificationMediaEditor, type NotificationMedia } from "../notifications/NotificationMedia";
+import { normalizeNotificationMedia } from "../../functions/notificationMedia.mjs";
 import { readableDarkText } from '../ui/textContrast';
 import { useMemo, useState } from "react";
 import { getApp } from "firebase/app";

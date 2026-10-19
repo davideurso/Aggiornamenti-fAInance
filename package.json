@@ -4,16 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run check:icons && vite build",
     "preview": "vite preview",
     "test:calculations": "node tests/financeCalculations.test.mjs",
     "test:i18n": "node tests/i18nTranslations.test.mjs",
     "build:web": "npm run build && firebase deploy --only hosting:fainance-test",
-    "build:android": "npm run build && npx cap sync android && cd android && set \"JAVA_HOME=C:\\Programmi\\Android\\Android Studio\\jbr\" && gradlew clean && gradlew assembleDebug"
+    "build:android": "npm run build && npx cap sync android && cd android && set \"JAVA_HOME=C:\\Programmi\\Android\\Android Studio\\jbr\" && gradlew clean && gradlew assembleDebug",
+    "test:movement-sync-v2": "node tests/movementSyncV2Clean.test.mjs && node tests/movementSyncV2Migration.test.mjs",
+    "check:icons": "node tools/CHECK_FAINANCE_ICON_PARITY.cjs"
   },
   "dependencies": {
     "@aparajita/capacitor-biometric-auth": "^10.0.0",
+    "@capacitor-community/file-opener": "8.0.1",
     "@capacitor-community/firebase-analytics": "8.1.0",
+    "@capacitor-community/speech-recognition": "^7.0.1",
     "@capacitor-firebase/authentication": "^8.2.0",
     "@capacitor/android": "^8.3.4",
     "@capacitor/app": "^8.1.0",
@@ -23,11 +27,11 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/ios": "^8.4.1",
     "@capacitor/preferences": "^8.0.1",
-    "@capacitor/push-notifications": "8.1.2",
+    "@capacitor/push-notifications": "^8.1.2",
     "@capacitor/share": "^8.0.1",
-    "@capawesome/capacitor-file-picker": "8.0.4",
-    "@capgo/capacitor-contacts": "8.0.17",
-    "@capgo/capacitor-speech-recognition": "8.1.10",
+    "@capawesome/capacitor-file-picker": "^8.1.0",
+    "@capgo/capacitor-contacts": "^8.1.2",
+    "@capgo/capacitor-speech-recognition": "^8.2.0",
     "firebase": "^12.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

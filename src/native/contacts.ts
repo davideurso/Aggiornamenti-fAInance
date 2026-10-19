@@ -1,3 +1,4 @@
+import { canonicalizeOwnedDom } from "../icons/canonicalEmoji";
 import { L } from '../utils/translationFallback';
 
 // Native/Web Contacts integration extracted from sezioni.tsx in Architecture Phase 10.
@@ -198,7 +199,7 @@ async function chooseFainanceContactFromList(cleaned:any[]){
         meta.style.overflow="hidden";
         meta.style.textOverflow="ellipsis";
         info.appendChild(name);if(meta.textContent)info.appendChild(meta);
-        row.appendChild(avatar);row.appendChild(info);list.appendChild(row);
+        row.appendChild(avatar);row.appendChild(info);canonicalizeOwnedDom(row);list.appendChild(row);
       });
     }
     function cleanup(value:any){

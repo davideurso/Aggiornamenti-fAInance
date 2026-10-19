@@ -85,7 +85,7 @@ export function ToolsPanel(){
   function chooseCurrency(code){const a=picker==='from'?code:from,b=picker==='to'?code:to;invalidate();setFrom(a);setTo(b);setQuote(null);setPicker(null);setSearch('');try{rememberPair(a,b);}catch{setError(true);}}
   function record(section,row){ctx.setFinanceEvolution(p=>({...p,tools:addToolHistory(p.tools,section,{...row,id:crypto.randomUUID()})}));setSaved(true);}
   function calculated(value){invalidate();try{record('calculator',{result:value});setCalc(value);setError(false);}catch{setError(true);setCalc(null);}}
-  async function rate(a,b,signal){return fetchToolRate(a,b,ctx.toolRateFetcher||fetch,signal);}
+  async function rate(a,b,signal){return fetchToolRate(a,b,ctx.toolRateFetcher,signal);}
   async function convert(a=from,b=to,input=amount,saveHistory=true){
     invalidate();const id=request.current,controller=new AbortController();abort.current=controller;
     const value=parseMoney(input);if(!String(input).trim()||!Number.isFinite(value)||value<0){setError(true);return;}
@@ -193,7 +193,7 @@ export function ToolsPanel(){
       <div className="tool-nav-group"><span className="tool-nav-label">{T('automations')}</span><div className="tool-tabs tool-main-tabs tool-main-tabs-automations" style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:12}}>{automationTabs.map(item=><button key={item.id} aria-pressed={page===item.id} onClick={()=>changePage(item.id)} style={{width:'100%'}}><span className="tool-tab-icon">{item.icon}</span><span>{item.label}</span></button>)}</div></div>
       <div className="tool-nav-group"><span className="tool-nav-label">{T('simulators')}</span><div className="tool-tabs tool-main-tabs tool-main-tabs-simulators">{simulatorTabs.map(item=><button key={item.id} aria-pressed={page===item.id} onClick={()=>changePage(item.id)}><span className="tool-tab-icon">{item.icon}</span><span>{item.label}</span></button>)}</div></div>
     </nav>
-    {error&&<p role="alert" className="tool-error">{T('error')}</p>}
+    {error&&<p role="alert" className="tool-error">{T('error')}{page==='converter'&&<button type="button" onClick={()=>convert()}>{L('Riprova')}</button>}</p>}
     {busy&&<p role="status">{T('busy')}</p>}
     {transaction?<div className="tool-card"><button onClick={()=>setTransaction(null)}>‹ {L('Indietro')}</button><h3>{T('create')}</h3><div className="tool-tabs"><button aria-pressed={direction==='expense'} onClick={()=>setDirection('expense')}>{L('Uscita')}</button><button aria-pressed={direction==='income'} onClick={()=>setDirection('income')}>{L('Entrata')}</button></div><ExpenseForm type={direction} initialValue={transaction} draftNamespace="draft_tool_" onSave={item=>{const accepted=direction==='expense'?ctx.addExpenses([item],'tool'):ctx.addIncomes([item],'tool');if(accepted===false)return false;setTransaction(null);return true;}}/></div>:<>
       {page==='calculator'&&<div className="tool-card"><h3>{T('calculator')}</h3><AmountCalculatorButton embedded key={seed.key} value={seed.value} onResult={calculated} onEdit={()=>{invalidate();setCalc(null);setSaved(false);}}/>{calc!=null&&<output className="tool-result">{smallDecimalNode(number(calc),ctx.lang||'it')}</output>}{saved&&<p role="status" className="tool-muted">✓ {T('saved')}</p>}{resultActions()}{inlineHistory('calculator')}</div>}

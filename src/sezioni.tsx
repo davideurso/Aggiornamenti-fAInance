@@ -10,6 +10,7 @@ import { assistantUsesDefaultPayment } from './finance/assistantRuleDefaults';
 import { evaluateAutomaticRules } from './finance/automaticRules';
 import { SavingsHomeClosing } from './sections/SavingsClosurePanel';
 import { useState, useEffect, useRef, useMemo } from "react";
+import { homeRecentMovements } from "./ui/homeRecentMovements";
 import { detectFinancialAnomalies, anomaliesForAssistant } from "./finance/anomalyDetection.mjs";
 import { AnomaliesPanel, anomalySectionTitle } from "./sections/AnomaliesPanel";
 import { CatalogLabel } from "./icons/CatalogLabel";
@@ -2497,16 +2498,15 @@ export function HomePanel() {
             : participantName(d.from) + " " + L("ti deve"),
         };
       });
-    var sharePeriod = currentBalancePeriod || balancePeriodRangeForKey(
-      String(balancePeriodKey || curMonthKey || todayStr().slice(0, 7)),
-      balancePeriodMode,
-      financialMonthStartDay
+    // Use the current accounting engine: its boundaries are civil ISO strings.
+    var sharePeriod = currentBalancePeriod || accountingPeriod.forKey(
+      String(balancePeriodKey || curMonthKey || todayStr().slice(0, 7))
     );
     var monthTotal = (p.activities || [])
       .filter(function (a) {
         if (a.kind === "settlement") return false;
         var date = String(a.date || "").slice(0, 10);
-        return !!date && date >= String(sharePeriod.startIso || "") && date <= String(sharePeriod.endIso || "");
+        return !!date && date >= sharePeriod.start && date <= sharePeriod.end;
       })
       .reduce(function (sum, a) {
         return sum + safeNum(a.amount);
@@ -2808,7 +2808,7 @@ export function HomePanel() {
         style={{
           marginTop: 0,
           width: "100%",
-          height: "100%",
+          height: 82,
           minWidth: 0,
           minHeight: 0,
           flex: "1 1 auto",
@@ -3079,19 +3079,19 @@ export function HomePanel() {
                 alignItems: "center",
                 gap: 4,
                 marginTop: avOne ? 4 : avTall ? 9 : 5,
-                padding: avOne ? "3px 7px" : avTall ? "6px 9px" : "4px 8px",
+                padding: "11px 16px", minHeight: 44, justifyContent: "center",
                 borderRadius: 999,
                 background: "#7F77DD",
                 color: readableDarkText("#fff", dark, "#7F77DD"),
-                fontSize: avOne ? 9 : avTall ? 11 : 10,
+                fontSize: 14,
                 fontWeight: 900,
-                whiteSpace: "nowrap",
+                whiteSpace: "normal",
                 maxWidth: "100%",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
               }}
             >
-              🎙️ {av.speak}
+              🎙️ {{it: "Apri l'Agente", en: "Open the Agent", es: "Abrir el Agente", fr: "Ouvrir l'Agent", de: "Agent ?ffnen", pt: "Abrir o Agente", pl: "Otw?rz Agenta", nl: "Open de Agent", ro: "Deschide Agentul", el: "??????? ????????"}[lang || "it"] || "Open the Agent"}
             </div>
             )}
           </div>
@@ -3806,11 +3806,11 @@ export function HomePanel() {
     }
     if (w.type === "latest_expenses") {
       var n = Math.max(1, Number(w.params && w.params.count) || 5);
-      return listMovement((expenses || []).slice(0, n), true, compact);
+      return listMovement(homeRecentMovements(expenses, n), true, compact);
     }
     if (w.type === "latest_incomes") {
       var n2 = Math.max(1, Number(w.params && w.params.count) || 5);
-      return listMovement((incomes || []).slice(0, n2), false, compact);
+      return listMovement(homeRecentMovements(incomes, n2), false, compact);
     }
     if (w.type === "share_recent") {
       var p = selectedShareProject(w);
@@ -3907,23 +3907,23 @@ export function HomePanel() {
       var shareInfo = shareBalanceDetails(sp);
       var bal = shareInfo.balance;
       return (
-        <div style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "100%" }}>
+        <div style={{ minWidth: 0, overflow: "hidden", display: "flex", flexDirection: "column", height: "auto" }}>
           {!sp && emptyBox("Nessun progetto Share")}
           {sp && (
             <>
               <div
-                className="fai-ellipsis"
-                style={{ fontSize: compact ? 10 : 12, color: subC, marginBottom: compact ? 3 : 5, fontWeight: 800 }}
+
+                style={{ fontSize: compact ? 12 : 14, overflowWrap: "anywhere", color: subC, marginBottom: compact ? 3 : 5, fontWeight: 800 }}
               >
                 {sp.name}
               </div>
               <div
                 style={{
-                  fontSize: compact ? 20 : 26,
+                  fontSize: compact ? 24 : 30,
                   fontWeight: 950,
-                  lineHeight: 1.05,
+                  lineHeight: 1.2,
                   color: readableDarkText(bal > 0.009 ? incomeColor : bal < -0.009 ? expenseColor : textC, dark, "#35354a"),
-                  whiteSpace: "nowrap",
+                  whiteSpace: "normal", overflowWrap: "anywhere",
                 }}
               >
                 {smallDecimalNode(fmt(Math.abs(bal)), lang)}
@@ -3935,19 +3935,19 @@ export function HomePanel() {
                   gap: compact ? 3 : 5,
                   marginTop: compact ? 4 : 7,
                   minHeight: 0,
-                  flex: 1,
+                  flex: "0 0 auto",
                   overflow: "hidden",
                 }}
               >
                 {shareInfo.relations.length
-                  ? shareInfo.relations.slice(0, compact ? 1 : 2).map(function (r, i) {
+                  ? shareInfo.relations.map(function (r, i) {
                       var owe = r.direction === "owe";
                       return (
                         <div
                           key={i}
                           style={{
                             display: "grid",
-                            gridTemplateColumns: "minmax(0,1fr) auto",
+                            gridTemplateColumns: compact ? "minmax(0,1fr)" : "minmax(0,1fr) minmax(0,auto)",
                             gap: 6,
                             alignItems: "center",
                             minWidth: 0,
@@ -3955,19 +3955,16 @@ export function HomePanel() {
                           }}
                         >
                           <div style={{ minWidth: 0, lineHeight: 1.18 }}>
-                            <div style={{ fontSize: compact ? 9 : 10, color: subC, fontWeight: 800 }}>
+                            <div style={{ fontSize: compact ? 11 : 12, color: subC, fontWeight: 800 }}>
                               {owe ? L("Devi a") : L("Ti deve")}
                             </div>
                             <div
                               style={{
-                                fontSize: compact ? 10 : 11,
+                                fontSize: compact ? 12 : 13,
                                 color: textC,
                                 fontWeight: 900,
                                 whiteSpace: "normal",
                                 overflowWrap: "anywhere",
-                                display: "-webkit-box",
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: "vertical",
                                 overflow: "hidden",
                               }}
                             >
@@ -3977,8 +3974,8 @@ export function HomePanel() {
                           <strong
                             style={{
                               color: readableDarkText(owe ? expenseColor : incomeColor, dark, "#35354a"),
-                              whiteSpace: "nowrap",
-                              fontSize: compact ? 10 : 11,
+                              whiteSpace: "normal", overflowWrap: "anywhere",
+                              fontSize: compact ? 12 : 13,
                               alignSelf: "center",
                             }}
                           >
@@ -3988,7 +3985,7 @@ export function HomePanel() {
                       );
                     })
                   : (
-                    <div style={{ fontSize: compact ? 10 : 11, color: subC, marginTop: 2 }}>
+                    <div style={{ fontSize: compact ? 12 : 13, color: subC, marginTop: 2 }}>
                       {L("Tutto saldato")}
                     </div>
                   )}
@@ -4002,13 +3999,13 @@ export function HomePanel() {
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: 8,
-                  fontSize: compact ? 9 : 10,
+                  fontSize: compact ? 11 : 12,
                   color: subC,
                   flexShrink: 0,
                 }}
               >
                 <span>{L("Totale del mese")}</span>
-                <strong style={{ color: textC, whiteSpace: "nowrap", fontSize: compact ? 10 : 11 }}>
+                <strong style={{ color: textC, whiteSpace: "normal", overflowWrap: "anywhere", fontSize: compact ? 12 : 13 }}>
                   {smallDecimalNode(fmt(shareInfo.monthTotal), lang)}
                 </strong>
               </div>
@@ -4040,35 +4037,34 @@ export function HomePanel() {
               display: "flex",
               flexDirection: "column",
               justifyContent: "center",
-              gap: 7,
+              gap: 12,
               width: "100%",
-              height: "100%",
               minHeight: 0,
-              overflow: "hidden",
+              overflow: "visible",
               boxSizing: "border-box",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr",
+                gridTemplateColumns: "minmax(0,1fr)",
                 gap: 10,
                 minWidth: 0,
               }}
             >
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 8, lineHeight: 1, color: subC, fontWeight: 850, marginBottom: 3, whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 11, lineHeight: 1.35, color: subC, fontWeight: 850, marginBottom: 3, whiteSpace: "nowrap" }}>
                   {L("Pianificato")}
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.05, color: readableDarkText("#1D9E75", dark, "#35354a"), fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 18, lineHeight: 1.25, color: readableDarkText("#1D9E75", dark, "#35354a"), fontWeight: 950, whiteSpace: "normal", overflowWrap: "anywhere", fontVariantNumeric: "tabular-nums" }}>
                   {smallDecimalNode(fmt(b.saving), lang)}
                 </div>
               </div>
-              <div style={{ minWidth: 0, textAlign: "right" }}>
-                <div style={{ fontSize: 8, lineHeight: 1, color: subC, fontWeight: 850, marginBottom: 3, whiteSpace: "nowrap" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11, lineHeight: 1.35, color: subC, fontWeight: 850, marginBottom: 3, whiteSpace: "nowrap" }}>
                   {L("Reale")}
                 </div>
-                <div style={{ fontSize: 13, lineHeight: 1.05, color: readableDarkText(realPositive ? "#1D9E75" : "#E24B4A", dark, "#35354a"), fontWeight: 950, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ fontSize: 18, lineHeight: 1.25, color: readableDarkText(realPositive ? "#1D9E75" : "#E24B4A", dark, "#35354a"), fontWeight: 950, whiteSpace: "normal", overflowWrap: "anywhere", fontVariantNumeric: "tabular-nums" }}>
                   {smallDecimalNode(fmt(b.real), lang)}
                 </div>
               </div>
@@ -5219,186 +5215,12 @@ export function HomePanel() {
       isEditing = homeEditMode && premiumHome,
       showHeader =
         available || (!buttonType && !assistantType && homeShowTitle(w));
-    var countN = Math.max(1, Number(w.params && w.params.count) || 5);
-    function homeWorkletBaseHeight(type, size, countN) {
-      var compact = size === "0.5x";
-      if (type === "assistant_voice_widget") return assistantTall ? 196 : 100;
-      if (isHomeNavButton(type)) return 72;
-      if (compact) {
-        if (type === "quick_actions") return 106;
-        if (type === "summary") return 218;
-        if (type === "fidelity_card") return 220;
-        if (type === "share_balance") return 120;
-        if (type === "share_recent") return 136;
-        if (type === "shopping_list_widget") return 172;
-        if (type === "upcoming_scheduled_expenses") return 168;
-        if (type === "latest_expenses" || type === "latest_incomes")
-          return Math.min(260, 70 + countN * 38);
-        if (type === "income_vs_expense") return 168;
-        if (type === "monthly_balance") return 154;
-        if (type === "savings_progress") return 148;
-        if (
-          type === "distribution_expenses" ||
-          type === "expenses_by_area" ||
-          type === "expenses_by_category" ||
-          type === "monthlyized_expenses_by_area" ||
-          type === "monthlyized_expenses_by_category" ||
-          type === "incomes_by_type"
-        )
-          return 172;
-        if (type === "goal") return 112;
-        return 145;
-      }
-      if (type === "quick_actions") return 84;
-      if (type === "summary") return secondaryCurrency && secRate ? 226 : 166;
-      if (type === "fidelity_card") return 210;
-      if (type === "credit_card_widget") return 160;
-      if (
-        type === "note_widget" ||
-        type === "bank_coord_widget" ||
-        type === "shopping_list_widget"
-      )
-        return 170;
-      if (type === "upcoming_scheduled_expenses") return 184;
-      if (type === "share_recent") return 140;
-      if (type === "latest_expenses" || type === "latest_incomes")
-        return Math.min(
-          390,
-          72 + countN * (secondaryCurrency && secRate ? 50 : 42)
-        );
-      if (type === "income_vs_expense") return 216;
-      if (type === "monthly_balance") return 176;
-      if (type === "savings_progress") return 164;
-      if (type === "distribution_expenses") return 150;
-      if (
-        type === "expenses_by_area" ||
-        type === "expenses_by_category" ||
-        type === "monthlyized_expenses_by_area" ||
-        type === "monthlyized_expenses_by_category" ||
-        type === "incomes_by_type"
-      )
-        return 166;
-      if (type === "goal") return 106;
-      return 160;
-    }
-    var normalH = homeWorkletBaseHeight(w.type, size, countN);
-    var doubleHeightTypes = [
-      "quick_actions",
-      "summary",
-      "distribution_expenses",
-      "income_vs_expense",
-      "monthly_balance",
-      "latest_expenses",
-      "latest_incomes",
-      "share_recent",
-      "share_balance",
-      "planned_saving",
-      "fidelity_card",
-      "goal",
-      "expenses_by_area",
-      "expenses_by_category",
-      "monthlyized_expenses",
-      "monthlyized_expenses_by_area",
-      "monthlyized_expenses_by_category",
-      "incomes_by_type",
-      "budget_overview",
-      "budget_by_category",
-      "savings_progress",
-      "upcoming_scheduled_expenses",
-      "note_widget",
-      "bank_coord_widget",
-      "credit_card_widget",
-      "shopping_list_widget",
-    ];
-    var targetH = available
-      ? 118
-      : assistantType
-      ? assistantTall
-        ? 196
-        : 100
-      : buttonType
-      ? size === "2x"
-        ? 112
-        : 72
-      : size === "2x" && doubleHeightTypes.indexOf(w.type) >= 0
-      ? normalH * 2
-      : normalH;
-    if (!available && w.type === "monthly_balance" && size === "2x") targetH = 290;
-    if (!available && !buttonType && !homeShowTitle(w)) {
-      if (w.type === "quick_actions")
-        targetH = compact ? 94 : size === "2x" ? 128 : 66;
-      else if (w.type === "summary")
-        targetH = compact
-          ? secondaryCurrency && secRate
-            ? 232
-            : 174
-          : size === "2x"
-          ? secondaryCurrency && secRate
-            ? 350
-            : 286
-          : secondaryCurrency && secRate
-          ? 218
-          : 150;
-      else if (w.type === "distribution_expenses")
-        targetH = compact ? 150 : size === "2x" ? 280 : 136;
-      else if (w.type === "monthlyized_expenses")
-        targetH = compact ? 104 : size === "2x" ? 176 : 116;
-      else if (
-        w.type === "expenses_by_area" ||
-        w.type === "expenses_by_category" ||
-        w.type === "monthlyized_expenses_by_area" ||
-        w.type === "monthlyized_expenses_by_category" ||
-        w.type === "incomes_by_type"
-      )
-        targetH = compact ? 164 : size === "2x" ? 318 : 154;
-      else if (w.type === "income_vs_expense")
-        targetH = compact ? 158 : size === "2x" ? 350 : 204;
-      else if (w.type === "monthly_balance")
-        targetH = compact ? 132 : size === "2x" ? 260 : 154;
-      else if (w.type === "savings_progress")
-        targetH = compact ? 142 : size === "2x" ? 300 : 142;
-      else if (w.type === "goal")
-        targetH = compact ? 102 : size === "2x" ? 150 : 92;
-      else if (w.type === "upcoming_scheduled_expenses")
-        targetH = compact ? 154 : size === "2x" ? 330 : 172;
-      else targetH = Math.max(72, targetH - 30);
-    }
-    if (isEditing && !available && compact) targetH += 22;
-    // Il riepilogo contiene quattro StatCard. La sua altezza minima deve dipendere
-    // dal numero reale di righe e dalla presenza della valuta secondaria; in caso
-    // contrario l’ultima riga viene tagliata dal contenitore del worklet.
-    if (!available && !buttonType && w.type === "summary") {
-      var summaryHasSecondary = !!(secondaryCurrency && secRate);
-      // Deve coincidere con le minHeight reali di StatCard (96/78px),
-      // più il padding verticale del worklet: altrimenti l'ultima riga viene tagliata.
-      var summaryCardHeight = compact ? 34 : size === "2x" ? (isMobile ? 142 : 128) : 62;
-      var summaryColumns = compact ? 1 : isMobile ? 2 : 4;
-      var summaryRows = Math.ceil(4 / summaryColumns);
-      var summaryGap = compact ? 6 : 8;
-      var summaryPadding = compact ? 16 : size === "2x" ? (isMobile ? 54 : 36) : 24;
-      var summaryHeaderHeight = homeShowTitle(w) ? (size === "2x" ? 38 : 30) : 0;
-      var summaryRequiredHeight =
-        summaryRows * summaryCardHeight +
-        Math.max(0, summaryRows - 1) * summaryGap +
-        summaryPadding +
-        summaryHeaderHeight;
-      targetH = Math.max(targetH, summaryRequiredHeight);
-      if (size === "2x" && isMobile) targetH = Math.max(targetH, homeShowTitle(w) ? 388 : 350);
-    }
-    if (!available && w.type === "monthlyized_expenses") {
-      targetH = (compact ? 142 : size === "2x" ? 202 : 160) - (homeShowTitle(w) ? 0 : 24);
-    }
-    // Fidelity: dimensioni compatte per mostrare tutto il codice senza scroll.
-    if (!available && w.type === "fidelity_card") {
-      targetH = size === "2x" ? 202 : compact ? 142 : 160;
-    }
-    var rowSpan = Math.max(3, Math.ceil((targetH + 14) / (8 + 14)));
     var payload = available
       ? { source: "library", type: w.type }
       : { source: "active", index: index, id: w.id };
     var common = {
       gridColumn: span,
-      gridRowEnd: "span " + rowSpan,
+      alignSelf: "stretch",
       background: bg,
       borderRadius: 16,
       border:
@@ -5433,7 +5255,7 @@ export function HomePanel() {
       opacity: available ? (assistantType ? 0.96 : 0.52) : 1,
       position: "relative",
       cursor: isEditing ? (homeDragging ? "grabbing" : "grab") : "default",
-      minHeight: targetH,
+      minHeight: available ? 118 : assistantType ? (assistantTall ? 196 : 112) : 0,
       boxSizing: "border-box",
       display: "flex",
       flexDirection: "column",
@@ -5714,11 +5536,7 @@ export function HomePanel() {
           <div
             style={{
               pointerEvents: "auto",
-              flex:
-                homeShowTitle(w) ||
-                !(w.type === "quick_actions" || w.type === "summary")
-                  ? 1
-                  : "0 0 auto",
+              flex: "0 0 auto",
               minWidth: 0,
               minHeight: w.type === "fidelity_card" || w.type === "monthlyized_expenses" ? 0 : undefined,
               overflowY:
@@ -6726,7 +6544,7 @@ export function HomePanel() {
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(4,minmax(0,1fr))",
-          gridAutoRows: 8,
+          gridAutoRows: "auto",
           gridAutoFlow: "row",
           gap: 14,
         }}
@@ -6849,8 +6667,8 @@ export function HomePanel() {
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(4,minmax(0,1fr))",
-              gridAutoRows: 8,
-              gridAutoFlow: "row dense",
+              gridAutoRows: "auto",
+              gridAutoFlow: "row",
               gap: 14,
             }}
           >

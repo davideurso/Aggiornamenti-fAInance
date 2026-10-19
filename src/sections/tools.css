@@ -2,11 +2,11 @@
 .fainance-tools * { box-sizing:border-box; }
 .fainance-tools h2 { font-size:23px; margin:0; }
 .fainance-tools h3 { margin:0 0 14px; font-size:17px; }
-.fainance-tools button { cursor:pointer; border:1px solid var(--tool-border); border-radius:12px; background:var(--tool-card); color:var(--tool-text); font:inherit; font-size:13px; padding:10px 13px; min-height:40px; overflow-wrap:anywhere; }
-.fainance-tools button:disabled { opacity:.4; cursor:default; }
-.fainance-tools button:focus-visible,.fainance-tools input:focus-visible { outline:2px solid var(--tool-primary); outline-offset:2px; }
-.fainance-tools input,.fainance-tools select { min-width:0; width:100%; padding:11px; font:inherit; color:var(--tool-text); border:1px solid var(--tool-border); border-radius:11px; background:var(--tool-card); }
-.fainance-tools label { display:grid; gap:5px; color:var(--tool-sub); font-size:12px; }
+.fainance-tools button:not(.fainance-entry-form *) { cursor:pointer; border:1px solid var(--tool-border); border-radius:12px; background:var(--tool-card); color:var(--tool-text); font:inherit; font-size:13px; padding:10px 13px; min-height:40px; overflow-wrap:anywhere; }
+.fainance-tools button:not(.fainance-entry-form *):disabled { opacity:.4; cursor:default; }
+.fainance-tools button:not(.fainance-entry-form *):focus-visible,.fainance-tools input:not(.fainance-entry-form *):focus-visible { outline:2px solid var(--tool-primary); outline-offset:2px; }
+.fainance-tools input:not(.fainance-entry-form *),.fainance-tools select:not(.fainance-entry-form *) { min-width:0; width:100%; padding:11px; font:inherit; color:var(--tool-text); border:1px solid var(--tool-border); border-radius:11px; background:var(--tool-card); }
+.fainance-tools label:not(.fainance-entry-form *) { display:grid; gap:5px; color:var(--tool-sub); font-size:12px; }
 .fainance-tools .tool-heading { display:flex; align-items:center; gap:12px; margin-bottom:18px; }
 .fainance-tools .tool-heading>span { background:var(--tool-soft); padding:12px; border-radius:17px; font-size:26px; }
 .fainance-tools .tool-heading p { margin:4px 0 0; font-size:12px; color:var(--tool-sub); }

@@ -7,7 +7,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   plugins: {
     FirebaseAuthentication: {
-      authDomain: 'fainance-a7794.firebaseapp.com',
+      authDomain: 'auth.fainanceapp.it',
       skipNativeAuth: true,
       providers: ['google.com', 'apple.com'],
     },
