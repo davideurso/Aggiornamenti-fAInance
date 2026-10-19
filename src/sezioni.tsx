@@ -6456,43 +6456,21 @@ export function HomePanel() {
                 <span style={{ fontSize: 13, fontWeight: 800 }}>
                   {card.title}
                 </span>
-                <button
-                  type="button"
-                  aria-label={L("Nascondi consiglio")}
-                  title={L("Nascondi consiglio")}
-                  onPointerDown={function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dismissHomeAdvice(card.id);
-                  }}
-                  style={{
-                    marginLeft: "auto",
-                    width: 26,
-                    height: 26,
-                    minWidth: 26,
-                    borderRadius: 999,
-                    border: 0,
-                    padding: 0,
-                    background: "#FEE2E2",
-                    color: readableDarkText("#E24B4A", dark, "#FEE2E2"),
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 18,
-                    fontWeight: 900,
-                    lineHeight: 1,
-                    cursor: "pointer",
-                    position: "relative",
-                    zIndex: 2,
-                  }}
+                <span
+                  style={{ marginLeft: "auto", flexShrink: 0 }}
+                  onPointerDown={function (e) { e.preventDefault(); e.stopPropagation(); }}
+                  onKeyDown={function (e) { e.stopPropagation(); }}
                 >
-                  ×
-                </button>
-                <span style={{ color: subC }}>›</span>
+                  <PopupCloseButton
+                    dark={dark}
+                    label={L("Nascondi consiglio")}
+                    onClick={function (e) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      dismissHomeAdvice(card.id);
+                    }}
+                  />
+                </span>
               </div>
             );
           })}

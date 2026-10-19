@@ -1781,7 +1781,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     const previous = localStorage.getItem(marker);
     const eligible = previous === "pending" || (previous !== "done" && localStorage.getItem(userKey("account_sync_pending_v1")) === "1");
     legacyCatalogUpgradeRef.current = { uid:String(userId), marker, eligible };
-    localStorage.setItem(marker, eligible ? "pending" : "done");
+    // A migration hint is best-effort. A full local store must never abort
+    // React rendering; keep eligibility in the ref and preserve the durable journal.
+    try {
+      const nextMarker = eligible ? "pending" : "done";
+      if (previous !== nextMarker) localStorage.setItem(marker, nextMarker);
+    } catch (_markerStorageError) {}
   }
   var postHydrationSyncRequestedRef = useRef(false);
   var accountSyncErrorToastAtRef = useRef(0);
@@ -3590,7 +3595,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     const count = migrateLegacyCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"), userKey, catalog, legacyCatalogWritePending(), readUserLocalUpdatedAt);
     if (count) { postHydrationSyncRequestedRef.current = true; markPendingAccountSync(); }
     if (catalog.expenseCatalog?.data && catalog.paymentCatalog?.data && catalog.incomeCatalog?.data) {
-      localStorage.setItem(upgrade.marker, "done"); upgrade.eligible = false;
+      // migrateLegacyCatalogEdits above must succeed before marking completion.
+      // Failure to persist this redundant hint must not abort account hydration.
+      try { localStorage.setItem(upgrade.marker, "done"); } catch (_markerStorageError) {}
+      upgrade.eligible = false;
     }
   }
   function catalogMutationValue(key, requested, keys, fromUser) {
@@ -23585,6 +23593,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             });
         } catch (e) {}
       }
+      var slotObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(showAtMeasuredSlot) : null;
+      if (slotObserver && topAdBoxRef.current) {
+        slotObserver.observe(topAdBoxRef.current);
+        if (topAdBoxRef.current.parentElement) slotObserver.observe(topAdBoxRef.current.parentElement);
+      }
       var t1 = setTimeout(showAtMeasuredSlot, 120);
       var t2 = setTimeout(showAtMeasuredSlot, 520);
       var t3 = setTimeout(showAtMeasuredSlot, 1200);
@@ -23600,6 +23613,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
+        if (slotObserver) slotObserver.disconnect();
         try {
           window.removeEventListener("resize", showAtMeasuredSlot);
         } catch (e) {}
@@ -23627,6 +23641,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return (
       <div
         ref={topAdBoxRef}
+        data-fainance-ad-slot="true"
         style={{
           position: "relative",
           height: topAdSlotHeight,
