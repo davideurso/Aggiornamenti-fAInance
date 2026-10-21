@@ -1,3 +1,5 @@
+import {useNotificationArrivalOrder} from './useNotificationArrivalOrder';
+import {spendingAlertNotices} from '../finance/spendingAlerts.js';
 import { createPortal } from "react-dom";
 import { SummaryActions } from "../ui/AppSummaryHeader";
 import { RichNotification } from "./RichNotification";
@@ -105,6 +107,17 @@ function useNotificationItems(userId: string) {
     return watchAppNotifications(String(userId || ""), setItems, () => undefined);
   }, [userId]);
   return [items, setItems] as const;
+}
+
+function useSpendingAlertNotificationItems(userId:string):AppNotificationRecord[]{
+ const ctx:any=useApp();
+ return useMemo(()=>spendingAlertNotices({rows:ctx.allTriggeredAlertsData||[],seen:ctx.shownAlertIds||[],dismissed:ctx.notifPrefs?.spendingAlertDismissedKeys||[],userId}) as AppNotificationRecord[],[userId,ctx.allTriggeredAlertsData,ctx.shownAlertIds,ctx.notifPrefs?.spendingAlertDismissedKeys]);
+}
+function updateSpendingAlertNotification(ctx:any,item:AppNotificationRecord,action:"read"|"dismiss"){
+ const key=String(item.actionValue||"");
+ const row=(ctx.allTriggeredAlertsData||[]).find((value:any)=>String(value._alertKey)===key);
+ if(row&&typeof ctx.markAlertsSeen==="function")ctx.markAlertsSeen([row]);
+ if(action==="dismiss"&&typeof ctx.setNotifPrefs==="function")ctx.setNotifPrefs((previous:any)=>({...previous,spendingAlertDismissedKeys:[...new Set([...(previous?.spendingAlertDismissedKeys||[]),key])].slice(-200)}));
 }
 
 function useRecurringNotificationItems(userId: string): AppNotificationRecord[] {
@@ -259,7 +272,8 @@ function NotificationRows({
     setDeleteError("");
     setDeletingId(item.id);
     try {
-      if (item.type === "period_closure") updateClosureNotification(ctx, item, "dismiss");
+      if(item.type==="spending_alert")updateSpendingAlertNotification(ctx,item,"dismiss");
+      else if (item.type === "period_closure") updateClosureNotification(ctx, item, "dismiss");
       else await deleteAppNotification(userId, item.id);
     } catch (_deleteError: any) {
       // FAINANCE V113: never expose raw Firebase/provider text in a different language.
@@ -321,7 +335,8 @@ function NotificationRows({
             <button
               type="button"
               onClick={async () => {
-                if (item.type === "period_closure") {
+                if(item.type==="spending_alert"){updateSpendingAlertNotification(ctx,item,"read");ctx.setTab?.("alerts");onOpen?.(item);}
+                else if (item.type === "period_closure") {
                   if (!item.read) updateClosureNotification(ctx, item, "read");
                   window.dispatchEvent(new CustomEvent("fainance:open-period-closure", {
                     detail: { periodKey: String(item.actionValue || "") },
@@ -423,7 +438,8 @@ export function NotificationInboxSettingsCard({ userId }: { userId: string }) {
   const ctx: any = useApp();
   const [storedItems, setStoredItems] = useNotificationItems(userId);
   const closureItems = usePeriodClosureNotice(userId);
-  const items = useMemo(() => [...closureItems, ...storedItems].sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)), [closureItems, storedItems]);
+  const spendingItems = useSpendingAlertNotificationItems(userId);
+  const items = useNotificationArrivalOrder([...spendingItems, ...closureItems, ...storedItems],userId);
   const L = (text: string) =>
     ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
   const dark = !!ctx.dark;
@@ -436,7 +452,8 @@ export function NotificationInboxSettingsCard({ userId }: { userId: string }) {
   if (!userId) return null;
 
   async function markAllRead() {
-    const pending = unread.filter((item) => item.type !== "period_closure");
+    const pending = unread.filter((item) => !item.virtual);
+    spendingItems.filter((item)=>!item.read).forEach(item=>updateSpendingAlertNotification(ctx,item,"read"));
     closureItems.filter((item) => !item.read).forEach((item) => updateClosureNotification(ctx, item, "read"));
     setStoredItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
     await Promise.all(pending.map((item) => markAppNotificationRead(userId, item.id, true).catch(() => undefined)));
@@ -538,10 +555,8 @@ export function NotificationCenter({
   const [storedItems, setStoredItems] = useNotificationItems(userId);
   const recurringItems = useRecurringNotificationItems(userId);
   const closureItems = usePeriodClosureNotice(userId);
-  const items = useMemo(
-    () => [...closureItems, ...recurringItems, ...storedItems].sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0)),
-    [closureItems, recurringItems, storedItems],
-  );
+  const spendingItems = useSpendingAlertNotificationItems(userId);
+  const items = useNotificationArrivalOrder([...spendingItems, ...closureItems, ...recurringItems, ...storedItems],userId);
   const [open, setOpen] = useState(false);
   const [closurePeriodKey, setClosurePeriodKey] = useState("");
   const [mundelyRequests, setMundelyRequests] = useState<MundelyLinkRequest[]>([]);
@@ -660,6 +675,7 @@ export function NotificationCenter({
 
   async function markAllRead() {
     const pending = unreadStored.slice();
+    spendingItems.filter((item)=>!item.read).forEach(item=>updateSpendingAlertNotification(ctx,item,"read"));
     closureItems.filter((item) => !item.read).forEach((item) => updateClosureNotification(ctx, item, "read"));
     setStoredItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
     await Promise.all(pending.map((item) => markAppNotificationRead(userId, item.id, true).catch(() => undefined)));

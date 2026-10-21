@@ -1,3 +1,4 @@
+import {PopupCloseButton} from '../../ui/PopupCloseButton';
 import React, { forwardRef, useLayoutEffect, useRef, useState } from 'react';
 import * as original from 'react/jsx-runtime';
 import { canonicalText, canonicalHtml, emojiParts, plainIconText } from '../canonicalEmoji';
@@ -5,19 +6,12 @@ export { Fragment } from 'react/jsx-runtime';
 export type { JSX } from 'react/jsx-runtime';
 // Keep native select behavior (keyboard, focus, value and events). Its selected
 // icon is our bundled image; native option labels use text rather than OS emoji.
-const CanonicalSelect = forwardRef<HTMLSelectElement, any>(function CanonicalSelect(props, forwarded) {
-  const own = useRef<HTMLSelectElement>(null);
-  const [icon,setIcon] = useState('');
-  const update = () => { const el=own.current; const option=el?.selectedOptions?.[0]; const next=option?.getAttribute('data-fainance-option-icon') || ''; setIcon(old => old === next ? old : next); };
-  useLayoutEffect(update);
-  const ref = (node: HTMLSelectElement | null) => { own.current=node; if(typeof forwarded==='function')forwarded(node); else if(forwarded)(forwarded as any).current=node; };
-  const style = icon ? {...props.style,backgroundImage:`url("${icon}")`,backgroundRepeat:'no-repeat',backgroundPosition:'12px center',backgroundSize:'1.1em 1.1em',paddingLeft:'2.2em'} : props.style;
-  return original.jsx('select', {...props,ref,style,onChange:(event:any) => { props.onChange?.(event); update(); }});
-});
+import {CanonicalSelect} from './CanonicalSelect';
 function strings(children:any):string { return Array.isArray(children) ? children.map(strings).join('') : typeof children==='string'||typeof children==='number' ? String(children) : ''; }
 function normalize(type:any,props:any): [any,any] {
   if (!props || typeof type !== 'string') return [type,props];
-  if(type==='button' && typeof props.children==='string' && ['×','✕','☰'].includes(props.children.trim()) && !props['aria-label'] && !props['aria-labelledby'])props={...props,'aria-label':props.children.trim()};
+  if(type==='button' && typeof props.children==='string' && ['☰'].includes(props.children.trim()) && !props['aria-label'] && !props['aria-labelledby'])props={...props,'aria-label':props.children.trim()};
+  if(type==='button' && typeof props.children==='string' && ['\u00d7','\u2715','\u2716'].includes(props.children.trim())) return [PopupCloseButton,{...props,label:props['aria-label']||props.title||'Chiudi'}];
   const scrim = props.style;
   if (scrim?.position === 'fixed' && (scrim.inset === 0 || scrim.inset === '0') && /^rgba\(/.test(String(scrim.background || scrim.backgroundColor || ''))) props={...props,'data-fainance-overlay':'true'};
   if (type === 'select') return [CanonicalSelect,props];

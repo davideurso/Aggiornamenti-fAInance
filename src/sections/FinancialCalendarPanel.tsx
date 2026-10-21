@@ -1,3 +1,4 @@
+import { FinancialForecastPanel, forecastWords } from './FinancialForecastPanel';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useApp } from '../core';
 import { buildFinancialCalendar, calendarMonthDays, summarizeFinancialCalendarEntries, calendarPayerName } from '../finance/financialCalendar.js';
@@ -360,6 +361,7 @@ export function FinancialCalendarPanel() {
   const monthExpense = monthTotals.expense / 100;
   const monthBalance = (monthTotals.income - monthTotals.expense) / 100;
   const day = visibleDays.find(item => item.date === selected) || visibleDays[0];
+  const cumulativeChange = Math.round((day.balance - data.openingBalance)*100)/100;
   const firstWeekday = dates.length
     ? (new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1)).getUTCDay() + 6) % 7
     : 0;
@@ -513,6 +515,10 @@ export function FinancialCalendarPanel() {
         <span>{words.dailyNet}</span>
         <strong className="fc-balance">{money(Math.abs(day.change))}</strong>
       </div>
+      <div className="fc-day-balance fc-cumulative">
+        <span>{forecastWords(c.lang || 'it')[11]}</span>
+        <strong className={cumulativeChange < 0 ? 'fc-negative' : 'fc-balance'}>{cumulativeChange < 0 ? '−' : ''}{money(cumulativeChange)}</strong>
+      </div>
       <div className="fc-day-flows" role="group" aria-label={words.dailyNet}>
         <span><i className="fc-dot-in" aria-hidden="true" />{words.dailyIncome} <strong className="fc-positive">{money(day.income)}</strong></span>
         <span><i className="fc-dot-out" aria-hidden="true" />{words.dailyExpense} <strong className="fc-negative">{money(day.expense)}</strong></span>
@@ -546,6 +552,7 @@ export function FinancialCalendarPanel() {
 
     </div>
 
+    <FinancialForecastPanel />
     <details className="fc-info">
       <summary><span aria-hidden="true">ⓘ</span> {words.infoTitle}</summary>
       <p>{words.note}</p>

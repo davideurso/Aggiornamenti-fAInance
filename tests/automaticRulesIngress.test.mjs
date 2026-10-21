@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+import {evaluateAutomaticRules} from '../src/finance/automaticRules.js';
+const source=fs.readFileSync('src/app.tsx','utf8'),tree=ts.createSourceFile('app.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const names=['prepareAutomaticMovements','approveAutomaticAlerts','addExpenses','addIncomes','confirmRecurring'];const chunks=[];
+function visit(node){if(ts.isFunctionDeclaration(node)&&names.includes(node.name?.text))chunks.push(node.getText(tree));ts.forEachChild(node,visit);}visit(tree);assert.equal(chunks.length,5);
+const rule={id:'r',kind:'automatic-v1',name:'Biliardo',enabled:true,priority:0,revision:0,trigger:'movement',match:'all',conditions:[{field:'description',operator:'contains',value:'biliardo'}],actions:[{field:'payment',value:3}],alert:{kind:'confirmation',text:'Confermi?'}};
+let expenses=[],incomes=[],accepted=false,consumed=0,prompted=0;
+const noop=()=>{};
+const context={evaluateAutomaticRules,financeEvolutionRef:{current:{rules:[rule]}},currentPlan:'premium',cats:[{id:1}],methods:[{id:1},{id:3}],incomeTypes:[{id:'salary'}],window:{confirm:()=>{prompted++;return accepted;},alert:noop},setExpenses:fn=>{expenses=fn(expenses);},setIncomes:fn=>{incomes=fn(incomes);},setToast:noop,parseMoney:Number,expenseWithMethodSnapshot:x=>x,bulkMovementRowLimit:()=>10,canUsePlanFeature:()=>true,rewardedFeatureConfig:()=>null,consumePlanFeature:()=>{consumed++;},singleMovementSuccessToast:noop,successToastForFeature:noop,limitedFeatureSuccessToast:noop,bulkMovementSuccessToast:noop,setVoiceModal:noop,setVoiceListening:noop,setVoiceText:noop,setVoiceParsed:noop,setVoiceError:noop,setTab:noop,setHistoryTab:noop,lang:'it',rulesText:()=>'',Date,Math};
+Object.assign(context,{startAnalyticsFlow:noop,finishAnalyticsFlow:noop});
+Object.defineProperties(context,{expenses:{get:()=>expenses},incomes:{get:()=>incomes}});
+vm.createContext(context);vm.runInContext(chunks.join('\n'),context);
+const input={id:1,desc:'Biliardo',amount:12,catId:1,methodId:1,date:'2026-09-15',_ruleDefaultFields:['methodId']};
+assert.equal(context.addExpenses([input],'manual'),false);assert.equal(expenses.length,0);assert.equal(consumed,0);assert.equal(prompted,1,'One confirmation before saving');
+accepted=true;assert.equal(context.addExpenses([input],'manual'),true);assert.equal(expenses.length,1);assert.equal(expenses[0].methodId,3);assert.equal(consumed,1);assert(!('_ruleDefaultFields' in expenses[0]));
+accepted=false;assert.equal(context.addIncomes([{...input,type:'salary'}],'voice'),false);assert.equal(incomes.length,0);assert.equal(consumed,1);
+const before=prompted;context.addExpenses([{...input,id:2}],'import');assert.equal(prompted,before);assert.equal(expenses[0].methodId,1,'Imports never reapply rules');
+accepted=true;context.addExpenses([{...input,id:3,_ruleDefaultFields:[]}],'assistant');assert.equal(expenses[0].methodId,1,'AI explicit values preserved');
+context.addExpenses([{...input,id:4},{...input,id:5}],'bulk');assert.equal(expenses.length,5);assert.equal(prompted,before+2,'One alert per matching rule in a batch');
+console.log('Real app ingress: rejected confirmation keeps data and quota unchanged; manual, income/voice, AI, bulk and import paths passed');
+
+let recurring=[{id:9,confirmed:[]}];
+Object.assign(context,{planLimits:{recurringMovements:true},curMonthKey:'2026-09',accountingDate:'2026-09-15',accountingPeriod:{settings:{}},recurringDueOccurrences:()=>[{_occurrenceKey:'2026-09',_occurrenceDate:'2026-09-15'}],setRecurring:fn=>{recurring=fn(recurring);}});
+const recurringInput={id:9,rtype:'expense',name:'Biliardo',amount:12,catId:1,methodId:1};
+accepted=false;const expenseCount=expenses.length;context.confirmRecurring(recurringInput,'2026-09');assert.equal(expenses.length,expenseCount);assert.equal(recurring[0].confirmed.length,0);
+accepted=true;context.confirmRecurring(recurringInput,'2026-09');assert.equal(expenses.length,expenseCount+1);assert.equal(expenses[0].methodId,1);assert.equal(recurring[0].confirmed.length,1);
+console.log('Recurring confirmation also honors rules and cancellation without losing the occurrence');
+// The real income save path uses the category filter before amount alternatives.
+context.financeEvolutionRef.current.rules=[{...rule,trigger:'income',categoryFilter:{direction:'income',value:'salary'},match:'any',conditions:[{field:'amount',operator:'less',value:1000},{field:'amount',operator:'greater',value:10000}],actions:[{field:'alert',kind:'confirmation',text:'Confermi lo stipendio?'}],alert:null}];
+accepted=false;const promptsBefore=prompted,incomesBefore=incomes.length;
+assert.equal(context.addIncomes([{id:90,type:'salary',amount:900}],'manual'),false);assert.equal(prompted,promptsBefore+1);assert.equal(incomes.length,incomesBefore);
+assert.equal(context.addIncomes([{id:91,type:'salary',amount:1850}],'manual'),true);assert.equal(prompted,promptsBefore+1);
+assert.equal(context.addIncomes([{id:92,type:'gift',amount:900}],'manual'),true);assert.equal(prompted,promptsBefore+1);
+accepted=true;assert.equal(context.addIncomes([{id:93,type:'salary',amount:15000}],'manual'),true);assert.equal(prompted,promptsBefore+2);
+console.log('Real income save: salary confirmation outside bounds only; cancellation and other categories verified');

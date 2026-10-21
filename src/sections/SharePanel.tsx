@@ -4026,9 +4026,9 @@ export function SharePanel() {
               <div>
                 <div style={{ fontSize: 12, fontWeight: 850, color: subC, marginBottom: 6 }}>{L("Categoria personale per le mie statistiche")}</div>
                 <select value={shareCategoryMappingDraft} onChange={function (e) { setShareCategoryMappingDraft(e.target.value); }} style={{ ...sinp, width: "100%", boxSizing: "border-box", borderRadius: 16, padding: "13px 14px", border: "1px solid " + (dark ? "#806318" : "#E4BF60"), background: dark ? "#302816" : "#FFF9EC", boxShadow: dark ? "none" : "0 8px 18px rgba(223,175,58,0.14)", fontWeight: 700, fontSize: 14 }}>
-                  <option value="">{(shareDefaultPersonalCategory ? shareDefaultPersonalCategory.name : L("Altro")) + " (" + L("categoria Default") + ")"}</option>
+                  <option value="" data-fainance-icon-ref={(shareDefaultPersonalCategory as any).icon || "\u{1F4C1}"}>{(shareDefaultPersonalCategory ? shareDefaultPersonalCategory.name : L("Altro")) + " (" + L("categoria Default") + ")"}</option>
                   {personalShareCategories.map(function (personalCategory) {
-                    return <option key={personalCategory.id} value={String(personalCategory.id)}>{personalCategory.icon || "🏷️"} {personalCategory.name}</option>;
+                    return <option key={personalCategory.id} value={String(personalCategory.id)} data-fainance-icon-ref={(personalCategory as any).icon || "\u{1F4C1}"}>{personalCategory.icon || "🏷️"} {personalCategory.name}</option>;
                   })}
                 </select>
               </div>
@@ -5466,7 +5466,7 @@ export function SharePanel() {
                             <option value="">{L("Senza categoria")}</option>
                             {projectShareCategories.map(function (category) {
                               return (
-                                <option key={category.id} value={String(category.id)}>
+                                <option key={category.id} value={String(category.id)} data-fainance-icon-ref={(category as any).icon || "\u{1F4C1}"}>
                                   {category.icon || "🏷️"} {category.name}
                                 </option>
                               );
@@ -6641,7 +6641,7 @@ export function SharePanel() {
                             <option value="">{L("Tutte le categorie")}</option>
                             {projectShareCategories.map(function (category) {
                               return (
-                                <option key={category.id} value={category.id}>
+                                <option key={category.id} value={category.id} data-fainance-icon-ref={(category as any).icon || "\u{1F4C1}"}>
                                   {category.name}
                                 </option>
                               );

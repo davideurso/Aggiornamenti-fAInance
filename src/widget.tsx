@@ -1,3 +1,6 @@
+import {spendingAlertSnapshot,suggestedAlertBudget} from './finance/spendingAlerts.js';
+import {PopupCloseButton} from './ui/PopupCloseButton';
+export {PopupCloseButton} from './ui/PopupCloseButton';
 import { financeMessage } from "./i18n/financeMessages";
 import { focusFainanceInput } from "./utils/appRuntime";
 import { findImportCurrencyColumn, convertImportedCurrencyRows, importedCurrencyFields, assertImportCurrencyContext } from "./data/importCurrency";
@@ -973,35 +976,6 @@ function iconTextValue(v) {
   return isCustomIconValue(x) ? "▧" : x;
 }
 
-export function PopupCloseButton({ onClick, dark, label }) {
-  return (
-    <button
-      data-fainance-popup-close="true"
-      type="button"
-      onClick={onClick}
-      aria-label={label || "Chiudi"}
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 9,
-        border: "1px solid #FCA5A5",
-        background: "#FFF0F0",
-        color: readableDarkText("#F87171", dark, "#FFF0F0"),
-        fontSize: 14,
-        fontWeight: 950,
-        lineHeight: 1,
-        cursor: "pointer",
-        boxShadow: "0 3px 10px #F871712B",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-      }}
-    >
-      ×
-    </button>
-  );
-}
 
 function fainancePopupSurfaceStyle(dark, variant) {
   if (variant === "info") {
@@ -2371,13 +2345,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
         setHue(hsv.h);
         setSaturation(hsv.s);
         setBrightness(hsv.v);
-        setMode(
-          (COLORS || []).slice(0, 10).some(function (c) {
-            return normalizeHtmlColor(c) === next;
-          })
-            ? "preset"
-            : "custom"
-        );
+        setMode("preset");
         dragRef.current = "";
       }
     },
@@ -2544,7 +2512,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                 gap: 10,
               }}
             >
-              {COLORS.slice(0, 10).map(function (c) {
+              {COLORS.slice(0, 15).map(function (c) {
                 var active =
                   normalizeHtmlColor(value) === normalizeHtmlColor(c);
                 return (
@@ -3259,19 +3227,19 @@ export function Toast({ msg, onDone, color }) {
 }
 
 export function AlertPopup({ newAlerts, onClose }) {
-  var ctx = useApp();
+  var ctx:any = useApp();
   var { fmt } = ctx;
   function L(s) {
     return translateFainanceText(s, (ctx && ctx.lang) || "it");
   }
   if (!newAlerts || !newAlerts.length) return null;
-  return (
-    <div
+  return createPortal((
+    <div role="alertdialog" aria-modal="true" aria-label={L("Alert superato!")} data-spending-alert-popup="true"
       style={{
         position: "fixed",
         inset: 0,
         background: "rgba(0,0,0,0.55)",
-        zIndex: 500,
+        zIndex: 2147483400,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -3313,22 +3281,8 @@ export function AlertPopup({ newAlerts, onClose }) {
                 : String(newAlerts.length) + " " + L("nuove soglie superate")}
             </div>
           </div>
-          <button
-            onClick={function () {
-              onClose(newAlerts);
-            }}
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              border: "none",
-              borderRadius: 8,
-              color: readableDarkText("#fff", (ctx as any).dark, "rgba(255,255,255,0.2)"),
-              fontSize: 18,
-              cursor: "pointer",
-              padding: "4px 10px",
-            }}
-          >
-            x
-          </button>
+          <PopupCloseButton onClick={()=>onClose(newAlerts)} dark={ctx.dark} label={L("Chiudi")} />
+
         </div>
         <div
           style={{ padding: "16px 20px", maxHeight: 340, overflowY: "auto" }}
@@ -3440,7 +3394,7 @@ export function AlertPopup({ newAlerts, onClose }) {
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 // ── FORMS ────────────────────────────────────────────────────────────────────
@@ -3919,9 +3873,8 @@ export function MovementAmountPanel({ value, setValue, type, inputRef, fieldId, 
               }}
             />
           </div>
-          {showAmountPlaceholder && (
-            <div
-              style={{
+          <div
+              style={{ visibility: showAmountPlaceholder ? "visible" : "hidden", minHeight: 18, lineHeight: "18px",
                 fontSize: isMobile ? 14.6 : 16,
                 color: readableDarkText(whiteSoft, dark, amountGradient),
                 fontWeight: 600,
@@ -3930,7 +3883,6 @@ export function MovementAmountPanel({ value, setValue, type, inputRef, fieldId, 
             >
               {TL("Inserisci l'importo")}
             </div>
-          )}
           {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
             <div style={{ fontSize: isMobile ? 11.6 : 12, color: readableDarkText(whiteSoft, dark, amountGradient), marginTop: 3 }}>
               ≈ {smallDecimalNode(formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
@@ -4100,7 +4052,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
               >
                 {sCats.map(function (c) {
                   return (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                       {iconTextValue(c.icon)} {c.name}
                     </option>
                   );
@@ -4155,7 +4107,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
               >
                 {sMethods.map(function (m) {
                   return (
-                    <option key={m.id} value={m.id}>
+                    <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                       {iconTextValue(m.icon)} {m.name}
                     </option>
                   );
@@ -4558,7 +4510,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
           >
             {sIncomeTypes.map(function (it) {
               return (
-                <option key={it.id} value={it.id}>
+                <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
                   {it.icon} {it.name}
                 </option>
               );
@@ -6366,7 +6318,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
             >
               {sCats.map(function (c) {
                 return (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                     {iconTextValue(c.icon)} {c.name}
                   </option>
                 );
@@ -6388,7 +6340,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
             >
               {sMethods.map(function (m) {
                 return (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                     {iconTextValue(m.icon)} {m.name}
                   </option>
                 );
@@ -6826,11 +6778,9 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                       onChange={function (patch) { updPatch(r._id, patch); }}
                     />
                   </div>
-                  {showAmountPlaceholder && (
-                    <div style={{ fontSize: 14.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), fontWeight: 600, marginTop: 4 }}>
+                  <div style={{ visibility: showAmountPlaceholder ? "visible" : "hidden", minHeight: 18, lineHeight: "18px", fontSize: 14.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), fontWeight: 600, marginTop: 4 }}>
                       {L("Inserisci l'importo")}
                     </div>
-                  )}
                   {String(r.currency || ctx.currency) !== String(ctx.currency) && Number(r.baseAmount) > 0 && (
                     <div style={{ fontSize: 11.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), marginTop: 3 }}>
                       ≈ {smallDecimalNode(formatNumber(r.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
@@ -6870,7 +6820,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         style={{ ...mobileInp, padding: "8px 3px 8px 2px", paddingLeft: 2, paddingRight: 3, fontSize: "clamp(13.2px,4.05vw,14.8px)", fontWeight: 750, border: "none", background: "transparent", height: 39, appearance: "none", WebkitAppearance: "none" }}
                       >
                         {sCats.map(function (c) {
-                          return <option key={c.id} value={c.id}>{iconTextValue(c.icon)} {c.name}</option>;
+                          return <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>{iconTextValue(c.icon)} {c.name}</option>;
                         })}
                       </select>
                       <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"), fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
@@ -6885,7 +6835,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         style={{ ...mobileInp, padding: "8px 3px 8px 2px", paddingLeft: 2, paddingRight: 3, fontSize: "clamp(13.2px,4.05vw,14.8px)", fontWeight: 750, border: "none", background: "transparent", height: 39, appearance: "none", WebkitAppearance: "none" }}
                       >
                         {sMethods.map(function (m) {
-                          return <option key={m.id} value={m.id}>{iconTextValue(m.icon)} {m.name}</option>;
+                          return <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>{iconTextValue(m.icon)} {m.name}</option>;
                         })}
                       </select>
                       <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"), fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
@@ -6900,7 +6850,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                     onChange={function (e) { upd(r._id, "itype", e.target.value); }}
                     style={{ ...mobileInp, padding: "10px 10px 10px 2px", paddingLeft: 2, fontSize: 13.7, fontWeight: 750, border: "none", background: "transparent", height: 48 }}
                   >
-                    {sIncomeTypes.map(function (it) { return <option key={it.id} value={it.id}>{it.icon} {it.name}</option>; })}
+                    {sIncomeTypes.map(function (it) { return <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>{it.icon} {it.name}</option>; })}
                   </select>
                 </div>
               )}
@@ -7080,7 +7030,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         >
                           {sCats.map(function (c) {
                             return (
-                              <option key={c.id} value={c.id}>
+                              <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                                 {iconTextValue(c.icon)} {c.name}
                               </option>
                             );
@@ -7097,7 +7047,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         >
                           {sMethods.map(function (m) {
                             return (
-                              <option key={m.id} value={m.id}>
+                              <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                                 {iconTextValue(m.icon)} {m.name}
                               </option>
                             );
@@ -7116,7 +7066,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                       >
                         {sIncomeTypes.map(function (it) {
                           return (
-                            <option key={it.id} value={it.id}>
+                            <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
                               {it.icon} {it.name}
                             </option>
                           );
@@ -7776,16 +7726,13 @@ export function RecurringManager() {
     return <MovementInstalmentSwitch checked={!!form.rateizzato} onChange={function () { setField("rateizzato", !form.rateizzato); }} isMobile={isMobile} activeColor={form.rtype === "expense" ? ctx.expenseColor : ctx.incomeColor} />;
   }
     return (
-      <div className="fainance-entry-form" data-recurring-form data-recurring-step={formStep} style={{ background: dark ? "#1e1e30" : "#fff", borderRadius: 18, border: "1px solid " + borderC, padding: isMobile ? 12 : 18, marginTop: inline ? 12 : 0, minWidth: 0 }}>
+      <div className="fainance-entry-form" data-recurring-form data-recurring-layout="single-page" style={{ background: dark ? "#1e1e30" : "#fff", borderRadius: 18, border: "1px solid " + borderC, padding: isMobile ? 12 : 18, marginTop: inline ? 12 : 0, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
           <div><div style={{ fontSize: 18, fontWeight: 900, color: tc }}>{editingId ? L("Modifica ricorrente") : L("Nuova ricorrente")}</div>
           <div style={{ fontSize: 11, color: sc, marginTop: 4 }}>{L("Non modifica le voci già presenti nello storico.")}</div></div>
           <PopupCloseButton onClick={cancelForm} dark={dark} label={L("Chiudi")} />
         </div>
-        <div role="group" aria-label={L("Passaggi")} style={{ display: "flex", gap: 4, padding: 4, borderRadius: 12, background: dark ? "#252535" : "#f5f5f5", marginBottom: 16 }}>
-          {[1, 2].map(function (step) { return <button key={step} type="button" aria-pressed={formStep === step} disabled={step === 2 && !recurringDetailsValid} onClick={function () { setFormStep(step); }} style={{ flex: 1, minWidth: 0, border: "none", borderRadius: 9, padding: "11px 5px", fontSize: 12, fontWeight: 800, cursor: "pointer", opacity: step === 2 && !recurringDetailsValid ? .55 : 1, background: formStep === step ? secondaryButtonColor : "transparent", color: formStep === step ? "#fff" : tc }}>{step + " · " + (step === 1 ? L("Dettagli") : L("Calendario"))}</button>; })}
-        </div>
-        <div hidden={formStep !== 1} data-recurring-details style={{ display: formStep === 1 ? "flex" : "none", flexDirection: "column", gap: 12 }}>
+        <div data-recurring-details style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div data-recurring-identity-row style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: 12, alignItems: "center", border: "1px solid " + borderC, borderRadius: 16, padding: 12, background: dark ? "#252535" : "#F7F9FC" }}>
             <div aria-label={L("Icona")} style={{ padding: 4, borderRadius: 12, background: dark ? "#1e1e30" : "#fff" }}><EmojiPicker value={form.icon || autoIcon(form.name) || "🔁"} onChange={function (v) { setField("icon", v); }} /></div>
             <label style={{ fontSize: 11, color: sc, minWidth: 0 }}>{L("Nome")}
@@ -7818,7 +7765,7 @@ export function RecurringManager() {
               >
                 {incomeTypes.map(function (it) {
                   return (
-                    <option key={it.id} value={it.id}>
+                    <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
                       {iconTextValue(it.icon)} {L(it.name)}
                     </option>
                   );
@@ -7827,7 +7774,7 @@ export function RecurringManager() {
             </div>
           )}
         </div>
-        <div hidden={formStep !== 2} data-recurring-calendar style={{ display: formStep === 2 ? "flex" : "none", flexDirection: "column", gap: 12 }}>
+        <div data-recurring-calendar style={{ display: "flex", marginTop: 16, flexDirection: "column", gap: 12 }}>
           <div style={{ fontSize: 13, fontWeight: 800, color: tc }}>{L("Frequenza")}</div>
           <div
             style={{
@@ -7977,9 +7924,8 @@ export function RecurringManager() {
           </div>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
-          {formStep === 2 && <Btn onClick={function () { setFormStep(1); }} disabled={false} bg={dark ? "#333" : "#f0f0f0"} color={tc} style={{ padding: "12px 14px" }}>{L("Indietro")}</Btn>}
-          <Btn onClick={function () { if (formStep === 1) { if (recurringDetailsValid) setFormStep(2); } else saveRecurring(); }} disabled={formStep === 1 ? !recurringDetailsValid : !recurringFormValid} color="#fff" bg={(formStep === 1 ? recurringDetailsValid : recurringFormValid) ? confirmButtonColor : "#A8A8A8"} style={{ flex: 1, minWidth: 120, padding: 12, fontWeight: 900 }}>{formStep === 1 ? L("Continua") : editingId ? L("Salva modifiche") : L("Crea ricorrente")}</Btn>
-          {formStep === 1 && <Btn onClick={cancelForm} disabled={false} bg={dark ? "#333" : "#f0f0f0"} color={tc} style={{ padding: "12px 14px" }}>{L("Annulla")}</Btn>}
+          <Btn onClick={saveRecurring} disabled={!recurringFormValid} color="#fff" bg={recurringFormValid ? confirmButtonColor : "#A8A8A8"} style={{ flex: 1, minWidth: 120, padding: 12, fontWeight: 900 }}>{editingId ? L("Salva modifiche") : L("Crea ricorrente")}</Btn>
+          {<Btn onClick={cancelForm} disabled={false} bg={dark ? "#333" : "#f0f0f0"} color={tc} style={{ padding: "12px 14px" }}>{L("Annulla")}</Btn>}
         </div>
       </div>
     );
@@ -9264,7 +9210,7 @@ export function GoalsPanel() {
                         >
                           <option value="">{G("bucketNone")}</option>
                           {availableBuckets.map(function (bucket) {
-                            return <option key={bucket.id} value={String(bucket.id)}>{bucket.name}</option>;
+                            return <option key={bucket.id} value={String(bucket.id)} data-fainance-icon-ref={(bucket as any).icon || "\u{1F4C1}"}>{bucket.name}</option>;
                           })}
                         </select>
                         {!availableBuckets.length && (
@@ -9551,6 +9497,7 @@ export function AlertsPanel() {
     catId: cats[0] ? cats[0].id : 1,
     groupId: groups[0] ? groups[0].id : "casa",
     budget: "",
+    _budgetAuto: true,
     triggerMode: "immediate",
     triggerPct: "",
     customText: "",
@@ -9580,71 +9527,23 @@ export function AlertsPanel() {
   var tc = dark ? "#eee" : "#333";
   var sc = dark ? "#aaa" : "#888";
   var borderC = dark ? "#444" : "#eee";
-  function getPrefilledBudget(catId, groupId, tp) {
-    if (!budgetPlan || !budgetPlan.items) return "";
-    if (tp === "cat") {
-      var item = budgetPlan.items.find(function (i) {
-        return i.catId === Number(catId);
-      });
-      return item && item.amount > 0 ? String(item.amount) : "";
-    }
-    var total = budgetPlan.items
-      .filter(function (i) {
-        var c = cats.find(function (c) {
-          return c.id === i.catId;
-        });
-        return c && c.group === groupId;
-      })
-      .reduce(function (a, i) {
-        return a + i.amount;
-      }, 0);
-    return total > 0 ? String(total) : "";
-  }
+  function getPrefilledBudget(catId,groupId,type,period=form.period){const value=suggestedAlertBudget({plan:budgetPlan,categories:cats,type,catId,groupId,period});return value===null?"":String(value);}
   function nowYear() {
     return new Date().getFullYear();
   }
-  function getSpent(al) {
-    var prefix = al.period === "annual" ? curMonthKey.slice(0,4) : curMonthKey;
-    if (al.type === "cat")
-      return expenses
-        .filter(function (e) {
-          return (
-            Number(e.catId) === Number(al.catId) && accountingPeriod.matches(e.date, prefix)
-          );
-        })
-        .reduce(function (a, e) {
-          return a + e.amount;
-        }, 0);
-    var gc = cats
-      .filter(function (c) {
-        return c.group === al.groupId;
-      })
-      .map(function (c) {
-        return c.id;
-      });
-    return expenses
-      .filter(function (e) {
-        return gc.includes(e.catId) && accountingPeriod.matches(e.date, prefix);
-      })
-      .reduce(function (a, e) {
-        return a + e.amount;
-      }, 0);
-  }
-  function isTriggered(al) {
-    var s = getSpent(al);
-    return al.triggerMode === "immediate"
-      ? s >= al.budget
-      : s >= al.budget * (1 + (al.triggerPct || 0) / 100);
-  }
+  function alertSnapshot(al){return spendingAlertSnapshot(al,{expenses,categories:cats,periodKey:curMonthKey,accountingPeriod,format:String});}
+  function getSpent(al){return alertSnapshot(al)._spent;}
+  function isTriggered(al){return alertSnapshot(al).triggered;}
   function getPct(al) {
     var s = getSpent(al);
     return al.budget > 0 ? Math.min(200, (s / al.budget) * 100) : 0;
   }
   function normalizeForm() {
+    const {_budgetAuto,...values}=form;
     return {
-      ...form,
+      ...values,
       icon: normalizeIconGlyph(form.icon) || "🔔",
-      catId: Number(form.catId),
+      catId: form.catId,
       budget: parseFloat(form.budget),
       triggerPct: parseFloat(form.triggerPct) || 0,
     };
@@ -9715,6 +9614,7 @@ export function AlertsPanel() {
       catId: al.catId || blank.catId,
       groupId: al.groupId || blank.groupId,
       budget: String(al.budget || ""),
+      _budgetAuto: false,
       triggerMode: al.triggerMode || "immediate",
       triggerPct: al.triggerPct || 0,
       customText: al.customText || "",
@@ -9728,23 +9628,17 @@ export function AlertsPanel() {
     setEditingId(null);
     setShowAdd(false);
   }
-  function handleTypeChange(nt) {
-    var nb = getPrefilledBudget(form.catId, form.groupId, nt);
-    setForm(function (p) {
-      return { ...p, type: nt, budget: nb || p.budget };
-    });
+  function handleTypeChange(type) {
+    setForm(p=>{const nb=getPrefilledBudget(p.catId,p.groupId,type,p.period);return {...p,type,budget:nb||p.budget,_budgetAuto:!!nb};});
   }
-  function handleCatChange(v) {
-    var nb = getPrefilledBudget(Number(v), form.groupId, "cat");
-    setForm(function (p) {
-      return { ...p, catId: Number(v), budget: nb || p.budget };
-    });
+  function handleCatChange(catId) {
+    setForm(p=>{const nb=getPrefilledBudget(catId,p.groupId,"cat",p.period);return {...p,catId,budget:nb||p.budget,_budgetAuto:!!nb};});
   }
-  function handleGroupChange(v) {
-    var nb = getPrefilledBudget(form.catId, v, "group");
-    setForm(function (p) {
-      return { ...p, groupId: v, budget: nb || p.budget };
-    });
+  function handleGroupChange(groupId) {
+    setForm(p=>{const nb=getPrefilledBudget(p.catId,groupId,"group",p.period);return {...p,groupId,budget:nb||p.budget,_budgetAuto:!!nb};});
+  }
+  function handlePeriodChange(period) {
+    setForm(p=>{const nb=getPrefilledBudget(p.catId,p.groupId,p.type,period);return {...p,period,budget:p._budgetAuto===false?p.budget:nb||p.budget};});
   }
   var triggered = alerts.filter(isTriggered).length;
   return (
@@ -9979,7 +9873,7 @@ export function AlertsPanel() {
                       value={form.budget}
                       onChange={function (e) {
                         setForm(function (p) {
-                          return { ...p, budget: e.target.value };
+                          return { ...p, budget: e.target.value, _budgetAuto: false };
                         });
                       }}
                       style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
@@ -10010,9 +9904,7 @@ export function AlertsPanel() {
                     <button
                       type="button"
                       onClick={function () {
-                        setForm(function (p) {
-                          return { ...p, period: "monthly" };
-                        });
+                        handlePeriodChange("monthly");
                       }}
                       style={{
                         flex: 1,
@@ -10043,9 +9935,7 @@ export function AlertsPanel() {
                     <button
                       type="button"
                       onClick={function () {
-                        setForm(function (p) {
-                          return { ...p, period: "annual" };
-                        });
+                        handlePeriodChange("annual");
                       }}
                       style={{
                         flex: 1,
@@ -10238,7 +10128,7 @@ export function AlertsPanel() {
                     >
                       {groups.map(function (g) {
                         return (
-                          <option key={g.id} value={g.id}>
+                          <option key={g.id} value={g.id} data-fainance-icon-ref={(g as any).icon || "\u{1F4C1}"}>
                             {g.name}
                           </option>
                         );
@@ -11074,7 +10964,7 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "7px 0" }}>
               <span style={{ fontSize: 12, color: sc }}>{L("Totale allocato")}</span>
-              <strong style={{ fontSize: 15, color: readableDarkText("#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>− {fmtBudget(totalAlloc)}</strong>
+              <strong style={{ fontSize: 15, color: readableDarkText("#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtBudget(totalAlloc)}</strong>
             </div>
             <div style={{ height: 1, background: borderC, margin: "4px 0 9px" }} />
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14 }}>
@@ -11519,7 +11409,7 @@ export function BudgetPlanPanel() {
                       borderBottom: "1px solid " + borderC,
                     }}
                   >
-                    {g.name} — {fmtBudget(gt)}
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6}}><FainanceIcon value={g.icon || "\u{1F4C1}"} size={18}/><span>{g.name} — {fmtBudget(gt)}</span></span>
                   </div>
                   {gc.map(function (c) {
                     var item = items.find(function (i) {
@@ -11546,7 +11436,7 @@ export function BudgetPlanPanel() {
                           }}
                         >
                           <span style={{ fontSize: 16, flexShrink: 0 }}>
-                            {c.icon}
+                            <FainanceIcon value={c.icon || "\u{1F3F7}"} size={18}/>
                           </span>
                           <span
                             style={{
@@ -12348,7 +12238,7 @@ export function SettingsList({
                 >
                   {gl.map(function (g2) {
                     return (
-                      <option key={g2.id} value={g2.id}>
+                      <option key={g2.id} value={g2.id} data-fainance-icon-ref={(g2 as any).icon || "\u{1F4C1}"}>
                         {L(g2.name)}
                       </option>
                     );
@@ -15157,7 +15047,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 >
                   {cats.map(function (c) {
                     return (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                         {iconTextValue(c.icon)} {c.name}
                       </option>
                     );
@@ -15179,7 +15069,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 >
                   {methods.map(function (m) {
                     return (
-                      <option key={m.id} value={m.id}>
+                      <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                         {m.archived ? "[Arch] " : ""}
                         {iconTextValue(m.icon)} {m.name}
                       </option>
@@ -15207,7 +15097,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
               >
                 {(incomeTypes || []).map(function (it) {
                   return (
-                    <option key={it.id} value={it.id}>
+                    <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
                       {iconTextValue(it.icon)} {L(it.name)}
                     </option>
                   );
@@ -17337,7 +17227,7 @@ export function ImportData(props: any = {}) {
                 >
                   {opts.map(function (o) {
                     return (
-                      <option key={String(o.id)} value={String(o.id)}>
+                      <option key={String(o.id)} value={String(o.id)} data-fainance-icon-ref={(o as any).icon || "\u{1F4C1}"}>
                         {o.icon ? o.icon + " " : ""}
                         {o.name}
                       </option>

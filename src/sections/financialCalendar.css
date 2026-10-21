@@ -78,3 +78,21 @@
 
 /* Bilanci azzurri corporate, sempre distinti da entrate e uscite. */
 .fc-panel .fc-balance{color:var(--fc-balance)}
+
+/* Projections reuse the calendar's approved palette and semantic colors. */
+.fc-forecast{margin:18px 0;padding:15px 13px;border:1px solid var(--fc-border);border-radius:15px;background:var(--fc-surface)}
+.fc-forecast h3{font-size:14px;margin:0 0 12px;color:var(--fc-text)}
+.fc-forecast-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.fc-forecast-grid article{min-width:0;padding:10px;background:var(--fc-background);border:1px solid var(--fc-border);border-radius:10px;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.fc-forecast-grid h4{font-size:14px;margin:0;color:var(--fc-text)}
+.fc-forecast-grid time,.fc-forecast-grid span{font-size:11px;color:var(--fc-sub);line-height:1.4}
+.fc-forecast-grid strong{font-size:15px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;max-width:100%}
+.fc-forecast p{font-size:11px;color:var(--fc-sub);line-height:1.5;margin:10px 0 0}
+.fc-forecast details{font-size:11px;width:100%;line-height:1.5}
+.fc-forecast summary{color:var(--fc-primary);cursor:pointer}
+.fc-forecast dl{margin:6px 0 0}.fc-forecast dd{margin:0 0 5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+@media(max-width:480px){.fc-forecast-grid{grid-template-columns:1fr}.fc-forecast-grid article{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.fc-forecast-grid h4,.fc-forecast-grid time{grid-column:1/-1}.fc-forecast-grid details{grid-column:1/-1}.fc-forecast-grid strong{text-align:right}}
+
+.fc-cumulative{padding-top:12px}.fc-cumulative strong{font-size:16px}
+
+.fc-forecast-confidence{grid-column:1/-1;color:var(--fc-muted);line-height:1.5;margin-top:8px}

@@ -1,5 +1,5 @@
 // Only fixed, non-personal categories may cross the Analytics boundary.
-export const sections = ['home', 'spese', 'history', 'budget', 'budgetPlan', 'goals', 'savings', 'share', 'stats', 'statistiche', 'settings', 'more', 'consulenteAI', 'voice', 'alerts', 'patrimonio', 'debtCredits', 'shopping', 'appunti', 'tools', 'recurring', 'login', 'register'];
+export const sections = ['home', 'spese', 'history', 'budget', 'budgetPlan', 'goals', 'savings', 'share', 'stats', 'statistiche', 'settings', 'more', 'consulenteAI', 'voice', 'alerts', 'patrimonio', 'debtCredits', 'shopping', 'appunti', 'tools', 'recurring', 'calendar', 'anomalies', 'login', 'register'];
 const values: Record<string, readonly string[]> = {
   section: sections,
   flow: ['registration', 'login', 'movement', 'budget', 'goal', 'backup_import', 'ai_request'],

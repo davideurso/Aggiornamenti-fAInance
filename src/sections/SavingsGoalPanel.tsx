@@ -1,3 +1,4 @@
+import { FainanceIcon } from '../icons/customIconLibrary';
 import { readableDarkText } from '../ui/textContrast';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -36,7 +37,7 @@ export function SavingsGoalPanel({bucketId, completion}:{bucketId:string;complet
       <div style={{minWidth:0,flex:1}}>
         <div style={{fontSize:11,color:ctx.subC,fontWeight:800,textTransform:'uppercase',letterSpacing:.35}}>{T('title')}</div>
         <div style={{display:'flex',alignItems:'center',gap:7,marginTop:4,minWidth:0}}>
-          <span aria-hidden="true">🎯</span>
+          {goal && <FainanceIcon value={goal.icon || "🎯"} size={21} alt="" style={{flexShrink:0}}/>}
           <strong style={{fontSize:14,overflowWrap:'anywhere'}}>{goal?.name || (bucket.goalId?T('unavailable'):T('none'))}</strong>
         </div>
       </div>
@@ -51,7 +52,7 @@ export function SavingsGoalPanel({bucketId, completion}:{bucketId:string;complet
     <p style={{fontSize:11,color:ctx.subC,lineHeight:1.45,margin:'9px 0 0'}}>{T('hint')}</p>
 
     {draft && <form onSubmit={event=>{event.preventDefault();save(draft.goalId,draft.expectedGoalId);}} style={{display:'grid',gap:9,marginTop:10,paddingTop:10,borderTop:`1px solid ${ctx.borderC}`}}>
-      <label style={{fontSize:12,fontWeight:800}}>{T('title')}<select autoFocus value={draft.goalId} onChange={event=>setDraft({...draft,goalId:event.target.value})} style={{...ctx.inp,display:'block',width:'100%',minWidth:0,boxSizing:'border-box',marginTop:6}}><option value="">{T('none')}</option>{eligible.map(item=><option key={item.id} value={String(item.id)}>{item.name}</option>)}</select></label>
+      <label style={{fontSize:12,fontWeight:800}}>{T('title')}<select aria-label={T('change')} value={draft.goalId} onChange={event=>setDraft({...draft,goalId:event.target.value})} style={{...ctx.inp,display:'block',width:'100%',minWidth:0,boxSizing:'border-box',marginTop:6}}><option value="">{T('none')}</option>{eligible.map(item=><option key={item.id} value={String(item.id)} data-fainance-icon-ref={(item as any).icon || "\u{1F3AF}"}>{item.name}</option>)}</select></label>
       {!eligible.length && <p style={{fontSize:11,color:ctx.subC,margin:0}}>{T('empty')}</p>}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}><button type="submit" style={{...button,background:accent,color:readableDarkText('#fff', ctx.dark, accent),border:`1px solid ${accent}`}}>{S('save')}</button><button type="button" style={button} onClick={()=>{setDraft(null);setError(false);}}>{S('cancel')}</button></div>
     </form>}

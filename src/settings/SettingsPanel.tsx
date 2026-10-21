@@ -5110,7 +5110,7 @@ export function SettingsPanel() {
                 })
                 .map(function (a) {
                   return (
-                    <option key={a.id} value={a.id}>
+                    <option key={a.id} value={a.id} data-fainance-icon-ref={(a as any).icon || "\u{1F4C1}"}>
                       {withIcon ? (a.icon || "📂") + " " : ""}
                       {L(a.name)}
                     </option>
@@ -5306,7 +5306,7 @@ export function SettingsPanel() {
                 <option value="">{L("Nessuna categoria default")}</option>
                 {activeCats.map(function (c) {
                   return (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                       {c.icon} {L(c.name)}
                     </option>
                   );
@@ -5337,7 +5337,7 @@ export function SettingsPanel() {
                   <option value="">-</option>
                   {activeCats.map(function (c) {
                     return (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                         {c.icon} {L(c.name)}
                       </option>
                     );
@@ -5369,7 +5369,7 @@ export function SettingsPanel() {
                     })
                     .map(function (c) {
                       return (
-                        <option key={c.id} value={c.id}>
+                        <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                           {c.icon} {L(c.name)}
                         </option>
                       );
@@ -5589,7 +5589,7 @@ export function SettingsPanel() {
               <option value="">{L("Nessun metodo default")}</option>
               {activeMethods.map(function (m) {
                 return (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                     {m.icon} {L(m.name)}
                   </option>
                 );
@@ -5912,7 +5912,7 @@ export function SettingsPanel() {
                 })
                 .map(function (it) {
                   return (
-                    <option key={it.id} value={it.id}>
+                    <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
                       {it.icon} {translateUiRuntimeText(it.name)}
                     </option>
                   );
@@ -5946,7 +5946,7 @@ export function SettingsPanel() {
                     })
                     .map(function (it) {
                       return (
-                        <option key={it.id} value={it.id}>
+                        <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
                           {it.icon || "💰"} {translateUiRuntimeText(it.name)}
                         </option>
                       );
@@ -5980,7 +5980,7 @@ export function SettingsPanel() {
                     })
                     .map(function (it) {
                       return (
-                        <option key={it.id} value={it.id}>
+                        <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
                           {it.icon || "💰"} {translateUiRuntimeText(it.name)}
                         </option>
                       );
@@ -6532,7 +6532,7 @@ export function SettingsPanel() {
                     >
                       {LANGUAGES.map(function (l) {
                         return (
-                          <option key={l.code} value={l.code}>
+                          <option key={l.code} value={l.code} data-fainance-icon-ref={(l as any).icon || "\u{1F4C1}"}>
                             {l.label}
                           </option>
                         );
@@ -7230,7 +7230,7 @@ export function SettingsPanel() {
             >
               {settingsShareCategories.map(function (c) {
                   return (
-                    <option key={String(c.id)} value={String(c.id)}>
+                    <option key={String(c.id)} value={String(c.id)} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                       {String(c.icon || "")} {String(translateUiRuntimeText(c.name || ""))}
                     </option>
                   );
@@ -8652,7 +8652,7 @@ export function SettingsPanel() {
 
   if (settingsPage === "sections_income_areas")
     return (
-      <StableNestedFormHost key={"stable-GroupSettingsPanel"} render={GroupSettingsPanel} formProps={{"title":("Entrate / Aree"),"desc":("Gestisci le aree delle entrate: lista, riordino e area default."),"items":(incomeGroups || DEFAULT_INCOME_GROUPS),"setItems":(setIncomeGroups),"defaultValue":(defaultIncomeArea),"setDefaultValue":(setDefaultIncomeArea)}} />
+      <StableNestedFormHost key={"stable-GroupSettingsPanel"} render={GroupSettingsPanel} formProps={{"title":("Entrate / Aree"),"desc":("Gestisci le aree delle entrate: lista, riordino e area default."),"items":(incomeGroups || DEFAULT_INCOME_GROUPS),"setItems":(setIncomeGroups),"defaultValue":(defaultIncomeArea),"setDefaultValue":(setDefaultIncomeArea),"withIcon":(true)}} />
     );
   if (settingsPage === "sections_income_categories")
     return (
@@ -8665,7 +8665,7 @@ export function SettingsPanel() {
     );
   if (settingsPage === "sections_expense_areas")
     return (
-      <StableNestedFormHost key={"stable-GroupSettingsPanel"} render={GroupSettingsPanel} formProps={{"title":("Uscite / Aree"),"desc":("Gestisci le aree delle uscite: lista, riordino e area default."),"items":(expenseGroups || DEFAULT_EXPENSE_GROUPS),"setItems":(setExpenseGroups),"defaultValue":(defaultExpenseArea),"setDefaultValue":(setDefaultExpenseArea)}} />
+      <StableNestedFormHost key={"stable-GroupSettingsPanel"} render={GroupSettingsPanel} formProps={{"title":("Uscite / Aree"),"desc":("Gestisci le aree delle uscite: lista, riordino e area default."),"items":(expenseGroups || DEFAULT_EXPENSE_GROUPS),"setItems":(setExpenseGroups),"defaultValue":(defaultExpenseArea),"setDefaultValue":(setDefaultExpenseArea),"withIcon":(true)}} />
     );
   if (settingsPage === "sections_expense_categories")
     return (
@@ -8877,7 +8877,7 @@ export function SettingsPanel() {
               <option value="">{L("Nessuna (prima della lista)")}</option>
               {settingsActiveCats.map(function (c) {
                 return (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                     {c.icon} {L(c.name)}
                   </option>
                 );
@@ -8936,7 +8936,7 @@ export function SettingsPanel() {
                 <option value="">-</option>
                 {settingsActiveCats.map(function (c) {
                   return (
-                    <option key={c.id} value={c.id}>
+                    <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                       {c.icon} {L(c.name)}
                     </option>
                   );
@@ -8968,7 +8968,7 @@ export function SettingsPanel() {
                   })
                   .map(function (c) {
                     return (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                         {c.icon} {L(c.name)}
                       </option>
                     );

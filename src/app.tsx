@@ -1,3 +1,5 @@
+import {triggeredSpendingAlerts} from './finance/spendingAlerts.js';
+import {useSpendingAlertDispatch} from './notifications/useSpendingAlertDispatch';
 import { PERIOD_CONFIRMATION_KEY, readPeriodConfirmation, keepPeriodConfirmation } from './data/periodConfirmation';
 import { readCatalogEdits, persistCatalogEdit, protectCatalogEdit, confirmCatalogEdits, catalogEditEqual, migrateLegacyCatalogEdits } from "./data/catalogLocalEdits";
 import { reconcileAuthorityCatalogs } from "./data/currentCatalogAuthority";
@@ -6,7 +8,7 @@ import { mergeIncomingMovements } from "./data/incomingMovements";
 import { DarkTextDefaults } from './ui/DarkTextDefaults';
 import { readableDarkText } from './ui/textContrast';
 import { getDocFromCache, getDocFromServer } from "firebase/firestore";
-import { readExistingCachedDocument, serializeSnapshotHandler, restoreResumeTab, needsCategoryRecovery, hasResumeCheckpoint, writeResumeCheckpoint } from "./utils/resumeCache";
+import { readExistingCachedDocument, serializeSnapshotHandler, needsCategoryRecovery, hasResumeCheckpoint, writeResumeCheckpoint } from "./utils/resumeCache";
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import {ToolsPanel} from './sections/ToolsPanel';
@@ -5781,13 +5783,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [widgetDebtCreditsAutoUpdate, setWidgetDebtCreditsAutoUpdate] =
     useStorage(userKey("widget_debt_credits_auto_update_v1"), true);
 
-  var [tab, setTabRaw] = useState(() => restoreResumeTab(localStorage, userKey("resume_tab_v1")));
+  var [tab, setTabRaw] = useState("home");
   var lastNonHomeTabRef = useRef(
     String(tab || "") && String(tab || "") !== "home" ? String(tab) : ""
   );
   var androidBackPreviewReturnRef = useRef(0);
   useEffect(() => {
-    try { localStorage.setItem(userKey("resume_tab_v1"), String(tab)); } catch (_) {}
+    // New sessions start on Home; background/resume retains current React state.
   }, [userId, tab]);
   useEffect(() => { trackAnalyticsSection(tab); }, [tab]);
   useEffect(() => {
@@ -16809,7 +16811,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.1.15";
+  var FAINANCE_CURRENT_VERSION = "2.1.16";
   var FAINANCE_CURRENT_VERSION_CODE = 239;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
@@ -19803,7 +19805,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               >
                 {LANGUAGES.map(function (x) {
                   return (
-                    <option key={x.code} value={x.code}>
+                    <option key={x.code} value={x.code} data-fainance-icon-ref={(x as any).icon || "\u{1F4C1}"}>
                       {x.label}
                     </option>
                   );
@@ -23099,69 +23101,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }, 0);
 
   // compute triggered alerts
-  function computeTriggered() {
-    return alerts
-      .filter(function (al) {
-        var prefix = al.period === "annual" ? String(curYear) : curMonthKey;
-        var spent;
-        if (al.type === "cat")
-          spent = countedExpensesForAnalysis
-            .filter(function (e) {
-              return e.catId === al.catId && accountingPeriod.matches(e.date, prefix);
-            })
-            .reduce(function (a, e) {
-              return a + e.amount;
-            }, 0);
-        else {
-          var gc = cats
-            .filter(function (c) {
-              return c.group === al.groupId;
-            })
-            .map(function (c) {
-              return c.id;
-            });
-          spent = countedExpensesForAnalysis
-            .filter(function (e) {
-              return gc.includes(e.catId) && accountingPeriod.matches(e.date, prefix);
-            })
-            .reduce(function (a, e) {
-              return a + e.amount;
-            }, 0);
-        }
-        var triggered =
-          al.triggerMode === "immediate"
-            ? spent >= al.budget
-            : spent >= al.budget * (1 + (al.triggerPct || 0) / 100);
-        if (!triggered) return false;
-        al._spent = spent;
-        return true;
-      })
-      .map(function (al) {
-        var grps = expenseGroups || DEFAULT_EXPENSE_GROUPS;
-        var cat3 =
-          al.type === "cat"
-            ? cats.find(function (c) {
-                return c.id === al.catId;
-              })
-            : null;
-        var prefixKey = al.period === "annual" ? String(curYear) : curMonthKey;
-        return {
-          ...al,
-          _alertKey: String(al.id) + ":" + prefixKey,
-          spentFmt: fmt(al._spent),
-          budgetFmt: fmt(al.budget),
-          pct: al.budget > 0 ? Math.min(200, (al._spent / al.budget) * 100) : 0,
-        };
-      });
-  }
-  var allTriggeredAlertsData = useMemo(computeTriggered, [
-    alerts,
-    countedExpensesForAnalysis,
-    cats,
-    curMonthKey,
-    curYear,
-    expenseGroups,
-  ]);
+  var allTriggeredAlertsData=useMemo(()=>triggeredSpendingAlerts({alerts,expenses:countedExpensesForAnalysis,categories:cats,periodKey:curMonthKey,accountingPeriod,format:fmt}),[alerts,countedExpensesForAnalysis,cats,curMonthKey,accountingPeriod,lang,currency]);
   function alertSeenKey(al) {
     return String((al && al._alertKey) || (al && al.id) || "");
   }
@@ -23208,42 +23148,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         } catch (e) {}
       }
     }
-    setAlertPopup(null);
+    setAlertPopup(current=>{const remaining=(current||[]).filter(row=>!keys.includes(alertSeenKey(row)));return remaining.length?remaining:null;});
   }
 
-  // ── REAL-TIME ALERT: only fire popup for newly triggered and not-yet-seen alerts ──
-  var prevTriggeredIdsRef = useRef([]);
-  useEffect(
-    function () {
-      if (!firestoreReady) return;
-      var currentIds = triggeredAlertsData.map(alertSeenKey);
-      var seen = new Set(
-        Array.isArray(shownAlertIds) ? shownAlertIds.map(String) : []
-      );
-      var newIds = currentIds.filter(function (id) {
-        return id && !seen.has(id) && !prevTriggeredIdsRef.current.includes(id);
-      });
-      if (newIds.length > 0) {
-        var newAlerts = triggeredAlertsData.filter(function (a) {
-          return newIds.includes(alertSeenKey(a));
-        });
-        setAlertPopup(newAlerts);
-      }
-      prevTriggeredIdsRef.current = currentIds;
-    },
-    [
-      firestoreReady,
-      JSON.stringify(triggeredAlertsData.map(alertSeenKey)),
-      JSON.stringify(shownAlertIds || []),
-    ]
-  );
-  useEffect(
-    function () {
-      if (tab === "alerts" && triggeredAlertsData.length > 0)
-        markAlertsSeen(triggeredAlertsData);
-    },
-    [tab, JSON.stringify(triggeredAlertsData.map(alertSeenKey))]
-  );
+  useSpendingAlertDispatch({ready:firestoreReady,accountKey:userId,rows:triggeredAlertsData,onPopup:setAlertPopup});
 
   function sortHistoryItems(list) {
     return sortFinancialHistoryItems(
@@ -27896,6 +27804,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     accountingDate,
     pendingCount,
     alertTriggered,
+    allTriggeredAlertsData,
+
     getCat,
     getMethod,
     getIT,

@@ -1,0 +1,51 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+import {loadTypeScript} from './loadTypeScript.mjs';
+import {createFinanceEvolution} from '../src/data/financeEvolution.js';
+import {saveAutomaticRule} from '../src/finance/automaticRuleStore.js';
+const {previewRuleRequest:preview,applyRuleRequest:apply,mergeRuleRequest:merge,ruleRequestSummary,assistantRuleError}=loadTypeScript('src/finance/assistantAutomaticRules.ts');
+const ctx={currentPlan:'premium',lang:'it',cats:[{id:1,name:'Altro'},{id:2,name:'Alimentari'}],methods:[{id:7,name:'Carta'},{id:8,name:'Contanti'}],incomeTypes:[{id:'salary',name:'Stipendio'}]};
+const create={action:'create_automatic_rule',ruleName:'Supermercato',ruleTrigger:'expense',ruleConditions:[{field:'description',operator:'contains',value:'Supermercato X'}],ruleActions:[{field:'category',value:'Alimentari'},{field:'payment',value:'Carta'}]};
+const empty=createFinanceEvolution();
+const draft=preview(empty,ctx,create,()=> 'rule-id');assert.equal(empty.rules.length,0);
+const saved=apply(empty,ctx,draft);assert.equal(saved.rules.length,1);assert.equal(saved.rules[0].actions[0].value,2);assert.equal(saved.rules[0].actions[1].value,7);
+assert.throws(()=>apply(saved,ctx,draft),/RULE_CONFLICT/,'Double create is blocked');
+const update=preview(saved,ctx,{action:'update_automatic_rule',ruleName:'Supermercato',ruleActions:[{field:'payment',value:'Contanti'}]});
+const changed=apply(saved,ctx,update);assert.equal(changed.rules[0].actions[1].value,8);assert.deepEqual(changed.rules[0].conditions,saved.rules[0].conditions);assert.deepEqual(changed.rules[0].actions[0],saved.rules[0].actions[0]);assert.equal(changed.rules[0].revision,1);assert.equal(saved.rules[0].revision,0);
+assert.throws(()=>apply(changed,ctx,update),/RULE_CONFLICT/);
+assert.throws(()=>apply(saved,{...ctx,methods:[]},update),/invalidCatalog/);
+const renamed=apply(saved,ctx,preview(saved,ctx,{action:'update_automatic_rule',ruleName:'Supermercato',newRuleName:'Spesa settimanale'}));assert.equal(renamed.rules[0].name,'Spesa settimanale');
+const disabled=apply(saved,ctx,preview(saved,ctx,{action:'update_automatic_rule',ruleName:'Supermercato',ruleEnabled:false}));assert.equal(disabled.rules[0].enabled,false);
+const deleted=apply(saved,ctx,preview(saved,ctx,{action:'delete_automatic_rule',ruleName:'Supermercato'}));assert.equal(deleted.rules.length,0);assert.equal(saved.rules.length,1);
+assert.throws(()=>preview(saved,ctx,{action:'delete_automatic_rule',ruleName:'Unknown'}),/targetAmbiguous/);
+assert.throws(()=>preview(saved,ctx,{action:'update_automatic_rule',ruleName:'Supermercato'}),/missingChanges/);
+assert.throws(()=>preview({...saved,rules:[...saved.rules,{...saved.rules[0],id:'second'}]},ctx,{action:'delete_automatic_rule',ruleName:'Supermercato'}),/targetAmbiguous/);
+assert.throws(()=>preview(saved,{...ctx,currentPlan:'free'},{...create,ruleName:'Another'}),/RULE_LIMIT/);
+assert.throws(()=>preview(empty,ctx,{...create,ruleConditions:[]}),/missingConditions/);
+assert.throws(()=>preview(empty,ctx,{...create,ruleActions:[{field:'category',value:'Invented'}]}),/invalidCatalog/);
+const salary={...create,ruleName:'Controllo stipendio',ruleTrigger:'income',ruleScopeCategoryName:'Stipendio',ruleConditions:[{field:'amount',operator:'less',value:1000},{field:'amount',operator:'greater',value:10000}],ruleActions:[{field:'alert',kind:'confirmation',text:'Confermi lo stipendio?'}]};
+const salarySaved=apply(empty,ctx,preview(empty,ctx,salary,()=> 'salary-id'));
+assert.throws(()=>preview(salarySaved,ctx,{action:'update_automatic_rule',ruleName:'Controllo stipendio',ruleConditions:[{field:'amount',value:900}]}),/conditionAmbiguous/);
+const salaryUpdated=apply(salarySaved,ctx,preview(salarySaved,ctx,{action:'update_automatic_rule',ruleName:'Controllo stipendio',ruleConditions:[{index:0,value:900}]}));assert.equal(salaryUpdated.rules[0].conditions[0].value,900);assert.equal(salaryUpdated.rules[0].conditions[1].value,10000);
+assert.equal(salaryUpdated.rules[0].actions[0].text,'Confermi lo stipendio?');
+let partial=merge(null,{action:'create_automatic_rule',ruleName:'X',ruleTrigger:'expense',ruleConditions:create.ruleConditions});partial=merge(partial,{action:'create_automatic_rule',ruleActions:create.ruleActions});assert.deepEqual(partial.ruleConditions,create.ruleConditions);
+assert.equal(merge({action:'update_automatic_rule',ruleName:'A',ruleActions:create.ruleActions},{action:'update_automatic_rule',ruleName:'B',ruleEnabled:false}).ruleActions,undefined);
+const alertLegacy={...salarySaved.rules[0],actions:[],alert:{kind:'information',text:'Legacy'}};
+const legacyFinance={...empty,rules:[alertLegacy]};const legacyUpdated=apply(legacyFinance,ctx,preview(legacyFinance,ctx,{action:'update_automatic_rule',ruleName:alertLegacy.name,newRuleName:'Legacy renamed'}));assert.equal(legacyUpdated.rules[0].actions[0].text,'Legacy');assert.equal(legacyFinance.rules[0].actions.length,0);
+for(const lang of ['it','en','es','fr','de','pt','pl','nl','ro','el']){assert(assistantRuleError(lang,'missingTarget'));assert(ruleRequestSummary(update,{...ctx,lang},true).split(/\s+/).length<40);}
+
+// Execute the actual manual editor submit path. Probe fields are deliberately
+// invalid: saving an existing rule must validate the rule, not the optional probe.
+const source=fs.readFileSync('src/sections/AutomaticRulesPanel.tsx','utf8');
+const ast=ts.createSourceFile('panel.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);const funcs=new Map();let formValidated=false;
+function visit(node){if(ts.isFunctionDeclaration(node)&&['apply','saveDraft'].includes(node.name?.text))funcs.set(node.name.text,node.getText(ast));if(ts.isJsxOpeningElement(node)&&node.tagName.getText(ast)==='form'){const attrs=node.attributes.properties;formValidated=attrs.some(a=>a.name?.text==='noValidate')&&attrs.some(a=>a.name?.text==='onSubmit'&&a.initializer?.expression?.getText(ast)==='saveDraft');}ts.forEachChild(node,visit);}visit(ast);assert(formValidated,'Native validation of the optional probe must not block the rule submit handler');
+assert(source.indexOf('saveErrorCode?assistantRuleError')>source.indexOf('role="dialog"'),'Save errors must be visible inside the modal');
+const code=ts.transpileModule([...funcs.values()].join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+let actual=saved,closed=false,error=false,errorCode='',tab='then';
+const env={ctx:{currentPlan:'premium',setFinanceEvolution:fn=>{actual=fn(actual)}},draft:{...saved.rules[0],name:'Edited manually',expectedRevision:0},probeOnly:false,test:{amount:-1},saveAutomaticRule,setError:v=>error=v,setSaveErrorCode:v=>errorCode=v,setEditorTab:v=>tab=v,closeEditor:()=>closed=true,limitNotice(){},runTest:()=>{throw Error('Saving a rule must not run its probe')}};
+const editor=new Function('env',`with(env){${code};return {apply,saveDraft};}`)(env);let prevented=false;
+editor.saveDraft({preventDefault(){prevented=true}});assert(prevented);assert(closed);assert.equal(actual.rules[0].name,'Edited manually');assert.equal(actual.rules[0].revision,1);assert(!error);
+closed=false;env.draft={...saved.rules[0],name:'Stale',expectedRevision:0};editor.saveDraft({preventDefault(){}});assert(error);assert.equal(errorCode,'RULE_CONFLICT');assert(!closed);assert.equal(actual.rules[0].name,'Edited manually');
+env.draft={...actual.rules[0],name:' ',expectedRevision:1};editor.saveDraft({preventDefault(){}});assert.equal(tab,'when');assert.equal(errorCode,'missingName');
+console.log('Automatic-rule assistant CRUD, partial updates, retained fields, rename, limits, revisions, privacy-safe brief summaries and real manual Save handler passed.');

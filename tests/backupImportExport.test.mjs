@@ -1,12 +1,9 @@
+import ts from "typescript";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 
 const settings = fs.readFileSync("src/settings/SettingsPanel.tsx", "utf8");
-const nativePlugin = fs.readFileSync(
-  "android/app/src/main/java/com/tracker/spese/app/FainanceFilePlugin.java",
-  "utf8"
-);
 const translations = fs.readFileSync("src/i18n/appTranslationPatches.ts", "utf8");
 
 for (const marker of [
@@ -17,7 +14,7 @@ for (const marker of [
   "stageBackupJsonText",
   "pendingBackupImport",
   'role="dialog"',
-  'accept=".json,application/json,text/json"',
+  'accept=".json,application/json,text/json',
 ]) {
   assert(settings.includes(marker), `Marcatore import backup assente: ${marker}`);
 }
@@ -52,17 +49,33 @@ assert.deepEqual(JSON.parse(context.decodeNativeBackupBase64(encoded)), sample);
 assert.equal(context.isRecognizedBackupJson(sample), true);
 assert.equal(context.isRecognizedBackupJson({ unexpected: true }), false);
 
-for (const marker of [
-  "@PluginMethod\n    public void pickJson",
-  "Intent.ACTION_OPEN_DOCUMENT",
-  "Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION",
-  "@ActivityCallback",
-  "pickJsonResult",
-  "MAX_JSON_BACKUP_BYTES",
-  'response.put("dataBase64"',
-]) {
-  assert(nativePlugin.includes(marker), `Marcatore plugin Android assente: ${marker}`);
+// The actual Android/Web UI uses the hidden file input. The legacy native
+// plugin handler is no longer connected to this button; do not require a
+// nonexistent Java plugin or claim to have tested that unsupported path.
+assert(settings.includes('var input = backupJsonFileInputRef.current;'));
+assert(settings.includes('input.click();'));
+assert(settings.includes('onChange={handleBackupJsonFile}'));
+const handler = settings.slice(handlerStart, settings.indexOf('async function handleNativeBackupJsonFile',handlerStart));
+assert(handler.indexOf('await readBackupJsonFile(f)') < handler.indexOf('input.value = ""'),
+  'File URI must remain available until reading finishes');
+const tree=ts.createSourceFile('SettingsPanel.tsx',settings,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const functions=[];
+function visit(node){
+ if(ts.isFunctionDeclaration(node)&&['readBackupJsonFile','readBackupJsonFileWithReader'].includes(node.name?.text))functions.push(node.getText(tree));
+ ts.forEachChild(node,visit);
 }
+visit(tree);assert.equal(functions.length,2);
+const readCode=ts.transpileModule(functions.join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2020}}).outputText;
+let readerUses=0;
+class TestReader{
+ readAsText(file){readerUses++;queueMicrotask(()=>{this.result=file.fixture;this.onload({target:this});});}
+}
+const readFile=new Function('FileReader',readCode+';return readBackupJsonFile;')(TestReader);
+const fixture=JSON.stringify(sample);
+assert.equal(await readFile({text:async()=>fixture}),fixture);
+assert.equal(readerUses,0);
+assert.equal(await readFile({text:async()=>{throw Error('WebView text read failed');},fixture}),fixture);
+assert.equal(readerUses,1,'FileReader fallback must execute on a rejected file.text()');
 
 const exportStart = settings.indexOf("async function runDataExport");
 const exportEnd = settings.indexOf("function runDataDelete", exportStart);

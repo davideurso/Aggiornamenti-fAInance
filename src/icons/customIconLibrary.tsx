@@ -1,3 +1,4 @@
+import {registerCatalogIconRenderer} from './runtime/iconRendererBridge';
 import { useEffect, useMemo, useState } from "react";
 import { collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, runTransaction, setDoc } from "firebase/firestore";
 import { fbAuth, fbDb } from "../firebase/client";
@@ -409,3 +410,5 @@ export function FainanceIcon({ value, size = 24, alt = "", style }: { value: unk
   if (!row) return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity:.55, ...style }}><rect x="3" y="3" width="18" height="18" rx="4"/><path d="m5 17 5-5 4 4 3-3 3 3M8 8h.01"/></svg>;
   return <img src={row.dataUrl} alt={alt || row.label || ""} draggable={false} style={{ width:size, height:size, objectFit:"cover", borderRadius:Math.max(4, Math.round(size * .22)), display:"block", ...style }}/>
 }
+
+registerCatalogIconRenderer(FainanceIcon, value=>{const parsed=parseCustomIconValue(value);if(!parsed)return null;const row=cache.get(cacheKey(parsed.ownerUid,parsed.id));if(!row)void loadCustomIconReference(value).catch(()=>{});return row?.dataUrl||null;}, listener=>{listeners.add(listener);return ()=>listeners.delete(listener);});

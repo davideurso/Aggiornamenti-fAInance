@@ -38,9 +38,9 @@ export function BudgetPeriodControls({ periodKey, onPeriodChange, scope, onScope
     {expanded && <div style={{borderTop:`1px solid ${ctx.borderC}`,padding:isMobile?14:16}}>
       <div style={{display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(3,minmax(0,1fr))',gap:10}}>
         <label style={controlCard}>{T('period')}<input type="month" aria-label={T('period')} value={periodKey} onChange={e=>{if(/^\d{4}-(0[1-9]|1[0-2])$/.test(e.target.value))onPeriodChange(e.target.value);}} style={field}/></label>
-        <label style={controlCard}>{T('scope')}<select value={scope} onChange={e=>onScopeChange(e.target.value as BudgetScope)} style={field}><option value="month">{T('month')}</option><option value="future">{T('future')}</option></select></label>
+        <label style={controlCard}>{T('scope')}<select value={scope} onChange={e=>onScopeChange(e.target.value as BudgetScope)} style={field}><option value="month" data-fainance-icon-ref={"\u{1F4C5}"}>{T('month')}</option><option value="future" data-fainance-icon-ref={"\u{1F501}"}>{T('future')}</option></select></label>
         <label style={controlCard}>{T('compare')}<select value={comparison} onChange={e=>ctx.setFinanceEvolution(previous=>({...previous,budget:{...previous.budget,comparison:e.target.value}}))} style={field}>
-          {(['previous','previousYear','average6','average12'] as const).map(value=><option key={value} value={value}>{T(value)}</option>)}
+          {(['previous','previousYear','average6','average12'] as const).map(value=><option key={value} value={value} data-fainance-icon-ref={value.startsWith("average")?"\u{1F4CA}":"\u{1F4C6}"}>{T(value)}</option>)}
         </select></label>
       </div>
 
