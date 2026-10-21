@@ -128,7 +128,7 @@ export function PatrimonioPanel(){
       var keepY=selYear,keepM=selMonth;
       var histSnap=pHistory&&pHistory[copyFromKey]?pHistory[copyFromKey]:null;
       var liveSnap=(copyFromKey===curMonthKey)?(patrimonioValues||{}):null;
-      var srcSnap={};
+      var srcSnap: Record<string, any>={};
       if(histSnap&&typeof histSnap==="object")srcSnap={...srcSnap,...histSnap};
       if(liveSnap&&typeof liveSnap==="object")srcSnap={...srcSnap,...liveSnap};
       function readValue(entry){
@@ -143,7 +143,7 @@ export function PatrimonioPanel(){
       var hasValues=pEntries.some(function(e){var raw=readValue(e);return raw!==undefined&&raw!==null&&String(raw)!=="";}) || sourceKeys.some(function(k){var raw=srcSnap[k];return raw!==undefined&&raw!==null&&String(raw)!=="";});
       if(!hasValues){setToast({text:"Nessun valore disponibile per il mese selezionato",type:"error",color:"#E24B4A",icon:"🚫"});return;}
       var nd={};
-      var copiedSnap={};
+      var copiedSnap: Record<string, any>={};
       // FIX 2.0.3 — gli snapshot salvati possono contenere stringhe con virgola: "1.500,00"
       // veniva letto come 1,50 sia nel valore singolo sia nel totale.
       pEntries.forEach(function(e){var raw=readValue(e);var val=raw!==undefined&&raw!==null?String(raw):"";nd[e.id]=val;copiedSnap[e.id]=parseMoney(val);});

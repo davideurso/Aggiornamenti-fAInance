@@ -1,3 +1,5 @@
+import { PremiumProfileIcon, ReleaseSocialLinks } from "../ui/release215";
+import releasePalette from "../ui/FAINANCE_PALETTE.json";
 import { readableDarkText } from '../ui/textContrast';
 import { periodClosureNoticeText } from '../notifications/periodClosureNotice.mjs';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
@@ -520,6 +522,7 @@ export function SettingsPanel() {
     setWidgetShareBgAlpha,
     setWidgetShareBgColor,
     setWidgetShareTitleColor,
+    setWidgetShareBodyColor,
     setWidget2BgColor,
     setWidget3BgColor,
     setWidgetFidelityBgColor,
@@ -2606,7 +2609,7 @@ export function SettingsPanel() {
   }
   function settingsHeaderIcon(page, title) {
     var icons: any = {
-      profile: "👤", profile_personal: "🪪", profile_privacy: "🛡️", profile_security: "🔐",
+      profile: <PremiumProfileIcon dark={dark} />, profile_personal: "🪪", profile_privacy: "🛡️", profile_security: "🔐",
       general: "🌐", sections: "🧩", sections_income: "💰", sections_income_areas: "📂",
       sections_income_categories: "🗂️", sections_expense: "💸", sections_expense_areas: "📂",
       sections_expense_categories: "🗂️", sections_expense_methods: "💳", shopping_settings: "🛒",
@@ -2635,7 +2638,7 @@ export function SettingsPanel() {
           alignItems: "center",
           gap: 12,
           marginBottom: 14,
-          marginTop: isMobile ? 48 : 0,
+          marginTop: 0,
           minHeight: 40,
         }}
       >
@@ -2648,7 +2651,7 @@ export function SettingsPanel() {
               display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
             }}
           >
-            <FainanceIcon value={headerIcon} size={21} />
+            {typeof headerIcon === "string" ? <FainanceIcon value={headerIcon} size={21} /> : headerIcon}
           </div>
           <div
             style={{
@@ -2878,9 +2881,9 @@ export function SettingsPanel() {
             >
               <div style={{
                 width: 42, height: 42, borderRadius: 14,
-                background: dark ? "#24213a" : "#F0EDFF", display: "flex",
+                background: s.id === "profile" ? (dark ? releasePalette.colors["night-surface"].hex : releasePalette.colors.paper.hex) : (dark ? "#24213a" : "#F0EDFF"), display: "flex",
                 alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0,
-              }}>{s.icon}</div>
+              }}>{s.id === "profile" ? <PremiumProfileIcon dark={dark} /> : s.icon}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
                   <div style={{ fontSize: 15, fontWeight: 900, color: textC }}>{L(s.label)}</div>
@@ -2905,7 +2908,7 @@ export function SettingsPanel() {
       });
     }
     return (
-      <div style={{ paddingTop: isMobile ? 48 : 0 }}>
+      <div style={{ paddingTop: 0 }}>
         <SettingsCards items={menuItems} />
       </div>
     );
@@ -14195,7 +14198,7 @@ export function SettingsPanel() {
     }
     var APP_VERSION = String(
       installedAppInfo.version || FAINANCE_CURRENT_VERSION
-    );
+    ).replace(/-test$/i, "");
     var updateStatus = appUpdateManualStatus;
     var setUpdateStatus = setAppUpdateManualStatus;
     async function checkForUpdates() {
@@ -14298,16 +14301,7 @@ export function SettingsPanel() {
             <div style={{ fontSize: 13, color: subC, marginBottom: 2 }}>
               Versione {APP_VERSION}
             </div>
-            <div
-              style={{
-                fontSize: 11,
-                color: subC,
-                marginTop: 4,
-                fontStyle: "italic",
-              }}
-            >
-              {L("Your AI-powered finance tracker")}
-            </div>
+            
           </div>
 
           {!hideLegal && (
@@ -14387,6 +14381,7 @@ export function SettingsPanel() {
           {/* Aggiornamenti OTA */}
           <div
             style={{
+              textAlign: "center",
               background: cardBg,
               borderRadius: 14,
               border: "1px solid " + borderC,
@@ -14499,9 +14494,9 @@ export function SettingsPanel() {
               disabled={updateStatus === "checking"}
               style={{
                 width: "100%",
-                background: dark ? "#252535" : "#f5f5f5",
-                color: textC,
-                border: "1px solid " + borderC,
+                background: dark ? releasePalette.colors.orange.hex : releasePalette.colors.navy.hex,
+                color: dark ? releasePalette.colors["navy-deep"].hex : releasePalette.colors.paper.hex,
+                border: "none",
                 borderRadius: btnRadius,
                 padding: "11px",
                 fontSize: 14,
@@ -14539,134 +14534,7 @@ export function SettingsPanel() {
             >
               {L("Seguici sui social")}
             </div>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr",
-                gap: 10,
-              }}
-            >
-              <button
-                type="button"
-                onClick={function () {
-                  openInfoExternal(
-                    "https://www.facebook.com/profile.php?id=61592298219650"
-                  );
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "12px 13px",
-                  border: "1px solid " + borderC,
-                  borderRadius: 12,
-                  background: dark ? "#252535" : "#F6F8FF",
-                  color: textC,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  minWidth: 0,
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 10,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "#1877F2",
-                    color: readableDarkText("#fff", dark, "#1877F2"),
-                    fontSize: 20,
-                    fontWeight: 950,
-                    flexShrink: 0,
-                  }}
-                >
-                  f
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span
-                    style={{ display: "block", fontSize: 13, fontWeight: 900 }}
-                  >
-                    Facebook
-                  </span>
-                  <span
-                    style={{
-                      display: "block",
-                      fontSize: 11,
-                      color: subC,
-                      marginTop: 2,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {L("Pagina ufficiale")}
-                  </span>
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={function () {
-                  openInfoExternal("https://www.instagram.com/fainanceapp");
-                }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "12px 13px",
-                  border: "1px solid " + borderC,
-                  borderRadius: 12,
-                  background: dark ? "#252535" : "#FFF6FB",
-                  color: textC,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  minWidth: 0,
-                }}
-              >
-                <span
-                  aria-hidden="true"
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 10,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background:
-                      "linear-gradient(135deg,#833AB4,#FD1D1D,#FCAF45)",
-                    color: "#fff",
-                    fontSize: 17,
-                    fontWeight: 950,
-                    flexShrink: 0,
-                  }}
-                >
-                  ◎
-                </span>
-                <span style={{ minWidth: 0 }}>
-                  <span
-                    style={{ display: "block", fontSize: 13, fontWeight: 900 }}
-                  >
-                    Instagram
-                  </span>
-                  <span
-                    data-no-translate="true"
-                    style={{
-                      display: "block",
-                      fontSize: 11,
-                      color: subC,
-                      marginTop: 2,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    @fainanceapp
-                  </span>
-                </span>
-              </button>
-            </div>
+            <ReleaseSocialLinks dark={dark} openExternal={openInfoExternal} translate={L} />
           </div>
 
           {/* Rating */}

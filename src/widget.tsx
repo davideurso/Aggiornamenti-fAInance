@@ -1,5 +1,6 @@
 import { financeMessage } from "./i18n/financeMessages";
 import { focusFainanceInput } from "./utils/appRuntime";
+import { findImportCurrencyColumn, convertImportedCurrencyRows, importedCurrencyFields, assertImportCurrencyContext } from "./data/importCurrency";
 import { fetchToolRate } from "./finance/tools";
 import { installMovementEntryFocus } from './ui/movementEntryFocus';
 import { useId } from 'react';
@@ -648,7 +649,7 @@ export function LineChart({ data, width, height, color, integer = false }) {
 }
 
 // ── UI ATOMS ─────────────────────────────────────────────────────────────────
-export function Btn({ children, onClick, bg, color, style, disabled }) {
+export function Btn({ children, onClick, onPointerDown, bg, color, style, disabled }: { children?: any; onClick?: any; onPointerDown?: any; bg?: any; color?: any; style?: any; disabled?: any }) {
   var ctx = useApp();
   var btnRadius = ctx.btnRadius;
   var primary = ctx.confirmButtonColor || "#378ADD";
@@ -664,6 +665,7 @@ export function Btn({ children, onClick, bg, color, style, disabled }) {
     <button
       type="button"
       onClick={onClick}
+      onPointerDown={onPointerDown}
       disabled={disabled}
       style={{
         background: resolved,
@@ -972,59 +974,8 @@ function iconTextValue(v) {
 }
 
 export function PopupCloseButton({ onClick, dark, label }) {
-  // Unica implementazione della X standard dei popup fAInance.
-  // Valori identici al popup Filtra/Storico: niente varianti locali.
-  // Ogni popup che usa questa X viene automaticamente mantenuto sotto i
-  // pulsanti Profilo/Notifiche, anche dopo resize/orientation change.
-  var buttonRef = useRef<any>(null);
-  useLayoutEffect(function () {
-    if (typeof window === "undefined" || !buttonRef.current) return;
-    var node: any = buttonRef.current.parentElement;
-    var overlay: any = null;
-    while (node && node !== document.body) {
-      try {
-        var css = window.getComputedStyle(node);
-        var rect = node.getBoundingClientRect();
-        if (
-          css.position === "fixed" &&
-          rect.width >= window.innerWidth * 0.7 &&
-          rect.height >= window.innerHeight * 0.55
-        ) {
-          overlay = node;
-          break;
-        }
-      } catch (_popupScanError) {}
-      node = node.parentElement;
-    }
-    if (!overlay) return;
-
-    function keepBelowHeader() {
-      try {
-        // Repositioning the overlay while a native select is open closes its menu.
-        if (document.activeElement && document.activeElement.tagName === "SELECT" && overlay.contains(document.activeElement)) return;
-        var computed = window.getComputedStyle(overlay);
-        var currentTop = Math.max(0, parseFloat(computed.paddingTop || "0") || 0);
-        overlay.setAttribute("data-fainance-popup-overlay", "true");
-        overlay.style.boxSizing = "border-box";
-        overlay.style.paddingTop =
-          "max(" +
-          currentTop +
-          "px, max(82px, calc(env(safe-area-inset-top, 0px) + 72px)))";
-        if (computed.display === "flex" && computed.alignItems !== "flex-end")
-          overlay.style.alignItems = "flex-start";
-        if (computed.overflowY === "visible") overlay.style.overflowY = "auto";
-        overlay.style.setProperty("-webkit-overflow-scrolling", "touch");
-      } catch (_popupSafeTopError) {}
-    }
-
-    keepBelowHeader();
-    var raf = window.requestAnimationFrame(keepBelowHeader);
-    // CSS env()/viewport units adapt the safe area without moving an open picker.
-    return function () { window.cancelAnimationFrame(raf); };
-  }, []);
   return (
     <button
-      ref={buttonRef}
       data-fainance-popup-close="true"
       type="button"
       onClick={onClick}
@@ -1324,7 +1275,8 @@ export function FainancePickerModal({
   onClose,
   children,
   zIndex,
-}) {
+  footer,
+}: { open: any; title: any; onClose: any; children: any; zIndex?: any; footer?: any }) {
   var ctx = useApp();
   var dark = ctx.dark;
   var textC = dark ? "#eee" : "#333";
@@ -1334,6 +1286,7 @@ export function FainancePickerModal({
   var modal = (
     <div
       role="dialog"
+      aria-label={typeof title === "string" ? title : undefined}
       aria-modal="true"
       onClick={function (e) {
         if (e.target === e.currentTarget) onClose();
@@ -1341,13 +1294,16 @@ export function FainancePickerModal({
       style={{
         position: "fixed",
         inset: 0,
+        top: "var(--app-viewport-top,0px)",
+        bottom: "auto",
+        height: "var(--app-viewport-height,100dvh)",
         zIndex: zIndex || 10150,
         background: "rgba(20,20,30,0.66)",
         backdropFilter: "blur(5px)",
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        padding: "max(82px,calc(env(safe-area-inset-top,0px) + 72px)) clamp(8px,2.5vw,16px) 16px",
+        padding: "calc(env(safe-area-inset-top,0px) + clamp(16px,5dvh,44px)) clamp(8px,2.5vw,16px) calc(env(safe-area-inset-bottom,0px) + 16px)",
         boxSizing: "border-box",
         overflowY: "auto",
         WebkitOverflowScrolling: "touch",
@@ -1359,7 +1315,7 @@ export function FainancePickerModal({
         }}
         style={{
           width: "min(620px,100%)",
-          maxHeight: "calc(100dvh - 98px)",
+          maxHeight: "calc(var(--app-viewport-height,100dvh) - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - clamp(16px,5dvh,44px) - 16px)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
@@ -1372,6 +1328,7 @@ export function FainancePickerModal({
             alignItems: "center",
             justifyContent: "space-between",
             gap: 10,
+            flexShrink: 0,
             padding: "14px clamp(12px,3.8vw,18px)",
             background: dark ? "#2B2B40" : "#F7F8FC",
             borderBottom: "1px solid " + borderC,
@@ -1401,12 +1358,14 @@ export function FainancePickerModal({
         <div
           style={{
             padding: "clamp(11px,3.6vw,18px)",
+            minHeight: 0,
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
           }}
         >
           {children}
         </div>
+        {footer && <div style={{flexShrink:0,padding:"12px clamp(11px,3.6vw,18px)",borderTop:"1px solid " + borderC}}>{footer}</div>}
       </div>
     </div>
   );
@@ -2932,7 +2891,7 @@ export function AppColorSelector({
   dark: darkProp,
   disabled,
   compact,
-}) {
+}: { value: any; onChange: any; dark?: any; disabled?: any; compact?: any }) {
   var ctx = useApp();
   var dark = darkProp == null ? ctx.dark : darkProp;
   var [open, setOpen] = useState(false);
@@ -3054,7 +3013,7 @@ export function DatePickerField({ value, onChange }) {
     </div>
   );
 }
-export function StatCard({ title, value, color, bg, sub, valueWeight }) {
+export function StatCard({ title, value, color, bg, sub, valueWeight }: { title: any; value: any; color: any; bg: any; sub?: any; valueWeight?: any }) {
   var statCtx:any = useApp();
   var dark = statCtx.dark;
   var hasSub = !!sub;
@@ -3243,25 +3202,25 @@ export function Toast({ msg, onDone, color }) {
     },
     [payload.id, text, type, duration]
   );
-  return (
+  var content = (
     <div
+      role="alert" data-fainance-toast="true"
       style={{
-        position: "fixed",
-        top: payload.compact ? undefined : "clamp(240px,38vh,360px)",
-        bottom: payload.compact ? "calc(84px + env(safe-area-inset-bottom, 0px))" : undefined,
-        left: "50%",
-        transform: "translateX(-50%)",
+        position: "relative",
         background: bg,
         color: readableDarkText(toastTextColor, (ctx as any).dark, bg),
         borderRadius: payload.compact ? 12 : 22,
         padding: payload.compact ? "12px 42px 12px 12px" : "16px 22px",
         fontSize: payload.compact ? 12 : 14,
         fontWeight: 800,
-        zIndex: 600,
+        zIndex: 1,
         boxShadow: "0 8px 40px rgba(0,0,0,0.28)",
         textAlign: "center",
-        minWidth: 240,
-        maxWidth: "88vw",
+        minWidth: "min(240px,100%)",
+        maxWidth: "min(420px,100%)",
+        maxHeight: "100%",
+        overflowY: "auto",
+        boxSizing: "border-box",
         lineHeight: 1.35,
         pointerEvents: "none",
       }}
@@ -3296,6 +3255,7 @@ export function Toast({ msg, onDone, color }) {
       )}
     </div>
   );
+  return typeof document !== "undefined" ? createPortal(<div data-fainance-toast-layer="true" style={{position:"fixed",inset:0,top:"var(--app-viewport-top,0px)",bottom:"auto",height:"var(--app-viewport-height,100dvh)",zIndex:2147483500,display:"flex",justifyContent:"center",alignItems:payload.compact?"flex-end":"center",padding:"calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + " + (payload.compact ? "84px" : "16px") + ")",boxSizing:"border-box",pointerEvents:"none"}}>{content}</div>,document.body) : content;
 }
 
 export function AlertPopup({ newAlerts, onClose }) {
@@ -4116,7 +4076,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
               {t.category}
             </label>
             <div style={{ position: "relative", minWidth: 0 }}>
-              <select
+              <select aria-label={t.category}
                 value={f.catId}
                 onChange={function (e) {
                   setF(function (p) {
@@ -4125,6 +4085,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
                 }}
                 style={{
                   ...inp,
+                  opacity: 0,
                   padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
                   paddingLeft: isMobile ? 2 : 4,
                   paddingRight: isMobile ? 3 : 6,
@@ -4145,6 +4106,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
                   );
                 })}
               </select>
+              <span aria-hidden="true" data-entry-selection="catId" style={{position:"absolute",inset:0,pointerEvents:"none",display:"grid",gridTemplateColumns:"22px minmax(0,1fr)",gap:4,alignItems:"center",fontSize:isMobile?"clamp(13.2px,4.05vw,14.8px)":16,fontWeight:750,color:tc}}><FainanceIcon value={(sCats.find(function(item){return String(item.id)===String(f.catId);})||{}).icon} size={20} style={{transform:"translateX(-3px)"}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(sCats.find(function(item){return String(item.id)===String(f.catId);})||{}).name}</span></span>
               <span
                 aria-hidden="true"
                 style={{
@@ -4169,7 +4131,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
               {TL("Pagamento")}
             </label>
             <div style={{ position: "relative", minWidth: 0 }}>
-              <select
+              <select aria-label={TL("Pagamento")}
                 value={f.methodId}
                 onChange={function (e) {
                   setF(function (p) {
@@ -4178,6 +4140,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
                 }}
                 style={{
                   ...inp,
+                  opacity: 0,
                   padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
                   paddingLeft: isMobile ? 2 : 4,
                   paddingRight: isMobile ? 3 : 6,
@@ -4198,6 +4161,7 @@ export function MovementExpenseSelectors({ value: f, setValue: setF, categories:
                   );
                 })}
               </select>
+              <span aria-hidden="true" data-entry-selection="methodId" style={{position:"absolute",inset:0,pointerEvents:"none",display:"grid",gridTemplateColumns:"22px minmax(0,1fr)",gap:4,alignItems:"center",fontSize:isMobile?"clamp(13.2px,4.05vw,14.8px)":16,fontWeight:750,color:tc}}><FainanceIcon value={(sMethods.find(function(item){return String(item.id)===String(f.methodId);})||{}).icon} size={20} style={{transform:"translateX(-3px)"}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(sMethods.find(function(item){return String(item.id)===String(f.methodId);})||{}).name}</span></span>
               <span
                 aria-hidden="true"
                 style={{
@@ -6521,7 +6485,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
       ctx.incomeTypeOverrides,
     ]
   );
-  function blank() {
+  function blank(): { _id: number; _ruleDefaultFields: string[]; amount: string; catId: any; methodId: any; itype: any; desc: string; date: string; rateizzato: boolean; rate: number; rateDirection: string; currency: string; baseCurrency: string; exchangeRate: number; exchangeRateDate?: string; exchangeRateSource?: string } {
     var dc = sCats.find(function (c) {
       return String(c.id) === String(ctx.defaultExpenseCat || "");
     }) ||
@@ -7265,6 +7229,11 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
 }
 export function RecurringManager() {
   var ctx: any = useApp();
+  useLayoutEffect(function () {
+    if (!ctx.setRecurringScreenActive) return;
+    ctx.setRecurringScreenActive(true);
+    return function () { ctx.setRecurringScreenActive(false); };
+  }, [ctx.setRecurringScreenActive]);
   function L(v) {
     return translateFainanceText(v, ctx.lang || "it");
   }
@@ -7449,7 +7418,7 @@ export function RecurringManager() {
       </div>
     );
   }
-  function showToast(msg, color) {
+  function showToast(msg, color?: any) {
     setToast({ msg: msg, color: color || "#1D9E75" });
   }
   function setField(k, v) {
@@ -9507,6 +9476,48 @@ export function GoalsPanel() {
     </div>
   );
 }
+
+export function AlertCategoryPicker({ value, onChange, categories, groups, inputStyle }: any) {
+  const ctx: any = useApp();
+  const dark = !!ctx.dark;
+  const L = (s: string) => translateFainanceText(s, ctx.lang || "it");
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const selected = categories.find((c: any) => String(c.id) === String(value));
+  useEffect(function () {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement;
+    const first = rowsRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]') || rowsRef.current?.querySelector<HTMLButtonElement>('button');
+    first?.focus();
+    function closeOnEscape(event: KeyboardEvent) { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } }
+    document.addEventListener("keydown", closeOnEscape, true);
+    return function () { document.removeEventListener("keydown", closeOnEscape, true); previous?.focus(); };
+  }, [open]);
+  return <>
+    <button ref={triggerRef} type="button" aria-label={L("Categoria")} aria-haspopup="dialog" aria-expanded={open}
+      onClick={()=>setOpen(true)} style={{...inputStyle, borderRadius:12, padding:"11px 12px", display:"flex", alignItems:"center", gap:10, textAlign:"left", cursor:"pointer"}}>
+      <FainanceIcon value={selected?.icon || "\u{1F4C1}"} size={20}/>
+      <span>{selected ? L(selected.name) : L("Categoria")}</span>
+    </button>
+    <FainancePickerModal open={open} title={L("Categoria")} onClose={()=>setOpen(false)} zIndex={10200}>
+      <div ref={rowsRef}>
+        {groups.map((group: any) => <section key={group.id}>
+          <div style={{fontSize:11,fontWeight:800,color:dark?"#aaa":"#777",textTransform:"uppercase",letterSpacing:1,margin:"12px 0 6px"}}>{L(group.name)}</div>
+          {safeCatsForGroup(categories, groups, group).map((item: any) =>
+            <button key={item.id} type="button" aria-pressed={String(value)===String(item.id)}
+              onClick={()=>{onChange(String(item.id));setOpen(false);}}
+              style={{width:"100%",boxSizing:"border-box",background:dark?"#252535":"#fff",borderRadius:10,border:"1px solid "+(dark?"#444":"#eee"),padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:10,cursor:"pointer",textAlign:"left"}}>
+              <span style={{display:"inline-flex"}}><FainanceIcon value={item.icon || "\u{1F4C1}"} size={20}/></span>
+              <span style={{width:12,height:12,borderRadius:"50%",background:item.color,flexShrink:0}}/>
+              <span style={{flex:1,fontSize:14,color:dark?"#eee":"#333",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(item.name)}</span>
+            </button>)}
+        </section>)}
+      </div>
+    </FainancePickerModal>
+  </>;
+}
+
 export function AlertsPanel() {
   var ctx = useApp();
   const accountingPeriod = (ctx as any).accountingPeriod;
@@ -10203,29 +10214,7 @@ export function AlertsPanel() {
                     >
                       {L("Categoria")}
                     </label>
-                    <select
-                      value={form.catId}
-                      onChange={function (e) {
-                        handleCatChange(e.target.value);
-                      }}
-                      style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
-                    >
-                      {groups.map(function (g) {
-                        return (
-                          <optgroup key={g.id} label={g.name}>
-                            {safeCatsForGroup(cats, groups, g).map(function (
-                              c
-                            ) {
-                              return (
-                                <option key={c.id} value={c.id}>
-                                  {iconTextValue(c.icon)} {c.name}
-                                </option>
-                              );
-                            })}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
+                    <AlertCategoryPicker value={form.catId} onChange={handleCatChange} categories={cats} groups={groups} inputStyle={inp} />
                   </div>
                 ) : (
                   <div>
@@ -11689,6 +11678,7 @@ export function SettingsList({
   var [newIcon, setNewIcon] = useState("📦");
   var [newExcludeFromTotals, setNewExcludeFromTotals] = useState(false);
   var [showCreate, setShowCreate] = useState(false);
+  var [saveError, setSaveError] = useState("");
   var [editId, setEditId] = useState(null);
   var [editName, setEditName] = useState("");
   var [editColor, setEditColor] = useState("");
@@ -11732,6 +11722,7 @@ export function SettingsList({
       });
   }
   function resetCreate() {
+    setSaveError("");
     setNewName("");
     setNewColor(COLORS[0]);
     setNewGroup(gl[0] ? gl[0].id : "");
@@ -12205,51 +12196,35 @@ export function SettingsList({
     onSave,
   }) {
     var valid = !baseBlocked && !!String(name || "").trim();
+    function submit() {
+      setSaveError("");
+      try {
+        if (onSave() === false) setSaveError(L("Salvataggio non riuscito. I dati inseriti sono conservati."));
+      } catch (error) {
+        var code = String(error && (typeof error.code === "string" ? error.code : error.message) || "");
+        if (!/^[A-Za-z0-9_./-]{1,80}$/.test(code)) code = String(error && error.name || "SAVE_FAILED");
+        setSaveError(L("Salvataggio non riuscito. I dati inseriti sono conservati.") + " (" + code + ")");
+      }
+    }
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.58)",
-          zIndex: 980,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "7vh 16px 3vh",
-          boxSizing: "border-box",
-          overflowY: "auto",
-        }}
-        onMouseDown={function (e) {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            maxWidth: 520,
-            background: dark ? "#252535" : "#fff",
-            borderRadius: 22,
-            border: "1px solid " + borderC,
-            boxShadow: "0 18px 65px rgba(0,0,0,0.38)",
-            padding: "20px 18px 18px",
-          }}
-        >
-          <div style={{ position: "absolute", right: 14, top: 14 }}>
-            <PopupCloseButton onClick={onClose} dark={dark} label={L("Chiudi")} />
-          </div>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 950,
-              color: tc,
-              marginBottom: 16,
-              paddingRight: 44,
-            }}
-          >
-            {L(title)}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+      <FainancePickerModal open={true} title={L(title)} onClose={onClose} footer={<div>{saveError && <div role="alert" data-category-save-error="true" style={{marginBottom:10,padding:10,borderRadius:10,background:dark?"#10243A":"#FFFFFF",border:"1px solid " + (dark?"#FF9AA3":"#B63B45"),color:dark?"#FF9AA3":"#B63B45",whiteSpace:"pre-line",overflowWrap:"anywhere",fontSize:13}}>{saveError}</div>}<div style={{ display: "flex", gap: 9, marginTop: 0 }}>
+            <Btn
+              onClick={submit}
+              disabled={!valid}
+              bg={valid ? confirmButtonColor : "#A8A8A8"}
+              style={{ flex: 1, padding: 12, fontWeight: 950 }}
+            >
+              {L("Salva")}
+            </Btn>
+            <Btn
+              onClick={onClose}
+              bg={dark ? "#333" : "#f0f0f0"}
+              color={tc}
+              style={{ padding: "12px 16px", fontWeight: 900 }}
+            >
+              {L("Annulla")}
+            </Btn>
+          </div></div>}><div data-category-fields="true"><div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
             {showIcon ? (
               <div
                 style={{
@@ -12337,12 +12312,15 @@ export function SettingsList({
               <input
                 autoFocus={editId === null}
                 value={name}
+                aria-label={L(nameFieldLabel())}
+                onInput={function (e) { setName(e.currentTarget.value); }}
+                onCompositionEnd={function (e) { setName(e.currentTarget.value); }}
                 disabled={baseBlocked}
                 onChange={function (e) {
                   setName(e.target.value);
                 }}
                 onKeyDown={function (e) {
-                  if (e.key === "Enter" && valid) onSave();
+                  if (e.key === "Enter" && valid) submit();
                 }}
                 placeholder={L(nameFieldLabel())}
                 style={inp}
@@ -12414,27 +12392,7 @@ export function SettingsList({
                 />
               </div>
             )}
-          </div>
-          <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
-            <Btn
-              onClick={onSave}
-              disabled={!valid}
-              bg={valid ? confirmButtonColor : "#A8A8A8"}
-              style={{ flex: 1, padding: 12, fontWeight: 950 }}
-            >
-              {L("Salva")}
-            </Btn>
-            <Btn
-              onClick={onClose}
-              bg={dark ? "#333" : "#f0f0f0"}
-              color={tc}
-              style={{ padding: "12px 16px", fontWeight: 900 }}
-            >
-              {L("Annulla")}
-            </Btn>
-          </div>
-        </div>
-      </div>
+          </div></div></FainancePickerModal>
     );
   }
   return (
@@ -13251,7 +13209,7 @@ export function PatrimonioSettingsPanel({
   forcedSection,
   allowEditing = true,
   onLocked,
-} = {}) {
+}: { forcedSection?: string; allowEditing?: boolean; onLocked?: () => void } = {}) {
   var ctx = useApp();
   function L(v) {
     return translateFainanceText(v, (ctx && ctx.lang) || "it");
@@ -15390,6 +15348,7 @@ export function ImportData(props: any = {}) {
   var [map, setMap] = useState<any>({
     date: "",
     amount: "",
+    currency: "",
     desc: "",
     cat: "",
     method: "",
@@ -15400,6 +15359,13 @@ export function ImportData(props: any = {}) {
     patNote: "",
   });
   var [importDateFmt, setImportDateFmt] = useState("auto");
+  var previewBuildRef = useRef(0);
+  var [currencyLoading, setCurrencyLoading] = useState(false);
+  useEffect(function () {
+    previewBuildRef.current++;
+    setCurrencyLoading(false);
+    return function () { previewBuildRef.current++; };
+  }, [rows, map, importType, importDateFmt, (ctx as any).currency, (ctx as any).currentPlan, (ctx as any).secondaryCurrency]);
   var [preview, setPreview] = useState<any[]>([]);
   var [msg, setMsg] = useState("");
   var [importSuccess, setImportSuccess] = useState<any>(null);
@@ -15504,6 +15470,8 @@ export function ImportData(props: any = {}) {
     });
   }
   function resetAll() {
+    previewBuildRef.current++;
+    setCurrencyLoading(false);
     setStep(0);
     setRows([]);
     setCols([]);
@@ -15519,6 +15487,7 @@ export function ImportData(props: any = {}) {
     setMap({
       date: "",
       amount: "",
+      currency: "",
       desc: "",
       cat: "",
       method: "",
@@ -15595,6 +15564,7 @@ export function ImportData(props: any = {}) {
     setMap({
       date: "",
       amount: "",
+      currency: findImportCurrencyColumn(header),
       desc: "",
       cat: "",
       method: "",
@@ -16799,7 +16769,9 @@ export function ImportData(props: any = {}) {
       reader2.readAsText(file, "UTF-8");
     }
   }
-  function buildPreview() {
+  async function buildPreview() {
+    if (currencyLoading) return;
+    var request = ++previewBuildRef.current;
     if (importType === "patrimonio") {
       if (!map.monthKey || !map.entryId || !map.amount) {
         setMsg(L("Mappa almeno Data/Mese, Categoria/Voce e Importo"));
@@ -16814,12 +16786,14 @@ export function ImportData(props: any = {}) {
       dsi = cols.indexOf(map.desc),
       ci2 = cols.indexOf(map.cat),
       mi = cols.indexOf(map.method),
-      ri = cols.indexOf(map.rate || "");
+      ri = cols.indexOf(map.rate || ""),
+      currencyIndex = cols.indexOf(map.currency || "");
     var failCount = 0;
     var p = rows
       .map(function (r) {
         var rawA = r[ai] || "";
         var amt = parseImportMoney(rawA);
+        var rowCurrency = currencyIndex >= 0 ? r[currencyIndex] : "";
         var rateVal = 0;
         if (ri >= 0) {
           var rv = parseInt(r[ri]);
@@ -16839,6 +16813,7 @@ export function ImportData(props: any = {}) {
           if (methN && !mm) unknown.paymentMethod = methN;
           return {
             date: iso,
+            currency: rowCurrency,
             amount: isNaN(amt) ? 0 : Math.abs(amt),
             desc: dsi >= 0 ? String(r[dsi] || "") : "",
             catName: catN,
@@ -16861,6 +16836,7 @@ export function ImportData(props: any = {}) {
           if (typeN && !it) unknown2.incomeType = typeN;
           return {
             date: iso2,
+            currency: rowCurrency,
             amount: isNaN(amt) ? 0 : Math.abs(amt),
             desc: dsi >= 0 ? String(r[dsi] || "") : "",
             typeName: typeN,
@@ -16895,6 +16871,7 @@ export function ImportData(props: any = {}) {
           if (rawEntry && !pEntry) unknown3.patrimonioEntry = rawEntry;
           return {
             monthKey: mk,
+            currency: rowCurrency,
             entryId: pEntry
               ? pEntry.id
               : pEntries[0]
@@ -16916,6 +16893,15 @@ export function ImportData(props: any = {}) {
             : r.date && r.amount > 0)
         );
       });
+    setCurrencyLoading(true);
+    try {
+      p = await convertImportedCurrencyRows(p, String((ctx as any).currency || "EUR"), CURRENCIES, fetchToolRate, { plan: String((ctx as any).currentPlan || "free").toLowerCase(), secondary: String((ctx as any).secondaryCurrency || "") });
+      if (request !== previewBuildRef.current) return;
+    } catch (error) {
+      if (request !== previewBuildRef.current) return;
+      setMsg(L(error && error.message === "IMPORT_CURRENCY_INVALID" ? "Valuta non riconosciuta o ambigua. Usa un codice come EUR, USD o GBP." : error && error.message === "IMPORT_CURRENCY_PLAN" ? "La valuta del file non è disponibile nel tuo piano." : error && error.message === "IMPORT_CURRENCY_AMOUNT" ? "L’importo convertito è troppo piccolo per la valuta principale." : "Impossibile recuperare il tasso di cambio. Riprova."));
+      return;
+    } finally { if (request === previewBuildRef.current) setCurrencyLoading(false); }
     var u = collectUnknowns(p);
     if (failCount > 0)
       setMsg(
@@ -17088,6 +17074,7 @@ export function ImportData(props: any = {}) {
         return {
           id: Date.now() + Math.random(),
           amount: p.amount,
+          ...importedCurrencyFields(p),
           catId: p.catId,
           methodId: p.methodId,
           methodName: p.methodName,
@@ -17100,6 +17087,7 @@ export function ImportData(props: any = {}) {
       return {
         id: Date.now() + Math.random(),
         amount: p.amount,
+          ...importedCurrencyFields(p),
         type: p.itype,
         desc: p.desc,
         date: p.date,
@@ -17108,7 +17096,19 @@ export function ImportData(props: any = {}) {
       };
     });
   }
+  function importCurrencyPreviewReady() {
+    try {
+      assertImportCurrencyContext(preview, String((ctx as any).currency || "EUR"), {plan:String((ctx as any).currentPlan || "free").toLowerCase(),secondary:String((ctx as any).secondaryCurrency || "")});
+      return true;
+    } catch(error) {
+      setPendingDataImportMode(null);
+      setStep(1);
+      setMsg(L(error && error.message === "IMPORT_CURRENCY_PLAN" ? "La valuta del file non è disponibile nel tuo piano." : "La valuta principale è cambiata. Genera di nuovo l’anteprima."));
+      return false;
+    }
+  }
   async function executeDataImport(mode) {
+    if (!importCurrencyPreviewReady()) return;
     if (importApplyBusyRef.current) return;
     var finalPreview = resolvePreviewRows();
     if (!finalPreview.length) {
@@ -17261,6 +17261,7 @@ export function ImportData(props: any = {}) {
     resetAll();
   }
   function doImport() {
+    if (!importCurrencyPreviewReady()) return;
     var candidateRows =
       unknownDecision === "skip"
         ? preview.filter(function (r) {
@@ -17701,6 +17702,7 @@ export function ImportData(props: any = {}) {
             }}
           >
             {L(IMPORT_GUIDELINES[importType].body)}
+            <div style={{marginTop:6}}>{L("Valuta")}: EUR / USD / GBP</div>
           </div>
         </div>
       )}
@@ -17819,6 +17821,7 @@ export function ImportData(props: any = {}) {
               📅 {L("Formato delle date nel file")}
             </label>
             <select
+              disabled={currencyLoading}
               value={importDateFmt}
               onChange={function (e) {
                 setImportDateFmt(e.target.value);
@@ -17847,12 +17850,14 @@ export function ImportData(props: any = {}) {
                   ["monthKey", "Data / Mese *"],
                   ["entryId", "Categoria / Voce *"],
                   ["amount", "Importo / Valore *"],
+                  ["currency", "Valuta"],
                   ["patNote", "Note (opzionale)"],
                 ]
               : importType === "expense"
               ? [
                   ["date", "Data *"],
                   ["amount", "Importo *"],
+                  ["currency", "Valuta"],
                   ["desc", "Descrizione"],
                   ["cat", "Categoria"],
                   ["method", "Pagamento"],
@@ -17861,6 +17866,7 @@ export function ImportData(props: any = {}) {
               : [
                   ["date", "Data *"],
                   ["amount", "Importo *"],
+                  ["currency", "Valuta"],
                   ["desc", "Descrizione"],
                   ["cat", "Tipo entrata"],
                   ["rate", "Rate (mesi)"],
@@ -17881,6 +17887,8 @@ export function ImportData(props: any = {}) {
                     {L(l)}
                   </label>
                   <select
+                    aria-label={L(l)}
+                    disabled={currencyLoading}
                     value={map[k] || ""}
                     onChange={function (e) {
                       var v = e.target.value;
@@ -17890,7 +17898,7 @@ export function ImportData(props: any = {}) {
                     }}
                     style={{ ...sinp, width: "100%" }}
                   >
-                    <option value="">{L("-- nessuna --")}</option>
+                    <option value="">{k === "currency" ? L("Valuta principale") + " (" + ((ctx as any).currency || "EUR") + ")" : L("-- nessuna --")}</option>
                     {cols.map(function (c, ci5) {
                       return (
                         <option key={ci5} value={c}>
@@ -17903,8 +17911,9 @@ export function ImportData(props: any = {}) {
               );
             })}
           </div>
+          <div role="note" style={{fontSize:12,color:(ctx as any).subC || tc,marginBottom:10,lineHeight:1.5}}>{L("Se la colonna Valuta non è selezionata, viene usata la valuta principale. Le altre valute sono convertite al cambio dell’anteprima.")}</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={buildPreview}>{L("Anteprima")}</Btn>
+            <Btn disabled={currencyLoading} onClick={buildPreview}>{currencyLoading ? L("Caricamento...") : L("Anteprima")}</Btn>
             <Btn
               onClick={function () {
                 setStep(0);
@@ -17951,8 +17960,8 @@ export function ImportData(props: any = {}) {
               >
                 <tr>
                   {(importType === "patrimonio"
-                    ? ["Mese", "Categoria", "Valore", "Note", "Stato"]
-                    : ["Data", "Importo", "Descrizione", "Cat/Tipo", "Stato"]
+                    ? ["Mese", "Categoria", "Valore", "Valuta", "Note", "Stato"]
+                    : ["Data", "Importo", "Valuta", "Descrizione", "Cat/Tipo", "Stato"]
                   ).map(function (h) {
                     return (
                       <th
@@ -18006,7 +18015,9 @@ export function ImportData(props: any = {}) {
                             }}
                           >
                             {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
+                            {r.originalAmount != null && <div style={{fontSize:10,color:(ctx as any).subC || tc,marginTop:3}}>{L("Valuta principale")}: {fmtAmt(r.amount, sym)}</div>}
                           </td>
+                          <td style={{padding:"6px 10px",color:tc}}>{r.currency}</td>
                           <td
                             style={{
                               padding: "6px 10px",
@@ -18051,7 +18062,9 @@ export function ImportData(props: any = {}) {
                             }}
                           >
                             {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
+                            {r.originalAmount != null && <div style={{fontSize:10,color:(ctx as any).subC || tc,marginTop:3}}>{L("Valuta principale")}: {fmtAmt(r.amount, sym)}</div>}
                           </td>
+                          <td style={{padding:"6px 10px",color:tc}}>{r.currency}</td>
                           <td style={{ padding: "6px 10px", color: tc }}>
                             {r.desc}
                           </td>
@@ -18194,7 +18207,7 @@ export function FAInanceLogo({ size, style }) {
     />
   );
 }
-export function AIGrilloIcon({ size, style, imgStyle }) {
+export function AIGrilloIcon({ size, style, imgStyle }: { size: any; style?: any; imgStyle?: any }) {
   size = size || 34;
   return (
     <span

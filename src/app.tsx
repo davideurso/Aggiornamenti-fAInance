@@ -28,6 +28,8 @@ import { createAccountingPeriod } from './finance/accountingPeriod';
 import { PeriodPreferences } from './settings/PeriodPreferences';
 import { periodText } from './i18n/periodTranslations';
 import { budgetForPeriod, saveBudgetForPeriod, resetBudgetForPeriod } from './finance/budgetEngine';
+import { readRecoverySnapshot, persistRecoverySnapshot, clearRecoverySnapshots } from "./data/recoverySnapshots";
+import { assertFinanceWriteReady } from "./data/financeWriteGate";
 import { financeMessage } from './i18n/financeMessages';
 import { participantForUser, shareAmountForUser } from './finance/shareUserAmount';
 import { buildExpensesForAnalysis, resolveSharePersonalCategoryId, fallbackPersonalCategoryId } from './finance/shareAnalytics';
@@ -327,6 +329,8 @@ import {
   watchAccountDeletionState,
 } from "./security/accountLifecycle";
 import { NotificationCenter } from "./notifications/NotificationCenter";
+import { AppViewport, AppSummaryHeader } from "./ui/AppSummaryHeader";
+import { PremiumProfileIcon } from "./ui/release215";
 import { startNativePushNotifications, syncNotificationProfile } from "./notifications/pushNotifications";
 
 /* fainanceBasicUserPayload extracted */
@@ -531,7 +535,7 @@ function AdminOnlyApp({ session, onLogout }: { session: AdminSession; onLogout: 
 
   return (
     <AppCtx.Provider value={ctxValue}>
-      <DarkTextDefaults dark={dark} background={bgColor} />
+      <AppViewport /><DarkTextDefaults dark={dark} background={bgColor} />
       <div
         data-fainance-admin-only="true"
         style={{
@@ -650,6 +654,7 @@ function AppWithLogin() {
           if (deleted) {
             try {
               clearFainanceLocalAccountData(user.uid);
+              await clearRecoverySnapshots(user.uid);
             } catch (e) {}
             setFbUser(null);
             setUserData(null);
@@ -2927,7 +2932,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     "custom_notifs_v1",
     "notif_prefs_v1",
   ];
-  function persistCompleteAccountRecoverySnapshot(reason?: string) {
+  async function persistCompleteAccountRecoverySnapshot(reason?: string) {
     if (!userId) return;
     try {
       var values: any = {};
@@ -2946,10 +2951,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var snapshot = JSON.stringify(snapshotValue);
       var currentKey = userKey("account_recovery_complete_v1"),
         previousKey = userKey("account_recovery_complete_previous_v1");
-      var previous = localStorage.getItem(currentKey);
-      if (previous) localStorage.setItem(previousKey, previous);
-      localStorage.setItem(currentKey, snapshot);
       accountRecoveryPendingRef.current = false;
+      await persistRecoverySnapshot(currentKey, previousKey, snapshot);
       try {
         createAutomaticAccountBackup({
           uid: String(userId),
@@ -2959,7 +2962,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         }).catch(function () {});
       } catch (_backupError) {}
     } catch (e) {
-      console.warn("Account recovery snapshot skipped", (e && e.message) || e);
+      accountRecoveryPendingRef.current = true;
+      console.warn("Account recovery snapshot skipped", e && e.name);
     }
   }
   function scheduleCompleteAccountRecoverySnapshot(reason?: string) {
@@ -3158,7 +3162,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       ];
       for (var i = 0; i < recoveryKeys.length; i++) {
         try {
-          var snapRaw = localStorage.getItem(recoveryKeys[i]);
+          var snapRaw = readRecoverySnapshot(recoveryKeys[i]);
           if (!snapRaw) continue;
           var snap = JSON.parse(snapRaw),
             saved = snap && snap.values ? snap.values[key] : null;
@@ -3767,7 +3771,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
   function catalogRecoverySnapshotValues(storageKey) {
     try {
-      var raw = localStorage.getItem(storageKey);
+      var raw = readRecoverySnapshot(storageKey);
       if (!raw) return null;
       var snap = JSON.parse(raw);
       return snap && snap.values && typeof snap.values === "object"
@@ -4778,29 +4782,39 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var financeEvolutionRef = useRef(financeEvolution);
   financeEvolutionRef.current = financeEvolution;
   function setFinanceEvolution(nextValue) {
-    // Validate before marking a write or touching the existing state.
     const next = migrateFinanceEvolution(typeof nextValue === 'function' ? nextValue(financeEvolutionRef.current) : nextValue);
     const now = Date.now();
     const nextWithRuleSync = migrateFinanceEvolution(trackAutomaticRuleLocalChange(financeEvolutionRef.current, next, now));
-    // A one-time confirmation is account-scoped and travels with verified V6
-    // preferences, independently of the larger financial document.
+    const changed = !syncJsonEqual(nextWithRuleSync, financeEvolutionRef.current);
+    // Preserve the previous durable and in-memory document when storage rejects
+    // an edit. This setter is also called by React effects and timed maintenance.
+    if (changed) {
+      try {
+        localStorage.setItem(userKey('finance_evolution_v1'), JSON.stringify(nextWithRuleSync));
+      } catch (error) {
+        persistAccountSyncError('finance-local-write', error, false);
+        setToast({ text: L('Modifica non salvata: memoria locale non disponibile. I dati precedenti sono conservati.'), type: 'error' });
+        return false;
+      }
+    }
+    // This small marker is redundant with the durable finance document. Failure
+    // to cache it must not unmount React; V6 also derives it from that document.
     if (nextWithRuleSync.periodIntroductionSeen === true) {
-      const previousConfirmation = readPeriodConfirmation(localStorage.getItem(userKey(PERIOD_CONFIRMATION_KEY)));
+      let previousConfirmation = null;
+      try { previousConfirmation = readPeriodConfirmation(localStorage.getItem(userKey(PERIOD_CONFIRMATION_KEY))); } catch (_readError) {}
       if (!previousConfirmation || !syncJsonEqual(previousConfirmation.period, nextWithRuleSync.period)) {
         const confirmation = { confirmed: true, period: nextWithRuleSync.period, updatedAt: now };
-        localStorage.setItem(userKey(PERIOD_CONFIRMATION_KEY), JSON.stringify(confirmation));
+        try { localStorage.setItem(userKey(PERIOD_CONFIRMATION_KEY), JSON.stringify(confirmation)); } catch (_markerError) {}
         setPeriodConfirmationRaw(confirmation);
         markPendingAccountSync(true);
       }
     }
-    if (syncJsonEqual(nextWithRuleSync, financeEvolutionRef.current)) return;
-    // Cloud hydration uses the raw setter. This public setter always represents
-    // an explicit edit, including an edit made during an async cloud callback.
-    localStorage.setItem(userKey('finance_evolution_v1'), JSON.stringify(nextWithRuleSync));
+    if (!changed) return true;
     writeUserLocalUpdatedAt('finance_evolution_v1', now);
     markPendingAccountSync(true);
     financeEvolutionRef.current = nextWithRuleSync;
-    return setFinanceEvolutionRaw(nextWithRuleSync);
+    setFinanceEvolutionRaw(nextWithRuleSync);
+    return true;
   }
   useEffect(() => {
     if (!userId || !firestoreReady || !firestoreHydratedRef.current ||
@@ -8429,14 +8443,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   // Only the resolved write promise acknowledges the pending revision.
                   firestoreHydratedRef.current = true;
                   setFirestoreReady(true);
-
+                  
                   return;
                 } else {
                   // Non applicare uno snapshot precedente alla modifica locale: altrimenti
                   // l'elemento appena creato scompare prima del salvataggio sul cloud.
                   firestoreHydratedRef.current = true;
                   setFirestoreReady(true);
-
+                  
                   return;
                 }
               }
@@ -11004,7 +11018,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
 
   async function writeCompactAccountDocument(docRef: any, payload: any) {
-    if (!financeSchemaCompatibleRef.current) throw new Error('UNSUPPORTED_FINANCE_SCHEMA');
+    assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
     var compactSource: any = { ...(payload || {}) };
     var previous: any = lastCloudExpandedDataRef.current || {};
     [
@@ -11078,6 +11092,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       compactSource.updatedAt || new Date().toISOString()
     );
     write.updatedAtMs = Number(compactSource.updatedAtMs || Date.now());
+    assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
     await setDoc(docRef, write, { merge: true });
     setFinanceCloudReceipt({ uid: docRef.id, value: compactSource.financeEvolution });
     lastCloudRawKeysRef.current = Object.keys(write).filter(function (key) {
@@ -12076,6 +12091,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     try {
 
+      assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
       scheduleCompleteAccountRecoverySnapshot("before-cloud-save");
       await writeCatalogAnchorV1(
         savePayload.catalogSyncV4,
@@ -12124,14 +12140,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           itemsTs
         );
     } catch (e) {
+      var validationPending = e && e.code === "aborted" && e.message === "FINANCE_SCHEMA_VALIDATION_PENDING";
       var syncTransient = accountSyncIsTransientError(e);
       var syncInfo = accountSyncErrorInfo(e);
-      console.error(
+      if (!validationPending) console.error(
         "Firestore save V5 error",
         syncInfo.rawCode,
         syncInfo.message
       );
-      persistAccountSyncError("firestore-save", e, syncTransient);
+      if (!validationPending) persistAccountSyncError("firestore-save", e, syncTransient);
       markAccountSyncPendingOnDevice();
       if (!syncTransient) {
         var syncErrorNow = Date.now(),
@@ -12177,7 +12194,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           token: "",
         };
       accountSyncRetryRequestedRef.current = true;
-      accountSyncRetryDelay = 30000;
+      accountSyncRetryDelay = validationPending ? 350 : 30000;
     } finally {
       accountSyncSavingRef.current = false;
       var afterSave: any = pendingAccountSyncRef.current || {
@@ -13609,7 +13626,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setToast("Progetto Share non trovato");
         return false;
       }
-      var project = { ...projectSnap.data(), id: String(invite.projectId) };
+      var project: { id: string; [key: string]: any } = { ...projectSnap.data(), id: String(invite.projectId) };
       var email = normalizeEmail(currentUser && currentUser.email);
       var participants = Array.isArray(project.participants)
         ? project.participants.slice()
@@ -14608,6 +14625,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [mergeTo, setMergeTo] = useState("");
   var [mobileMenu, setMobileMenu] = useState(false);
   var [nativeBannerSuppressed, setNativeBannerSuppressed] = useState(false);
+  var [recurringScreenActive, setRecurringScreenActive] = useState(false);
   useEffect(
     function () {
       if (!mobileMenu) return;
@@ -16791,7 +16809,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.1.14";
+  var FAINANCE_CURRENT_VERSION = "2.1.15";
   var FAINANCE_CURRENT_VERSION_CODE = 239;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
@@ -23021,7 +23039,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return true;
   }
 
-  var balanceViewMode = homeBalanceView === "reale" ? "reale" : "rateizzato";
+  var balanceViewMode: "reale" | "rateizzato" = homeBalanceView === "reale" ? "reale" : "rateizzato";
   // La barra superiore usa lo stesso motore del periodo finanziario della Home.
   // Il periodo e' quello salvato in financeEvolution.period (non le preferenze legacy).
   var curMonthExp = accountingPeriod.total(countedExpensesForAnalysis, curMonthKey, balanceViewMode);
@@ -23057,7 +23075,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
   var monthlyTotals = useMemo(
     function () {
-      var mode = statsView === "reale" ? "reale" : "rateizzato";
+      var mode: "reale" | "rateizzato" = statsView === "reale" ? "reale" : "rateizzato";
       var counted = monthlyTotalsForYear(
         countedExpensesForAnalysis,
         countedIncomes,
@@ -23536,7 +23554,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
 
   function shouldShowTopAdBox() {
-    if (nativeBannerSuppressed) return false;
+    if (nativeBannerSuppressed || recurringScreenActive || editingItem || tab === "spese") return false;
     if (currentPlan !== "free") return false;
     if (!planLimits || !planLimits.ads) return false;
     if (!isMobile) return false;
@@ -23551,7 +23569,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // hook propri e puo' essere invocata come funzione: nessun rimontaggio.
   var topAdVisible = shouldShowTopAdBox();
   // Come le icone superiori, nascondi il riepilogo mentre si inserisce un movimento.
-  var mobileSummaryVisible = !!showAppSummaryHeader && tab !== "spese";
+  var mobileSummaryVisible = !!showAppSummaryHeader && tab !== "spese" && firestoreReady && !appLocked && !!userId && accountUiReady;
+  var [summaryActionsHost, setSummaryActionsHost] = useState<HTMLElement | null>(null);
   var topAdNativeBanner = isNativeMobileApp();
   var topAdBoxRef = useRef(null);
   var topAdSlotHeight = mobileSummaryVisible ? 68 : 74;
@@ -26192,7 +26211,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var settingsSections = [
     {
       id: "profile",
-      icon: "👤",
+      icon: <PremiumProfileIcon dark={dark} />,
       label: translateUiRuntimeText("Profilo"),
       desc: translateUiRuntimeText("Dati personali, account, accesso"),
     },
@@ -27855,6 +27874,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setSecondaryButtonColor,
     nativeBannerSuppressed,
     setNativeBannerSuppressed,
+    setRecurringScreenActive,
     // ── Firestore / auth ────────────────────────────────────────────────────
     firestoreReady,
     isOffline,
@@ -28190,10 +28210,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
   return (
     <AppCtx.Provider value={ctxValue}>
-      <DarkTextDefaults dark={dark} background={bgColor} />
+      <AppViewport /><DarkTextDefaults dark={dark} background={bgColor} />
       <style>{"input:focus::placeholder,textarea:focus::placeholder{color:transparent!important;opacity:0!important;}"}</style>
       {firestoreReady && !appLocked && (
         <NotificationCenter
+          actionsHost={summaryActionsHost}
           userId={String(userId || "")}
           onProfile={function () {
             setTab("settings");
@@ -28288,10 +28309,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             flexDirection: "column",
             background: bgColor,
             overflow: "hidden",
-            paddingTop:
-              fainanceNativePlatform() === "ios"
-                ? 0 // The native iOS WebView is constrained below the status bar.
-                : "env(safe-area-inset-top, 0px)",
+            paddingTop: "env(safe-area-inset-top, 0px)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)",
             boxSizing: "border-box",
             ...({
@@ -28300,75 +28318,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } as any),
           }}
         >
-          {mobileSummaryVisible && (
-              <div
-                className="fainance-mobile-summary"
-                style={{
-                  background: headerBg,
-                  borderBottom: "1px solid " + borderC,
-                  padding: "9px clamp(10px,3.7vw,16px) 8px",
-                  flexShrink: 0,
-                }}
-              >
-                <div
-                  className="fainance-summary-values"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-                    columnGap: "clamp(4px,2.3vw,10px)",
-                    width: "100%",
-                    boxSizing: "border-box",
-                    paddingRight: firestoreReady && !appLocked ? "clamp(82px,24vw,106px)" : 0,
-                  }}
-                >
-                  <div style={{ textAlign: "center", minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: subC }}>
-                      {translateUiRuntimeText("Uscite")}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 19,
-                        fontWeight: 600,
-                        color: readableDarkText(expenseColor, dark, headerBg),
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {fmtHeader(curMonthExp)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "center", minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: subC }}>
-                      {translateUiRuntimeText("Saldo")}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 17,
-                        fontWeight: 600,
-                        color: readableDarkText(BALANCE_COLOR, dark, headerBg),
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {fmtHeader(curMonthBalance)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "center", minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: subC }}>
-                      {translateUiRuntimeText("Entrate")}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 19,
-                        fontWeight: 600,
-                        color: readableDarkText(incomeColor, dark, headerBg),
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {fmtHeader(curMonthInc)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          {mobileSummaryVisible && <AppSummaryHeader actionsRef={setSummaryActionsHost} background={headerBg} border={borderC} subtle={subC} values={[[translateUiRuntimeText("Uscite"),fmtHeader(curMonthExp),readableDarkText(expenseColor,dark,headerBg)],[translateUiRuntimeText("Saldo"),fmtHeader(curMonthBalance),readableDarkText(BALANCE_COLOR,dark,headerBg)],[translateUiRuntimeText("Entrate"),fmtHeader(curMonthInc),readableDarkText(incomeColor,dark,headerBg)]]} />}
           {TopAdBox()}
           <div
             className="fainance-mobile-content"
@@ -28481,11 +28431,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 position: "fixed",
                 inset: 0,
+                top: "var(--app-viewport-top,0px)",
+                bottom: "auto",
+                height: "var(--app-viewport-height,100dvh)",
                 background: "rgba(0,0,0,0.4)",
                 zIndex: 9998,
                 display: "flex",
                 alignItems: "flex-end",
-                paddingBottom: 0,
+                padding: "calc(env(safe-area-inset-top,0px) + 12px) 0 env(safe-area-inset-bottom,0px)",
                 boxSizing: "border-box",
               }}
               onClick={function () {
@@ -28497,7 +28450,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: cardBg,
                   borderRadius: "20px 20px 0 0",
                   width: "100%",
-                  maxHeight: "72vh",
+                  maxHeight: "100%",
                   overflow: "hidden",
                   display: "flex",
                   flexDirection: "column",
@@ -28552,7 +28505,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     overflowY: "auto",
                     WebkitOverflowScrolling: "touch",
                     overscrollBehavior: "contain",
-                    padding: "0 16px calc(104px + env(safe-area-inset-bottom, 0px))",
+                    padding: "0 16px 8px",
                     background: cardBg,
                   }}
                 >
@@ -28571,7 +28524,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                           display: "flex",
                           alignItems: "center",
                           gap: 14,
-                          padding: "12px 8px",
+                          padding: "clamp(7px,1.05dvh,12px) 8px",
                           border: "none",
                           background: "transparent",
                           borderBottom: "1px solid " + borderC,
@@ -28774,56 +28727,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } as any),
           }}
         >
-          {showAppSummaryHeader && (
-              <div
-                style={{
-                  background: headerBg,
-                  borderBottom: "1px solid " + borderC,
-                  padding: "10px 108px 10px 24px",
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{ display: "flex", gap: 24 }}>
-                  {[
-                    [
-                      translateUiRuntimeText("Uscite"),
-                      expenseColor,
-                      fmtHeader(curMonthExp),
-                    ],
-                    [
-                      translateUiRuntimeText("Saldo"),
-                      BALANCE_COLOR,
-                      fmtHeader(curMonthBalance),
-                    ],
-                    [
-                      translateUiRuntimeText("Entrate"),
-                      incomeColor,
-                      fmtHeader(curMonthInc),
-                    ],
-                  ].map(function (item) {
-                    return (
-                      <div key={item[0]} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 10, color: subC }}>
-                          {item[0]}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 16,
-                            fontWeight: 600,
-                            color: readableDarkText(item[1], dark, "#35354a"),
-                          }}
-                        >
-                          {item[2]}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+          {mobileSummaryVisible && <AppSummaryHeader actionsRef={setSummaryActionsHost} background={headerBg} border={borderC} subtle={subC} values={[[translateUiRuntimeText("Uscite"),fmtHeader(curMonthExp),readableDarkText(expenseColor,dark,headerBg)],[translateUiRuntimeText("Saldo"),fmtHeader(curMonthBalance),readableDarkText(BALANCE_COLOR,dark,headerBg)],[translateUiRuntimeText("Entrate"),fmtHeader(curMonthInc),readableDarkText(incomeColor,dark,headerBg)]]} />}
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
             <div
               style={{

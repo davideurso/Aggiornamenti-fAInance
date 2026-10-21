@@ -18,6 +18,8 @@ function strings(children:any):string { return Array.isArray(children) ? childre
 function normalize(type:any,props:any): [any,any] {
   if (!props || typeof type !== 'string') return [type,props];
   if(type==='button' && typeof props.children==='string' && ['×','✕','☰'].includes(props.children.trim()) && !props['aria-label'] && !props['aria-labelledby'])props={...props,'aria-label':props.children.trim()};
+  const scrim = props.style;
+  if (scrim?.position === 'fixed' && (scrim.inset === 0 || scrim.inset === '0') && /^rgba\(/.test(String(scrim.background || scrim.backgroundColor || ''))) props={...props,'data-fainance-overlay':'true'};
   if (type === 'select') return [CanonicalSelect,props];
   if (type === 'option') { const label=strings(props.children), parts=emojiParts(label), asset=parts.find(p=>p.asset)?.asset; return [type,{...props,value:props.value === undefined ? label : props.value,children:plainIconText(label)||props['aria-label']|| (asset?'Icona':label),'data-fainance-option-icon':asset||undefined}]; }
   if(props.dangerouslySetInnerHTML?.__html && typeof props.dangerouslySetInnerHTML.__html==='string') return [type,{...props,dangerouslySetInnerHTML:{__html:canonicalHtml(props.dangerouslySetInnerHTML.__html)}}];

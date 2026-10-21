@@ -146,7 +146,7 @@ export function sameNamedItems(a,b){return JSON.stringify((a||[]).map(function(x
 
 export const DEFAULT_METHODS=[{id:1,name:"Conto corrente",icon:"🏦",color:"#378ADD",group:"conti_carte"},{id:2,name:"Carta di debito",icon:"💳",color:"#5DCAA5",group:"conti_carte"},{id:3,name:"Prepagata",icon:"💳",color:"#9F77DD",group:"conti_carte"},{id:8,name:"Carta di credito",icon:"💳",color:"#F2C94C",group:"conti_carte"},{id:4,name:"Contanti",icon:"💵",color:"#F0997B",group:"altri"},{id:5,name:"PayPal",icon:"💠",color:"#185FA5",group:"altri"},{id:6,name:"Buoni pasto",icon:"🍱",color:"#D3D1C7",group:"altri"},{id:7,name:"Altro",icon:"📦",color:"#B4B2A9",group:"altri"}];
 export const INCOME_TYPES=[{id:"salario",icon:"💼",color:"#5DCAA5",name:"Stipendio",group:"lavoro"},{id:"bonus",icon:"🎯",color:"#EF9F27",name:"Bonus",group:"lavoro"},{id:"dividendi",icon:"📈",color:"#378ADD",name:"Dividendi",group:"investimenti"},{id:"interessi",icon:"💰",color:"#FAC775",name:"Interessi",group:"investimenti"},{id:"regali",icon:"🎁",color:"#D4A8F0",name:"Regali",group:"extra_inc"},{id:"rimborsi",icon:"↩️",color:"#9FE1CB",name:"Rimborsi",group:"extra_inc"},{id:"extra",icon:"⭐",color:"#D4A8F0",name:"Entrate extra",group:"extra_inc"},{id:"altro_inc",icon:"📦",color:"#D3D1C7",name:"Altro",group:"extra_inc"}];
-export function getAllIncomeTypes(extra,overrides){
+export function getAllIncomeTypes(extra?: any,overrides?: any){
   var custom=Array.isArray(extra)?extra:null;
   if(!custom){
     try{
@@ -369,7 +369,7 @@ export function formatNumber(value,lang,options){
     return parts[0]+","+(parts[1]||"").slice(0,max);
   }
 }
-export function fmtAmt(n,sym,lang){return String(sym||"")+"\u00A0"+formatNumber(n,lang,{minimumFractionDigits:2,maximumFractionDigits:2});}
+export function fmtAmt(n,sym,lang?: any){return String(sym||"")+"\u00A0"+formatNumber(n,lang,{minimumFractionDigits:2,maximumFractionDigits:2});}
 export function smallDecimalNode(value,lang,scale="0.70em") {
   if (value == null || typeof value === "boolean") return value as any;
   if (typeof value !== "string" && typeof value !== "number") return value as any;

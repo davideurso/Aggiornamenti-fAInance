@@ -1,4 +1,5 @@
 import { readableDarkText } from '../ui/textContrast';
+import { PremiumProfileIcon } from '../ui/release215';
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { useApp } from "../core";
@@ -277,7 +278,7 @@ export function AdminCenterPanel({ session }: { session: AdminSession | null }) 
             <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {users.slice(0, 8).map((row) => (
                 <div key={row.uid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid " + borderC }}>
-                  <span style={{ fontSize: 18 }}>👤</span>
+                  <PremiumProfileIcon dark={dark} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ color: textC, fontSize: 11, fontWeight: 850, overflow: "hidden", textOverflow: "ellipsis" }}>{row.email || row.username || row.uid}</div>
                     <div style={{ color: subC, fontSize: 10, marginTop: 2 }}>{row.plan || "—"} · {row.platform || "—"} · {row.language || "—"}</div>

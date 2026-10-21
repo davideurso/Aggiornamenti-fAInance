@@ -1,0 +1,36 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),ts=require('typescript');
+const root=path.join(__dirname,'..');
+const source=fs.readFileSync(path.join(root,'src/ui/movementDatePicker.ts'),'utf8');
+const output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020},reportDiagnostics:true});
+assert.equal(output.diagnostics.filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
+const box={exports:{}};new Function('exports','module',output.outputText)(box.exports,box);
+const open=box.exports.openMovementDatePicker;
+let opens=0,prevented=0;const order=[];
+const event={currentTarget:{value:'2026-10-15',showPicker(){opens++;order.push('open');}},preventDefault(){prevented++;order.push('prevent');}};
+open(event);assert.equal(opens,1,'first tap opens exactly once');assert.equal(prevented,1);assert.deepEqual(order,['open','prevent']);assert.equal(event.currentTarget.value,'2026-10-15');
+open({currentTarget:{value:'2026-10-15'},preventDefault(){throw Error('Native fallback blocked');}});
+open({currentTarget:{showPicker(){throw Error('Unsupported WebView');}},preventDefault(){throw Error('Native fallback blocked');}});
+const widget=fs.readFileSync(path.join(root,'src/widget.tsx'),'utf8');
+const tree=ts.createSourceFile('widget.tsx',widget,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+assert.equal(tree.parseDiagnostics.length,0);
+const dateInputs=[];function visit(n){if((ts.isJsxSelfClosingElement(n)||ts.isJsxOpeningElement(n))&&n.tagName.getText(tree)==='input'){
+ const attrs=n.attributes.properties;
+ const click=attrs.find(a=>a.name?.getText(tree)==='onClick');
+ if(click?.initializer?.expression?.getText(tree)==='openMovementDatePicker')dateInputs.push(n);
+}ts.forEachChild(n,visit);}visit(tree);
+assert.equal(dateInputs.length,2,'single and bulk use the same tap handler');
+for(const input of dateInputs){const text=input.getText(tree);assert.match(text,/width: "100%"/);assert.match(text,/height: "100%"/);assert.match(text,/aria-label=/);assert.match(text,/onChange=/);}
+const app=fs.readFileSync(path.join(root,'src/app.tsx'),'utf8');
+const nt=ts.createSourceFile('app.tsx',app,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let expression;function find(n){if(ts.isVariableDeclaration(n)&&n.name.getText(nt)==='mobileSummaryVisible')expression=n.initializer.getText(nt);ts.forEachChild(n,find);}find(nt);
+assert(expression,'One shared visibility rule for the complete summary');
+const names=['showAppSummaryHeader','tab','firestoreReady','appLocked','userId','accountUiReady'];
+const evaluate=new Function(...names,'return '+expression);
+const base={showAppSummaryHeader:true,tab:'home',firestoreReady:true,appLocked:false,userId:'test-account',accountUiReady:true};
+const visible=patch=>{const v={...base,...patch};return evaluate(...names.map(k=>v[k]));};
+for(const tab of ['home','history','calendar','consulenteAI','settings'])assert.equal(visible({tab}),true,tab);
+for(const patch of [{tab:'spese'},{showAppSummaryHeader:false},{firestoreReady:false},{appLocked:true},{userId:''},{accountUiReady:false}])assert.equal(visible(patch),false,JSON.stringify(patch));
+const notifications=fs.readFileSync(path.join(root,'src/notifications/NotificationCenter.tsx'),'utf8');
+assert(notifications.includes('createPortal(<SummaryActions'),'Actions belong to the same header');
+assert(!notifications.includes('top: actionTop'),'No independently positioned actions');
+console.log('[OK] Movement entry: first-tap picker, native fallback, single/bulk full touch targets; complete summary visibility and shared action host.');

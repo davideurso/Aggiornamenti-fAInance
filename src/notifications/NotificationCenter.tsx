@@ -1,3 +1,5 @@
+import { createPortal } from "react-dom";
+import { SummaryActions } from "../ui/AppSummaryHeader";
 import { RichNotification } from "./RichNotification";
 import { NotificationMediaView, openNotificationDestination } from "./NotificationMedia";
 import { readableDarkText } from '../ui/textContrast';
@@ -218,16 +220,7 @@ function updateClosureNotification(ctx: any, item: AppNotificationRecord, action
   ctx.setNotifPrefs((previous: any) => updatePeriodClosureNotice(previous, item.id, action));
 }
 
-function EmployeeProfileIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M4.7 20c.55-3.15 3.1-5 7.3-5 2.08 0 3.75.45 4.97 1.28" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <rect x="15" y="15.5" width="6.2" height="4.8" rx="1.2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M17.1 15.5v-.7c0-.65.53-1.18 1.18-1.18h.02c.65 0 1.18.53 1.18 1.18v.7" stroke="currentColor" strokeWidth="1.45" />
-    </svg>
-  );
-}
+
 
 function NotificationRows({
   items,
@@ -534,10 +527,12 @@ export function NotificationCenter({
   userId,
   onOpen,
   onProfile,
+  actionsHost,
 }: {
   userId: string;
   onOpen?: (notification: AppNotificationRecord) => void;
   onProfile?: () => void;
+  actionsHost?: HTMLElement | null;
 }) {
   const ctx: any = useApp();
   const [storedItems, setStoredItems] = useNotificationItems(userId);
@@ -631,21 +626,6 @@ export function NotificationCenter({
       window.removeEventListener("fainance:share-mutated", onShareMutation as EventListener);
     };
   }, [userId]);
-  // Le azioni globali restano disponibili anche nella chat dell'Agente AI.
-  const hideFloatingActions = !!ctx.isMobile && ctx.tab === "spese";
-  const iosNative = (() => {
-    try {
-      const cap: any = (window as any).Capacitor;
-      return !!(cap && typeof cap.getPlatform === "function" && cap.getPlatform() === "ios");
-    } catch (_error) {
-      return false;
-    }
-  })();
-  const actionTop = ctx.isMobile
-    ? iosNative
-      ? "max(calc(env(safe-area-inset-top,0px) + 9px), 53px)"
-      : "calc(env(safe-area-inset-top,0px) + 9px)"
-    : 14;
   if (!userId) return null;
 
   async function openItem(item: AppNotificationRecord) {
@@ -705,30 +685,8 @@ export function NotificationCenter({
     <>
       <style>{`
         .notification-media { flex: 1 0 100%; min-width: 0; }
-        [role="dialog"][aria-modal="true"] {
-          padding-top: max(82px, calc(env(safe-area-inset-top, 0px) + 72px)) !important;
-          box-sizing: border-box !important;
-          scroll-padding-top: max(82px, calc(env(safe-area-inset-top, 0px) + 72px));
-          align-items: flex-start !important;
-          overflow-y: auto !important;
-          -webkit-overflow-scrolling: touch;
-        }
       `}</style>
-      {!hideFloatingActions && (
-      <div style={{ position: "fixed", right: 10, top: actionTop, zIndex: 9996, display: "flex", gap: 5, alignItems: "center" }}>
-        <button type="button" aria-label={L("Apri profilo")} onClick={onProfile} style={actionButton}>
-          <EmployeeProfileIcon />
-        </button>
-        <button type="button" aria-label={L("Apri centro notifiche")} onClick={() => setOpen(true)} style={{ ...actionButton, fontSize: 17 }}>
-          🔔
-          {notificationCount > 0 && (
-            <span style={{ position: "absolute", right: -5, top: -6, minWidth: 19, height: 19, padding: "0 4px", borderRadius: 999, background: "#E24B4A", color: readableDarkText("#fff", dark, "#E24B4A"), border: "2px solid " + cardBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 950, boxSizing: "border-box" }}>
-              {notificationCount > 99 ? "99+" : notificationCount}
-            </span>
-          )}
-        </button>
-      </div>
-      )}
+      {actionsHost && createPortal(<SummaryActions dark={dark} style={actionButton} count={notificationCount} translate={L} onProfile={onProfile} onNotifications={() => setOpen(true)} background={cardBg} />, actionsHost)}
 
       {open && (
         <div role="dialog" aria-modal="true" aria-label={L("Centro notifiche")} onClick={(event) => event.target === event.currentTarget && setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(15,23,42,.48)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: "max(82px,calc(env(safe-area-inset-top,0px) + 72px)) 12px 16px", boxSizing: "border-box" }}>

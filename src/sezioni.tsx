@@ -2777,28 +2777,10 @@ export function HomePanel() {
     var type = (c && c.codeType) || "barcode";
     if (type === "qr") {
       var cells = homeQrCells(c && c.code);
-      return (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(17,1fr)",
-            gap: 1,
-            width: "min(100px,100%)",
-            aspectRatio: "1 / 1",
-            margin: "6px auto 0",
-            background: "#fff",
-            padding: 8,
-            borderRadius: 12,
-            boxSizing: "border-box",
-          }}
-        >
-          {cells.map(function (cell, i) {
-            return (
-              <div key={i} style={{ background: cell.on ? "#111" : "#fff" }} />
-            );
-          })}
-        </div>
-      );
+      return <svg role="img" aria-label={"Codice QR " + String(c && c.code || "")} viewBox="0 0 19 19" preserveAspectRatio="xMidYMid meet" width="100%" height="100%" style={{display:"block",width:"100%",height:"100%",minHeight:82,minWidth:0,background:"#FFFFFF",borderRadius:12}}>
+        <rect width="19" height="19" fill="#FFFFFF"/>
+        {cells.map(function(cell,i){return cell.on ? <rect key={i} x={1+i%17} y={1+Math.floor(i/17)} width="1" height="1" fill="#111111"/> : null;})}
+      </svg>;
     }
     var bars = homeBarcodeBars(c && c.code);
     var codeText = String((c && c.code) || "").trim();
@@ -2808,13 +2790,14 @@ export function HomePanel() {
         style={{
           marginTop: 0,
           width: "100%",
-          height: 82,
+          height: "100%",
           minWidth: 0,
-          minHeight: 0,
+          minHeight: 82,
           flex: "1 1 auto",
+          position: "relative",
           background: "#FFFFFF",
           borderRadius: 10,
-          padding: "5px 7px",
+          padding: 0,
           boxSizing: "border-box",
           overflow: "hidden",
           textAlign: "center",
@@ -2832,6 +2815,8 @@ export function HomePanel() {
             width="100%"
             height="100%"
             style={{
+              position: "absolute",
+              inset: 0,
               display: "block",
               width: "100%",
               height: "100%",
@@ -3806,7 +3791,7 @@ export function HomePanel() {
     }
     if (w.type === "latest_expenses") {
       var n = Math.max(1, Number(w.params && w.params.count) || 5);
-      return listMovement(homeRecentMovements(expenses, n), true, compact);
+      return listMovement(homeRecentMovements(expenses, n, todayStr()), true, compact);
     }
     if (w.type === "latest_incomes") {
       var n2 = Math.max(1, Number(w.params && w.params.count) || 5);
@@ -3912,7 +3897,7 @@ export function HomePanel() {
           {sp && (
             <>
               <div
-
+                
                 style={{ fontSize: compact ? 12 : 14, overflowWrap: "anywhere", color: subC, marginBottom: compact ? 3 : 5, fontWeight: 800 }}
               >
                 {sp.name}
@@ -5536,7 +5521,7 @@ export function HomePanel() {
           <div
             style={{
               pointerEvents: "auto",
-              flex: "0 0 auto",
+              flex: w.type === "fidelity_card" ? "1 1 auto" : "0 0 auto",
               minWidth: 0,
               minHeight: w.type === "fidelity_card" || w.type === "monthlyized_expenses" ? 0 : undefined,
               overflowY:
@@ -17407,7 +17392,7 @@ function QuickVoiceEntryModal() {
   }
   function updateVoiceParsed(patch) {
     setVoiceParsed(function (p) {
-      return p ? { ...p, ...patch, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>!Object.hasOwn(patch,k==='type'?'incomeType':k)) } : p;
+      return p ? { ...p, ...patch, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>!Object.prototype.hasOwnProperty.call(patch,k==='type'?'incomeType':k)) } : p;
     });
   }
   function changeVoiceCat(id) {

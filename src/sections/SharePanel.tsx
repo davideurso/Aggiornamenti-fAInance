@@ -151,7 +151,7 @@ export function SharePanel() {
           }
         }
         for(const root of roots){
-          const localRadios=Array.from(root.querySelectorAll('input[type="radio"]'));
+          const localRadios=Array.from(root.querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
           const rows=[];
           for(let index=0;index<localRadios.length;index+=1){
             const radio=localRadios[index];
@@ -182,7 +182,7 @@ export function SharePanel() {
         }
       };
       document.addEventListener("click",(event)=>{
-        const target=event.target;
+        const target=event.target as Element|null;
         const button=target&&typeof target.closest==="function"?target.closest("button,[role='button']"):null;
         if(!button)return;
         const label=String([button.getAttribute("aria-label"),button.getAttribute("title"),button.textContent].filter(Boolean).join(" ")).toLowerCase();
@@ -242,13 +242,13 @@ export function SharePanel() {
     // MUNDELY_44_SHARE_CURRENCY
     function formatShareBridgeAmount(activity:any,value:any){
       var numeric=Number(value||0);
-      var code=String((activity&&((activity.currency||activity.originalCurrency||activity.mundelyCurrency)))||currency||"EUR").trim().toUpperCase()||"EUR";
+      var code=String((activity&&((activity.currency||activity.originalCurrency||activity.mundelyCurrency)))||_c.currency||"EUR").trim().toUpperCase()||"EUR";
       try{return new Intl.NumberFormat(undefined,{style:"currency",currency:code}).format(numeric);}
       catch(_e){return numeric.toFixed(2)+" "+code;}
     }
     function formatShareBridgeBaseAmount(value:any){
       var numeric=Number(value||0);
-      var code=String(currency||"EUR").trim().toUpperCase()||"EUR";
+      var code=String(_c.currency||"EUR").trim().toUpperCase()||"EUR";
       try{return new Intl.NumberFormat(undefined,{style:"currency",currency:code}).format(numeric);}
       catch(_e){return numeric.toFixed(2)+" "+code;}
     }
@@ -622,7 +622,7 @@ export function SharePanel() {
     },
     [shareTransactionPopupVisible]
   );
-  var sinp = {
+  var sinp: import("react").CSSProperties = {
     width: "100%",
     borderRadius: 10,
     border: "1px solid " + borderC,

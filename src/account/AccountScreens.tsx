@@ -1,4 +1,5 @@
 import { readableDarkText } from '../ui/textContrast';
+import { PremiumProfileIcon } from '../ui/release215';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from '../analytics/useAnalyticsFlow';
 import { useState, useEffect, useMemo } from "react";
@@ -2960,7 +2961,7 @@ export function ProfileCard({
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: textC }}>
-                  {PL("👤 Profilo")}
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6}}><PremiumProfileIcon dark={dark} />{PL("Profilo")}</span>
                 </div>
                 <div
                   style={{
@@ -3004,12 +3005,12 @@ export function ProfileCard({
           >
             {[
               [
-                "👤",
+                <PremiumProfileIcon dark={dark} />,
                 d.firstName || splitDisplayName(d.name || "").firstName || "—",
                 PL("Nome"),
               ],
               [
-                "👤",
+                <PremiumProfileIcon dark={dark} />,
                 d.lastName || splitDisplayName(d.name || "").lastName || "—",
                 PL("Cognome"),
               ],
@@ -3317,7 +3318,7 @@ export function ProfileCard({
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 900, color: textC }}>
-                {PL("👤 Profilo")}
+                <span style={{display:"inline-flex",alignItems:"center",gap:6}}><PremiumProfileIcon dark={dark} />{PL("Profilo")}</span>
               </div>
               <div
                 style={{
