@@ -1,3 +1,4 @@
+import {buildSavingsForecast} from '../src/finance/savingsForecast.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -27,9 +28,9 @@ test('future schedule, installments, variable overlap and ledger reconcile to ex
   assert.equal(f.baseline.dailyVariableExpense,3);
   assert.equal(r.knownIncome,1000);
   assert.equal(r.knownExpense,205);
-  assert.equal(r.estimatedAdditionalExpense,87);
+  assert.equal(r.estimatedAdditionalExpense,85);
   assert.equal(r.ledgerBalance,null);assert.equal(r.knownChange,795);
-  assert.equal(r.estimatedLedgerBalance,null);assert.equal(r.estimatedChange,708);
+  assert.equal(r.estimatedLedgerBalance,null);assert.equal(r.estimatedChange,710);
   for(const h of f.horizons) {
     const days=f.daily.filter(x=>x.date<=h.date);
     assert.equal(Math.round(h.knownChange*100),days.reduce((n,d)=>n+d.knownIncome-d.knownExpense,0));
@@ -102,7 +103,7 @@ test('full data gets budget version/override, exact residual and projected overr
   assert.equal(b.budget,20);assert.equal(b.spent,0);assert.equal(b.committedExpense,5);
   assert.equal(b.remainingAfterCommitments,15);assert.equal(b.projectedExpense,30);assert.equal(b.projectedOverrun,10);
   assert.equal(r.budgets.find(x=>x.categoryId==='3').committedExpense,0,'past purchase already counted at full actual date');
-  assert.deepEqual(r.forecast.horizons,forecast(input).horizons,'budget is not a second expense');
+  assert.deepEqual(r.forecast.horizons,buildSavingsForecast(input).horizons,'budget is not a second expense');
 });
 test('privacy: summary/areas emit no income, balance, budget, description or profile values',()=>{
   const secret='PRIVATE_SENTINEL';

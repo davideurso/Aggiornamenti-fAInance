@@ -1,5 +1,8 @@
 import {useNotificationArrivalOrder} from './useNotificationArrivalOrder';
 import {spendingAlertNotices} from '../finance/spendingAlerts.js';
+import { notificationShowsInApp, isSystemCommunication } from './notificationChannels.mjs';
+import { readLocalReminders, markLocalReminderRead, markAllLocalRemindersRead, removeLocalReminder, clearLocalReminders } from './localCustomReminders.mjs';
+import { notificationChannelText } from './notificationChannelTranslations.mjs';
 import { createPortal } from "react-dom";
 import { SummaryActions } from "../ui/AppSummaryHeader";
 import { RichNotification } from "./RichNotification";
@@ -39,6 +42,8 @@ function notificationIcon(item: AppNotificationRecord): string {
   if (item.type === "share_project_deleted") return "🗂️";
   if (item.type === "recurring_confirmation") return "🔁";
   if (item.type === "period_closure") return "📅";
+  if (item.type === "custom_reminder") return "✏️";
+  if (item.type === "salary_reminder") return "💼";
   if (item.severity === "critical") return "🚨";
   if (item.severity === "warning") return "⚠️";
   if (item.severity === "success") return "✅";
@@ -268,12 +273,13 @@ function NotificationRows({
   }
 
   async function removeItem(item: AppNotificationRecord) {
-    if (deletingId) return;
+    if (deletingId || isSystemCommunication(item.type)) return;
     setDeleteError("");
     setDeletingId(item.id);
     try {
       if(item.type==="spending_alert")updateSpendingAlertNotification(ctx,item,"dismiss");
       else if (item.type === "period_closure") updateClosureNotification(ctx, item, "dismiss");
+      else if (item.source === "local_custom") removeLocalReminder(userId, item.id);
       else await deleteAppNotification(userId, item.id);
     } catch (_deleteError: any) {
       // FAINANCE V113: never expose raw Firebase/provider text in a different language.
@@ -342,7 +348,8 @@ function NotificationRows({
                     detail: { periodKey: String(item.actionValue || "") },
                   }));
                 } else {
-                  if (!item.read && !item.virtual) await markAppNotificationRead(userId, item.id, true).catch(() => undefined);
+                  if (item.source === "local_custom") markLocalReminderRead(userId, item.id);
+                  else if (!item.read && !item.virtual) await markAppNotificationRead(userId, item.id, true).catch(() => undefined);
                   onOpen?.(item);
                 }
               }}
@@ -396,7 +403,7 @@ function NotificationRows({
               >
                 ✅ {L("Conferma")}
               </button>
-            ) : (
+            ) : !isSystemCommunication(item.type) && (
             <button
               type="button"
               aria-label={L("Elimina notifica")}
@@ -439,7 +446,11 @@ export function NotificationInboxSettingsCard({ userId }: { userId: string }) {
   const [storedItems, setStoredItems] = useNotificationItems(userId);
   const closureItems = usePeriodClosureNotice(userId);
   const spendingItems = useSpendingAlertNotificationItems(userId);
-  const items = useNotificationArrivalOrder([...spendingItems, ...closureItems, ...storedItems],userId);
+  const allowedItems = useMemo(
+    () => [...spendingItems, ...closureItems, ...storedItems].filter((item) => notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)),
+    [spendingItems, closureItems, storedItems, ctx.notifPrefs?.notificationChannels],
+  );
+  const items = useNotificationArrivalOrder(allowedItems,userId);
   const L = (text: string) =>
     ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(text) : text;
   const dark = !!ctx.dark;
@@ -453,9 +464,10 @@ export function NotificationInboxSettingsCard({ userId }: { userId: string }) {
 
   async function markAllRead() {
     const pending = unread.filter((item) => !item.virtual);
-    spendingItems.filter((item)=>!item.read).forEach(item=>updateSpendingAlertNotification(ctx,item,"read"));
-    closureItems.filter((item) => !item.read).forEach((item) => updateClosureNotification(ctx, item, "read"));
+    spendingItems.filter((item)=>!item.read && notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)).forEach(item=>updateSpendingAlertNotification(ctx,item,"read"));
+    closureItems.filter((item) => !item.read && notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)).forEach((item) => updateClosureNotification(ctx, item, "read"));
     setStoredItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
+    markAllLocalRemindersRead(userId);
     await Promise.all(pending.map((item) => markAppNotificationRead(userId, item.id, true).catch(() => undefined)));
   }
 
@@ -540,6 +552,24 @@ function MundelyLinkRequestRows({
   );
 }
 
+function useLocalCustomReminderItems(userId: string): AppNotificationRecord[] {
+  const [items, setItems] = useState<AppNotificationRecord[]>([]);
+  useEffect(() => {
+    const refresh = () => setItems(readLocalReminders(userId) as AppNotificationRecord[]);
+    refresh();
+    const onUpdate = (event: Event) => {
+      if (String((event as CustomEvent).detail?.userId || '') === userId) refresh();
+    };
+    window.addEventListener('fainance:local-custom-reminders', onUpdate);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener('fainance:local-custom-reminders', onUpdate);
+      window.removeEventListener('storage', refresh);
+    };
+  }, [userId]);
+  return items;
+}
+
 export function NotificationCenter({
   userId,
   onOpen,
@@ -553,11 +583,20 @@ export function NotificationCenter({
 }) {
   const ctx: any = useApp();
   const [storedItems, setStoredItems] = useNotificationItems(userId);
+  const localCustomItems = useLocalCustomReminderItems(userId);
   const recurringItems = useRecurringNotificationItems(userId);
   const closureItems = usePeriodClosureNotice(userId);
   const spendingItems = useSpendingAlertNotificationItems(userId);
-  const items = useNotificationArrivalOrder([...spendingItems, ...closureItems, ...recurringItems, ...storedItems],userId);
+  const allowedItems = useMemo(
+    () => [...spendingItems, ...closureItems, ...recurringItems, ...storedItems, ...localCustomItems.filter(local => !storedItems.some(remote => (remote as any).occurrenceId === local.id))].filter((item) => notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)),
+    [spendingItems, closureItems, recurringItems, storedItems, localCustomItems, ctx.notifPrefs?.notificationChannels],
+  );
+  const items = useNotificationArrivalOrder(allowedItems,userId);
   const [open, setOpen] = useState(false);
+  const [inboxFilter, setInboxFilter] = useState<"all" | "unread">("all");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState(false);
+
   const [closurePeriodKey, setClosurePeriodKey] = useState("");
   const [mundelyRequests, setMundelyRequests] = useState<MundelyLinkRequest[]>([]);
   const [mundelyBusyId, setMundelyBusyId] = useState("");
@@ -570,7 +609,7 @@ export function NotificationCenter({
   const borderC = ctx.borderC || (dark ? "#29455F" : "#D8E1EA");
   const primary = dark ? "#8CC6FF" : "#052A5F";
   const unread = useMemo(() => items.filter((item) => !item.read), [items]);
-  const unreadStored = useMemo(() => storedItems.filter((item) => !item.read), [storedItems]);
+  const unreadStored = useMemo(() => storedItems.filter((item) => !item.read && notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)), [storedItems, ctx.notifPrefs?.notificationChannels]);
   const notificationCount = unread.length + mundelyRequests.length;
   useEffect(() => {
     const onPeriodClosure = (event: Event) => {
@@ -587,6 +626,14 @@ export function NotificationCenter({
       window.removeEventListener("fainance:open-period-closure", onPeriodClosure);
     };
   }, []);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
   useEffect(() => {
     if (!userId || !isMundelyBridgeEnabled()) {
       setMundelyRequests([]);
@@ -675,10 +722,34 @@ export function NotificationCenter({
 
   async function markAllRead() {
     const pending = unreadStored.slice();
-    spendingItems.filter((item)=>!item.read).forEach(item=>updateSpendingAlertNotification(ctx,item,"read"));
-    closureItems.filter((item) => !item.read).forEach((item) => updateClosureNotification(ctx, item, "read"));
+    spendingItems.filter((item)=>!item.read && notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)).forEach(item=>updateSpendingAlertNotification(ctx,item,"read"));
+    closureItems.filter((item) => !item.read && notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)).forEach((item) => updateClosureNotification(ctx, item, "read"));
     setStoredItems((current) => current.map((row) => ({ ...row, read: true })) as AppNotificationRecord[]);
+    markAllLocalRemindersRead(userId);
     await Promise.all(pending.map((item) => markAppNotificationRead(userId, item.id, true).catch(() => undefined)));
+  }
+
+  async function deleteAllDismissable() {
+    if (bulkDeleting) return;
+    if (!window.confirm(notificationChannelText(ctx.lang, "deleteAllConfirm"))) return;
+    setBulkDeleteError(false);
+    setBulkDeleting(true);
+    try {
+      // Virtual recurring items are pending financial actions; never delete them without confirmation.
+      const closableSpending = spendingItems.filter((item) => notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type));
+      const closablePeriods = closureItems.filter((item) => notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type));
+      for (const item of closableSpending) updateSpendingAlertNotification(ctx, item, "dismiss");
+      for (const item of closablePeriods) updateClosureNotification(ctx, item, "dismiss");
+      // Await each Firestore operation to avoid unbounded concurrent writes.
+      for (const item of storedItems.filter((item) => !isSystemCommunication(item.type) && notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type))) {
+        await deleteAppNotification(userId, item.id);
+      }
+      clearLocalReminders(userId);
+    } catch (_error) {
+      setBulkDeleteError(true);
+    } finally {
+      setBulkDeleting(false);
+    }
   }
 
   const actionButton = {
@@ -701,26 +772,62 @@ export function NotificationCenter({
     <>
       <style>{`
         .notification-media { flex: 1 0 100%; min-width: 0; }
+        .fainance-notification-screen {
+          position: fixed; inset: 0; z-index: 10050;
+          background: rgba(3, 26, 61, .58);
+          display: flex; align-items: center; justify-content: center;
+          padding: 16px; box-sizing: border-box;
+        }
+        .fainance-notification-surface {
+          width: min(640px, 100%); max-height: min(760px, calc(100dvh - 32px));
+          overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
+        }
+        @media (max-width: 650px) {
+          .fainance-notification-screen { padding: 0; align-items: stretch; }
+          .fainance-notification-surface {
+            width: 100%; max-height: none; height: 100dvh;
+            border: none !important; border-radius: 0 !important;
+            padding: max(18px, env(safe-area-inset-top, 0px)) 16px max(25px, env(safe-area-inset-bottom, 0px)) !important;
+          }
+        }
       `}</style>
       {actionsHost && createPortal(<SummaryActions dark={dark} style={actionButton} count={notificationCount} translate={L} onProfile={onProfile} onNotifications={() => setOpen(true)} background={cardBg} />, actionsHost)}
 
       {open && (
-        <div role="dialog" aria-modal="true" aria-label={L("Centro notifiche")} onClick={(event) => event.target === event.currentTarget && setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 10050, background: "rgba(15,23,42,.48)", display: "flex", alignItems: "flex-start", justifyContent: "flex-end", padding: "max(82px,calc(env(safe-area-inset-top,0px) + 72px)) 12px 16px", boxSizing: "border-box" }}>
-          <section style={{ width: "min(430px,100%)", maxHeight: "calc(100dvh - 98px)", overflowY: "auto", background: cardBg, border: "1px solid " + borderC, borderRadius: 22, padding: 14, boxShadow: dark ? "none" : "0 22px 70px rgba(15,23,42,.25)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ color: textC, fontSize: 18, fontWeight: 950 }}>{L("Notifiche")}</div>
-                <div style={{ color: subC, fontSize: 11 }}>{L("Inviti Share e comunicazioni importanti")}</div>
+        <div className="fainance-notification-screen" role="dialog" aria-modal="true" aria-label={notificationChannelText(ctx.lang, "centerTitle")} onClick={(event) => event.target === event.currentTarget && setOpen(false)}>
+          <section className="fainance-notification-surface" style={{ background: cardBg, color: textC, border: "1px solid " + borderC, borderRadius: 20, padding: 18, boxShadow: dark ? "none" : "0 22px 70px rgba(15,23,42,.22)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 15, paddingBottom: 12, borderBottom: "1px solid " + borderC }}>
+              <span aria-hidden="true" style={{ width: 36, height: 36, borderRadius: 11, background: dark ? "#29455F" : "#EDF3FA", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 18 }}>🔔</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: textC, fontSize: 17, fontWeight: 900 }}>{notificationChannelText(ctx.lang, "centerTitle")}{unread.length > 0 ? ` (${unread.length})` : ""}</div>
+                <div style={{ color: subC, fontSize: 11, marginTop: 2 }}>{notificationChannelText(ctx.lang, "centerDescription")}</div>
               </div>
-              {unread.length > 0 && (
-                <button type="button" onClick={markAllRead} style={{ border: 0, background: "transparent", color: readableDarkText(primary, dark, "transparent"), fontWeight: 850, cursor: "pointer", fontSize: 11 }}>
-                  {L("Segna tutte come lette")}
-                </button>
-              )}
               <PopupCloseButton onClick={() => setOpen(false)} dark={dark} label={L("Chiudi")} />
             </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 13 }}>
+              <div role="group" aria-label={notificationChannelText(ctx.lang, "inboxFilterLabel")} style={{ display: "inline-flex", padding: 3, borderRadius: 11, border: "1px solid " + borderC, background: dark ? "#152C44" : "#F0F4F9", gap: 3 }}>
+                {(["all", "unread"] as const).map((filter) => (
+                  <button type="button" key={filter} aria-pressed={inboxFilter === filter} onClick={() => setInboxFilter(filter)}
+                    style={{ borderRadius: 8, border: 0, cursor: "pointer", padding: "8px 12px", fontSize: 12, fontWeight: 800,
+                      color: inboxFilter === filter ? (dark ? "#FFFFFF" : "#052A5F") : subC,
+                      background: inboxFilter === filter ? (dark ? "#29455F" : "#FFFFFF") : "transparent",
+                      boxShadow: inboxFilter === filter && !dark ? "0 2px 6px rgba(5,42,95,.10)" : "none" }}>
+                    {notificationChannelText(ctx.lang, filter === "all" ? "filterAll" : "filterUnread")}{filter === "unread" && unread.length ? ` (${unread.length})` : ""}
+                  </button>
+                ))}
+              </div>
+              <div style={{ flex: 1 }} />
+              {unread.some((item) => item.type !== "recurring_confirmation") && <button type="button" onClick={markAllRead} style={{ border: "1px solid " + borderC, background: dark ? "#152C44" : "#FFFFFF", borderRadius: 9, padding: "8px 10px", color: textC, fontWeight: 800, cursor: "pointer", fontSize: 11 }}>
+                {L("Segna tutte come lette")}
+              </button>}
+              {(storedItems.some((item) => !isSystemCommunication(item.type) && notificationShowsInApp(ctx.notifPrefs?.notificationChannels, item.type)) || localCustomItems.length > 0 || spendingItems.length > 0 || closureItems.length > 0) &&
+                <button type="button" disabled={bulkDeleting} onClick={() => void deleteAllDismissable()} style={{ border: "1px solid " + (dark ? "#8D4F58" : "#E5B7BE"), background: dark ? "#38242B" : "#FFF6F7", borderRadius: 9, padding: "8px 10px", color: dark ? "#FFB5BE" : "#A12E3F", fontWeight: 800, cursor: bulkDeleting ? "default" : "pointer", opacity: bulkDeleting ? .55 : 1, fontSize: 11 }}>
+                  {notificationChannelText(ctx.lang, bulkDeleting ? "deleting" : "deleteAll")}
+                </button>}
+            </div>
+            {bulkDeleteError && <div role="alert" style={{ color: dark ? "#FFB5BE" : "#A12E3F", fontSize: 12, marginBottom: 10 }}>{notificationChannelText(ctx.lang, "deleteError")}</div>}
             <MundelyLinkRequestRows requests={mundelyRequests} busyId={mundelyBusyId} onDecision={decideMundelyLink} />
-            <NotificationRows items={items} userId={userId} onOpen={openItem} />
+            <NotificationRows items={inboxFilter === "unread" ? items.filter((item) => !item.read) : items} userId={userId} onOpen={openItem} />
           </section>
         </div>
       )}

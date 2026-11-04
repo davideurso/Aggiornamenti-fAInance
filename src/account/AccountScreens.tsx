@@ -1,3 +1,4 @@
+import {contactEndpoint} from '../integrations/contactEndpoint.js';
 import { readableDarkText } from '../ui/textContrast';
 import { PremiumProfileIcon } from '../ui/release215';
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
@@ -1264,7 +1265,7 @@ export function ContactForm({ currentUser }) {
         contactCtrl.abort();
       }, 15000);
       var response = await fetch(
-        "https://europe-west1-fainance-a7794.cloudfunctions.net/sendContactEmail",
+        contactEndpoint(fbAuth.app.options.projectId),
         {
           method: "POST",
           headers: {

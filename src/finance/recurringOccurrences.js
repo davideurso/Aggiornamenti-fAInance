@@ -4,6 +4,11 @@ function occurrenceId(rule, date) {
   return String(rule && rule.id != null ? rule.id : '') + '@' + String(date || '');
 }
 
+// A confirmation from two devices or the Test backend targets the same movement.
+export function recurringMovementId(rule, date) {
+  return 'recurring_' + occurrenceId(rule, date);
+}
+
 function asStringSet(value) {
   return new Set((Array.isArray(value) ? value : []).map(String));
 }

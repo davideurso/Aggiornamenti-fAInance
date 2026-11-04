@@ -1,5 +1,19 @@
+import { commitNativeShareActivity, useNativeShareCommit } from './firebase/shareActivityCommit';
+import {mergeSensitiveRecords} from './integrations/chatgptSensitiveMerge.js';
+import {preferLocalAIConsent,pendingChatgptLanguage} from './integrations/chatgptTestPreferences.js';
+import {resolveChatgptTestRoute} from './integrations/chatgptTestRoutes.js';
+import {appEnvironment as chatgptAppEnvironment,firebaseConfig as chatgptFirebaseConfig} from './config/env';
+import {trackAccountWrite,skipTestAccountEcho} from './data/accountSnapshotEcho';
+import {noteGrowthCreations} from './data/growthCreationIntents';
+import { notifyGrowthSourceCommitted } from "./data/growthMetricsCommit";
+import { civilToday, derivePatrimony } from './finance/patrimonyAutoBalance.js';
+import { activeShareActivities, shareCashMovementKey, shareCashMovementsForUser, shareProjectsForRead } from './finance/shareCashMovements.js';
+import { incomeReceiptFields } from "./finance/incomeReceipt";
 import {triggeredSpendingAlerts} from './finance/spendingAlerts.js';
 import {useSpendingAlertDispatch} from './notifications/useSpendingAlertDispatch';
+import { notificationShowsInApp, mergeNotificationChannelState } from './notifications/notificationChannels.mjs';
+import { collectDueLocalReminders } from './notifications/localCustomReminders.mjs';
+import { loadNotificationChannels } from './notifications/pushNotifications';
 import { PERIOD_CONFIRMATION_KEY, readPeriodConfirmation, keepPeriodConfirmation } from './data/periodConfirmation';
 import { readCatalogEdits, persistCatalogEdit, protectCatalogEdit, confirmCatalogEdits, catalogEditEqual, migrateLegacyCatalogEdits } from "./data/catalogLocalEdits";
 import { reconcileAuthorityCatalogs } from "./data/currentCatalogAuthority";
@@ -7,7 +21,8 @@ import { INTERNAL_DESTINATIONS, readNotificationMedia } from "../functions/notif
 import { mergeIncomingMovements } from "./data/incomingMovements";
 import { DarkTextDefaults } from './ui/DarkTextDefaults';
 import { readableDarkText } from './ui/textContrast';
-import { getDocFromCache, getDocFromServer } from "firebase/firestore";
+import { getDocFromCache, getDocFromServer, runTransaction, writeBatch } from "firebase/firestore";
+import { preserveNewerPatrimony, reconcilePatrimonyAuthority } from "./finance/patrimonyWriteConflict.js";
 import { readExistingCachedDocument, serializeSnapshotHandler, needsCategoryRecovery, hasResumeCheckpoint, writeResumeCheckpoint } from "./utils/resumeCache";
 import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
 import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
@@ -31,10 +46,11 @@ import { PeriodPreferences } from './settings/PeriodPreferences';
 import { periodText } from './i18n/periodTranslations';
 import { budgetForPeriod, saveBudgetForPeriod, resetBudgetForPeriod } from './finance/budgetEngine';
 import { readRecoverySnapshot, persistRecoverySnapshot, clearRecoverySnapshots } from "./data/recoverySnapshots";
+import { markStartupPhase, measureStartup } from "./utils/startupDiagnostics";
 import { assertFinanceWriteReady } from "./data/financeWriteGate";
 import { financeMessage } from './i18n/financeMessages';
 import { participantForUser, shareAmountForUser } from './finance/shareUserAmount';
-import { buildExpensesForAnalysis, resolveSharePersonalCategoryId, fallbackPersonalCategoryId } from './finance/shareAnalytics';
+import { buildExpensesForAnalysis, expensesWithoutShareShadows, resolveSharePersonalCategoryId, fallbackPersonalCategoryId } from './finance/shareAnalytics';
 import {
   useState,
   useEffect,
@@ -45,7 +61,7 @@ import {
   createContext,
   Component,
 } from "react";
-import { registerPlugin, SystemBars, SystemBarsStyle, SystemBarType } from "@capacitor/core";
+import { CapacitorHttp, registerPlugin, SystemBars, SystemBarsStyle, SystemBarType } from "@capacitor/core";
 import {
   AppCtx,
   useApp,
@@ -308,7 +324,7 @@ import {
   nextBulkMovementAllowedAt,
   isBulkMovementLocked,
 } from "./finance/bulkMovementPolicy";
-import { recurringDueOccurrences, recurringOccurrenceForDate } from './finance/recurringOccurrences';
+import { recurringDueOccurrences, recurringOccurrenceForDate, recurringMovementId } from './finance/recurringOccurrences';
 import { sortFinancialHistoryItems } from "./finance/historySorting";
 import { debtCreditBalance } from "./finance/debtCredit";
 import { maskPaymentCardNumber } from "./finance/paymentCards";
@@ -757,6 +773,19 @@ function AppWithLogin() {
     },
     [fbUser && fbUser.uid]
   );
+
+  const photoProfileUid = fbUser?.uid;
+  useEffect(() => {
+    if (chatgptAppEnvironment !== "test" || chatgptFirebaseConfig.projectId !== "fainance-test-20260823195207" || !photoProfileUid || adminSession?.isAdmin) return;
+    return onSnapshot(doc(fbDb, "users", photoProfileUid), { includeMetadataChanges: true }, (snapshot) => {
+      if (!snapshot.exists() || snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
+      const photo = String(snapshot.data().profilePhotoDataUrl || "");
+      setUserData((profile) => {
+        if (profile?.id !== photoProfileUid || (profile.profilePhotoDataUrl || "") === photo) return profile;
+        return { ...profile, profilePhotoDataUrl: photo };
+      });
+    }, (error) => console.warn("Profile photo synchronization failed", error.code));
+  }, [photoProfileUid, adminSession?.isAdmin]);
 
   if (fbUser === undefined)
     return (
@@ -1755,6 +1784,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     return out.concat(recoveredCatalogs);
   }
+  var remoteApplyResumeTimerRef = useRef<any>(null);
   var firestoreHydratedRef = useRef(false);
   var applyingFirestoreRef = useRef(false);
   var remoteApplyDepthRef = useRef(0);
@@ -1816,7 +1846,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     history_sort_secondary_direction_v1: true, terms_accepted_v1: true, privacy_accepted_v1: true,
     meta_events_consent_v1: true, legal_acceptance_date_v1: true, onboarding_guide_seen_v1: true,
     initial_setup_status_v1: true, share_show_history_v1: true, share_category_mappings_v1: true,
-    share_default_category_v1: true, shopping_areas_v1: true, shopping_units_v1: true,
+    share_default_category_v1: true, share_default_method_v1: true, shopping_areas_v1: true, shopping_units_v1: true,
     shopping_area_icons_v1: true, shopping_area_colors_v1: true, shopping_bought_color_v1: true,
     shopping_active_list_id_v2: true, shopping_product_sort_v1: true, shopping_default_area_v1: true,
     shopping_default_unit_v1: true, debt_credits_show_patrimonio_v1: true,
@@ -2513,7 +2543,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (Object.keys(readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))).length) return false;
     if (!validUserStateAuthorityV6(value) || !userId) return false;
     // Recovery snapshots cannot undo a newer catalog already delivered live.
-    value = reconcileAuthorityCatalogs(value, lastCloudExpandedDataRef.current?.catalogSyncV4, catalogAnchorV1Ref.current?.catalogSyncV4);
+    value = reconcilePatrimonyAuthority(reconcileAuthorityCatalogs(value, lastCloudExpandedDataRef.current?.catalogSyncV4, catalogAnchorV1Ref.current?.catalogSyncV4), lastCloudExpandedDataRef.current);
     var values: any = preservePeriodConfirmation(value.values || {});
     var prefix = "user_" + String(userId) + "_";
     var changedKeys: string[] = [];
@@ -2556,7 +2586,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         "shopping_preferences_v2",
         "patrimony_preferences_v2",
       ].forEach(function (groupKey) {
-        writeUserLocalUpdatedAt(groupKey, ts);
+        writeUserLocalUpdatedAt(groupKey, groupKey === "patrimonio_catalog_v2" ? Number(value.__patrimonioCatalogUpdatedAt || ts) : ts);
       });
       userStateAuthorityV6RevisionRef.current = Math.max(
         Number(userStateAuthorityV6RevisionRef.current || 0),
@@ -2591,6 +2621,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
     var out: any = applyUserStateAuthorityV5ToCloudData(data, bridge);
     try { delete out.userStateAuthorityV5; } catch (e) {}
+    if (authority.__patrimonioCatalogUpdatedAt) out.patrimonioCatalogUpdatedAt = Number(authority.__patrimonioCatalogUpdatedAt);
     out.userStateAuthorityV6 = authority;
     return out;
   }
@@ -2599,7 +2630,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (!userId) return null;
     try {
       var row: any = await fainancePromiseTimeout(
-        readLatestUserStateAuthorityBackupV6(String(userId), true),
+        readLatestUserStateAuthorityBackupV6(String(userId), true, useNativeShareCommit(fbDb.app.options.projectId)),
         15000,
         "Timeout lettura User State Authority V6."
       );
@@ -2723,20 +2754,23 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         throw new Error("USER_STATE_AUTHORITY_V6_TOO_LARGE");
 
       try {
-        var saved: any = await fainancePromiseTimeout(
-          saveUserStateAuthorityBackupV6({
-            uid: String(userId),
-            authority: authority,
-            appVersion: "2.1.7",
-          }),
-          15000,
-          "Timeout salvataggio User State Authority V6."
-        );
+        // SDK writes remain durable while offline or queued. Await their real
+        // ACK; a read deadline must not abandon a mutation and start a duplicate.
+        var saved: any = await saveUserStateAuthorityBackupV6({
+          uid: String(userId),
+          authority: authority,
+          appVersion: "2.1.7",
+        });
         var backupId = String((saved && saved.id) || "");
         if (!backupId) throw new Error("USER_STATE_AUTHORITY_V6_BACKUP_ID_MISSING");
 
-        var anchored: any = { ...authority, __backupId: backupId };
-        userStateAuthorityV6RevisionRef.current = revision;
+        // A retry can share an older in-flight write. Anchor only the authority
+        // actually acknowledged by Firebase, never the newer caller's snapshot.
+        if (userStateAuthorityV6ValidatedUidRef.current !== String(userId || "")) return false;
+        var acknowledgedAuthority: any = saved.authority;
+        if (!validUserStateAuthorityV6(acknowledgedAuthority)) throw new Error("USER_STATE_AUTHORITY_V6_ACK_INVALID");
+        var anchored: any = { ...acknowledgedAuthority, __backupId: backupId };
+        userStateAuthorityV6RevisionRef.current = Number(acknowledgedAuthority.revision || 0);
         userStateAuthorityV6AnchorRef.current = anchored;
         try {
           localStorage.removeItem(
@@ -2744,6 +2778,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           );
         } catch (e) {}
 
+        if (!userStateAuthorityV3ValuesEqual(acknowledgedAuthority.values || {}, currentUserStateAuthorityV3Values())) return false;
         if (!verifyServer) return true;
         var serverConfirmed = await verifyUserStateAuthorityV6Server(
           anchored,
@@ -2877,6 +2912,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       Number(remoteApplyDepthRef.current || 0) - 1
     );
     applyingFirestoreRef.current = remoteApplyDepthRef.current > 0;
+    // A save deferred by any catalog or account merge must be re-armed when
+    // the outermost merge finishes, including merges outside the main listener.
+    if (!applyingFirestoreRef.current && Number(pendingAccountSyncRef.current?.revision || 0) > 0 && !remoteApplyResumeTimerRef.current) {
+      remoteApplyResumeTimerRef.current = setTimeout(function () {
+        remoteApplyResumeTimerRef.current = null;
+        // Resume the writer directly. A render pulse here can repeat catalog
+        // normalization effects and indefinitely postpone their own save.
+        latestAccountSaveRef.current();
+      }, 250);
+    }
   }
   var accountRecoveryTimerRef = useRef<any>(null);
   var accountRecoveryPendingRef = useRef(false);
@@ -3047,6 +3092,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
 
   var [lang, setLang] = useStorage("pref_lang_v2", getDefaultLang());
+  useEffect(function () {
+    if (chatgptAppEnvironment !== 'test' || chatgptFirebaseConfig.projectId !== 'fainance-test-20260823195207' || !userId) return;
+    const appliedKey = 'fainance_chatgpt_language_applied_' + userId;
+    return onSnapshot(doc(fbDb, 'users', userId), function (snapshot) {
+      const preference = snapshot.data()?.chatgptLanguagePreference;
+      const pending = pendingChatgptLanguage(chatgptAppEnvironment, chatgptFirebaseConfig.projectId, preference, localStorage.getItem(appliedKey));
+      if (!pending) return;
+      setLang(pending.language);
+      localStorage.setItem(appliedKey, String(pending.stamp));
+    }, function (error) { console.warn('ChatGPT Test language synchronization failed', error.code); });
+  }, [userId]);
+
   var CATALOG_SYNC_V3_KEYS = {
     cats_v10: true,
     meth_v10: true,
@@ -3376,6 +3433,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       if (key) delete out[key];
     });
     return out;
+  }
+  function userSynchronizedSetting(setter, storageKey: string, scope: string) {
+    // Only the public UI setter records explicit intent. Hydration continues to
+    // use the internal setter and every cloud write retains its validation gate.
+    if (fbDb.app.options.projectId !== "fainance-test-20260823195207") return setter;
+    return function (next) {
+      if ((applyingFirestoreRef.current || !firestoreHydratedRef.current) && (typeof next === "function" || !syncJsonEqual(readUserLocalJson(storageKey, undefined), next))) markUserLocalChanges([scope], true);
+      return setter(next);
+    };
   }
   function markHomePreferencesChange() {
     if (!applyingFirestoreRef.current) markUserLocalChange("home_preferences");
@@ -3931,39 +3997,104 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
   async function readCloudExpenseCategoryBackupCandidates() {
     if (!userId) return [];
-    try {
-      var backupSnap: any = await getDocs(
-        query(collection(fbDb, "users", String(userId), "backups"), limit(16))
-      );
-      var rows = (backupSnap.docs || [])
-        .map(function (row) { return row && row.data ? row.data() : null; })
-        .filter(function (row) { return !!(row && row.payload); })
-        .sort(function (a, b) { return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0); });
-      var out: any[] = [];
-      for (var i = 0; i < rows.length && out.length < 8; i++) {
-        try {
-          var row: any = rows[i];
-          if (String(row.encoding || "") !== "gzip-base64-json-v1") continue;
-          var raw = String(row.payload || "");
-          if (!raw) continue;
-          var binary = atob(raw);
-          var bytes = new Uint8Array(binary.length);
-          for (var j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
-          var DecompressionCtor: any = (globalThis as any).DecompressionStream;
-          if (!DecompressionCtor) break;
-          var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionCtor("gzip"));
-          var decoded = new TextDecoder().decode(await new Response(stream).arrayBuffer());
-          var parsed: any = JSON.parse(decoded);
-          var snapshot = parsed && parsed.snapshot && typeof parsed.snapshot === "object" ? parsed.snapshot : null;
-          var values = snapshot && snapshot.values && typeof snapshot.values === "object" ? snapshot.values : null;
-          var catsRaw = values ? values.cats_v10 : null;
-          if (catsRaw === null || catsRaw === undefined || catsRaw === "") continue;
-          var catsValue = typeof catsRaw === "string" ? JSON.parse(catsRaw) : catsRaw;
-          if (Array.isArray(catsValue) && catsValue.length) out.push(catsValue);
-        } catch (_backupCategoryError) {}
+    const uid = String(userId);
+    const authUser = fbAuth.currentUser;
+    const project = fbDb.app.options.projectId;
+    const cacheKey = userKey("recovery_category_backups_v2");
+    async function decodeCategories(row: any) {
+      if (row?.encoding !== "gzip-base64-json-v1" || !row.payload) return null;
+      const binary = atob(String(row.payload));
+      const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+      const DecompressionCtor = (globalThis as any).DecompressionStream;
+      if (!DecompressionCtor) throw new Error("CATEGORY_BACKUP_DECOMPRESSION_UNAVAILABLE");
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionCtor("gzip"));
+      const decoded = new TextDecoder().decode(await new Response(stream).arrayBuffer());
+      const catsRaw = JSON.parse(decoded)?.snapshot?.values?.cats_v10;
+      const categories = typeof catsRaw === "string" && catsRaw ? JSON.parse(catsRaw) : catsRaw;
+      return Array.isArray(categories) && categories.length ? categories : null;
+    }
+    async function readNativeCandidates() {
+      const token = await authUser.getIdToken();
+      const base = "https://firestore.googleapis.com/v1/projects/" + project + "/databases/(default)/documents";
+      const payloadFields = ["encoding", "payload", "createdAtMs"];
+      async function request(path: string, data: any) {
+        if (fbAuth.currentUser !== authUser) throw new Error("CATEGORY_BACKUP_ACCOUNT_CHANGED");
+        const response = await CapacitorHttp.post({
+          url: base + path,
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          responseType: "json",
+          connectTimeout: 4000,
+          readTimeout: 6500,
+          data,
+        });
+        if (fbAuth.currentUser !== authUser || response.status !== 200 || !Array.isArray(response.data)
+          || !response.data.length || response.data.some(row => !row || row.error)) {
+          throw new Error("CATEGORY_BACKUP_READ_FAILED");
+        }
+        return response.data;
       }
-      return out;
-    } catch (_backupReadError) {
+      async function queryBackups(fields: string[]) {
+        const rows = await request("/users/" + encodeURIComponent(uid) + ":runQuery", {
+          structuredQuery: { from: [{ collectionId: "backups" }],
+            select: { fields: fields.map(fieldPath => ({ fieldPath })) }, limit: 16 },
+        });
+        if (rows.some(row => !row.document && !row.readTime)) throw new Error("CATEGORY_BACKUP_RESULT_MISSING");
+        return rows.flatMap(row => row.document ? [row.document] : []);
+      }
+      let cached: any = {};
+      try { cached = JSON.parse(localStorage.getItem(cacheKey) || "{}") || {}; } catch {}
+      const hasCache = Object.keys(cached).length > 0;
+      const documents = await queryBackups(hasCache ? ["__name__"] : payloadFields);
+      if (documents.some(doc => !doc.name || !doc.updateTime)) throw new Error("CATEGORY_BACKUP_REVISION_MISSING");
+      const missing = documents.filter(doc => cached[doc.name]?.revision !== doc.updateTime);
+      const payloads = hasCache && missing.length
+        ? (await request(":batchGet", { documents: missing.map(doc => doc.name), mask: { fieldPaths: payloadFields } }))
+          .flatMap(row => row.found ? [row.found] : [])
+        : documents;
+      const byName = new Map(payloads.map(doc => [doc.name, doc]));
+      const next: Record<string, any> = {};
+      const sorted = [];
+      for (const doc of documents) {
+        const hit = cached[doc.name];
+        if (hit?.revision === doc.updateTime && (hit.categories === null || Array.isArray(hit.categories))) {
+          next[doc.name] = hit;
+        } else {
+          const payload = byName.get(doc.name);
+          if (payload?.updateTime !== doc.updateTime) throw new Error("CATEGORY_BACKUP_REVISION_CHANGED");
+          const fields = payload.fields || {};
+          const createdAtMs = Number(fields.createdAtMs?.integerValue ?? fields.createdAtMs?.doubleValue ?? 0);
+          try {
+            const categories = await decodeCategories({ encoding: fields.encoding?.stringValue, payload: fields.payload?.stringValue });
+            next[doc.name] = { revision: doc.updateTime, createdAtMs, categories };
+          } catch {
+            continue;
+          }
+        }
+        sorted.push(next[doc.name]);
+      }
+      try { localStorage.setItem(cacheKey, JSON.stringify(next)); } catch {}
+      return sorted.sort((a, b) => b.createdAtMs - a.createdAtMs)
+        .flatMap(row => row.categories ? [row.categories] : []).slice(0, 8);
+    }
+    try {
+      if (useNativeShareCommit(project) && authUser?.uid === uid) {
+        try { return await measureStartup("catalog_fetch", readNativeCandidates()); } catch {}
+      }
+      const snap = await measureStartup("catalog_fetch", getDocs(
+        query(collection(fbDb, "users", uid, "backups"), limit(16))
+      ));
+      const rows = snap.docs.map(row => row.data()).filter(row => !!row?.payload)
+        .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+      const candidates: any[] = [];
+      for (const row of rows) {
+        try {
+          const categories = await decodeCategories(row);
+          if (categories) candidates.push(categories);
+        } catch {}
+        if (candidates.length === 8) break;
+      }
+      return candidates;
+    } catch {
       return [];
     }
   }
@@ -4164,8 +4295,19 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var ref: any = catalogAnchorDocRefV1();
     if (!ref) return null;
     try {
+      async function readCurrentAnchor() {
+        if (useNativeShareCommit(fbDb.app.options.projectId) && fbAuth.currentUser?.uid === userId) {
+          try {
+            const lite = await import("firebase/firestore/lite");
+            return await fainancePromiseTimeout(
+              lite.getDoc(lite.doc(lite.getFirestore(fbDb.app), ref.path)), 3000, "CATALOG_DIRECT_READ_TIMEOUT"
+            );
+          } catch {}
+        }
+        return getDoc(ref);
+      }
       var snap: any = await fainancePromiseTimeout(
-        preferCache ? readExistingCachedDocument(() => getDocFromCache(ref), () => getDoc(ref)) : getDoc(ref),
+        preferCache ? readExistingCachedDocument(() => getDocFromCache(ref), () => getDoc(ref)) : readCurrentAnchor(),
         8000, "CATALOG_ANCHOR_READ_TIMEOUT"
       );
       if (!snap.exists()) return null;
@@ -4674,6 +4816,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         ? requested
         : []
       : prepareAccountCollectionWrite("goal", current, requested);
+    if(!applyingFirestoreRef.current&&typeof nextValue==='function')noteGrowthCreations(String(userId||''),'goals',current,prepared);
     goalsRef.current = prepared;
     return setGoalsRaw(prepared);
   }
@@ -4689,6 +4832,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         ? requested
         : []
       : prepareAccountCollectionWrite("alert", current, requested);
+    if(!applyingFirestoreRef.current&&typeof nextValue==='function')noteGrowthCreations(String(userId||''),'alerts',current,prepared);
     alertsRef.current = prepared;
     return setAlertsRaw(prepared);
   }
@@ -4812,6 +4956,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       }
     }
     if (!changed) return true;
+    if(!applyingFirestoreRef.current&&typeof nextValue==='function'){
+      const previous=financeEvolutionRef.current;
+      noteGrowthCreations(String(userId||''),'rules',previous.rules,nextWithRuleSync.rules);
+      noteGrowthCreations(String(userId||''),'budgetVersions',previous.budget?.standardVersions,nextWithRuleSync.budget?.standardVersions);
+      noteGrowthCreations(String(userId||''),'budgetOverrides',previous.budget?.overrides,nextWithRuleSync.budget?.overrides);
+    }
     writeUserLocalUpdatedAt('finance_evolution_v1', now);
     markPendingAccountSync(true);
     financeEvolutionRef.current = nextWithRuleSync;
@@ -5262,6 +5412,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return setHomeBalanceViewRaw(value);
   }
   var DEFAULT_HOME_WORKLETS = [
+    { id: "home_button_transfer", type: "button_transfer", size: "1x", color: "#FFFFFF", params: {} },
     {
       id: "home_quick_actions",
       type: "quick_actions",
@@ -5487,7 +5638,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     markDisplayPreferencesChange();
     return setStatsViewRaw(value);
   }
-  var [bgTheme, setBgTheme] = useStorage(userKey("pref_bg"), "default");
+  const syncChatgptTheme = chatgptAppEnvironment === "test" && chatgptFirebaseConfig.projectId === "fainance-test-20260823195207";
+  var [bgTheme, setBgThemeRaw] = useStorage(userKey("pref_bg"), "default");
+  function setBgTheme(value) {
+    if (syncChatgptTheme && value !== readUserLocalJson("pref_bg", "default")) markDisplayPreferencesChange();
+    return setBgThemeRaw(value);
+  }
   var [btnStyle, setBtnStyleRaw] = useStorage(
     userKey("pref_btn_style"),
     "soft"
@@ -5862,6 +6018,35 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     customNotifsRef.current = prepared;
     return setCustomNotifsRaw(prepared);
   }
+  var notifPrefsRef = useRef(notifPrefs);
+  notifPrefsRef.current = notifPrefs;
+  // Foreground reminder dispatcher: previous versions only stored custom rules and
+  // never evaluated them. Account-scoped, idempotent and without server writes.
+  useEffect(function () {
+    if (!userId) return;
+    var cancelled = false;
+    function checkDue() {
+      if (cancelled || document.visibilityState === "hidden") return;
+      try {
+        var modes = notifPrefsRef.current?.notificationChannels;
+        var allowedCustom = []; // Custom reminders are created once by the server scheduler.
+        var allowedAutomatic = notificationShowsInApp(modes, "salary_reminder") ? notifPrefsRef.current : {};
+        collectDueLocalReminders(userId, allowedCustom, Date.now(), allowedAutomatic);
+      }
+      catch (_error) { /* storage unavailable: do not modify financial state */ }
+    }
+    checkDue();
+    var timer = window.setInterval(checkDue, 15000);
+    document.addEventListener("visibilitychange", checkDue);
+    window.addEventListener("focus", checkDue);
+    return function () {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", checkDue);
+      window.removeEventListener("focus", checkDue);
+    };
+  }, [userId]);
+
   var [patrimonioHistory, setPatrimonioHistoryRaw] = useStorage(
     userKey("patrimonio_history_v1"),
     {}
@@ -5871,6 +6056,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       markUserLocalChanges(["patrimonio_data_v2"]);
     return setPatrimonioHistoryRaw(nextValue);
   }
+  // Read-only derived balances: hydration and replay never increment stored amounts.
+  var [patrimonioToday, setPatrimonioToday] = useState(civilToday);
+  useEffect(function () {
+    var update = function () { setPatrimonioToday(civilToday()); };
+    var timer = window.setInterval(update, 60000);
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return function () { window.clearInterval(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", update); };
+  }, []);
   var [patrimonioNotes, setPatrimonioNotesRaw] = useStorage(
     userKey("patrimonio_notes_v1"),
     {}
@@ -6264,10 +6458,62 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     },
     [userId, initialSetupStatus]
   );
-  var [shareProjects, setShareProjectsRaw] = useStorage(
+  var [storedShareProjects, setShareProjectsRaw] = useStorage(
     userKey("share_projects_v1"),
     []
   );
+  var [shareCashCloud, setShareCashCloud] = useState({uid:"", projects:[]});
+  var shareProjects = useMemo(() => shareProjectsForRead(storedShareProjects,
+    userId && shareCashCloud.uid === String(userId) ? shareCashCloud.projects : null),
+    [storedShareProjects, shareCashCloud, userId]);
+  var shareCashReceipts = useRef({ uid: "", projects: new Map<string, any>() });
+  var shareCashMethodReceipts = useRef({ uid: "", methods: new Map<string, { previous: any; confirmed: any }>() });
+  var [shareCashSnapshot, setShareCashSnapshot] = useState({ uid: "", assignments: {} });
+  function sameShareCashMethod(a, b) {
+    return a?.methodId === b?.methodId && a?.direction === b?.direction;
+  }
+  useEffect(function () {
+    if (!userId || !fbDb) return;
+    var uid = String(userId);
+    let cancelled = false;
+    let usedDirectRead = false;
+    let unsubscribe: (() => void) | undefined;
+    function applyAssignments(documents) {
+      if (cancelled || fbAuth.currentUser?.uid !== uid) return;
+      const assignments = Object.fromEntries(documents.map(d => [d.id, d.data()]));
+      const pending = shareCashMethodReceipts.current;
+      if (pending.uid === uid) for (const [key, receipt] of pending.methods) {
+        if (sameShareCashMethod(assignments[key], receipt.confirmed)) pending.methods.delete(key);
+        else if (!assignments[key] || sameShareCashMethod(assignments[key], receipt.previous)) assignments[key] = receipt.confirmed;
+        else pending.methods.delete(key);
+      }
+      setShareCashSnapshot({ uid, assignments });
+    }
+    function subscribe() {
+      if (cancelled) return;
+      unsubscribe = onSnapshot(collection(fbDb, "users", uid, "shareCashMethods"), { includeMetadataChanges: true }, snapshot => {
+        if (!usedDirectRead || !snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) applyAssignments(snapshot.docs);
+      }, error => console.warn("Share cash method listener unavailable", error.code));
+    }
+    if (useNativeShareCommit(fbDb.app.options.projectId) && fbAuth.currentUser?.uid === uid) {
+      void import("firebase/firestore/lite").then(async lite => {
+        const db = lite.getFirestore(fbDb.app);
+        const result = await fainancePromiseTimeout(lite.getDocs(lite.collection(db, "users", uid, "shareCashMethods")), 4000, "SHARE_METHOD_READ_TIMEOUT");
+        usedDirectRead = true;
+        applyAssignments(result.docs);
+      }).catch(() => undefined).finally(subscribe);
+    } else subscribe();
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, [userId]);
+  var shareCashAssignments = shareCashSnapshot.uid === String(userId) ? shareCashSnapshot.assignments : null;
+  var shareCashMovements = useMemo(function () {
+    if (userId && (!shareCashAssignments || shareCashCloud.uid !== String(userId))) return null;
+    return shareCashMovementsForUser(shareProjects, shareCashAssignments, userId, currency);
+  }, [shareCashCloud, shareProjects, shareCashAssignments, userId, currency]);
+  var patrimonioAutomatic = useMemo(function () {
+    return derivePatrimony({ entries: patrimonioEntries, values: patrimonioValues, history: patrimonioHistory,
+      expenses, incomes, shareCashMovements, mode: shareCashMovements===null ? "manuale" : patrimonioMode, today: patrimonioToday, periodSettings: accountingPeriod.settings });
+  }, [patrimonioEntries, patrimonioValues, patrimonioHistory, expenses, incomes, shareCashMovements, patrimonioMode, patrimonioToday, accountingPeriod]);
   var shareProjectsRef = useRef(shareProjects);
   shareProjectsRef.current = shareProjects;
   function setShareProjects(nextValue) {
@@ -6304,10 +6550,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("share_default_category_v1"),
     "17"
   );
+  var [shareDefaultMethodId, setShareDefaultMethodIdRaw] = useStorage(userKey("share_default_method_v1"), "");
   var effectiveShareDefaultCategoryId = fallbackPersonalCategoryId(
     cats,
     shareDefaultCategoryId
   );
+  const activePersonalExpenses = useMemo(() => expensesWithoutShareShadows(expenses, shareProjects),
+    [expenses, shareProjects]);
+  const expensesForHistory = useMemo(() => showShareInHistory ? activePersonalExpenses : expensesWithoutShareShadows(expenses, shareProjects, false),
+    [activePersonalExpenses, expenses, shareProjects, showShareInHistory]);
   var expensesForAnalysis = useMemo(
     function () {
       return buildExpensesForAnalysis({
@@ -6500,11 +6751,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     .join("|");
   var countedExpenses = useMemo(
     function () {
-      return (expenses || []).filter(function (e) {
+      return activePersonalExpenses.filter(function (e) {
         return !isExpenseExcludedFromTotals(e);
       });
     },
-    [expenses, expenseCalculationCategorySignature]
+    [activePersonalExpenses, expenseCalculationCategorySignature]
   );
   var countedExpensesForAnalysis = useMemo(
     function () {
@@ -7369,6 +7620,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       balancePeriodMode: balancePeriodMode === "financial" ? "financial" : "calendar",
       financialMonthStartDay: Math.max(1, Math.min(31, Number(financialMonthStartDay) || 27)),
       statsView: String(statsView || "rateizzato"),
+      ...(syncChatgptTheme ? { bgTheme } : {}),
       btnStyle: String(btnStyle || "soft"),
       expenseColor: String(expenseColor || "#E24B4A"),
       incomeColor: String(incomeColor || "#1D9E75"),
@@ -7484,12 +7736,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       readUserLocalUpdatedAt("category_preferences_v2"),
       currentCategoryPreferencesV2()
     );
+    // This compatibility copy must use the same persisted revision as the
+    // account payload, even when encryption outlives the render that started it.
+    var livePatrimonioAreas = readUserLocalJson("patrimonio_areas_v1", patrimonioAreas);
+    var livePatrimonioEntries = readUserLocalJson("patrimonio_entries_v1", patrimonioEntries);
     put(
       "patrimonioCatalog",
       readUserLocalUpdatedAt("patrimonio_catalog_v2"),
       {
-        areas: Array.isArray(patrimonioAreas) ? patrimonioAreas : [],
-        entries: Array.isArray(patrimonioEntries) ? patrimonioEntries : [],
+        areas: Array.isArray(livePatrimonioAreas) ? livePatrimonioAreas : [],
+        entries: Array.isArray(livePatrimonioEntries) ? livePatrimonioEntries : [],
       }
     );
     put(
@@ -7801,6 +8057,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           balancePeriodMode: readUserLocalJson("pref_balance_period_mode_v1", "calendar"),
           financialMonthStartDay: readUserLocalJson("pref_financial_month_start_day_v1", 27),
           statsView: readUserLocalJson("pref_statsview", "rateizzato"),
+          ...(syncChatgptTheme ? { bgTheme: readUserLocalJson("pref_bg", "default") } : {}),
           btnStyle: readUserLocalJson("pref_btn_style", "soft"),
           expenseColor: readUserLocalJson("pref_exp_color", "#E24B4A"),
           incomeColor: readUserLocalJson("pref_inc_color", "#1D9E75"),
@@ -8176,7 +8433,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           }
         )
       );
-      setNotifPrefs(localSnap.notifPrefs || {});
+      setNotifPrefs((previous) => mergeNotificationChannelState(previous, localSnap.notifPrefs || {}));
       setPlanUsage(localSnap.planUsage || {});
       setShownAlertIds(
         Array.isArray(localSnap.shownAlertIds) ? localSnap.shownAlertIds : []
@@ -8249,11 +8506,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         // the incoming account has been validated and merged.
         firestoreHydratedRef.current = true;
         setAccountCacheReady(true);
+        markStartupPhase("local_ready");
       }
 
       var docRef = doc(fbDb, "userData", userId);
       var cancelled = false;
       var firstSnapshot = true;
+      var lastAppliedAccountSnapshot: any = null;
       var catalogReadFromCache = false;
       var userStateAuthorityV5ReadFromCache = false;
       var readyFallback = setTimeout(function () {
@@ -8264,18 +8523,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         }
       }, 12000);
       var unsubData: any = null;
+      let observerDelivered = false;
+      let bootstrapStamp = 0;
+      const snapshotStamp = (data: any) => Math.max(Number(data?.accountDataUpdatedAtMsV5) || 0, Number(data?.updatedAtMs) || 0);
       try {
-        unsubData = onSnapshot(
-          docRef,
-          { includeMetadataChanges: true },
-          serializeSnapshotHandler(async function (snap: any) {
+        const applyAccountSnapshot = serializeSnapshotHandler(async function (snap: any) {
             if (cancelled) return;
+            if (firstSnapshot) markStartupPhase("snapshot_received");
             clearTimeout(readyFallback);
             var snapshotRemoteApplyStarted = false;
 
             try {
             if (snap.exists()) {
               var rawCloud: any = snap.data() || {};
+              if (skipTestAccountEcho({ project: fbDb.app.options.projectId, uid: String(userId || ""), validatedUid: userStateAuthorityV6ValidatedUidRef.current, ready: financeSchemaCompatibleRef.current, raw: rawCloud, metadata: snap.metadata, last: lastAppliedAccountSnapshot }, syncJsonEqual)) return;
               lastCloudRawKeysRef.current = Object.keys(rawCloud);
               financeSchemaCompatibleRef.current = false;
               var d: any;
@@ -8284,14 +8545,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var cloudUserStateAuthorityV5: any = null;
               var cloudUserStateAuthorityV6: any = null;
               try {
-                d = await fainanceExpandAccountCloudDataV5(rawCloud);
+                d = await measureStartup("session_decode", fainanceExpandAccountCloudDataV5(rawCloud));
                 if (cancelled) return;
                 // Independent recovery reads run together, with their existing validation.
                 // Neither network wait is itself a state application.
                 var catalogAnchorRead = (!catalogAnchorLoadedRef.current || (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites))
-                  ? readCatalogAnchorV1(!!snap.metadata.fromCache) : null;
+                  ? measureStartup("A3", readCatalogAnchorV1(!!snap.metadata.fromCache)) : null;
                 var authorityV6Read = (!userStateAuthorityV6AnchorRef.current || (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites))
-                  ? readLatestUserStateAuthorityV6() : null;
+                  ? measureStartup("A4", readLatestUserStateAuthorityV6()) : null;
 
 
               if (!catalogAnchorLoadedRef.current || (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites)) {
@@ -8315,7 +8576,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   ? userStateAuthorityV6AnchorRef.current
                   : null;
                 if (cloudUserStateAuthorityV6) {
-                  cloudUserStateAuthorityV6 = reconcileAuthorityCatalogs(cloudUserStateAuthorityV6, d.catalogSyncV4, catalogAnchorV1Ref.current && catalogAnchorV1Ref.current.catalogSyncV4);
+                  cloudUserStateAuthorityV6 = reconcilePatrimonyAuthority(reconcileAuthorityCatalogs(cloudUserStateAuthorityV6, d.catalogSyncV4, catalogAnchorV1Ref.current && catalogAnchorV1Ref.current.catalogSyncV4), d);
                   d = applyUserStateAuthorityV6ToCloudData(d, cloudUserStateAuthorityV6);
                 }
 
@@ -8326,9 +8587,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites))
                 ) {
                   userStateAuthorityV5ReadFromCache = !!snap.metadata.fromCache;
-                  var authorityV5 = await readUserStateAuthorityV5(
+                  var authorityV5 = await measureStartup("A7", readUserStateAuthorityV5(
                     userStateAuthorityV5ReadFromCache
-                  );
+                  ));
                   if (authorityV5) userStateAuthorityV5AnchorRef.current = authorityV5;
                 }
                 cloudUserStateAuthorityV5 =
@@ -8433,6 +8694,40 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var preserveLatestLocalOnFirst =
                 isFirstSnapshot && Number(pendingSync.revision || 0) > 0;
               if (!isFirstSnapshot && Number(pendingSync.revision || 0) > 0) {
+                const remoteTheme = d.displayPreferencesV2?.bgTheme ?? d.bgTheme;
+                if (
+                  syncChatgptTheme &&
+                  !snap.metadata.fromCache && !snap.metadata.hasPendingWrites &&
+                  /^(default|slate|warm|ocean|forest|viola|dark|darkslate)$/.test(remoteTheme) &&
+                  Number(d.displayPreferencesUpdatedAt || 0) > readUserLocalUpdatedAt("display_preferences_v2")
+                ) {
+                  setBgThemeRaw(remoteTheme);
+                }
+                if (fbDb.app.options.projectId === "fainance-test-20260823195207") {
+                  // A queued unrelated account edit must not hide a newer balance
+                  // from another device. Apply only strictly newer Patrimonio groups.
+                  var newerData = Number(d.patrimonioDataUpdatedAt || 0) > readUserLocalUpdatedAt("patrimonio_data_v2");
+                  var newerCatalog = Number(d.patrimonioCatalogUpdatedAt || 0) > readUserLocalUpdatedAt("patrimonio_catalog_v2");
+                  if (newerData || newerCatalog) {
+                    // The snapshot already owns one remote-apply scope above.
+                    // Opening a second scope here would leave the writer blocked.
+                    var applyPatrimonyField = function (key: string, value: any, setter: any) {
+                      localStorage.setItem(userKey(key), JSON.stringify(value));
+                      setter(value);
+                    };
+                    if (newerData) {
+                      applyPatrimonyField("patrimonio_values_v1", ensureObjectValue(d.patrimonioValues, {}), setPatrimonioValues);
+                      applyPatrimonyField("patrimonio_history_v1", ensureObjectValue(d.patrimonioHistory, {}), setPatrimonioHistory);
+                      applyPatrimonyField("patrimonio_notes_v1", ensureObjectValue(d.patrimonioNotes, {}), setPatrimonioNotes);
+                      writeUserLocalUpdatedAt("patrimonio_data_v2", Number(d.patrimonioDataUpdatedAt));
+                    }
+                    if (newerCatalog && Array.isArray(d.patrimonioEntries) && Array.isArray(d.patrimonioAreas)) {
+                      applyPatrimonyField("patrimonio_entries_v1", d.patrimonioEntries, setPatrimonioEntries);
+                      applyPatrimonyField("patrimonio_areas_v1", d.patrimonioAreas, setPatrimonioAreas);
+                      writeUserLocalUpdatedAt("patrimonio_catalog_v2", Number(d.patrimonioCatalogUpdatedAt));
+                    }
+                  }
+                }
                 var incomingSyncToken = String(d.syncClientWriteToken || "");
                 if (
                   pendingSync.token &&
@@ -9021,7 +9316,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 recurringExpenseCategoryReferences
               );
               if (isFirstSnapshot && needsCategoryRecovery(mergedCats, allExpenseCategoryReferences, isRecoveredExpenseCategory)) {
-                var cloudBackupCategoryCandidates = await readCloudExpenseCategoryBackupCandidates();
+                var cloudBackupCategoryCandidates = await measureStartup("A5", readCloudExpenseCategoryBackupCandidates());
                 if (cancelled) return;
                 var backupRepair = repairRecoveredExpenseCategories(mergedCats, cloudBackupCategoryCandidates);
                 var backupReferences = restoreReferencedExpenseCategories(
@@ -9453,6 +9748,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 needsBackfill = true;
               }
 
+              // Category recovery above can await the network. Re-read balances
+              // and catalog together with their timestamps after that await,
+              // so a user edit made meanwhile is never paired with an old value.
+              latestLocalPatrimonioValues = readUserLocalJson("patrimonio_values_v1", patrimonioValues);
+              latestLocalPatrimonioHistory = readUserLocalJson("patrimonio_history_v1", patrimonioHistory);
+              latestLocalPatrimonioNotes = readUserLocalJson("patrimonio_notes_v1", patrimonioNotes);
+              latestLocalPatrimonioAreas = readUserLocalJson("patrimonio_areas_v1", patrimonioAreas);
+              latestLocalPatrimonioEntries = readUserLocalJson("patrimonio_entries_v1", patrimonioEntries);
               var localPatrimonioCatalogTs = readUserLocalUpdatedAt(
                   "patrimonio_catalog_v2"
                 ),
@@ -9751,6 +10054,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   preferLocalDisplay
                 );
               });
+              if (syncChatgptTheme) {
+                const localTheme = readUserLocalJson("pref_bg", "default");
+                const cloudTheme = cloudDisplay?.bgTheme ?? d.bgTheme;
+                const validCloudTheme = typeof cloudTheme === "string" &&
+                  /^(default|slate|warm|ocean|forest|viola|dark|darkslate)$/.test(cloudTheme);
+                mergedDisplay.bgTheme = validCloudTheme && !preferLocalDisplay ? cloudTheme : localTheme;
+                setBgThemeRaw(mergedDisplay.bgTheme);
+              }
               setCurrency(
                 String(mergedDisplay.currency || getDefaultCurrency())
               );
@@ -9949,12 +10260,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   cloudBank = Array.isArray(rawBank)
                     ? rawBank
                     : localSnap.bankCoords;
-                var mergedBank = preserveLatestLocalOnFirst
-                  ? mergeArrayPreferLocalByStableId(
-                      cloudBank,
-                      latestLocalBankCoords
-                    )
-                  : cloudBank;
+                var mergedBank = chatgptAppEnvironment === 'test'
+                  ? mergeSensitiveRecords(cloudBank, preserveLatestLocalOnFirst ? latestLocalBankCoords : [], d.accountDeletedRecords, 'bank')
+                  : preserveLatestLocalOnFirst ? mergeArrayPreferLocalByStableId(cloudBank, latestLocalBankCoords) : cloudBank;
                 setBankCoords(
                   Array.isArray(mergedBank) ? mergedBank : latestLocalBankCoords
                 );
@@ -9984,12 +10292,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   cloudCredit = Array.isArray(rawCredit)
                     ? rawCredit
                     : localSnap.creditCards;
-                var mergedCredit = preserveLatestLocalOnFirst
-                  ? mergeArrayPreferLocalByStableId(
-                      cloudCredit,
-                      latestLocalCreditCards
-                    )
-                  : cloudCredit;
+                var mergedCredit = chatgptAppEnvironment === 'test'
+                  ? mergeSensitiveRecords(cloudCredit, preserveLatestLocalOnFirst ? latestLocalCreditCards : [], d.accountDeletedRecords, 'card')
+                  : preserveLatestLocalOnFirst ? mergeArrayPreferLocalByStableId(cloudCredit, latestLocalCreditCards) : cloudCredit;
                 setCreditCards(
                   Array.isArray(mergedCredit)
                     ? mergedCredit
@@ -10014,7 +10319,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               if (d.aiDataAccess) setAiDataAccess(d.aiDataAccess);
               if (d.aiFloatingEnabled !== undefined)
                 setAiFloatingEnabled(!!d.aiFloatingEnabled);
-              if (d.notifPrefs) setNotifPrefs(d.notifPrefs);
+              if (d.notifPrefs) setNotifPrefs((previous) => mergeNotificationChannelState(previous, d.notifPrefs));
               var notificationKey = function (item) {
                 return accountSyncRecordKey("notification", item);
               };
@@ -10535,10 +10840,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var localConsentTs = readUserLocalUpdatedAt("ai_consent_v2"),
                 cloudConsentTs = Number(d.aiConsentUpdatedAt || 0);
               var preferLocalConsent =
-                localConsentTs > cloudConsentTs ||
-                !cloudConsent ||
-                (localConsent.accepted === true &&
-                  cloudConsent.accepted !== true);
+                preferLocalAIConsent(localConsent, localConsentTs, cloudConsent, cloudConsentTs);
               var mergedConsent: any = preferLocalConsent
                 ? localConsent
                 : cloudConsent;
@@ -10961,6 +11263,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               }, 700);
             }
 
+            if (financeSchemaCompatibleRef.current && userStateAuthorityV6ValidatedUidRef.current === String(userId || "")) {
+              lastAppliedAccountSnapshot = { raw: snap.data(), fromCache: !!snap.metadata.fromCache };
+              if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) markStartupPhase("account_data_ready");
+            }
+
             if (postHydrationSyncRequestedRef.current) {
               setTimeout(function () {
                 if (cancelled) return;
@@ -10981,13 +11288,19 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } finally {
 
               if (snapshotRemoteApplyStarted) endRemoteApply();
-              // Resume edits deferred by this asynchronous cloud merge. Synchronous
-              // display translations must not repeatedly restart the save timer.
-              if (!cancelled && !applyingFirestoreRef.current && pendingAccountSyncRef.current.revision > 0) {
-                setAccountSyncRetryPulse(function (v) { return v + 1; });
-              }
             }
-          }),
+          });
+        unsubData = onSnapshot(
+          docRef,
+          { includeMetadataChanges: true },
+          function (snap) {
+            observerDelivered = true;
+            if (bootstrapStamp && !snap.metadata.hasPendingWrites) {
+              if (snap.metadata.fromCache || (snap.exists() && snapshotStamp(snap.data()) < bootstrapStamp)) return;
+              bootstrapStamp = 0;
+            }
+            void applyAccountSnapshot(snap);
+          },
           function (err) {
             if (cancelled) return;
             clearTimeout(readyFallback);
@@ -10999,6 +11312,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             setFirestoreReady(true);
           }
         );
+        if (useNativeShareCommit(fbDb.app.options.projectId) && fbAuth.currentUser?.uid === userId) {
+          // The authenticated Lite read and the durable SDK observer use the
+          // same project and rules. Only the first authoritative result starts
+          // hydration; all account validation still runs in the shared handler.
+          void import("firebase/firestore/lite").then(async lite => {
+            const database = lite.getFirestore(fbDb.app);
+            const snap = await lite.getDoc(lite.doc(database, "userData", userId));
+            if (cancelled || observerDelivered || fbAuth.currentUser?.uid !== userId || !snap.exists()) return;
+            const raw = snap.data();
+            const stamp = snapshotStamp(raw);
+            if (!stamp) return;
+            bootstrapStamp = stamp;
+            await applyAccountSnapshot({ exists: () => true, data: () => raw, metadata: { fromCache: false, hasPendingWrites: false } });
+          }).catch(() => undefined);
+        }
       } catch (err) {
         clearTimeout(readyFallback);
         console.error(
@@ -11055,7 +11383,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     // Non deve mai essere incorporato nello snapshot compresso, altrimenti una
     // save legacy potrebbe riportare in vita una copia precedente.
     delete compactSource.userStateAuthorityV3;
-    var compressed = await fainanceCompressAccountDataV5(compactSource);
+    async function commitCompact(candidate: any, rawKeys: string[], transaction?: any) {
+    var compressed = await fainanceCompressAccountDataV5(candidate);
     var write: any = {};
     var reserved: any = {
       currentPlan: true,
@@ -11072,30 +11401,65 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
     Array.from(
       new Set(
-        (lastCloudRawKeysRef.current || []).concat(Object.keys(compactSource))
+        rawKeys.concat(Object.keys(candidate))
       )
     ).forEach(function (key) {
       if (!reserved[key]) write[key] = deleteField();
     });
     write.accountSyncSchemaVersion = 5;
-    write.userStateAuthorityV2 = compactSource.userStateAuthorityV2 || previous.userStateAuthorityV2 || null;
+    write.userStateAuthorityV2 = candidate.userStateAuthorityV2 || previous.userStateAuthorityV2 || null;
     write.accountDataCompressedV5 = compressed.value;
     write.accountDataCompressionV5 = compressed.encoding;
     write.accountDataRawBytesV5 = compressed.rawBytes;
     write.accountDataCompressedBytesV5 = compressed.compressedBytes;
     write.accountDataUpdatedAtMsV5 = Number(
-      compactSource.updatedAtMs || Date.now()
+      candidate.updatedAtMs || Date.now()
     );
-    write.dataIntegrityV1 = compactSource.dataIntegrityV1 || {};
+    write.dataIntegrityV1 = candidate.dataIntegrityV1 || {};
     write.syncClientWriteToken = String(
-      compactSource.syncClientWriteToken || ""
+      candidate.syncClientWriteToken || ""
     );
     write.updatedAt = String(
-      compactSource.updatedAt || new Date().toISOString()
+      candidate.updatedAt || new Date().toISOString()
     );
-    write.updatedAtMs = Number(compactSource.updatedAtMs || Date.now());
+    write.updatedAtMs = Number(candidate.updatedAtMs || Date.now());
     assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
-    await setDoc(docRef, write, { merge: true });
+    if (transaction) transaction.set(docRef, write, { merge: true });
+    else await setDoc(docRef, write, { merge: true });
+    return write;
+    }
+    var write: any;
+    if (fbDb.app.options.projectId === "fainance-test-20260823195207") {
+      // The document version is checked atomically: a resumed client cannot
+      // overwrite a newer web balance with its queued account snapshot.
+      await runTransaction(fbDb, async function (transaction) {
+        var server = await transaction.get(docRef);
+        var remote = server.exists()
+          ? await fainanceExpandAccountCloudDataV5(server.data()) : {};
+        var candidate = { ...preserveNewerPatrimony(compactSource, remote) };
+        const remoteTheme = remote.displayPreferencesV2?.bgTheme ?? remote.bgTheme;
+        if (
+          /^(default|slate|warm|ocean|forest|viola|dark|darkslate)$/.test(remoteTheme) &&
+          Number(remote.displayPreferencesUpdatedAt || 0) > Number(candidate.displayPreferencesUpdatedAt || 0)
+        ) {
+          candidate.bgTheme = remoteTheme;
+          candidate.displayPreferencesV2 = { ...candidate.displayPreferencesV2, bgTheme: remoteTheme };
+        }
+        candidate.accountDeletedRecords = mergeSyncTombstones(candidate.accountDeletedRecords, remote.accountDeletedRecords);
+        candidate.appuntiDocuments = mergeSyncRecords(
+          candidate.appuntiDocuments,
+          remote.appuntiDocuments,
+          candidate.accountDeletedRecords,
+          (item) => accountSyncRecordKey("document", item),
+          true
+        );
+        write = await commitCompact(candidate, Object.keys(server.data() || {}), transaction);
+        compactSource = candidate;
+      });
+    } else {
+      write = await commitCompact(compactSource, lastCloudRawKeysRef.current || []);
+    }
+    notifyGrowthSourceCommitted(String(docRef.id), "FUNCTIONS", "SNAPSHOT", compactSource);
     setFinanceCloudReceipt({ uid: docRef.id, value: compactSource.financeEvolution });
     lastCloudRawKeysRef.current = Object.keys(write).filter(function (key) {
       return write[key] !== undefined;
@@ -11374,6 +11738,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       return;
     }
     // The UI persists these synchronously; asynchronous encryption may span more edits.
+    // Capture Patrimonio data after asynchronous encryption, alongside its
+    // current revision timestamps. A delayed writer must not label old links
+    // or balances with a newer local edit timestamp and erase the actual edit.
+    const latestPatrimonySaveV1 = {
+      areas: readUserLocalJson("patrimonio_areas_v1", patrimonioAreas),
+      entries: readUserLocalJson("patrimonio_entries_v1", patrimonioEntries),
+      values: readUserLocalJson("patrimonio_values_v1", patrimonioValues),
+      history: readUserLocalJson("patrimonio_history_v1", patrimonioHistory),
+      notes: readUserLocalJson("patrimonio_notes_v1", patrimonioNotes),
+    };
     var cats = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "cats_v10", readUserLocalJson("cats_v10", []));
     var methods = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "meth_v10", readUserLocalJson("meth_v10", []));
     var methodGroups = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "method_groups_v1", readUserLocalJson("method_groups_v1", []));
@@ -11616,12 +11990,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       financeEvolution,
       financeEvolutionUpdatedAt: readUserLocalUpdatedAt('finance_evolution_v1'),
       budgetPlanClearedAt: readBudgetPlanClearedAt(),
-      patrimonioValues,
-      patrimonioAreas,
-      patrimonioEntries,
+      patrimonioValues: latestPatrimonySaveV1.values,
+      patrimonioAreas: latestPatrimonySaveV1.areas,
+      patrimonioEntries: latestPatrimonySaveV1.entries,
       patrimonioCatalogUpdatedAt: patrimonioCatalogTs,
-      patrimonioHistory,
-      patrimonioNotes,
+      patrimonioHistory: latestPatrimonySaveV1.history,
+      patrimonioNotes: latestPatrimonySaveV1.notes,
       patrimonioDataUpdatedAt: patrimonioDataTs,
       patrimonioMode: patValue.patrimonioMode,
       patrimonyPreferencesV2: patValue,
@@ -12100,7 +12474,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         savePayload.dataIntegrityV1 || {}
       );
 
-      await writeCompactAccountDocument(docRef, savePayload);
+      const releaseOwnAccountWrite = trackAccountWrite(fbDb.app.options.projectId, String(userId || ""), writeToken);
+      try { await writeCompactAccountDocument(docRef, savePayload); }
+      finally { releaseOwnAccountWrite(); }
       // The committed main write is an ACK of this exact payload; an older ACK
       // cannot clear a newer local edit. Replay any peer change buffered meanwhile.
       confirmCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"), savePayload.catalogSyncV4);
@@ -12358,10 +12734,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       setTimeout(resolve, 80);
     });
 
-    var confirmed = await saveUserStateAuthorityV6Direct(
-      "logout",
-      true
-    );
+    var confirmed: any = false;
+    try {
+      // Bound the logout UI wait, not the underlying durable write. No logout
+      // or second backup is allowed while the original ACK remains pending.
+      confirmed = await fainancePromiseTimeout(saveUserStateAuthorityV6Direct("logout", true), 15000, "USER_STATE_SYNC_PENDING");
+    } catch (error) {
+      setToast({ text: L("Sincronizzazione ancora in corso. Attendi la conferma prima di uscire."), type: "warning", color: "#EF9F27", icon: "☁️" });
+      return false;
+    }
 
     if (!confirmed) {
       var detail = "";
@@ -13166,7 +13547,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
     return value;
   }
-  function syncShareProjectToCloud(project) {
+  function syncShareProjectToCloud(project, cashMethod?: { activityId: string; methodId: string; direction: string }) {
     if (!project || !userId) return;
     var pid = String(project.id);
     var nowIso = new Date().toISOString();
@@ -13202,9 +13583,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
     }
     function attemptShareSync(attempt) {
-      setDoc(doc(fbDb, "shareProjects", pid), cloudProject, {
-        merge: true,
-      }).then(function () {
+      var projectDoc = doc(fbDb, "shareProjects", pid);
+      var write: Promise<void>;
+      if (cashMethod) {
+        var key = shareCashMovementKey(pid, cashMethod.activityId);
+        var batch = writeBatch(fbDb);
+        batch.set(projectDoc, cloudProject, { merge: true });
+        batch.set(doc(fbDb, "users", userId, "shareCashMethods", key), {
+          projectId: pid, activityId: cashMethod.activityId, methodId: cashMethod.methodId, direction: cashMethod.direction,
+        });
+        write = batch.commit();
+      } else {
+        write = setDoc(projectDoc, cloudProject, { merge: true });
+      }
+      write.then(function () {
         notifyMundelyBridgeAfterShareCloudWrite();
       }).catch(async function (e) {
         var code = String((e && e.code) || "unknown")
@@ -13330,12 +13722,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setShareInviteLoading(false);
       });
   }
+  const shareListenerReady = firestoreReady || useNativeShareCommit(fbDb.app.options.projectId);
   useEffect(
     function () {
-      if (!firestoreReady || !userId) return;
+      if (!shareListenerReady || !userId || fbAuth.currentUser?.uid !== userId) return;
       var email = normalizeEmail(currentUser && currentUser.email);
       setShareInviteLoading(true);
       var projectMaps = { member: {}, owner: {} };
+      var projectServerReady = { member: false, owner: false };
       var inviteMaps = { email: {}, uid: {} };
       function applyProjects() {
         var all = {};
@@ -13348,6 +13742,25 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         var remoteArr = Object.keys(all).map(function (k) {
           return all[k];
         });
+        if (projectServerReady.member && projectServerReady.owner) {
+          const receipts = shareCashReceipts.current;
+          const localById = new Map(shareProjectsRef.current.map(project => [String(project.id), project]));
+          const cashProjects = remoteArr.map(project => {
+            const id = String(project.id);
+            const receipt = receipts.uid === String(userId) ? receipts.projects.get(id) : null;
+            let confirmed = project;
+            if (receipt) {
+              if (shareProjectStamp(project) < shareProjectStamp(receipt)) confirmed = mergeShareProjectDeep(project, receipt);
+              else receipts.projects.delete(id);
+            }
+            const local = localById.get(id);
+            if (!local?.deletedActivityIds?.length) return confirmed;
+            return { ...confirmed, deletedActivityIds: [...new Set([
+              ...(confirmed.deletedActivityIds || []).map(String), ...local.deletedActivityIds.map(String),
+            ])] };
+          });
+          setShareCashCloud({uid:String(userId),projects:filterShareProjectsByTombstones(cashProjects,latestShareProjectTombstones())});
+        }
         setShareProjects(function (current) {
           return filterShareProjectsByTombstones(
             mergeShareProjectArrays(current, remoteArr),
@@ -13380,17 +13793,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setShareInviteLoading(false);
       }
       var unsubs = [];
+      let projectsCancelled = false;
+      let usedDirectProjects = false;
+      function subscribeProjects() {
+      if (projectsCancelled) return;
       unsubs.push(
         onSnapshot(
           query(
             collection(fbDb, "shareProjects"),
             where("memberUids", "array-contains", userId)
           ),
+          { includeMetadataChanges:true },
           function (snap) {
+            if (usedDirectProjects && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
             var map = {};
             snap.forEach(function (d) {
               map[d.id] = { ...d.data(), id: d.id };
             });
+            if (!snap.metadata.fromCache) projectServerReady.member = true;
             projectMaps.member = map;
             applyProjects();
           },
@@ -13409,11 +13829,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             collection(fbDb, "shareProjects"),
             where("ownerUid", "==", userId)
           ),
+          { includeMetadataChanges:true },
           function (snap) {
+            if (usedDirectProjects && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
             var map = {};
             snap.forEach(function (d) {
               map[d.id] = { ...d.data(), id: d.id };
             });
+            if (!snap.metadata.fromCache) projectServerReady.owner = true;
             projectMaps.owner = map;
             applyProjects();
           },
@@ -13425,6 +13848,23 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           }
         )
       );
+      }
+      if (useNativeShareCommit(fbDb.app.options.projectId)) {
+        void import("firebase/firestore/lite").then(async lite => {
+          const projects = lite.collection(lite.getFirestore(fbDb.app), "shareProjects");
+          const [member, owner] = await fainancePromiseTimeout(Promise.all([
+            lite.getDocs(lite.query(projects, lite.where("memberUids", "array-contains", userId))),
+            lite.getDocs(lite.query(projects, lite.where("ownerUid", "==", userId))),
+          ]), 4000, "SHARE_PROJECTS_READ_TIMEOUT");
+          if (projectsCancelled || fbAuth.currentUser?.uid !== userId) return;
+          const map = snapshot => Object.fromEntries(snapshot.docs.map(d => [d.id, { ...d.data(), id: d.id }]));
+          projectMaps.member = map(member);
+          projectMaps.owner = map(owner);
+          projectServerReady.member = projectServerReady.owner = true;
+          usedDirectProjects = true;
+          applyProjects();
+        }).catch(() => undefined).finally(subscribeProjects);
+      } else subscribeProjects();
       if (email) {
         unsubs.push(
           onSnapshot(
@@ -13496,6 +13936,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         )
       );
       return function () {
+        projectsCancelled = true;
         unsubs.forEach(function (u) {
           try {
             u && u();
@@ -13503,7 +13944,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
       };
     },
-    [firestoreReady, userId, currentUser && currentUser.email]
+    [shareListenerReady, userId, currentUser && currentUser.email]
   );
   useEffect(
     function () {
@@ -13982,6 +14423,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           clearTimeout(userStateAuthoritySaveTimerRef.current);
       } catch (e) {}
       userStateAuthoritySaveTimerRef.current = null;
+      if (remoteApplyResumeTimerRef.current) clearTimeout(remoteApplyResumeTimerRef.current);
+      remoteApplyResumeTimerRef.current = null;
       latestUserStateAuthoritySaveRef.current = null;
       userStateAuthorityV3SaveChainRef.current = Promise.resolve(true);
       userStateAuthorityV3RevisionRef.current = 0;
@@ -14010,6 +14453,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [addSubTab, setAddSubTab] = useState("single");
 
   function openQuickAddFromUrl(rawUrl) {
+    const chatgptRoute=resolveChatgptTestRoute(String(rawUrl||''),chatgptAppEnvironment,chatgptFirebaseConfig.projectId);
+    if(chatgptRoute){
+      setTab(chatgptRoute.tab);setSettingsPage(chatgptRoute.settings);setMobileMenu(false);
+      if(chatgptRoute.projectId)setShareSelectedProjectId(chatgptRoute.projectId);
+      if(chatgptRoute.input){setSpeseSubTab('add');setAddType('expense');setAddSubTab(chatgptRoute.input);}
+      return;
+    }
     var raw = String(rawUrl || "");
     var url = raw.toLowerCase();
     if (!url) return;
@@ -16811,7 +17261,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.1.16";
+  var FAINANCE_CURRENT_VERSION = "2.1.17";
   var FAINANCE_CURRENT_VERSION_CODE = 239;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
@@ -21610,10 +22060,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       ? ADMOB_BANNER_AD_UNIT_ID_IOS
       : ADMOB_BANNER_AD_UNIT_ID_ANDROID;
   }
+  // No ad request or native overlay during any onboarding/setup stage, including transitions.
+  var adsBlockedBySetup = !!(initialSetupOpen || onboardingGuideOpen ||
+    initialSetupStatus === "essential_pending" || initialSetupStatus === "advanced_pending" ||
+    onboardingGuideEligibleNow() || !userId || !accountUiReady || !termsAccepted || !privacyAccepted || appLocked);
+  var adsBlockedBySetupRef = useRef(adsBlockedBySetup);
+  adsBlockedBySetupRef.current = adsBlockedBySetup;
   var adConsentRequestedRef = useRef(false);
   var rewardedAdInProgressRef = useRef(false);
   var rewardedAdCompletedAtRef = useRef(0);
   function requestAdConsentIfNeeded() {
+    if (adsBlockedBySetupRef.current) return;
     var ads = nativePlugin("FainanceAds");
     if (!isNativeMobileApp() || !ads || !ads.requestConsent) return;
     if (adConsentRequestedRef.current) return;
@@ -22259,6 +22716,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
 
   function showShortInterstitialForExtraMovement(onDismiss) {
+    if (adsBlockedBySetupRef.current) return;
     var nowMs = Date.now();
     if (rewardedAdInProgressRef.current) return;
     if (nowMs - Number(rewardedAdCompletedAtRef.current || 0) < 2500) return;
@@ -22307,6 +22765,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
 
   function showRewardedAdForExtraMovement(onReward) {
+    if (adsBlockedBySetupRef.current) return;
     var nowMs = Date.now();
     if (rewardedAdInProgressRef.current) return;
     if (nowMs - Number(rewardedAdCompletedAtRef.current || 0) < 2500) return;
@@ -22686,7 +23145,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return false;
   }
   function prepareAutomaticMovements(items,direction,source){
-    const results=items.map(item=>evaluateAutomaticRules(financeEvolutionRef.current.rules,item,direction,source||'manual',{plan:currentPlan,cats,methods,incomeTypes}));
+    const results=items.map(item=>evaluateAutomaticRules(financeEvolutionRef.current.rules,item,direction,source||'manual',{plan:currentPlan,cats,methods,incomeTypes,instalmentOptions:planLimits.instalmentOptions}));
     return {items:results.map(r=>r.item),alerts:results.flatMap(r=>r.alerts).filter((a,i,list)=>list.findIndex(b=>b.ruleId===a.ruleId)===i)};
   }
   function approveAutomaticAlerts(alerts){
@@ -22994,7 +23453,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     let prepared;
     try {
       const item = {
-        id: Date.now(), amount: r.amount, desc: r.name, date: ds,
+        id: recurringMovementId(r, ds), amount: r.amount, desc: r.name, date: ds,
         currency: r.currency || currency,
         baseCurrency: r.baseCurrency || currency,
         originalAmount: r.originalAmount == null ? null : r.originalAmount,
@@ -23015,7 +23474,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               recurringCategoryName: String(r.categoryNameSnapshot || ""),
               recurringMethodName: String(r.methodNameSnapshot || ""),
             }
-          : {type: r.incomeType}),
+          : {type: r.incomeType,...incomeReceiptFields(r,methods)}),
       };
       prepared = prepareAutomaticMovements([item], r.rtype, 'recurring');
     } catch {
@@ -23151,7 +23610,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setAlertPopup(current=>{const remaining=(current||[]).filter(row=>!keys.includes(alertSeenKey(row)));return remaining.length?remaining:null;});
   }
 
-  useSpendingAlertDispatch({ready:firestoreReady,accountKey:userId,rows:triggeredAlertsData,onPopup:setAlertPopup});
+  useEffect(function () {
+    if (!notificationShowsInApp(notifPrefs?.notificationChannels, "spending_alert")) setAlertPopup(null);
+  }, [notifPrefs?.notificationChannels?.spending_alert]);
+  useSpendingAlertDispatch({
+    ready:firestoreReady,
+    accountKey:userId,
+    rows:notificationShowsInApp(notifPrefs?.notificationChannels, "spending_alert") ? triggeredAlertsData : [],
+    onPopup:setAlertPopup,
+  });
 
   function sortHistoryItems(list) {
     return sortFinancialHistoryItems(
@@ -23169,7 +23636,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     function () {
       if (!showShareInHistory) return [];
       return (shareProjects || []).flatMap(function (project) {
-        return (project.activities || [])
+        return activeShareActivities(project)
           .filter(function (a) {
             return a.kind !== "settlement";
           })
@@ -23248,7 +23715,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var q = String(searchQuery || "").trim().toLowerCase();
       var minAmt = filterAmtMin ? parseMoney(filterAmtMin) : null;
       var maxAmt = filterAmtMax ? parseMoney(filterAmtMax) : null;
-      var personalSource = filterAreaPersonal ? expenses : [];
+      var personalSource = filterAreaPersonal ? expensesForHistory : [];
       var shareSource =
         filterAreaShare && showShareInHistory ? shareHistoryExpenses : [];
       var source = personalSource.concat(shareSource);
@@ -23319,7 +23786,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       );
     },
     [
-      expenses,
+      expensesForHistory,
       shareHistoryExpenses,
       filterAreaPersonal,
       filterAreaShare,
@@ -23438,7 +23905,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   };
   useEffect(
     function () {
-      if (currentPlan === "free") {
+      if (currentPlan === "free" && !adsBlockedBySetup) {
         requestAdConsentIfNeeded();
       } else {
         try {
@@ -23447,22 +23914,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         } catch (e) {}
       }
     },
-    [currentPlan]
+    [currentPlan, adsBlockedBySetup]
   );
 
   useEffect(
     function () {
-      if (!nativeBannerSuppressed) return;
+      if (!nativeBannerSuppressed && !adsBlockedBySetup) return;
       try {
         var ads = nativePlugin("FainanceAds");
         if (ads && ads.hideBanner) ads.hideBanner({});
       } catch (e) {}
     },
-    [nativeBannerSuppressed]
+    [nativeBannerSuppressed, adsBlockedBySetup]
   );
 
   function shouldShowTopAdBox() {
-    if (nativeBannerSuppressed || recurringScreenActive || editingItem || tab === "spese") return false;
+    if (adsBlockedBySetupRef.current || nativeBannerSuppressed || recurringScreenActive || editingItem || tab === "spese") return false;
     if (currentPlan !== "free") return false;
     if (!planLimits || !planLimits.ads) return false;
     if (!isMobile) return false;
@@ -23477,7 +23944,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // hook propri e puo' essere invocata come funzione: nessun rimontaggio.
   var topAdVisible = shouldShowTopAdBox();
   // Come le icone superiori, nascondi il riepilogo mentre si inserisce un movimento.
-  var mobileSummaryVisible = !!showAppSummaryHeader && tab !== "spese" && firestoreReady && !appLocked && !!userId && accountUiReady;
+  var mobileSummaryVisible = !!showAppSummaryHeader && tab !== "spese" && !appLocked && !!userId && accountUiReady;
   var [summaryActionsHost, setSummaryActionsHost] = useState<HTMLElement | null>(null);
   var topAdNativeBanner = isNativeMobileApp();
   var topAdBoxRef = useRef(null);
@@ -23487,7 +23954,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var ads = nativePlugin("FainanceAds");
       if (!topAdVisible || !topAdNativeBanner || !ads || !ads.showBanner) return;
       requestAdConsentIfNeeded();
+      var cancelled = false;
       function showAtMeasuredSlot() {
+        if (cancelled || adsBlockedBySetupRef.current) return;
         var top = 0;
         try {
           var el = topAdBoxRef.current;
@@ -23537,6 +24006,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
       } catch (e) {}
       return function () {
+        cancelled = true;
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
@@ -26621,12 +27091,67 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setShareProjects(function (list) {
       return [p].concat(list || []);
     });
+    noteGrowthCreations(String(userId||''),'shareProjects',[],[p]);
     syncShareProjectToCloud(p);
     setShareSelectedProjectId(p.id);
     setShareProjectTab("attivita");
     return p;
   }
-  function updateShareProject(pid, fn) {
+  async function updatePersistedShareActivity(pid, activityId, apply, cashMethod, create = false) {
+    const uid = String(userId || "");
+    if (!uid || fbAuth.currentUser?.uid !== uid) throw Error("SHARE_SESSION_CHANGED");
+    const ref = doc(fbDb, "shareProjects", String(pid));
+    function preparePatch(remote) {
+      const existing = (remote.activities || []).some(a => String(a.id) === String(activityId));
+      if ((remote.deletedActivityIds || []).map(String).includes(String(activityId)) || existing === create)
+        throw Error(create ? "SHARE_ACTIVITY_EXISTS" : "SHARE_ACTIVITY_MISSING");
+      const local = shareProjectsRef.current.find(p => String(p.id) === String(pid));
+      const now = Math.max(Date.now(), shareProjectStamp(remote) + 1, shareProjectStamp(local) + 1,
+        ...[...(remote.activities || []), ...(local?.activities || [])].map(a => syncRecordTime(a) + 1));
+      const next = apply(remote);
+      const activities = (next.activities || []).map(a => String(a.id) === String(activityId)
+        ? { ...a, syncUpdatedAtMs: now, updatedAt: new Date(now).toISOString() } : a);
+      return { activities, deletedActivityIds: next.deletedActivityIds || [],
+        updatedAt: new Date(now).toISOString(), updatedAtMs: now, shareRevision: now };
+    }
+    const privateMethod = cashMethod ? {
+      key: shareCashMovementKey(pid, activityId),
+      data: {projectId:String(pid),activityId:String(activityId),methodId:cashMethod.methodId,direction:cashMethod.direction},
+    } : null;
+    const committed = useNativeShareCommit(fbDb.app.options.projectId)
+      ? await commitNativeShareActivity({projectId:String(pid),activityId:String(activityId),uid,
+          token:await fbAuth.currentUser.getIdToken(),apply:preparePatch,privateMethod})
+      : await runTransaction(fbDb, async tx => {
+          const snapshot = await tx.get(ref);
+          if (!snapshot.exists()) throw Error("SHARE_PROJECT_MISSING");
+          const remote = { ...snapshot.data(), id: snapshot.id };
+          const patch = preparePatch(remote);
+          tx.update(ref, sanitizeShareCloudValue(patch));
+          if (privateMethod) tx.set(doc(fbDb,"users",uid,"shareCashMethods",privateMethod.key),privateMethod.data);
+          return { ...remote, ...patch };
+        });
+    if (fbAuth.currentUser?.uid !== uid) return;
+    if (shareCashReceipts.current.uid !== uid) shareCashReceipts.current = { uid, projects: new Map() };
+    shareCashReceipts.current.projects.set(String(pid), committed);
+    setShareCashCloud(current => current.uid !== uid ? current : {...current,
+      projects:current.projects.map(p => String(p.id)===String(pid) ? mergeShareProjectDeep(p,committed) : p)});
+    setShareProjects(list => list.map(p => String(p.id) === String(pid)
+      ? mergeShareProjectDeep(p, committed) : p));
+    if (cashMethod) {
+      const key = shareCashMovementKey(pid, activityId);
+      if (shareCashMethodReceipts.current.uid !== uid) shareCashMethodReceipts.current = { uid, methods: new Map() };
+      const pending = shareCashMethodReceipts.current.methods;
+      const previous = pending.get(key)?.previous ?? shareCashAssignments?.[key];
+      pending.set(key, { previous, confirmed: cashMethod });
+      setShareCashSnapshot(current => current.uid !== uid ? current : ({ uid, assignments: {
+        ...current.assignments, [key]: cashMethod,
+      }}));
+    }
+    window.dispatchEvent(new CustomEvent("fainance:share-mutated"));
+  }
+
+  function updateShareProject(pid, fn, cashMethod?: { activityId: string; methodId: string; direction: string }, persistedActivityId?: string, create = false) {
+    if (persistedActivityId != null) return updatePersistedShareActivity(pid, persistedActivityId, fn, cashMethod, create);
     setShareProjects(function (list) {
       return (list || []).map(function (p) {
         if (String(p.id) !== String(pid)) return p;
@@ -26640,7 +27165,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           candidate = { ...candidate, categories: p.categories || [] };
         }
         var updated = { ...candidate, updatedAt: nowIso, updatedAtMs: Date.now() };
-        syncShareProjectToCloud(updated);
+        syncShareProjectToCloud(updated, cashMethod);
         return updated;
       });
     });
@@ -26655,7 +27180,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var participantId = String(participant.id || "");
     var projectId = String(project.id || "");
     var projectName = String(project.name || "Progetto Share");
-    return (Array.isArray(project.activities) ? project.activities : [])
+    return activeShareActivities(project)
       .filter(function (activity) {
         return activity && activity.kind !== "settlement";
       })
@@ -27427,6 +27952,27 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     ]
   );
 
+  useEffect(function () {
+    if (!userId) return;
+    var cancelled = false;
+    var fetchSavedChoices = function () {
+      loadNotificationChannels().then(function (remote) {
+        if (cancelled || !remote.updatedAtMs) return;
+        setNotifPrefs(function (previous) {
+          if (Number(previous?.notificationChannelsUpdatedAtMs || 0) >= remote.updatedAtMs) return previous;
+          return {
+            ...previous,
+            notificationChannels: remote.channels,
+            notificationChannelsUpdatedAtMs: remote.updatedAtMs,
+          };
+        });
+      }).catch(function () { /* Legacy deployments may not have the callable yet. */ });
+    };
+    fetchSavedChoices();
+    window.addEventListener("focus", fetchSavedChoices);
+    return function () { cancelled = true; window.removeEventListener("focus", fetchSavedChoices); };
+  }, [userId]);
+
   useEffect(
     function () {
       var alive = true;
@@ -27562,17 +28108,36 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     incomeColor,
     isMobile,
     patrimonioAreas,
-    setPatrimonioAreas,
+    setPatrimonioAreas: userSynchronizedSetting(setPatrimonioAreas, "patrimonio_areas_v1", "patrimonio_catalog_v2"),
     patrimonioEntries,
-    setPatrimonioEntries,
-    patrimonioValues,
-    setPatrimonioValues,
+    setPatrimonioEntries: userSynchronizedSetting(setPatrimonioEntries, "patrimonio_entries_v1", "patrimonio_catalog_v2"),
+    patrimonioValues: patrimonioAutomatic.values,
+    patrimonioAutomatic,
+    shareCashMovements,
+    shareCashAssignments,
+    persistPatrimonyTransfer: function (next) {
+      if (!firestoreReady || applyingFirestoreRef.current) return false;
+      const oldValues = readUserLocalJson("patrimonio_values_v1", {});
+      const oldHistory = readUserLocalJson("patrimonio_history_v1", {});
+      const oldEntries = readUserLocalJson("patrimonio_entries_v1", patrimonioEntries);
+      setPatrimonioValues(next.patrimonioValues);
+      setPatrimonioHistory(next.patrimonioHistory);
+      setPatrimonioEntries(next.patrimonioEntries);
+      const saved = readUserLocalJson("patrimonio_entries_v1", []);
+      const revisions = rows => rows.flatMap(entry => entry.fundTransfersV1 || []);
+      if (syncJsonEqual(readUserLocalJson("patrimonio_values_v1", null), next.patrimonioValues) &&
+          syncJsonEqual(readUserLocalJson("patrimonio_history_v1", null), next.patrimonioHistory) &&
+          syncJsonEqual(revisions(saved), revisions(next.patrimonioEntries))) return true;
+      setPatrimonioValues(oldValues);setPatrimonioHistory(oldHistory);setPatrimonioEntries(oldEntries);
+      return false;
+    },
+    setPatrimonioValues: userSynchronizedSetting(setPatrimonioValues, "patrimonio_values_v1", "patrimonio_data_v2"),
     patrimonioMode,
-    setPatrimonioMode,
-    patrimonioHistory,
-    setPatrimonioHistory,
+    setPatrimonioMode: userSynchronizedSetting(setPatrimonioMode, "patrimonio_mode_v1", "patrimony_preferences_v2"),
+    patrimonioHistory: patrimonioAutomatic.history,
+    setPatrimonioHistory: userSynchronizedSetting(setPatrimonioHistory, "patrimonio_history_v1", "patrimonio_data_v2"),
     patrimonioNotes,
-    setPatrimonioNotes,
+    setPatrimonioNotes: userSynchronizedSetting(setPatrimonioNotes, "patrimonio_notes_v1", "patrimonio_data_v2"),
     historyFutureMode,
     setHistoryFutureMode,
     historySortDate,
@@ -27613,15 +28178,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     secRateLoading,
     currency,
     showSecInHistory,
-    setShowSecInHistory,
+    setShowSecInHistory: userSynchronizedSetting(setShowSecInHistory, "pref_sec_history", "display_preferences_v2"),
     showSecInStats,
-    setShowSecInStats,
+    setShowSecInStats: userSynchronizedSetting(setShowSecInStats, "pref_sec_stats", "display_preferences_v2"),
     showSecInBudget,
-    setShowSecInBudget,
+    setShowSecInBudget: userSynchronizedSetting(setShowSecInBudget, "pref_sec_budget", "display_preferences_v2"),
     showSecInPatrimonio,
-    setShowSecInPatrimonio,
+    setShowSecInPatrimonio: userSynchronizedSetting(setShowSecInPatrimonio, "pref_sec_patrimonio", "display_preferences_v2"),
     showPatrimonioDecimals,
-    setShowPatrimonioDecimals,
+    setShowPatrimonioDecimals: userSynchronizedSetting(setShowPatrimonioDecimals, "pref_patrimonio_decimals_v1", "display_preferences_v2"),
 
     currentPlan,
     setCurrentPlan,
@@ -27685,7 +28250,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     markAlertsSeen,
     // ── Statistiche ────────────────────────────────────────────────────────
     statsView,
-    setStatsView,
+    setStatsView: userSynchronizedSetting(setStatsView, "pref_statsview", "display_preferences_v2"),
     curYear,
     yearExp,
     yearInc,
@@ -27731,6 +28296,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     shareCategoryMappings,
     setShareCategoryMappings,
     shareDefaultCategoryId: effectiveShareDefaultCategoryId,
+    shareDefaultMethodId,
+    setShareDefaultMethodId: userSynchronizedSetting(setShareDefaultMethodIdRaw, "share_default_method_v1", "preference_storage_v2"),
     setShareDefaultCategoryId,
     expensesForAnalysis,
     countedExpenses,
@@ -27777,9 +28344,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     shareReceiptUploads,
     setShareReceiptUploads,
     confirmButtonColor,
-    setConfirmButtonColor,
+    setConfirmButtonColor: userSynchronizedSetting(setConfirmButtonColor, "pref_confirm_color", "display_preferences_v2"),
     secondaryButtonColor,
-    setSecondaryButtonColor,
+    setSecondaryButtonColor: userSynchronizedSetting(setSecondaryButtonColor, "pref_secondary_button_color_v1", "display_preferences_v2"),
     nativeBannerSuppressed,
     setNativeBannerSuppressed,
     setRecurringScreenActive,
@@ -27864,14 +28431,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     showAppSummaryHeader,
     setShowAppSummaryHeader,
     firstDayOfWeek,
-    setFirstDayOfWeek,
+    setFirstDayOfWeek: userSynchronizedSetting(setFirstDayOfWeek, "pref_first_day_week", "display_preferences_v2"),
     mobileNavOrder,
     setMobileNavOrder,
     mobileNavIconCount,
     setMobileNavIconCount,
     mobileMenuOrder,
     setMobileMenuOrder,
-    setDateFmt,
+    setDateFmt: userSynchronizedSetting(setDateFmt, "pref_datefmt", "display_preferences_v2"),
     setBalancePeriodMode,
     setFinancialMonthStartDay,
     // ── AI floating ────────────────────────────────────────────────────────
@@ -27963,9 +28530,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     widget3SelectedGoalId,
     setWidget3SelectedGoalId,
     bgTheme,
-    setBgTheme,
+    setBgTheme: userSynchronizedSetting(setBgTheme, "pref_bg", "display_preferences_v2"),
     btnStyle,
-    setBtnStyle,
+    setBtnStyle: userSynchronizedSetting(setBtnStyle, "pref_btn_style", "display_preferences_v2"),
     // ── Misc ────────────────────────────────────────────────────────────────
     shownAlertIds,
     setShownAlertIds,
@@ -28045,10 +28612,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setAppUpdateManualStatus,
     setBiometricLockMessage,
     setBiometricLockTimeout,
-    setCurrency,
+    setCurrency: userSynchronizedSetting(setCurrency, "pref_cur", "display_preferences_v2"),
     setExpenseCatsFromSettings,
-    setExpenseColor,
-    setIncomeColor,
+    setExpenseColor: userSynchronizedSetting(setExpenseColor, "pref_exp_color", "display_preferences_v2"),
+    setIncomeColor: userSynchronizedSetting(setIncomeColor, "pref_inc_color", "display_preferences_v2"),
     setInitialSetupStatus,
     setInstalledAppInfo,
     setLang,
@@ -28057,7 +28624,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setMetaEventsConsent,
     setMobileAllNavOrder,
     setPlanBillingPeriod,
-    setSecondaryCurrency,
+    setSecondaryCurrency: userSynchronizedSetting(setSecondaryCurrency, "pref_sec_cur", "display_preferences_v2"),
     setSecurityPinDraft,
     setShoppingAreaColors,
     setShoppingDeletedRecordsRaw,
@@ -28122,7 +28689,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     <AppCtx.Provider value={ctxValue}>
       <AppViewport /><DarkTextDefaults dark={dark} background={bgColor} />
       <style>{"input:focus::placeholder,textarea:focus::placeholder{color:transparent!important;opacity:0!important;}"}</style>
-      {firestoreReady && !appLocked && (
+      {accountUiReady && !!userId && !appLocked && (
         <NotificationCenter
           actionsHost={summaryActionsHost}
           userId={String(userId || "")}
@@ -28279,11 +28846,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       setSettingsPage(null);
                       setMobileMenu(false);
                     } else if (item.id === "more") {
-                      setTab("more");
                       setMobileMenu(function (s) {
                         return !s;
                       });
-                      setSettingsPage(null);
                     } else {
                       setTab(item.id);
                       setMobileMenu(false);
@@ -28443,7 +29008,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                           color: readableDarkText(textC, dark, "transparent"),
                         }}
                       >
-                        <span style={{ fontSize: 22 }}>{item.icon}</span>
+                        <span style={{ fontSize: 22, width: 32, height: 32, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{item.icon}</span>
                         {item.label}
                         {item.badge > 0 && (
                           <span
@@ -28584,6 +29149,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 var untouchedRuleFields = ['catId','type','methodId','desc','tags','note'].filter(function (field) {
                   return JSON.stringify(proposedEdit[field]) === JSON.stringify(current[matchedIndex][field]);
                 });
+                if(['rateizzato','rate','rateDirection'].every(function(field){return JSON.stringify(proposedEdit[field])===JSON.stringify(current[matchedIndex][field]);}))untouchedRuleFields.push('installments');
                 var editRuleResult;
                 try {
                   editRuleResult = evaluateAutomaticRules(
@@ -28591,7 +29157,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     { ...proposedEdit, _ruleDefaultFields: untouchedRuleFields },
                     editingItem.isExp ? 'expense' : 'income',
                     String(proposedEdit.source || 'manual'),
-                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes }
+                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes, instalmentOptions:planLimits.instalmentOptions }
                   );
                 } catch (e) {
                   setToast({text:rulesText(lang,'error'),type:'error'});
@@ -28844,6 +29410,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 var untouchedRuleFields = ['catId','type','methodId','desc','tags','note'].filter(function (field) {
                   return JSON.stringify(proposedEdit[field]) === JSON.stringify(current[matchedIndex][field]);
                 });
+                if(['rateizzato','rate','rateDirection'].every(function(field){return JSON.stringify(proposedEdit[field])===JSON.stringify(current[matchedIndex][field]);}))untouchedRuleFields.push('installments');
                 var editRuleResult;
                 try {
                   editRuleResult = evaluateAutomaticRules(
@@ -28851,7 +29418,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     { ...proposedEdit, _ruleDefaultFields: untouchedRuleFields },
                     editingItem.isExp ? 'expense' : 'income',
                     String(proposedEdit.source || 'manual'),
-                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes }
+                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes, instalmentOptions:planLimits.instalmentOptions }
                   );
                 } catch (e) {
                   setToast({text:rulesText(lang,'error'),type:'error'});

@@ -1,0 +1,13 @@
+export type NotificationChannelMode = "off" | "in_app" | "push" | "email" | "push_email";
+export type NotificationChannelKind = "spending_alert" | "share" | "recurring" | "period_closure" | "reminders" | "custom" | "service";
+export const NOTIFICATION_CHANNEL_MODES: NotificationChannelMode[];
+export const NOTIFICATION_CHANNEL_KEYS: NotificationChannelKind[];
+export const DEFAULT_NOTIFICATION_CHANNELS: Readonly<Record<NotificationChannelKind, NotificationChannelMode>>;
+export function notificationChannelKind(type: unknown): NotificationChannelKind;
+export function normalizedNotificationChannels(value: unknown): Record<NotificationChannelKind, NotificationChannelMode>;
+export function notificationDeliveryMode(channels: unknown, type: unknown): NotificationChannelMode;
+export function notificationShowsInApp(channels: unknown, type: unknown): boolean;
+export function notificationAllowsPush(channels: unknown, type: unknown): boolean;
+export function notificationAllowsEmail(channels: unknown, type: unknown): boolean;
+export function mergeNotificationChannelState(previous: Record<string, any> | null, incoming: Record<string, any> | null): Record<string, any>;
+export function isSystemCommunication(type: unknown): boolean;

@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { loadTypeScript } from './loadTypeScript.mjs';
 const { resolveSharePersonalCategoryId } = loadTypeScript('src/finance/shareAnalytics.js');
 import { participantForUser, shareAmountForUser } from '../src/finance/shareUserAmount.js';
+import { activeShareActivities } from '../src/finance/shareCashMovements.js';
 const project={ownerUid:'davide',participants:[{id:'me',uid:'davide',role:'owner'},{id:'francesca-participant',uid:'francesca'}]};
 const activity={amount:450,paidBy:'francesca-participant',shares:{me:170,'francesca-participant':280}};
 assert.equal(shareAmountForUser(project,activity,'davide'),170);
@@ -33,12 +34,12 @@ const archivedCode=ts.transpileModule(archived.getText(tree),{compilerOptions:{t
 const nameCode=ts.transpileModule(nameFunctions.join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
 const completeProject={...project,id:'project',name:'Test',activities:[{...activity,id:'expense',date:'2026-09-10',desc:'Regalo Matrimonio',originalAmount:900,currency:'USD',baseCurrency:'EUR'}]};
 for(const [uid,expected] of [['davide',170],['francesca',280],['unrelated',0]]){
-  const rows=new Function('useMemo','showShareInHistory','shareProjects','userId','currency','shareAmountForUser','resolveSharePersonalCategoryId','shareCategoryMappings','effectiveShareDefaultCategoryId','cats',nameCode+historyCode+';return result;')(
-    fn=>fn(),true,[completeProject],uid,'EUR',shareAmountForUser,resolveSharePersonalCategoryId,{},17,[{id:17,name:'Altro'}]);
+  const rows=new Function('useMemo','showShareInHistory','shareProjects','userId','currency','shareAmountForUser','resolveSharePersonalCategoryId','shareCategoryMappings','effectiveShareDefaultCategoryId','cats','activeShareActivities',nameCode+historyCode+';return result;')(
+    fn=>fn(),true,[completeProject],uid,'EUR',shareAmountForUser,resolveSharePersonalCategoryId,{},17,[{id:17,name:'Altro'}],activeShareActivities);
   assert.equal(rows.length,expected?1:0);
   if(expected){assert.equal(rows[0].amount,expected);assert.equal(rows[0].baseAmount,expected);assert.equal(rows[0].originalAmount,expected*2);}
-  const savedRows=new Function('shareCurrentParticipant','shareAmountForUser','userId','currency','todayStr','resolveSharePersonalCategoryId','shareCategoryMappings','effectiveShareDefaultCategoryId','cats',archivedCode+';return shareHistoryRowsForCurrentUser;')(
-    p=>participantForUser(p,uid),shareAmountForUser,uid,'EUR',()=> '2026-09-10',resolveSharePersonalCategoryId,{},17,[{id:17,name:'Altro'}])(completeProject);
+  const savedRows=new Function('shareCurrentParticipant','shareAmountForUser','userId','currency','todayStr','resolveSharePersonalCategoryId','shareCategoryMappings','effectiveShareDefaultCategoryId','cats','activeShareActivities',archivedCode+';return shareHistoryRowsForCurrentUser;')(
+    p=>participantForUser(p,uid),shareAmountForUser,uid,'EUR',()=> '2026-09-10',resolveSharePersonalCategoryId,{},17,[{id:17,name:'Altro'}],activeShareActivities)(completeProject);
   assert.equal(savedRows.length,expected?1:0);
   if(expected)assert.equal(savedRows[0].amount,expected);
 }

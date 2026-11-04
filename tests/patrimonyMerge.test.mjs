@@ -1,0 +1,22 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {mergePatrimony,patrimonyHasData,patrimonySnapshotValue} from '../src/finance/patrimonyMerge.js';
+import {derivePatrimony,createBalanceCheckpoint} from '../src/finance/patrimonyAutoBalance.js';
+const a={id:'a',name:'Conto A'},b={id:'b',name:'Conto B'},now='2026-10-28T12:00:00Z';
+test('exact requested January/February/March merge preserves every monthly total and removes source',()=>{
+ const state={patrimonioEntries:[a,b],patrimonioValues:{a:1000,b:1000},patrimonioHistory:{'2026-01':{a:2000,b:0,_total:2000},'2026-02':{a:0,b:1000,_total:1000},'2026-03':{a:1000,b:1000,_total:2000}},patrimonioNotes:{a:'A note',b:'B note'}};const saved=JSON.stringify(state),out=mergePatrimony(state,a,b,now);
+ assert.deepEqual(Object.values(out.patrimonioHistory).map(s=>s.b),[2000,1000,2000]);assert.equal(out.patrimonioValues.b,2000);for(const snap of Object.values(out.patrimonioHistory)){assert(!('a'in snap));assert.equal(snap.b,snap._total);}assert(out.patrimonioEntries[0].deleted);assert.match(out.patrimonioNotes.b,/B note.*\n\nConto A: A note/);assert(!('a'in out.patrimonioNotes));assert.equal(JSON.stringify(state),saved);
+});
+test('missing months import values, zero and negatives are data, decimals sum in cents, archive retained',()=>{
+ const state={patrimonioEntries:[a,{...b,archived:true}],patrimonioValues:{a:'0,10',b:'0,20'},patrimonioHistory:{'2026-01':{a:-2.15,c:9,_savedAt:'keep'},'2026-02':{b:0},'2026-03':{a:0}},patrimonioNotes:{}};const out=mergePatrimony(state,a,b,now);assert.equal(out.patrimonioValues.b,.3);assert.equal(out.patrimonioHistory['2026-01'].b,-2.15);assert.equal(out.patrimonioHistory['2026-01'].c,9);assert.equal(out.patrimonioHistory['2026-01']._savedAt,'keep');assert.equal(out.patrimonioHistory['2026-03'].b,0);assert(out.patrimonioEntries[1].archived);assert(patrimonyHasData(state,a));assert(!patrimonyHasData({},a));
+});
+test('legacy nested snapshots/name aliases import once and preserve metadata and counts',()=>{
+ const state={patrimonioEntries:[a,b],patrimonioHistory:{'2026-01':{values:{'Conto A':10,'Conto B':20,c:50},_total:80,_automatic:{a:true,b:false},_entryTransactionCounts:{a:2,b:4},meta:'stay'}}};const out=mergePatrimony(state,a,b,now),snap=out.patrimonioHistory['2026-01'];assert.equal(patrimonySnapshotValue(snap,b).value,30);assert.equal(snap.values.c,50);assert(!('Conto A'in snap.values));assert(!('Conto B'in snap.values));assert.equal(snap._entryTransactionCounts.b,6);assert(snap._automatic.b);assert.equal(snap._total,80);
+});
+test('automatic merge unions instruments without replaying past income; future movement counted once and cold replay stable',()=>{
+ const cp=(id,amount)=>createBalanceCheckpoint({date:'2026-10-01',amount,methodIds:[id],incomes:[],expenses:[],now});const entries=[{...a,balanceLink:{version:1,enabled:true,checkpoints:[cp('cash',100)]}},{...b,balanceLink:{version:1,enabled:true,checkpoints:[cp('bank',200)]}}];
+ const incomes=[{id:'i1',date:'2026-10-05',amount:10,receivedInMethodId:'cash'},{id:'i2',date:'2026-10-06',amount:20,receivedInMethodId:'bank'}];const initial=derivePatrimony({entries,values:{a:100,b:200},incomes,mode:'entrambe',today:'2026-10-28'});const out=mergePatrimony({patrimonioEntries:entries,patrimonioValues:initial.values,patrimonioHistory:initial.history,incomes},a,b,now);const input={entries:out.patrimonioEntries,values:out.patrimonioValues,history:out.patrimonioHistory,incomes,mode:'entrambe',today:'2026-10-28'};const result=derivePatrimony(input);assert.equal(result.values.b,330);assert.deepEqual(result.conflicts,[]);assert.equal(result.history['2026-10'].b,330);assert.deepEqual(derivePatrimony(JSON.parse(JSON.stringify(input))),result);assert.equal(derivePatrimony({...input,today:'2026-10-29',incomes:[...incomes,{id:'i3',date:'2026-10-29',amount:5,receivedInMethodId:'cash'}]}).values.b,335);
+});
+test('invalid/deleted target, repeated merge and conflicting third-party ownership cannot mutate state',()=>{
+ const state={patrimonioEntries:[a,b]};const copy=JSON.stringify(state);for(const target of [a,null,{id:'missing'}])assert.throws(()=>mergePatrimony(state,a,target,now));assert.equal(JSON.stringify(state),copy);const out=mergePatrimony(state,a,b,now);assert.throws(()=>mergePatrimony(out,a,b,now));
+ const link={version:1,enabled:true,checkpoints:[{methodIds:['m']}]};assert.throws(()=>mergePatrimony({patrimonioEntries:[{...a,balanceLink:link},b,{id:'c',balanceLink:link}]},a,b,now),/CONFLICT/);
+});

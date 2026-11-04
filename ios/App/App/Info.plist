@@ -18,6 +18,8 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
@@ -41,22 +43,18 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleVersion</key>
-	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
-	<true />
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
-	<false />
+	<false/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-4502496181111632~7115058902</string>
 	<key>LSRequiresIPhoneOS</key>
-	<true />
+	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Serve per scansionare scontrini e carte fidelity.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>fAInance usa la rubrica solo per inserire il titolare di un debito o credito.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>fAInance usa Face ID per proteggere l’accesso ai tuoi dati finanziari.</string>
+	<string>fAInance usa Face ID per proteggere lâ€™accesso ai tuoi dati finanziari.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>fAInance usa il microfono per registrare brevi comandi vocali e trasformarli in movimenti finanziari.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
@@ -90,6 +88,10 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<true />
+	<true/>
+	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
 </dict>
 </plist>

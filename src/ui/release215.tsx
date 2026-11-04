@@ -3,11 +3,11 @@ import facebookLogo from '../assets/social215/facebook.svg';
 import instagramLogo from '../assets/social215/instagram.svg';
 import youtubeLogo from '../assets/social215/youtube.svg';
 
-export function PremiumProfileIcon({ dark = false }: { dark?: boolean }) {
+export function PremiumProfileIcon({ dark = false, surface }: { dark?: boolean; surface?: string }) {
   const colors = palette.colors;
   const gold = dark ? colors.orange.hex : colors.amber.hex;
   return <svg width="26" height="26" viewBox="0 0 28 28" aria-hidden="true" fill="none">
-    <circle cx="14" cy="14" r="12.5" fill={dark ? colors['night-surface'].hex : colors.paper.hex} stroke={gold} strokeWidth="1"/>
+    <circle cx="14" cy="14" r="12.5" fill={surface ?? (dark ? colors['night-surface'].hex : colors.paper.hex)} stroke={gold} strokeWidth="1"/>
     <circle cx="14" cy="10" r="3.2" fill={gold}/>
     <path d="M7.8 21c.2-4 2.3-6 6.2-6s6 2 6.2 6Z" fill={gold}/>
   </svg>;

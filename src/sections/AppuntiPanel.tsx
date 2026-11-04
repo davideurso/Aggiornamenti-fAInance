@@ -297,6 +297,7 @@ export function AppuntiPanel() {
       String((creditCardForm || {}).number || "").replace(/\D/g, "").length > 0;
     var [editingDocumentId, setEditingDocumentId] = useState(null);
     var [documentNameDraft, setDocumentNameDraft] = useState("");
+    const [documentPreview, setDocumentPreview] = useState<{name: string; dataUrl: string} | null>(null);
     var fileInputRef = useRef(null);
     var noteEditorRef = useRef(null);
     var noteSelectionRef = useRef(null);
@@ -813,11 +814,21 @@ export function AppuntiPanel() {
     // in memoria.
     async function openAppuntiDocument(d) {
       if (!d || (!d.dataUrl && !d.storagePath)) return;
+      let dataUrl: string;
       try {
-        var dataUrl = d.dataUrl ? String(d.dataUrl) : await readAttachmentDataUrl(d);
+        dataUrl = d.dataUrl ? String(d.dataUrl) : await readAttachmentDataUrl(d);
         if (!dataUrl) throw new Error("document-data-unavailable");
-        var fullName = documentFullName(d) || "documento";
-        var mimeType = fainanceResolveMime(fullName, d.type || "");
+      } catch {
+        setToast({ text: L("File non disponibile"), type: "error", translated: true });
+        return;
+      }
+      const fullName = documentFullName(d) || "documento";
+      if (/^data:image\/(jpeg|png|webp|gif|bmp);base64,/i.test(dataUrl)) {
+        setDocumentPreview({ name: fullName, dataUrl });
+        return;
+      }
+      const mimeType = fainanceResolveMime(fullName, d.type || "");
+      try {
         await openFileWithSystem({
           dataUrl: dataUrl,
           fileName: fullName,
@@ -1315,6 +1326,15 @@ export function AppuntiPanel() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {documentPreview && appuntiModal(documentPreview.name, () => setDocumentPreview(null),
+          <img src={documentPreview.dataUrl} alt={documentPreview.name}
+            style={{ display: "block", maxWidth: "100%", maxHeight: "62vh", margin: "0 auto", objectFit: "contain" }}
+            onError={() => {
+              setDocumentPreview(null);
+              setToast({ text: L("File non disponibile"), type: "error", translated: true });
+            }}
+          />
+        )}
         <div
           style={{
             background: documentsUnavailable ? (dark ? "#2B2B36" : "#F3F4F6") : cardBg,

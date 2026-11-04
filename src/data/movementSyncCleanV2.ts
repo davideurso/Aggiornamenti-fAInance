@@ -1,3 +1,4 @@
+import { notifyGrowthSourceCommitted } from "./growthMetricsCommit";
 import { readWithDeadline } from "../utils/readDeadline";
 import {
   collection,
@@ -367,8 +368,19 @@ export function watchMovementSyncV2(
   let latest: MovementRecordV2[] | null = null;
   const byDocument = new Map<string, MovementRecordV2>();
   let latestMeta: MovementWatchMeta = { fromCache: true, hasPendingWrites: true };
+  let emitted: MovementRecordV2[] | null = null;
+  let emittedMeta: MovementWatchMeta | null = null;
   const emit = () => {
-    if (latest) listener(overlayPendingMovementRecordsV2(uid, latest, latestMeta), latestMeta);
+    if (!latest) return;
+    const next = overlayPendingMovementRecordsV2(uid, latest, latestMeta);
+    // Individual ACKs do not change the financial view. Keep real data changes
+    // immediate, and still emit the first server view and final pending ACK.
+    if (emitted && emittedMeta && emittedMeta.fromCache === latestMeta.fromCache &&
+        emittedMeta.hasPendingWrites === latestMeta.hasPendingWrites &&
+        emitted.length === next.length && emitted.every((row,index) => row === next[index])) return;
+    emitted = next;
+    emittedMeta = latestMeta;
+    listener(next, latestMeta);
   };
   const observers = pendingObserversV2.get(uid) || new Set<() => void>();
   pendingObserversV2.set(uid, observers);
@@ -385,8 +397,10 @@ export function watchMovementSyncV2(
           if (change.type === 'removed') byDocument.delete(change.doc.id);
           else {
             const record = normalizeRecord(change.doc.data());
-            if (record && record.uid === uid) byDocument.set(change.doc.id, record);
-            else byDocument.delete(change.doc.id);
+            if (record && record.uid === uid) {
+              const previous = byDocument.get(change.doc.id);
+              if (!sameMovementVersionV2(previous || null, record)) byDocument.set(change.doc.id, record);
+            } else byDocument.delete(change.doc.id);
           }
         });
       } else {
@@ -477,6 +491,7 @@ export function writeMovementDiffV2(
     operation.then(() => {
       const entry = pending.get(record.recordId);
       if (entry?.record.mutationId === record.mutationId) entry.committed = true;
+      notifyGrowthSourceCommitted(uid, "MOVEMENTS", "ORDINARY");
       notifyPendingV2(uid);
     }, (error) => {
       const entry = pending.get(record.recordId);
@@ -707,6 +722,7 @@ export async function replaceMovementSetsV2(
   if (active.size !== desired.size || [...desired].some(([id, record]) =>
     !active.has(id) || canonicalMovementPayloadV2(active.get(id)!.payload) !== canonicalMovementPayloadV2(record.payload)))
     throw new Error('SYNC_V2_CONCURRENT_EDIT_OR_VERIFY_FAILED');
+  notifyGrowthSourceCommitted(uid, "MOVEMENTS", "REPLACEMENT");
   return target;
 }
 
@@ -869,6 +885,7 @@ export async function migrateLegacyMovementSnapshotV2(
   if (missing.length) {
     throw new Error(`MOVEMENT_V2_MIGRATION_VERIFY_FAILED:${missing.length}`);
   }
+  notifyGrowthSourceCommitted(uid, "MOVEMENTS", "MIGRATION");
   return { total: records.length };
 }
 
@@ -885,6 +902,7 @@ export async function completeMovementSyncV2Migration(uidValue: string): Promise
   }, { merge: true });
   await waitForPendingWrites(fbDb);
   await saveLocalActiveMarker(uid);
+  notifyGrowthSourceCommitted(uid, "MOVEMENTS", "MIGRATION");
 }
 
 function movementPayloadWithCanonicalRecordId(record: MovementRecordV2): any {

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		FA1C0A000000000000000002 /* CanonicalIcons.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FA1C0A000000000000000001 /* CanonicalIcons.xcassets */; };
 		FAI00000000000000110 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = FAI00000000000000210 /* GoogleService-Info.plist */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
@@ -30,7 +31,7 @@
 
 		A10000000000000000000005 /* FainanceWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* FainanceWidgets.swift */; };
 		A10000000000000000000006 /* FainanceWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* FainanceWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		A14100000000000000000001 /* CanonicalIcons.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A14100000000000000000002 /* CanonicalIcons.xcassets */; };
+		A11000000000000000000003 /* FainanceAnalyticsGuardPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11000000000000000000001 /* FainanceAnalyticsGuardPlugin.swift */; };
 /* End PBXBuildFile section */
 
 
@@ -60,6 +61,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		FA1C0A000000000000000001 /* CanonicalIcons.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = CanonicalIcons.xcassets; sourceTree = "<group>"; };
 		FAI00000000000000210 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = GoogleService-Info.plist; sourceTree = "<group>"; };
 		FAI00000000000000211 /* App.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -87,7 +89,7 @@
 		A10000000000000000000002 /* FainanceWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = FainanceWidgets.entitlements; sourceTree = "<group>"; };
 		A10000000000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A10000000000000000000004 /* FainanceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = FainanceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		A14100000000000000000002 /* CanonicalIcons.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = CanonicalIcons.xcassets; sourceTree = "<group>"; };
+		A11000000000000000000001 /* FainanceAnalyticsGuardPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FainanceAnalyticsGuardPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -135,6 +137,7 @@
 			children = (
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
+				A11000000000000000000001 /* FainanceAnalyticsGuardPlugin.swift */,
 				FAI00000000000000210 /* GoogleService-Info.plist */,
 				FAI00000000000000211 /* App.entitlements */,
 				FAI00000000000000000201 /* FainanceBillingPlugin.swift */,
@@ -160,7 +163,7 @@
 			isa = PBXGroup;
 			children = (
 				A10000000000000000000001 /* FainanceWidgets.swift */,
-				A14100000000000000000002 /* CanonicalIcons.xcassets */,
+				FA1C0A000000000000000001 /* CanonicalIcons.xcassets */,
 				A10000000000000000000002 /* FainanceWidgets.entitlements */,
 				A10000000000000000000003 /* Info.plist */,
 			);
@@ -289,7 +292,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A14100000000000000000001 /* CanonicalIcons.xcassets in Resources */,
+				FA1C0A000000000000000002 /* CanonicalIcons.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -301,6 +304,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
+				A11000000000000000000003 /* FainanceAnalyticsGuardPlugin.swift in Sources */,
 				FAI00000000000000000101 /* FainanceBillingPlugin.swift in Sources */,
 				FAI00000000000000000102 /* FainanceBillingPlugin.m in Sources */,
 				FAI00000000000000000103 /* FainanceAdsPlugin.swift in Sources */,
@@ -468,14 +472,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 270;
+				CURRENT_PROJECT_VERSION = 271;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.1.16;
+				MARKETING_VERSION = 2.1.17;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -491,14 +495,14 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 270;
+				CURRENT_PROJECT_VERSION = 271;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.1.16;
+				MARKETING_VERSION = 2.1.17;
 				PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
@@ -515,7 +519,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = FainanceWidgets/FainanceWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 270;
+				CURRENT_PROJECT_VERSION = 271;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FainanceWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
@@ -524,7 +528,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2.1.16;
+				MARKETING_VERSION = 2.1.17;
 				PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -539,7 +543,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = FainanceWidgets/FainanceWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 270;
+				CURRENT_PROJECT_VERSION = 271;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = FainanceWidgets/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 14.0;
@@ -548,7 +552,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2.1.16;
+				MARKETING_VERSION = 2.1.17;
 				PRODUCT_BUNDLE_IDENTIFIER = it.fainanceapp.app.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

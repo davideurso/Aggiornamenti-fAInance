@@ -10,7 +10,8 @@ import {
 } from "firebase/auth";
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { firebaseConfig } from "../config/env";
+import { firebaseConfig, appEnvironment } from "../config/env";
+import { firestoreTransportSettings } from "./firestoreTransport";
 
 function isNativePlatform(): boolean {
   try {
@@ -58,9 +59,9 @@ export const fbDb = initializeFirestore(firebaseApp, {
       ? persistentSingleTabManager({ forceOwnership: true })
       : persistentMultipleTabManager(),
   }),
-  // Let Firestore detect whether this network needs long polling. Forcing it
-  // delays every server read on otherwise compatible connections.
-  experimentalAutoDetectLongPolling: true,
+  // Test native uses immediate long-poll responses to avoid buffered ACKs.
+  // Production and web retain their existing auto-detection behaviour.
+  ...firestoreTransportSettings(nativeRuntime, appEnvironment),
 });
 // FIX 2.0.5 — Cloud Storage non era mai stato inizializzato. Serve per spostare gli
 // allegati fuori dal documento Firestore userData/{uid}, che ha un limite di 1 MiB.

@@ -1,7 +1,9 @@
+import {createSingleFlightWriter} from './singleFlightWrite.js';
 import { collection, deleteDoc, doc, getDocFromServer, getDocs, getDocsFromServer, limit, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { fbDb } from "../firebase/client";
 import { fainanceCompressAccountDataV5, fainanceExpandAccountCloudDataV5 } from "./accountCloudCodec";
 import { writeTechnicalLog } from "../observability/technicalLogs";
+import { readWithDeadline } from "../utils/readDeadline";
 
 const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MAX_BACKUPS = 12;
@@ -135,7 +137,12 @@ async function decodeBackupSnapshot(row: any): Promise<any | null> {
   }
 }
 
-export async function saveUserStateAuthorityBackupV6(
+const saveAuthorityOnce = createSingleFlightWriter();
+export function saveUserStateAuthorityBackupV6(input: UserStateAuthorityBackupV6Input): Promise<{ id: string; authority: any; createdAtMs: number }> {
+  return saveAuthorityOnce(String(input.uid || ''), () => saveUserStateAuthorityBackupV6Payload(input));
+}
+
+async function saveUserStateAuthorityBackupV6Payload(
   input: UserStateAuthorityBackupV6Input
 ): Promise<{ id: string; authority: any; createdAtMs: number }> {
   const uid = String(input.uid || "");
@@ -184,7 +191,7 @@ export async function saveUserStateAuthorityBackupV6(
 
   // Metadata is useful for diagnostics/admin but must never make the user-state
   // write fail after the private payload has already been acknowledged.
-  await setDoc(metadataRef, {
+  void setDoc(metadataRef, {
     id,
     uid,
     reason,
@@ -217,10 +224,34 @@ export async function readUserStateAuthorityBackupV6ById(
 
 export async function readLatestUserStateAuthorityBackupV6(
   uid: string,
-  preferServer = true
+  preferServer = true,
+  readAuthorityOnly = false
 ): Promise<{ id: string; authority: any; createdAtMs: number } | null> {
   const safeUid = String(uid || "");
   if (!safeUid) return null;
+  async function findAuthority(rows: any[]) {
+    for (const row of rows) {
+      const data: any = row.data ? row.data() : {};
+      if (String(data.reason || "") !== USER_STATE_AUTHORITY_V6_REASON) continue;
+      const authority = await decodeBackupSnapshot(data);
+      if (authority) return { id: String(row.id || data.id || ""), authority, createdAtMs: Number(data.createdAtMs || 0) };
+    }
+    return null;
+  }
+  if (preferServer && readAuthorityOnly) {
+    try {
+      const lite = await import("firebase/firestore/lite");
+      const db = lite.getFirestore(fbDb.app);
+      const backups = lite.collection(db, "users", safeUid, "backups");
+      const result = await readWithDeadline(
+        lite.getDocs(lite.query(backups, lite.where("reason", "==", USER_STATE_AUTHORITY_V6_REASON))), 4000
+      );
+      const latest = await findAuthority([...result.docs].sort((a, b) => Number(b.data().createdAtMs || 0) - Number(a.data().createdAtMs || 0)));
+      if (latest) return latest;
+    } catch {
+      // Fall back to the established lookup if the filtered server read fails.
+    }
+  }
   const q = query(
     collection(fbDb, "users", safeUid, "backups"),
     orderBy("createdAtMs", "desc"),
@@ -234,16 +265,5 @@ export async function readLatestUserStateAuthorityBackupV6(
     snap = await getDocs(q);
   }
 
-  for (const row of snap.docs || []) {
-    const data: any = row.data ? row.data() : {};
-    if (String(data.reason || "") !== USER_STATE_AUTHORITY_V6_REASON) continue;
-    const authority = await decodeBackupSnapshot(data);
-    if (!authority) continue;
-    return {
-      id: String(row.id || data.id || ""),
-      authority,
-      createdAtMs: Number(data.createdAtMs || 0),
-    };
-  }
-  return null;
+  return findAuthority(snap.docs || []);
 }

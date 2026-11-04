@@ -1,3 +1,7 @@
+import { cashFlowText, transferText } from '../i18n/cashFlowTranslations';
+import {catalogRemapText} from '../i18n/catalogRemapTranslations';
+import {SettingsSegmented, secondarySettingsStyle, settingsActionStyle} from '../ui/SettingsControls';
+import {catalogSettingsText} from '../i18n/catalogSettingsTranslations';
 import { PremiumProfileIcon, ReleaseSocialLinks } from "../ui/release215";
 import releasePalette from "../ui/FAINANCE_PALETTE.json";
 import { readableDarkText } from '../ui/textContrast';
@@ -12,6 +16,8 @@ import { periodForDate, periodLabel } from '../finance/periodEngine';
 import { generalPeriodTranslation } from '../i18n/generalPeriodTranslations';
 import { financeMessage } from '../i18n/financeMessages';
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { PushNotifications } from "@capacitor/push-notifications";
+import { createPortal } from "react-dom";
 import {
   useApp,
   fbAuth,
@@ -77,7 +83,9 @@ import {
 } from "../security/sensitiveStorage";
 import { AccountSecurityCenter } from "../security/AccountSecurityCenter";
 import { writeTechnicalLog } from "../observability/technicalLogs";
-import { NotificationInboxSettingsCard } from "../notifications/NotificationCenter";
+import { DEFAULT_NOTIFICATION_CHANNELS, normalizedNotificationChannels } from "../notifications/notificationChannels.mjs";
+import { notificationChannelText } from "../notifications/notificationChannelTranslations.mjs";
+import { saveNotificationChannels } from "../notifications/pushNotifications";
 import { resolveAdminSession, type AdminSession } from "../admin/session";
 import { AdminCenterPanel } from "../admin/AdminCenterPanel";
 import {
@@ -2601,6 +2609,9 @@ export function SettingsPanel() {
       profile_privacy: "profile",
       profile_security: "profile",
       plans_settings: "profile_personal",
+      notifications_types: "notifications",
+      notifications_reminders: "notifications",
+      notifications_custom: "notifications",
       terms_conditions: "profile_privacy",
       privacy_policy: "profile_privacy",
       admin_center: null,
@@ -2609,12 +2620,12 @@ export function SettingsPanel() {
   }
   function settingsHeaderIcon(page, title) {
     var icons: any = {
-      profile: <PremiumProfileIcon dark={dark} />, profile_personal: "🪪", profile_privacy: "🛡️", profile_security: "🔐",
+      profile: <PremiumProfileIcon dark={dark} surface="transparent" />, profile_personal: "🪪", profile_privacy: "🛡️", profile_security: "🔐",
       general: "🌐", sections: "🧩", sections_income: "💰", sections_income_areas: "📂",
       sections_income_categories: "🗂️", sections_expense: "💸", sections_expense_areas: "📂",
       sections_expense_categories: "🗂️", sections_expense_methods: "💳", shopping_settings: "🛒",
       shopping_settings_lists: "🧺", shopping_settings_areas: "📂", shopping_settings_units: "⚖️",
-      debt_credits_settings: "📉", notifications: "🔔", patrimonio_settings: "💎",
+      debt_credits_settings: "📉", notifications: "🔔", notifications_types: "🔔", notifications_reminders: "⏰", notifications_custom: "✏️", patrimonio_settings: "💎",
       patrimonio_areas_settings: "📂", patrimonio_entries_settings: "💎", patrimonio_mode_settings: "⚙️", patrimonio_display_settings: "👁️",
       appearance: "🎨", appearance_app: "🎨", appearance_nav: "📱", appearance_icons: "🖼️",
       appearance_widget: "🧱", appearance_widget_quick: "⚡", appearance_widget_note: "📝",
@@ -2881,9 +2892,9 @@ export function SettingsPanel() {
             >
               <div style={{
                 width: 42, height: 42, borderRadius: 14,
-                background: s.id === "profile" ? (dark ? releasePalette.colors["night-surface"].hex : releasePalette.colors.paper.hex) : (dark ? "#24213a" : "#F0EDFF"), display: "flex",
+                background: dark ? "#24213a" : "#F0EDFF", display: "flex",
                 alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0,
-              }}>{s.id === "profile" ? <PremiumProfileIcon dark={dark} /> : s.icon}</div>
+              }}>{s.id === "profile" ? <PremiumProfileIcon dark={dark} surface="transparent" /> : s.icon}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
                   <div style={{ fontSize: 15, fontWeight: 900, color: textC }}>{L(s.label)}</div>
@@ -2925,73 +2936,7 @@ export function SettingsPanel() {
         </div>
       </div>
     );
-  function Segmented({ items, value, onChange, columns }: {items:any[];value:any;onChange:any;columns?:number}) {
-    var cols =
-      Number(columns) ||
-      (isMobile && items.length > 2 ? 2 : Math.max(1, items.length));
-    var activeC = secondaryButtonColor || "#5FAFE5";
-    return (
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(" + cols + ",minmax(0,1fr))",
-          gap: 4,
-          background: dark ? "#252535" : "#f5f5f5",
-          borderRadius: 12,
-          padding: 3,
-          marginBottom: 12,
-        }}
-      >
-        {items.map(function (it) {
-          var active = value === it.id;
-          var disabled = !!it.disabled;
-          return (
-            <button
-              type="button"
-              key={it.id}
-              aria-disabled={disabled}
-              onClick={function (e) {
-                if (e && e.stopPropagation) e.stopPropagation();
-                if (disabled) {
-                  if (it.lockedMessage) setToast(it.lockedMessage);
-                  return;
-                }
-                onChange(it.id);
-              }}
-              style={{
-                minWidth: 0,
-                minHeight: 44,
-                touchAction: "manipulation",
-                WebkitTapHighlightColor: "transparent",
-                padding: isMobile ? "8px 5px" : "9px 10px",
-                border: "none",
-                borderRadius: 10,
-                background: active ? activeC : "transparent",
-                color: readableDarkText(active
-                  ? "#fff"
-                  : disabled
-                  ? dark
-                    ? "#555"
-                    : "#aaa"
-                  : subC, dark, active ? activeC : "transparent"),
-                fontSize: isMobile ? 11 : 13,
-                lineHeight: 1.18,
-                whiteSpace: "normal",
-                overflowWrap: "anywhere",
-                cursor: "pointer",
-                fontWeight: active ? 800 : 400,
-                boxShadow: active ? "0 3px 10px " + activeC + "40" : "none",
-                opacity: disabled ? 0.55 : 1,
-              }}
-            >
-              {L(it.label)}
-              {disabled ? " 🔒" : ""}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
+  function Segmented(props:any) { return <SettingsSegmented {...props}/>; }
 
   function WidgetAppearancePanel() {
     var noteLocked = !safeWidgetAllowed("note");
@@ -4856,7 +4801,7 @@ export function SettingsPanel() {
                 onClick={submit}
                 disabled={!valid}
                 bg={valid ? confirmButtonColor || "#7F77DD" : "#A8A8A8"}
-                style={{ flex: 1, padding: 12, fontWeight: 950 }}
+                style={{...({ flex: 1, padding: 12, fontWeight: 950 }),...secondarySettingsStyle(_c)}}
               >
                 {L("Salva")}
               </Btn>
@@ -4864,7 +4809,7 @@ export function SettingsPanel() {
                 onClick={close}
                 bg={dark ? "#333" : "#f0f0f0"}
                 color={textC}
-                style={{ padding: "12px 16px", fontWeight: 900 }}
+                style={{...({ padding: "12px 16px", fontWeight: 900 }),...secondarySettingsStyle(_c)}}
               >
                 {L("Annulla")}
               </Btn>
@@ -4954,7 +4899,7 @@ export function SettingsPanel() {
                       onClick={function () {
                         openEdit(a);
                       }}
-                      style={{
+                      style={{...({
                         background: baseSettingsAllowed ? "#EEF4FF" : (dark ? "#34343F" : "#E5E7EB"),
                         border: "1px solid " + (baseSettingsAllowed ? "#BFD7FF" : (dark ? "#4B4B58" : "#D1D5DB")),
                         borderRadius: 8,
@@ -4963,31 +4908,27 @@ export function SettingsPanel() {
                         color: readableDarkText(baseSettingsAllowed ? "#378ADD" : (dark ? "#8F8F9B" : "#9CA3AF"), dark, baseSettingsAllowed ? "#EEF4FF" : (dark ? "#34343F" : "#E5E7EB")),
                         padding: "5px 8px",
                         fontWeight: 700,
-                      }}
-                    >
-                      ✏️
-                    </button>
+                      }),...settingsActionStyle(_c,'edit')}}
+                     aria-label={L('Modifica')}><FainanceIcon value={"✏️"} size={16}/></button>
                     <button
                       aria-disabled={!baseSettingsAllowed}
                       onClick={function () {
                         archive(a.id);
                       }}
-                      style={{
+                      style={{...({
                         background: baseSettingsAllowed ? "none" : (dark ? "#34343F" : "#E5E7EB"),
                         border: baseSettingsAllowed ? "none" : "1px solid " + (dark ? "#4B4B58" : "#D1D5DB"),
                         borderRadius: 8, cursor: "pointer", padding: "5px 8px", marginLeft: -5,
                         fontSize: 16,
                         color: readableDarkText(baseSettingsAllowed ? subC : (dark ? "#8F8F9B" : "#9CA3AF"), dark, baseSettingsAllowed ? "none" : (dark ? "#34343F" : "#E5E7EB")),
-                      }}
-                    >
-                      {a.archived ? "📂" : "🗂"}
-                    </button>
+                      }),...settingsActionStyle(_c,'archive')}}
+                     aria-label={L('Archivia')}><FainanceIcon value={a.archived ? "📂" : "🗂"} size={16}/></button>
                     <button
                       aria-disabled={!baseSettingsAllowed}
                       onClick={function () {
                         del(a.id);
                       }}
-                      style={{
+                      style={{...({
                         background: baseSettingsAllowed ? "#FFF0F0" : (dark ? "#34343F" : "#E5E7EB"),
                         border: "1px solid " + (baseSettingsAllowed ? "#FFD0D0" : (dark ? "#4B4B58" : "#D1D5DB")),
                         borderRadius: 8,
@@ -4997,10 +4938,8 @@ export function SettingsPanel() {
                         padding: "5px 8px",
                         marginLeft: -5,
                         fontWeight: 700,
-                      }}
-                    >
-                      🗑️
-                    </button>
+                      }),...settingsActionStyle(_c,'delete')}}
+                     aria-label={L('Elimina')}><FainanceIcon value={"🗑️"} size={16}/></button>
                   </div>
                 );
               })}
@@ -5013,7 +4952,7 @@ export function SettingsPanel() {
                   if (blockSetting("base")) return;
                   setShowCreate(true);
                 }}
-                style={{
+                style={{...({
                   width: "100%",
                   marginTop: 8,
                   background: baseSettingsAllowed
@@ -5028,7 +4967,7 @@ export function SettingsPanel() {
                   cursor: "pointer",
                   fontSize: 15,
                   fontWeight: 900,
-                }}
+                }),...secondarySettingsStyle(_c)}}
               >
                 ＋ {L("Nuova area")}
               </button>
@@ -5435,12 +5374,12 @@ export function SettingsPanel() {
                       icon: "🔗",
                     });
                 }}
-                style={{
+                style={{...({
                   width: "100%",
                   padding: 13,
                   fontSize: 14,
                   fontWeight: 600,
-                }}
+                }),...secondarySettingsStyle(_c)}}
               >
                 {L("Accorpa")}
               </Btn>
@@ -5475,7 +5414,7 @@ export function SettingsPanel() {
         : activeMethods;
     return (
       <div>
-        <PageHeader title="Uscite / Pagamenti" />
+        <PageHeader title={catalogRemapText(lang,"Pagamento e Ricezione")} />
         <div
           style={{
             background: cardBg,
@@ -5485,7 +5424,7 @@ export function SettingsPanel() {
           }}
         >
           <SettingHint>
-            Gestisci pagamenti: lista, riordino e default.
+            {catalogRemapText(lang,"Gestisci i metodi condivisi di pagamento e ricezione: lista, riordino e default.")}
           </SettingHint>
           <Segmented
             items={[
@@ -5506,7 +5445,7 @@ export function SettingsPanel() {
               <SettingsList
                 items={methods}
                 setItems={guardedSetter(setMethods, "base")}
-                label="Aggiungi pagamento"
+                label="Aggiungi metodo"
                 showIcon
                 showGroup
                 groupList={methodGroups}
@@ -5646,7 +5585,7 @@ export function SettingsPanel() {
       };
     });
     function setIncomeItems(nextItems) {
-      var nextCustom = [];
+      var nextCustom = (customIncomeTypes || []).filter(function(it){return (it.deleted || it.archived) && !(nextItems||[]).some(function(next){return String(next.id)===String(it.id);});});
       var nextOverrides = { ...incomeTypeOverrides };
       var nextOrder = [];
       var nextIds = (nextItems || []).map(function (it) {
@@ -5680,7 +5619,7 @@ export function SettingsPanel() {
         }
       });
       (nextItems || []).forEach(function (it) {
-        nextOrder.push(it.id);
+        if (!it.deleted) nextOrder.push(it.id);
         var clean = {
           name: it.name,
           icon: it.icon || "💰",
@@ -5688,10 +5627,11 @@ export function SettingsPanel() {
           group: it.group || (groups[0] ? groups[0].id : "lavoro"),
           excludeFromTotals: !!it.excludeFromTotals,
           archived: !!it.archived,
-          deleted: false,
+          deleted: !!it.deleted,
+          ...(it.deleted ? {userDeleted:true,deletedAt:it.deletedAt || new Date().toISOString(),updatedAt:it.updatedAt || new Date().toISOString()} : {}),
         };
         var isBase = INCOME_TYPES.some(function (b) {
-          return b.id === it.id;
+          return String(b.id) === String(it.id);
         });
         if (isBase) {
           nextOverrides[it.id] = clean;
@@ -5989,12 +5929,12 @@ export function SettingsPanel() {
               </div>
               <Btn
                 onClick={mergeIncomeCategories}
-                style={{
+                style={{...({
                   width: "100%",
                   padding: 13,
                   fontSize: 14,
                   fontWeight: 600,
-                }}
+                }),...secondarySettingsStyle(_c)}}
               >
                 {L("Accorpa")}
               </Btn>
@@ -7190,56 +7130,26 @@ export function SettingsPanel() {
     settingsShareCategories[0] ||
     { id: "17" };
 
-  if (settingsPage === "share_settings")
-    return (
-      <div>
-        <PageHeader title="Share" />
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div
-            style={{
-              background: cardBg,
-              borderRadius: 14,
-              border: "1px solid " + borderC,
-              padding: 20,
-            }}
-          >
-            <div style={{ fontSize: 14, fontWeight: 700, color: textC, marginBottom: 4 }}>
-              🤝 {L("Categoria predefinita per le spese Share")}
-            </div>
-            <SettingHint>
-              {L(
-                "Viene usata per la tua quota delle spese Share quando non hai configurato una mappatura specifica. Per i nuovi utenti il valore iniziale è Altro."
-              )}
-            </SettingHint>
-            <select
-              value={String(settingsShareDefaultCategory.id || "17")}
-              onChange={function (e) {
-                setShareDefaultCategoryId(String(e.target.value || "17"));
-                setToast(L("Impostazioni aggiornate"));
-              }}
-              style={{
-                width: "100%",
-                minHeight: 42,
-                borderRadius: 10,
-                border: "1px solid " + borderC,
-                background: cardBg,
-                color: textC,
-                padding: "8px 10px",
-                fontSize: 14,
-              }}
-            >
-              {settingsShareCategories.map(function (c) {
-                  return (
-                    <option key={String(c.id)} value={String(c.id)} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
-                      {String(c.icon || "")} {String(translateUiRuntimeText(c.name || ""))}
-                    </option>
-                  );
-                })}
-            </select>
-          </div>
+  if (settingsPage === "share_settings") {
+    const activeMethods=(methods||[]).filter(m=>!m.archived&&!m.deleted&&!m.deletedAt&&m.status!=="archived"&&m.status!=="deleted");
+    const general=activeMethods.find(m=>String(m.id)===String(_c.defaultExpenseMethod||""));
+    function shareSetting(title,info,value,change,rows,generalOption=false){
+      return <div style={{background:cardBg,borderRadius:14,border:"1px solid "+borderC,padding:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:14,fontWeight:700,color:textC,marginBottom:8}}>
+          <span>{title}</span><FainanceInfoPopover label={title} body={info}/>
         </div>
-      </div>
-    );
+        <select aria-label={title} value={value} onChange={e=>{change(e.target.value);setToast(L("Impostazioni aggiornate"));}}
+          style={{width:"100%",minHeight:42,borderRadius:10,border:"1px solid "+borderC,background:"#fff",color:"#000",padding:"8px 10px",fontSize:14}}>
+          {generalOption&&<option value="" data-fainance-icon-ref={general?.icon}>{cashFlowText(lang,"useGeneral")}{general?" · "+L(general.name):""}</option>}
+          {rows.map(row=><option key={String(row.id)} value={String(row.id)} data-fainance-icon-ref={row.icon}>{L(row.name)}</option>)}
+        </select>
+      </div>;
+    }
+    return <div><PageHeader title="Share"/><div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {shareSetting(cashFlowText(lang,"defaultCategory"),cashFlowText(lang,"shareCategoryInfo"),String(settingsShareDefaultCategory.id),setShareDefaultCategoryId,settingsShareCategories)}
+      {shareSetting(cashFlowText(lang,"defaultMethod"),cashFlowText(lang,"shareMethodInfo"),String(_c.shareDefaultMethodId||""),_c.setShareDefaultMethodId,activeMethods,true)}
+    </div></div>;
+  }
 
   if (settingsPage === "sections")
     return (
@@ -7257,7 +7167,19 @@ export function SettingsPanel() {
               id: "sections_expense",
               icon: "💸",
               label: "Uscite",
-              desc: "Aree, categorie e pagamenti",
+              desc: "Aree e categorie delle uscite",
+            },
+            {
+              id: "sections_expense_methods",
+              icon: "💳",
+              label: catalogRemapText(lang,"Pagamento e Ricezione"),
+              desc: "Lista, riordino e default dei metodi",
+            },
+            {
+              id: "patrimonio_settings",
+              icon: "💎",
+              label: "Patrimonio",
+              desc: "Modalità, aree e voci patrimonio",
             },
             {
               id: "history_settings",
@@ -7270,12 +7192,6 @@ export function SettingsPanel() {
               icon: "🤝",
               label: "Share",
               desc: "Categoria personale predefinita per le spese Share",
-            },
-            {
-              id: "patrimonio_settings",
-              icon: "💎",
-              label: "Patrimonio",
-              desc: "Modalità, aree e voci patrimonio",
             },
             {
               id: "debt_credits_settings",
@@ -8639,12 +8555,7 @@ export function SettingsPanel() {
               label: "Categorie",
               desc: "Lista, riordino, default e accorpa categorie",
             },
-            {
-              id: "sections_expense_methods",
-              icon: "💳",
-              label: "Pagamenti",
-              desc: "Lista, riordino e default dei metodi",
-            },
+
           ]}
         />
       </div>
@@ -8825,7 +8736,7 @@ export function SettingsPanel() {
             <SettingsList
               items={methods}
               setItems={guardedSetter(setMethods, "base")}
-              label="Aggiungi pagamento"
+              label="Aggiungi metodo"
               showIcon
               showGroup
               groupList={methodGroups}
@@ -9055,6 +8966,142 @@ export function SettingsPanel() {
         return { ...p, [k]: v };
       });
     }
+    function NT(key) { return notificationChannelText(lang, key); }
+    // Use precisely the same component/props as the rest of Settings, directly.
+    // Do not use a nested React component (its changing identity closes open popovers).
+    function notificationInfo(body) {
+      return <FainanceInfoPopover
+        label={L("Informazioni")}
+        body={renderInfoBody(body)}
+        size={19}
+        popupWidth={280}
+        popupOffsetY={27}
+        popupAlign="right"
+        buttonStyle={{ fontSize: 10 }}
+        popupStyle={{ fontSize: 11, lineHeight: 1.5 }}
+      />;
+    }
+    var reminderToggleColor = dark ? "#5281AF" : "#245B8E";
+    function renderReminderToggle(title, description, checked, onChange, restricted) {
+      return <div onClickCapture={restricted ? function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        if (event && event.stopPropagation) event.stopPropagation();
+        blockSetting("base");
+      } : undefined} style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
+        padding: "11px 12px", borderRadius: 10,
+        background: dark ? "#152C44" : "#F7F9FC", border: "1px solid " + borderC,
+        opacity: restricted ? 0.55 : 1,
+      }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 13, fontWeight: 650, color: textC }}>{title}</div>
+          <div style={{ fontSize: 12, color: subC, lineHeight: 1.4, marginTop: 3 }}>{description}</div>
+        </div>
+        <Toggle label="" color={reminderToggleColor} checked={checked} onChange={onChange} />
+      </div>;
+    }
+    var notificationSurface = {
+      background: cardBg,
+      border: "1px solid " + borderC,
+      borderRadius: 16,
+      padding: isMobile ? "15px 14px" : 18,
+    };
+    var notificationTitle = { fontSize: 14, fontWeight: 800, color: textC };
+    var notificationHint = { fontSize: 12, lineHeight: 1.45, color: subC };
+    function openReceivedNotifications() {
+      window.dispatchEvent(new Event("fainance:open-notifications"));
+    }
+    var notificationTypes = [
+      { key: "spending_alert", icon: "⚠️", nameKey: "spendingName", descKey: "spendingDesc" },
+      { key: "share", icon: "🤝", nameKey: "shareName", descKey: "shareDesc" },
+      { key: "recurring", icon: "🔁", nameKey: "recurringName", descKey: "recurringDesc" },
+      { key: "period_closure", icon: "📆", nameKey: "periodName", descKey: "periodDesc" },
+      { key: "reminders", icon: "⏰", nameKey: "remindersName", descKey: "remindersDesc" },
+      { key: "service", icon: "🔔", nameKey: "serviceName", descKey: "serviceDesc" },
+      { key: "custom", icon: "✏️", nameKey: "customName", descKey: "customDesc" },
+    ];
+    var notificationModes = [
+      { key: "off", symbol: "○" },
+      { key: "in_app", symbol: "▣" },
+      { key: "push", symbol: "◉" },
+      { key: "email", symbol: "✉" },
+      { key: "push_email", symbol: "◉ ✉" },
+    ];
+    var notificationModeStyles = {
+      off: { foreground: dark ? "#C1CAD5" : "#596778", background: dark ? "#223247" : "#EDF0F4", border: dark ? "#42536B" : "#D5DCE5" },
+      in_app: { foreground: dark ? "#B9DDFF" : "#124E87", background: dark ? "#163A5B" : "#EAF3FD", border: dark ? "#35608B" : "#BED6EF" },
+      push: { foreground: dark ? "#FFFFFF" : "#FFFFFF", background: dark ? "#245B8E" : "#052A5F", border: dark ? "#5281AF" : "#052A5F" },
+      email: { foreground: dark ? "#D9D5FF" : "#514A91", background: dark ? "#302E4C" : "#F0EEFC", border: dark ? "#55517D" : "#DCD6F4" },
+      push_email: { foreground: dark ? "#FFE1A7" : "#6A4600", background: dark ? "#45371B" : "#FFF0D1", border: dark ? "#856B34" : "#E7C079" },
+    };
+    var [openChannelKind, setOpenChannelKind] = useState(null);
+    var [pushPermissionState, setPushPermissionState] = useState("unknown");
+    useEffect(function () {
+      var alive = true;
+      async function checkPushPermission() {
+        try {
+          if (Capacitor.isNativePlatform()) {
+            var permission = await PushNotifications.checkPermissions();
+            if (alive) setPushPermissionState(String(permission.receive || "unknown"));
+          } else if (typeof Notification !== "undefined") {
+            if (alive) setPushPermissionState(String(Notification.permission || "unknown"));
+          } else if (alive) {
+            setPushPermissionState("unsupported");
+          }
+        } catch (_error) { if (alive) setPushPermissionState("unknown"); }
+      }
+      void checkPushPermission();
+      return function () { alive = false; };
+    }, []);
+    useEffect(function () {
+      if (!openChannelKind) return;
+      function dismiss(event) { if (event.key === "Escape") setOpenChannelKind(null); }
+      window.addEventListener("keydown", dismiss);
+      return function () { window.removeEventListener("keydown", dismiss); };
+    }, [openChannelKind]);
+    async function requestPushPermission() {
+      try {
+        if (Capacitor.isNativePlatform()) {
+          var result = await PushNotifications.requestPermissions();
+          setPushPermissionState(String(result.receive || "unknown"));
+          if (result.receive === "granted") await PushNotifications.register();
+        } else if (typeof Notification !== "undefined" && typeof Notification.requestPermission === "function") {
+          setPushPermissionState(String(await Notification.requestPermission()));
+        }
+      } catch (_error) { setPushPermissionState("unknown"); }
+    }
+    var channels = normalizedNotificationChannels(np.notificationChannels);
+    var [channelsError, setChannelsError] = useState("");
+    useEffect(function () {
+      if (!channelsError) return;
+      var alive = true;
+      function retryOnReconnect() {
+        saveNotificationChannels(normalizedNotificationChannels(np.notificationChannels))
+          .then(function () { if (alive) setChannelsError(""); })
+          .catch(function () { /* Keep the truthful pending status. */ });
+      }
+      window.addEventListener("online", retryOnReconnect);
+      window.addEventListener("focus", retryOnReconnect);
+      return function () {
+        alive = false;
+        window.removeEventListener("online", retryOnReconnect);
+        window.removeEventListener("focus", retryOnReconnect);
+      };
+    }, [!!channelsError, np.notificationChannelsUpdatedAtMs]);
+    function setNotificationChannel(kind, mode) {
+      var next = { ...channels, [kind]: mode };
+      setNotifPrefs(function (previous) {
+        return {
+          ...previous,
+          notificationChannels: next,
+          notificationChannelsUpdatedAtMs: Math.max(Date.now(), Number(previous?.notificationChannelsUpdatedAtMs || 0) + 1),
+        };
+      });
+      setChannelsError("");
+      saveNotificationChannels(next).catch(function () {
+        setChannelsError(NT("syncError"));
+      });
+    }
     var notifBaseAllowed = settingAllowed("base");
     var [showNewNotif, setShowNewNotif] = useState(false);
     var [editNotifId, setEditNotifId] = useState(null);
@@ -9166,38 +9213,133 @@ export function SettingsPanel() {
     })();
     return (
       <div>
-        <PageHeader title="Notifiche & Promemoria" />
+        <PageHeader title={settingsPage === "notifications_types" ? NT("typesMenuTitle") : settingsPage === "notifications_reminders" ? NT("remindersMenuTitle") : NT("customMenuTitle")} />
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <NotificationInboxSettingsCard userId={String(userId || "")} />
+          {settingsPage === "notifications_types" && <>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 13 }}>
+            {[
+              { title: NT("pushStatus"), icon: "🔔", status: NT(pushPermissionState === "granted" ? "permissionGranted" : pushPermissionState === "denied" ? "permissionDenied" : pushPermissionState === "unsupported" ? "permissionUnsupported" : "permissionNotGranted"), ready: pushPermissionState === "granted", help: NT("pushHelp") },
+              { title: NT("emailStatus"), icon: "✉️", status: NT(fbAuth.currentUser?.emailVerified ? "emailVerified" : "emailNotVerified"), ready: !!fbAuth.currentUser?.emailVerified, help: NT("emailSenderInfo") },
+            ].map(function (entry, index) {
+              return <div key={entry.title} style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0, padding: "11px 12px", borderRadius: 14,
+                border: "1px solid " + borderC, background: cardBg }}>
+                <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: 11, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: dark ? "#1C3855" : "#EDF3FA", fontSize: 16 }}>{entry.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, color: subC, lineHeight: 1.3 }}>{entry.title}</div>
+                  <div style={{ fontSize: 12, fontWeight: 850, color: entry.ready ? (dark ? "#79D5A8" : "#18794E") : textC, marginTop: 3 }}>{entry.status}</div>
+                </div>
+                {index === 0 && pushPermissionState !== "granted" && pushPermissionState !== "denied" && pushPermissionState !== "unsupported" && <button type="button" onClick={requestPushPermission} style={{ flexShrink: 0, border: "1px solid " + (dark ? "#5281AF" : "#CBDCEB"), borderRadius: 10, padding: "7px 9px", background: dark ? "#1C3855" : "#EDF3FA", color: dark ? "#D9EAFA" : "#052A5F", fontSize: 11, fontWeight: 800, cursor: "pointer" }}>{NT("enablePush")}</button>}
+                {notificationInfo(entry.help)}
+              </div>;
+            })}
+          </div>
+          <section style={notificationSurface} aria-label={NT("title")}>
+            <div style={{ ...notificationTitle, marginBottom: 3 }}>{NT("title")}</div>
+            <div style={{ ...notificationHint, marginBottom: 12 }}>{NT("intro")}</div>
+            <div style={{ ...notificationHint, marginBottom: 8 }}>{NT("inAppAlways")}</div>
+            {notificationTypes.map(function (entry) {
+              var currentMode = channels[entry.key] || DEFAULT_NOTIFICATION_CHANNELS[entry.key];
+              if (entry.key === "service" && currentMode === "off") currentMode = "in_app";
+              var modeStyle = notificationModeStyles[currentMode] || notificationModeStyles.in_app;
+              return (
+                <div key={entry.key} style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 0", borderTop: "1px solid " + borderC, minWidth: 0 }}>
+                  <span aria-hidden="true" style={{ width: 37, height: 37, minWidth: 37, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", background: dark ? "#203953" : "#EDF3FA" }}>
+                    <FainanceIcon value={entry.icon} size={19} />
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, lineHeight: 1.3, fontWeight: 800, color: textC }}>{NT(entry.nameKey)}</div>
+                    <div style={{ fontSize: 11, lineHeight: 1.4, color: subC, marginTop: 3 }}>{NT(entry.key === "service" ? "systemPolicy" : entry.descKey)}</div>
+                  </div>
+                  <button type="button"
+                    onClick={function () { setOpenChannelKind(entry.key); }}
+                    aria-haspopup="dialog" aria-label={NT("channelLabel") + ": " + NT(entry.nameKey) + ", " + NT(currentMode)}
+                    style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, flexShrink: 0,
+                      maxWidth: isMobile ? 125 : 170, minHeight: 37, padding: "7px 10px", borderRadius: 999,
+                      border: "1px solid " + modeStyle.border, background: modeStyle.background, color: modeStyle.foreground,
+                      fontSize: 11.5, fontWeight: 800, cursor: "pointer" }}>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{NT(currentMode)}</span>
+                    <span aria-hidden="true" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "0 0 13px", width: 13, height: 17 }}>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m3.5 6 4.5 4 4.5-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+            <details style={{ paddingTop: 10, borderTop: "1px solid " + borderC, color: subC, fontSize: 11 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 650 }}>{NT("requirementsTitle")}</summary>
+              <div style={{ marginTop: 8, lineHeight: 1.5 }}>{NT("warning")}</div>
+            </details>
+            {channelsError && (
+              <div role="status" style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, paddingTop: 8,
+                fontSize: 11, lineHeight: 1.35, color: dark ? "#FFE1A7" : "#825700" }}>
+                <span style={{ flex: 1, minWidth: 160 }}>{NT("syncShort")}</span>
+                <button type="button" onClick={function () {
+                  saveNotificationChannels(normalizedNotificationChannels(np.notificationChannels))
+                    .then(() => setChannelsError("")).catch(() => setChannelsError(NT("syncError")));
+                }} style={{ border: 0, borderBottom: "1px solid currentColor", background: "transparent", color: "inherit", cursor: "pointer", padding: 2, fontWeight: 750 }}>
+                  {NT("retry")}
+                </button>
+              </div>
+            )}
+          </section>
+          {openChannelKind && createPortal(
+            <div role="presentation" onClick={function (event) { if (event.target === event.currentTarget) setOpenChannelKind(null); }}
+              style={{ position: "fixed", inset: 0, zIndex: 11000, background: "rgba(3,26,61,0.64)", display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", padding: isMobile ? 0 : 16 }}>
+              <section role="dialog" aria-modal="true" aria-label={NT("channelLabel")}
+                style={{ background: cardBg, color: textC, borderRadius: isMobile ? "20px 20px 0 0" : 20,
+                  width: isMobile ? "100%" : "min(100%, 430px)", maxHeight: "85dvh", overflowY: "auto",
+                  padding: isMobile ? "20px 17px max(22px, env(safe-area-inset-bottom, 0px))" : 22,
+                  boxShadow: "0 24px 70px rgba(3,26,61,.24)", border: "1px solid " + borderC }}>
+                <div style={{ width: 40, height: 4, borderRadius: 9, background: borderC, margin: "0 auto 14px" }} aria-hidden="true" />
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 13 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>{NT(notificationTypes.find(e => e.key === openChannelKind)?.nameKey || "title")}</div>
+                    <div style={{ fontSize: 12, lineHeight: 1.4, color: subC, marginTop: 4 }}>{NT("chooseChannel")}</div>
+                  </div>
+                  <button type="button" onClick={function () { setOpenChannelKind(null); }} aria-label={L("Chiudi")}
+                    style={{ border: "1px solid " + borderC, borderRadius: 10, background: dark ? "#203953" : "#F7F9FC", color: textC, fontSize: 20, minWidth: 34, height: 34, cursor: "pointer" }}>×</button>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {notificationModes.filter(mode => openChannelKind !== "service" || mode.key !== "off").map(function (mode) {
+                    var selectedMode = channels[openChannelKind] || DEFAULT_NOTIFICATION_CHANNELS[openChannelKind];
+                    if (openChannelKind === "service" && selectedMode === "off") selectedMode = "in_app";
+                    var selected = selectedMode === mode.key;
+                    var palette = notificationModeStyles[mode.key];
+                    return <button type="button" key={mode.key} onClick={function () { setNotificationChannel(openChannelKind, mode.key); setOpenChannelKind(null); }}
+                      aria-pressed={selected}
+                      style={{ display: "flex", alignItems: "center", textAlign: "left", width: "100%", gap: 12,
+                        borderRadius: 13, padding: "12px 13px", minHeight: 51, cursor: "pointer",
+                        border: "1px solid " + (selected ? palette.border : borderC),
+                        background: selected ? palette.background : (dark ? "#152C44" : "#FFFFFF"),
+                        color: selected ? palette.foreground : textC }}>
+                      <span aria-hidden="true" style={{ width: 26, textAlign: "center", fontSize: 16 }}>{mode.symbol}</span>
+                      <span style={{ flex: 1, fontWeight: selected ? 850 : 700, fontSize: 13 }}>{NT(mode.key)}</span>
+                      <span aria-hidden="true" style={{ fontSize: 16 }}>{selected ? "✓" : ""}</span>
+                    </button>;
+                  })}
+                </div>
+              </section>
+            </div>, document.body
+          )}
+          </>}
+          {settingsPage === "notifications_reminders" && <>
+          <div style={{ ...notificationTitle, padding: "3px 2px 0", fontSize: 14 }}>{NT("automaticTitle")}</div>
           {/* Promemoria inserimento */}
           <div
             style={{
               background: cardBg,
               borderRadius: 14,
               border: "1px solid " + borderC,
-              padding: 20,
+              padding: isMobile ? 14 : 18,
             }}
           >
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: textC,
-                marginBottom: 4,
-              }}
-            >
-              ⏰ {L("Promemoria inserimento spese")}
-            </div>
-            <div style={{ fontSize: 12, color: subC, marginBottom: 14 }}>
-              {L("Ricevere un promemoria per inserire le spese del giorno")}
-            </div>
-            <Toggle
-              label="Attiva promemoria"
-              checked={!!np.remindActive}
-              onChange={function () {
-                setNp("remindActive", !np.remindActive);
-              }}
-            />
+            {renderReminderToggle(
+              "⏰ " + L("Promemoria inserimento spese"),
+              L("Ricevere un promemoria per inserire le spese del giorno"),
+              !!np.remindActive,
+              function () { setNp("remindActive", !np.remindActive); },
+              false
+            )}
             {np.remindActive && (
               <div
                 style={{
@@ -9211,44 +9353,22 @@ export function SettingsPanel() {
                   <div style={{ fontSize: 12, color: subC, marginBottom: 6 }}>
                     {L("Frequenza")}
                   </div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div role="group" aria-label={L("Frequenza")} style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2, minmax(0, 1fr))" : "repeat(4, minmax(0, 1fr))", gap: 7 }}>
                     {[
                       { id: "daily", label: "Ogni giorno" },
                       { id: "every2", label: "Ogni 2 giorni" },
                       { id: "every3", label: "Ogni 3 giorni" },
                       { id: "weekly", label: "Settimanale" },
                     ].map(function (f) {
-                      return (
-                        <button
-                          key={f.id}
-                          onClick={function () {
-                            setNp("remindFreq", f.id);
-                          }}
-                          style={{
-                            padding: "7px 14px",
-                            borderRadius: 8,
-                            border:
-                              "1px solid " +
-                              (np.remindFreq === f.id ? "#7F77DD" : borderC),
-                            background:
-                              np.remindFreq === f.id
-                                ? "#EEEDFE"
-                                : dark
-                                ? "#252535"
-                                : "#f5f5f5",
-                            color: readableDarkText(np.remindFreq === f.id ? "#534AB7" : textC, dark, np.remindFreq === f.id
-                                ? "#EEEDFE"
-                                : dark
-                                ? "#252535"
-                                : "#f5f5f5"),
-                            fontSize: 12,
-                            cursor: "pointer",
-                            fontWeight: np.remindFreq === f.id ? 600 : 400,
-                          }}
-                        >
-                          {L(f.label)}
-                        </button>
-                      );
+                      var active = (np.remindFreq || "daily") === f.id;
+                      return <button type="button" key={f.id} aria-pressed={active} onClick={function () { setNp("remindFreq", f.id); }}
+                        style={{ minWidth: 0, minHeight: 43, padding: "8px 7px", borderRadius: 11,
+                          border: "1px solid " + (active ? (dark ? "#5281AF" : "#245B8E") : borderC),
+                          background: active ? (dark ? "#203953" : "#EAF3FD") : cardBg,
+                          color: active ? (dark ? "#F4F7FB" : "#052A5F") : textC,
+                          fontSize: 11.5, fontWeight: active ? 850 : 600, cursor: "pointer" }}>
+                        {L(f.label)}
+                      </button>;
                     })}
                   </div>
                 </div>
@@ -9256,29 +9376,23 @@ export function SettingsPanel() {
                   <div style={{ fontSize: 12, color: subC, marginBottom: 6 }}>
                     {L("Orario")}
                   </div>
-                  <input
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 9, borderRadius: 12,
+                    background: dark ? "#152C44" : "#F7F9FC", padding: "4px 11px", border: "1px solid " + borderC }}>
+                    <span aria-hidden="true" style={{ fontSize: 17 }}>🕒</span>
+                    <input
                     type="time"
+                    aria-label={L("Orario")}
                     value={np.remindHour || "20:00"}
                     onChange={function (e) {
                       setNp("remindHour", e.target.value);
                     }}
-                    style={{ ...sinp, width: "auto" }}
+                    style={{ ...sinp, width: "auto", minWidth: 105, padding: "8px 2px", border: "none", boxShadow: "none", background: "transparent", color: textC, fontSize: 15, fontWeight: 750 }}
                   />
+                  </div>
                 </div>
-                <div
-                  style={{
-                    background: "#FFF8E1",
-                    border: "1px solid #FFD54F",
-                    borderRadius: 8,
-                    padding: "10px 12px",
-                  }}
-                >
-                  <span style={{ fontSize: 12, color: readableDarkText("#856404", dark, "#FFF8E1") }}>
-                    {"ℹ️ " +
-                      L(
-                        'I promemoria richiedono i permessi di notifica del browser. Clicca "Attiva" per abilitarli.'
-                      )}
-                  </span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2, color: subC, fontSize: 12 }}>
+                  <span>{NT("reminderHelpShort")}</span>
+                  {notificationInfo(NT("reminderPermissionHelp"))}
                 </div>
               </div>
             )}
@@ -9290,72 +9404,32 @@ export function SettingsPanel() {
               background: cardBg,
               borderRadius: 14,
               border: "1px solid " + borderC,
-              padding: 20,
+              padding: isMobile ? 14 : 18,
             }}
           >
             <div
               style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: textC,
-                marginBottom: 14,
+                ...notificationTitle,
+                marginBottom: 12,
               }}
             >
               🔔 {L("Notifiche di sistema")}
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div
-                style={{
-                  display: "flex", justifyContent: "space-between", alignItems: "center",
-                  gap: 12, padding: "10px 12px", borderRadius: 10,
-                  background: dark ? "#10243A" : "#EEF4FA",
-                  border: "1px solid " + borderC,
-                }}
-              >
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: textC }}>
-                    {periodClosureNoticeText(lang, "settingTitle")}
-                  </div>
-                  <div style={{ fontSize: 12, color: subC, marginTop: 3 }}>
-                    {periodClosureNoticeText(lang, "settingDescription")}
-                  </div>
-                </div>
-                <Toggle
-                  label=""
-                  color={confirmButtonColor}
-                  checked={np.periodClosureActive !== false}
-                  onChange={function () {
-                    setNp("periodClosureActive", np.periodClosureActive === false);
-                  }}
-                />
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  background: dark ? "#252535" : "#f9f9f9",
-                  borderRadius: 10,
-                  border: "1px solid " + (dark ? "#333" : "#f0f0f0"),
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: textC }}>
-                    {"💼 " + L("Stipendio")}
-                  </div>
-                  <div style={{ fontSize: 12, color: subC }}>
-                    {L("Notifica il giorno del mese configurato")}
-                  </div>
-                </div>
-                <Toggle
-                  label=""
-                  checked={!!np.stipendioActive}
-                  onChange={function () {
-                    setNp("stipendioActive", !np.stipendioActive);
-                  }}
-                />
-              </div>
+              {renderReminderToggle(
+                periodClosureNoticeText(lang, "settingTitle"),
+                periodClosureNoticeText(lang, "settingDescription"),
+                np.periodClosureActive !== false,
+                function () { setNp("periodClosureActive", np.periodClosureActive === false); },
+                false
+              )}
+              {renderReminderToggle(
+                "💼 " + L("Stipendio"),
+                L("Notifica il giorno del mese configurato"),
+                !!np.stipendioActive,
+                function () { setNp("stipendioActive", !np.stipendioActive); },
+                false
+              )}
               {np.stipendioActive && (
                 <div
                   style={{
@@ -9370,60 +9444,34 @@ export function SettingsPanel() {
                   </span>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     max="31"
-                    value={np.stipendioDay || 27}
+                    value={np.stipendioDay ?? 27}
                     onChange={function (e) {
-                      setNp("stipendioDay", parseInt(e.target.value) || 27);
+                      var raw = e.target.value;
+                      setNp("stipendioDay", raw === "" ? "" : Math.max(0, Math.min(31, Number(raw) || 0)));
                     }}
+                    onBlur={function () { if (np.stipendioDay === "") setNp("stipendioDay", 0); }}
                     style={{ ...sinp, width: 70 }}
                   />
-                  <span style={{ fontSize: 12, color: subC }}>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: subC }}>
                     {L("di ogni mese")}
+                    {notificationInfo(NT("salaryLastDayInfo"))}
                   </span>
                 </div>
               )}
-              <div
-                onClickCapture={function (e) {
-                  if (!notifBaseAllowed) {
-                    if (e && e.preventDefault) e.preventDefault();
-                    if (e && e.stopPropagation) e.stopPropagation();
-                    blockSetting("base");
-                  }
-                }}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "10px 12px",
-                  background: dark ? "#252535" : "#f9f9f9",
-                  borderRadius: 10,
-                  border: "1px solid " + (dark ? "#333" : "#f0f0f0"),
-                  opacity: notifBaseAllowed ? 1 : 0.55,
-                  filter: notifBaseAllowed ? "none" : "grayscale(1)",
-                  cursor: notifBaseAllowed ? "default" : "pointer",
-                }}
-              >
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: textC }}>
-                    🔄 {L("Spese ricorrenti")}
-                  </div>
-                  <div style={{ fontSize: 12, color: subC }}>
-                    {L("Avviso quando ci sono ricorrenti da confermare")}
-                  </div>
-                </div>
-                <Toggle
-                  label=""
-                  checked={!!np.spesaRicorrente}
-                  onChange={function () {
-                    if (blockSetting("base")) return;
-                    setNp("spesaRicorrente", !np.spesaRicorrente);
-                  }}
-                />
-              </div>
+              {renderReminderToggle(
+                "🔄 " + L("Spese ricorrenti"),
+                L("Avviso quando ci sono ricorrenti da confermare"),
+                !!np.spesaRicorrente,
+                function () { if (blockSetting("base")) return; setNp("spesaRicorrente", !np.spesaRicorrente); },
+                !notifBaseAllowed
+              )}
             </div>
           </div>
 
+          </>}
+          {settingsPage === "notifications_custom" && <>
           {/* Notifiche custom */}
           <div
             onClickCapture={function (e) {
@@ -9437,7 +9485,7 @@ export function SettingsPanel() {
               background: cardBg,
               borderRadius: 14,
               border: "1px solid " + borderC,
-              padding: 20,
+              padding: isMobile ? 14 : 18,
               opacity: notifBaseAllowed ? 1 : 0.55,
               filter: notifBaseAllowed ? "none" : "grayscale(1)",
               cursor: notifBaseAllowed ? "default" : "pointer",
@@ -9446,28 +9494,18 @@ export function SettingsPanel() {
             <div
               style={{
                 display: "flex",
-                justifyContent: "space-between",
+                justifyContent: "flex-end",
                 alignItems: "center",
-                marginBottom: 14,
+                gap: 10,
+                marginBottom: 12,
               }}
             >
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: textC }}>
-                  ✏️ {L("Notifiche personalizzate")}{" "}
-                  <span
-                    style={{
-                      fontSize: 10,
-                      background: dark ? "#33333E" : "#ECEEF2",
-                      color: subC,
-                      borderRadius: 20,
-                      padding: "1px 7px",
-                      fontWeight: 900,
-                    }}
-                  >
-                    Base
-                  </span>
-                </div>
-              </div>
+              <span
+                style={{ fontSize: 10, background: dark ? "#33333E" : "#ECEEF2", color: subC,
+                  borderRadius: 20, padding: "3px 9px", fontWeight: 900 }}
+              >
+                Base
+              </span>
               {!showNewNotif && (
                 <button
                   onClick={function () {
@@ -9478,12 +9516,12 @@ export function SettingsPanel() {
                   }}
                   style={{
                     background: notifBaseAllowed
-                      ? "#7F77DD"
+                      ? "#052A5F"
                       : dark
                       ? "#333"
                       : "#e5e5e5",
                     color: readableDarkText(notifBaseAllowed ? "#fff" : subC, dark, notifBaseAllowed
-                      ? "#7F77DD"
+                      ? "#052A5F"
                       : dark
                       ? "#333"
                       : "#e5e5e5"),
@@ -9969,6 +10007,7 @@ export function SettingsPanel() {
               })}
             </div>
           </div>
+          </>}
         </div>
       </div>
     );
@@ -10266,54 +10305,50 @@ export function SettingsPanel() {
     );
   }
 
-  if (settingsPage === "notifications")
+  if (settingsPage === "notifications") {
+    var notificationMenuEntries = [
+      { id: "notifications_center", icon: "🔔", title: "centerTitle", desc: "centerDescription" },
+      { id: "notifications_types", icon: "🎚️", title: "typesMenuTitle", desc: "typesMenuDescription" },
+      { id: "notifications_reminders", icon: "⏰", title: "remindersMenuTitle", desc: "remindersMenuDescription" },
+      { id: "notifications_custom", icon: "✏️", title: "customMenuTitle", desc: "customMenuDescription" },
+    ];
+    return <div>
+      <PageHeader title={notificationChannelText(lang, "preferencesTitle")} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        {notificationMenuEntries.map(function (entry) {
+          return <button type="button" key={entry.id}
+            onClick={function () {
+              if (entry.id === "notifications_center") window.dispatchEvent(new Event("fainance:open-notifications"));
+              else setSettingsPage(entry.id);
+            }}
+            style={{ display: "flex", alignItems: "center", gap: 13, width: "100%", textAlign: "left", cursor: "pointer", padding: isMobile ? "14px 13px" : "16px", background: cardBg,
+              border: "1px solid " + borderC, borderRadius: 14,
+              boxShadow: dark ? "none" : "0 3px 12px rgba(5,42,95,.04)" }}>
+            <span aria-hidden="true" style={{ width: 40, height: 40, borderRadius: 12, background: dark ? "#203953" : "#ECF3FB", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 20 }}>{entry.icon}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: "block", color: textC, fontSize: 14, fontWeight: 850 }}>{notificationChannelText(lang, entry.title)}</span>
+              <span style={{ display: "block", color: subC, fontSize: 11.5, lineHeight: 1.45, marginTop: 4 }}>{notificationChannelText(lang, entry.desc)}</span>
+            </span>
+            <span aria-hidden="true" style={{ fontSize: 19, color: subC, flexShrink: 0 }}>›</span>
+          </button>;
+        })}
+      </div>
+    </div>;
+  }
+  if (settingsPage === "notifications_types" || settingsPage === "notifications_reminders" || settingsPage === "notifications_custom")
     return (
       <StableNestedPanelHost
-        key="settings-notifications"
-        render={function () {
-          return NotificationsSettingsPage();
-        }}
+        key={settingsPage}
+        render={function () { return NotificationsSettingsPage(); }}
       />
     );
 
   if (settingsPage === "patrimonio_settings")
-    return (
-      <div>
-        <PageHeader title="Patrimonio" />
-        <SettingsCards
-          items={[
-            {
-              id: "patrimonio_display_settings",
-              icon: "👁️",
-              label: "Visualizzazione",
-              desc: "Decimali e formato degli importi",
-            },
-            {
-              id: "patrimonio_areas_settings",
-              icon: "📂",
-              label: "Aree",
-              desc: settingAllowed("base")
-                ? "Lista, crea, modifica e riordina aree patrimonio"
-                : "Lista disponibile. Crea, modifica e riordina dal piano Base",
-            },
-            {
-              id: "patrimonio_entries_settings",
-              icon: "💎",
-              label: "Voci",
-              desc: settingAllowed("base")
-                ? "Lista, crea, modifica e riordina voci patrimonio"
-                : "Lista disponibile. Crea, modifica e riordina dal piano Base",
-            },
-            {
-              id: "patrimonio_mode_settings",
-              icon: "⚙️",
-              label: "Modalità",
-              desc: "Come vengono aggiornati i valori del patrimonio",
-            },
-          ]}
-        />
-      </div>
-    );
+    return <div><PageHeader title="Patrimonio"/><SettingsCards items={[
+      {id:"patrimonio_areas_settings",icon:"📂",label:"Aree",desc:catalogSettingsText(lang,"areasDesc")},
+      {id:"patrimonio_entries_settings",icon:"💎",label:"Categorie",desc:catalogSettingsText(lang,"categoriesDesc")},
+      {id:"patrimonio_mode_settings",icon:"⚙️",label:catalogSettingsText(lang,"modeDisplay"),desc:catalogSettingsText(lang,"modeDesc")}
+    ]}/></div>;
   if (settingsPage === "patrimonio_areas_settings")
     return (
       <div>
@@ -10330,7 +10365,7 @@ export function SettingsPanel() {
   if (settingsPage === "patrimonio_entries_settings")
     return (
       <div>
-        <PageHeader title="Patrimonio / Voci" />
+        <PageHeader title={L("Patrimonio")+" / "+L("Categorie")} />
         <PatrimonioSettingsPanel
           forcedSection="entries"
           allowEditing={settingAllowed("base")}
@@ -10343,14 +10378,14 @@ export function SettingsPanel() {
   if (settingsPage === "patrimonio_mode_settings")
     return (
       <div>
-        <PageHeader title="Patrimonio / Modalità" />
+        <PageHeader title={L("Patrimonio")+" / "+catalogSettingsText(lang,"modeDisplay")} />
         <PatrimonioSettingsPanel forcedSection="mode" />
       </div>
     );
   if (settingsPage === "patrimonio_display_settings")
     return (
       <div>
-        <PageHeader title="Patrimonio / Visualizzazione" />
+        <PageHeader title={L("Patrimonio")+" / "+catalogSettingsText(lang,"modeDisplay")} />
         <PatrimonioSettingsPanel forcedSection="display" />
       </div>
     );
@@ -12611,7 +12646,7 @@ export function SettingsPanel() {
             type: "application/json",
           }),
           function () {
-            setToast(L("Backup esportato"));
+            setToast({text:L("Backup esportato"),type:"success"});
           }
         );
       } catch (err) {
@@ -12635,7 +12670,7 @@ export function SettingsPanel() {
         methods,
         dateFmt,
         function () {
-          setToast(L("File Excel uscite esportato"));
+          setToast({text:L("File Excel uscite esportato"),type:"success"});
         },
         "fainance_uscite.xlsx"
       );
@@ -12649,7 +12684,7 @@ export function SettingsPanel() {
         methods,
         dateFmt,
         function () {
-          setToast(L("File CSV uscite esportato"));
+          setToast({text:L("File CSV uscite esportato"),type:"success"});
         },
         "fainance_uscite.csv"
       );
@@ -12663,7 +12698,7 @@ export function SettingsPanel() {
         methods,
         dateFmt,
         function () {
-          setToast(L("File Excel entrate esportato"));
+          setToast({text:L("File Excel entrate esportato"),type:"success"});
         },
         "fainance_entrate.xlsx"
       );
@@ -12677,7 +12712,7 @@ export function SettingsPanel() {
         methods,
         dateFmt,
         function () {
-          setToast(L("File CSV entrate esportato"));
+          setToast({text:L("File CSV entrate esportato"),type:"success"});
         },
         "fainance_entrate.csv"
       );
@@ -12703,7 +12738,7 @@ export function SettingsPanel() {
           { type: "application/json" }
         ),
         function () {
-          setToast(L("File JSON Patrimonio esportato"));
+          setToast({text:L("File JSON Patrimonio esportato"),type:"success"});
         }
       );
       return;
@@ -12715,7 +12750,7 @@ export function SettingsPanel() {
           type: "application/json",
         }),
         function () {
-          setToast(L("File JSON Budget esportato"));
+          setToast({text:L("File JSON Budget esportato"),type:"success"});
         }
       );
       return;
@@ -12749,7 +12784,7 @@ export function SettingsPanel() {
           { type: "application/json" }
         ),
         function () {
-          setToast(L("File JSON Spesa esportato"));
+          setToast({text:L("File JSON Spesa esportato"),type:"success"});
         }
       );
       return;
@@ -12772,7 +12807,7 @@ export function SettingsPanel() {
           { type: "application/json" }
         ),
         function () {
-          setToast(L("File JSON Debiti / Crediti esportato"));
+          setToast({text:L("File JSON Debiti / Crediti esportato"),type:"success"});
         }
       );
       return;
@@ -12940,7 +12975,7 @@ export function SettingsPanel() {
               <div
                 role="dialog"
                 aria-modal="true"
-                aria-label={L("Come vuoi importare il JSON?")}
+                aria-label={L("Come vuoi importare il JSON?")} data-fainance-tone="warning"
                 style={{
                   position: "fixed",
                   inset: 0,
@@ -12963,10 +12998,10 @@ export function SettingsPanel() {
                   }}
                   style={{
                     width: "min(460px, 100%)",
-                    background: cardBg,
-                    color: textC,
-                    border: "1px solid " + borderC,
-                    borderRadius: 20,
+                    background: "#FFD54F",
+                    color: "#3B3000",
+                    border: "1px solid #D4AB21",
+                    borderRadius: 16,
                     padding: 22,
                     boxShadow: "0 22px 70px rgba(0,0,0,.28)",
                     position: "relative",
@@ -12982,13 +13017,13 @@ export function SettingsPanel() {
                   <div style={{ fontSize: 20, fontWeight: 950, marginBottom: 12, paddingRight: 52 }}>
                     {L("Come vuoi importare il JSON?")}
                   </div>
-                  <div style={{ fontSize: 14, lineHeight: 1.55, color: subC }}>
+                  <div style={{ fontSize: 14, lineHeight: 1.55, color: "#3B3000" }}>
                     {L("Il file contiene:") + " "}
                     <strong style={{ color: textC }}>
                       {pendingBackupImport.summary}
                     </strong>
                   </div>
-                  <div style={{ fontSize: 12, lineHeight: 1.5, color: subC, marginTop: 8 }}>
+                  <div style={{ fontSize: 12, lineHeight: 1.5, color: "#3B3000", marginTop: 8 }}>
                     {L("Puoi integrare il backup con i dati già presenti oppure sostituire completamente i dati esistenti con quelli del JSON.")}
                   </div>
                   {movementDataBusy && <div role="status" aria-live="polite" style={{ marginTop: 10, fontWeight: 700, color: textC }}>

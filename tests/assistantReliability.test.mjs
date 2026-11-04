@@ -109,3 +109,13 @@ assert.equal(logic.buildRealtimeManualResponseSessionUpdate({}).session.audio.in
 console.log('Prompt echo filtering, language protection and accurate service errors passed.');
 
 assert(!logic.getFainanceHelpAnswer('Come creo un alert?','it').includes('Posso'));
+
+// Both external request paths retain the same read-only schedule evidence and privacy marker.
+const {assistantSchedulesForApp}=await import('../src/finance/assistantSchedules.js');
+const financialSchedules=assistantSchedulesForApp({today:'2026-11-04',aiDataAccess:'full',currency:'EUR',recurring:[{id:'salary',rtype:'income',name:'Stipendio',amount:1200,frequency:'monthly',dayOfMonth:30,effectiveFrom:'2026-11-01'}]},'entrate ricorrenti questo mese');
+const scheduleRequest=logic.buildAssistantRequestPayload({question:'entrate ricorrenti questo mese',interfaceLanguage:'it',aiDataAccess:'full',financeContext:{financialSchedules}});
+const realtime=logic.buildRealtimeSessionRequest({interfaceLanguage:'it',aiDataAccess:'full',financeContext:{financialSchedules}});
+assert.equal(scheduleRequest.payload.financeContext.financialSchedules.recurring.requestedTotals.pending.income,1200);
+assert.deepEqual(realtime.financeContext.financialSchedules,scheduleRequest.payload.financeContext.financialSchedules);
+assert(logic.assistantProductKnowledgeInstruction().includes('financialSchedules'));
+assert.equal(logic.buildAssistantRequestPayload({question:'rate',financeContext:{financialSchedules:assistantSchedulesForApp({aiDataAccess:'summary'})}}).payload.financeContext.financialSchedules.reason,'FULL_DATA_ACCESS_REQUIRED');

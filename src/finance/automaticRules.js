@@ -3,7 +3,7 @@ import {parseRuleLogic,evaluateRuleLogic} from "./automaticRuleFormula.js";
 // with their historical limit during read/migration; they are never truncated.
 export const MAX_RULE_CONDITIONS=6;
 export const ruleFields=['description','category','payment','amount','direction','transactionType','source'];
-export const actionFields=['category','payment','description','tags','note','alert'];
+export const actionFields=['category','payment','description','tags','note','installments','alert'];
 export const operatorsFor=field=>field==='amount'?['equals','notEquals','greater','greaterOrEqual','less','lessOrEqual','between']:field==='description'?['contains','equals','starts','notContains']:['equals','notEquals'];
 export const ruleLimit=plan=>plan==='premium'?Infinity:plan==='base'?2:1;
 const text=v=>String(v??'').normalize('NFKC').trim().toLocaleLowerCase();
@@ -45,7 +45,11 @@ export function validateAutomaticRule(rule,options={}){
   }
   if(rule.categoryFilter!=null&&(!['expense','income'].includes(rule.categoryFilter.direction)||!['string','number'].includes(typeof rule.categoryFilter.value)||!String(rule.categoryFilter.value).trim()||(rule.trigger!=='movement'&&rule.trigger!==rule.categoryFilter.direction)))throw new Error('INVALID_RULE_CATEGORY');
   if(new Set(rule.actions.map(a=>a.field)).size!==rule.actions.length)throw new Error('DUPLICATE_RULE_ACTION');
-  for(const a of rule.actions)if(a.field!=='alert'&&(!actionFields.includes(a.field)||!['string','number'].includes(typeof a.value)||!String(a.value).trim()||String(a.value).length>500))throw new Error('INVALID_RULE_ACTION');
+  for(const a of rule.actions){
+    if(a.field==='installments'){
+      if(!Number.isSafeInteger(a.value)||a.value<1||a.value>240||!['forward','backward'].includes(a.direction))throw new Error('INVALID_RULE_INSTALLMENTS');
+    }else if(a.field!=='alert'&&(!actionFields.includes(a.field)||!['string','number'].includes(typeof a.value)||!String(a.value).trim()||String(a.value).length>500))throw new Error('INVALID_RULE_ACTION');
+  }
   const alerts=[...rule.actions.filter(a=>a.field==='alert'),...(rule.alert?[rule.alert]:[])];
   if(alerts.length>1)throw new Error('DUPLICATE_RULE_ALERT');
   for(const alert of alerts)if(!['information','confirmation'].includes(alert.kind)||typeof alert.text!=='string'||!alert.text.trim()||alert.text.length>1000)throw new Error('INVALID_RULE_ALERT');
@@ -113,6 +117,20 @@ export function evaluateAutomaticRules(rules,item,direction,source='manual',opti
     matched.push(rule.id);
     for(const action of rule.actions){
       if(action.field==='alert'){alerts.push({kind:action.kind,text:action.text,ruleId:rule.id,name:rule.name});continue;}
+      // Same three movement fields as the existing manual Rateizza control.
+      // It is one atomic action: no extra transactions and no change to amount/date.
+      if(action.field==='installments'){
+        const field='installments',value=JSON.stringify([action.value,action.direction]);
+        if(claimed.has(field)){
+          const first=owner.get(field);
+          if(first.value!==value)conflicts.push({field,firstRule:first.name,secondRule:rule.name,firstValue:first.value,secondValue:value});
+          skipped.push({field,reason:'priority'});continue;
+        }
+        if(item.rateizzato||(options.event==='edit'&&!defaults.has(field))){skipped.push({field,reason:'explicit'});continue;}
+        if(Array.isArray(options.instalmentOptions)&&options.instalmentOptions.length&&!options.instalmentOptions.includes(action.value)){skipped.push({field,reason:'plan'});continue;}
+        next.rateizzato=true;next.rate=action.value;next.rateDirection=action.direction;
+        claimed.add(field);owner.set(field,{name:rule.name,value});continue;
+      }
       const field=action.field==='category'?(direction==='income'?'type':'catId'):action.field==='payment'?'methodId':action.field==='description'?'desc':action.field;
       if(direction==='income'&&field==='methodId')continue;
       const explicit=field==='methodId'?(item.methodId??item.method):item[field];
@@ -136,7 +154,7 @@ export function evaluateAutomaticRules(rules,item,direction,source='manual',opti
     if(rule.alert)alerts.push({...rule.alert,ruleId:rule.id,name:rule.name});
   }
   delete next._ruleDefaultFields;
-  return {item:next,matched,alerts,changed:[...claimed],skipped,conflicts};
+  return {item:next,matched,alerts,changed:[...claimed].flatMap(field=>field==='installments'?['rateizzato','rate','rateDirection']:[field]),skipped,conflicts};
 }
 
 export function automaticRuleForEditor(rule){

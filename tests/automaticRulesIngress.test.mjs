@@ -9,7 +9,7 @@ function visit(node){if(ts.isFunctionDeclaration(node)&&names.includes(node.name
 const rule={id:'r',kind:'automatic-v1',name:'Biliardo',enabled:true,priority:0,revision:0,trigger:'movement',match:'all',conditions:[{field:'description',operator:'contains',value:'biliardo'}],actions:[{field:'payment',value:3}],alert:{kind:'confirmation',text:'Confermi?'}};
 let expenses=[],incomes=[],accepted=false,consumed=0,prompted=0;
 const noop=()=>{};
-const context={evaluateAutomaticRules,financeEvolutionRef:{current:{rules:[rule]}},currentPlan:'premium',cats:[{id:1}],methods:[{id:1},{id:3}],incomeTypes:[{id:'salary'}],window:{confirm:()=>{prompted++;return accepted;},alert:noop},setExpenses:fn=>{expenses=fn(expenses);},setIncomes:fn=>{incomes=fn(incomes);},setToast:noop,parseMoney:Number,expenseWithMethodSnapshot:x=>x,bulkMovementRowLimit:()=>10,canUsePlanFeature:()=>true,rewardedFeatureConfig:()=>null,consumePlanFeature:()=>{consumed++;},singleMovementSuccessToast:noop,successToastForFeature:noop,limitedFeatureSuccessToast:noop,bulkMovementSuccessToast:noop,setVoiceModal:noop,setVoiceListening:noop,setVoiceText:noop,setVoiceParsed:noop,setVoiceError:noop,setTab:noop,setHistoryTab:noop,lang:'it',rulesText:()=>'',Date,Math};
+const context={currency:'EUR',planLimits:{instalmentOptions:null},evaluateAutomaticRules,financeEvolutionRef:{current:{rules:[rule]}},currentPlan:'premium',cats:[{id:1}],methods:[{id:1},{id:3}],incomeTypes:[{id:'salary'}],window:{confirm:()=>{prompted++;return accepted;},alert:noop},setExpenses:fn=>{expenses=fn(expenses);},setIncomes:fn=>{incomes=fn(incomes);},setToast:noop,parseMoney:Number,expenseWithMethodSnapshot:x=>x,bulkMovementRowLimit:()=>10,canUsePlanFeature:()=>true,rewardedFeatureConfig:()=>null,consumePlanFeature:()=>{consumed++;},singleMovementSuccessToast:noop,successToastForFeature:noop,limitedFeatureSuccessToast:noop,bulkMovementSuccessToast:noop,setVoiceModal:noop,setVoiceListening:noop,setVoiceText:noop,setVoiceParsed:noop,setVoiceError:noop,setTab:noop,setHistoryTab:noop,lang:'it',rulesText:()=>'',Date,Math};
 Object.assign(context,{startAnalyticsFlow:noop,finishAnalyticsFlow:noop});
 Object.defineProperties(context,{expenses:{get:()=>expenses},incomes:{get:()=>incomes}});
 vm.createContext(context);vm.runInContext(chunks.join('\n'),context);
@@ -36,3 +36,18 @@ assert.equal(context.addIncomes([{id:91,type:'salary',amount:1850}],'manual'),tr
 assert.equal(context.addIncomes([{id:92,type:'gift',amount:900}],'manual'),true);assert.equal(prompted,promptsBefore+1);
 accepted=true;assert.equal(context.addIncomes([{id:93,type:'salary',amount:15000}],'manual'),true);assert.equal(prompted,promptsBefore+2);
 console.log('Real income save: salary confirmation outside bounds only; cancellation and other categories verified');
+
+// The actual creation path must use Rateizza fields without creating extra records.
+context.planLimits={instalmentOptions:null};context.currentPlan='premium';
+context.financeEvolutionRef.current.rules=[{...rule,trigger:'movement',actions:[{field:'installments',value:3,direction:'backward'}]}];
+accepted=false;let beforeRows=expenses.length,beforeQuota=consumed;
+assert.equal(context.addExpenses([{...input,id:100,rateizzato:false}],'manual'),false);
+assert.equal(expenses.length,beforeRows);assert.equal(consumed,beforeQuota);
+accepted=true;assert.equal(context.addExpenses([{...input,id:101,rateizzato:false}],'manual'),true);
+assert.equal(expenses.length,beforeRows+1);assert.equal(expenses[0].amount,12);assert.equal(expenses[0].rate,3);assert.equal(expenses[0].rateDirection,'backward');
+const incomeRows=incomes.length;
+assert.equal(context.addIncomes([{...input,id:102,type:'salary',rateizzato:false}],'manual'),true);
+assert.equal(incomes.length,incomeRows+1);assert.equal(incomes[0].rateizzato,true);assert.equal(incomes[0].rate,3);
+context.addExpenses([{...input,id:103,rateizzato:true,rate:6,rateDirection:'forward'}],'manual');
+assert.equal(expenses[0].rate,6);assert.equal(expenses[0].rateDirection,'forward');
+console.log('Real expense/income ingress: one row, unchanged amount/date, cancellation and quota, existing manual installments preserved');

@@ -1,9 +1,11 @@
+import { buildSavingsForecast } from './savingsForecast.js';
 // Read-only calculations for the existing assistant and financial calendar.
 // Money is accumulated in cents. Forecasts describe the loaded ledger, not a bank account.
 import { buildFinancialCalendar, validCalendarDate } from './financialCalendar.js';
 import { periodForDate, periodForKey, shiftPeriodKey } from './periodEngine.js';
 import { budgetForPeriod } from './budgetEngine.js';
 import { parseMoneyValue } from '../financeCalculations.js';
+import { recurringOccurrenceAlreadyGenerated, recurringOccurrencesInPeriod } from './recurringOccurrences.js';
 
 const DAY = 86400000;
 const list = value => Array.isArray(value) ? value : [];
@@ -106,16 +108,28 @@ function categoryLabel(id,categories,rows=[]) {
   const names=[...new Set(rows.filter(r=>catOf(r)===String(id)).map(r=>r.categoryNameSnapshot||r.categoryName||r.catName).filter(usable).map(x=>x.trim()))];
   return names.length===1?names[0]:'[CATEGORY_NAME_UNAVAILABLE]';
 }
+const internalTransfer=row=>!!(row?.transferId||row?.isTransfer||['transfer','trasferimento','giroconto'].includes(normalize(row?.kind||row?.type||'')));
 const privateOrdinary=row=>!row._share&&!row.shareProjectId&&!row._shareProjectId&&!row.shareActivityId&&!row.rateizzato&&
   !row.recurringOccurrenceId&&!row.recurringId&&!row.recurringRuleId&&!row.generatedFromRecurringId&&
-  !row.transferId&&!row.isTransfer&&!['transfer','trasferimento','giroconto'].includes(normalize(row.kind||row.type||''))&&!row.oneOff&&!row.exceptional;
+  !internalTransfer(row)&&!row.oneOff&&!row.exceptional;
 const fingerprint=row=>catOf(row)+'|'+normalize(row.desc||row.description||row.name||row.type||row.itype||'').trim();
+// A month appended to a source label is a period, not a new payer.
+// Keep income type in the identity so distinct sources cannot cover one another.
+function incomeDescription(row) {
+  const text=normalize(row?.desc||row?.description||row?.name||row?.type||row?.itype||'').trim();
+  const tokens=text.split(/\s+/),tail=tokens.at(-1);
+  if(tokens.length>2&&/^(19|20)\d{2}$/.test(tail))tokens.pop();
+  if(tokens.length>1&&MONTHS.flat().includes(tokens.at(-1)))return tokens.slice(0,-1).join(' ');
+  return text;
+}
+const incomeFingerprint=row=>String(row?.incomeType??row?.type??row?.itype??'')+'|'+incomeDescription(row);
+const patternFingerprint=(row,kind)=>kind==='income'?incomeFingerprint(row):fingerprint(row);
 const median=values=>[...values].sort((a,b)=>a-b)[Math.floor(values.length/2)];
 // Read-only hypothesis: one stable payment in each of three completed civil months.
 function stablePatterns(rows,today,rules,kind) {
   const keys=[-3,-2,-1].map(n=>shiftPeriodKey(today.slice(0,7),n)),groups=new Map();
   for(const row of rows.filter(r=>privateOrdinary(r)&&money(r.amount)>0&&keys.includes(dateOf(r).slice(0,7)))) {
-    const key=fingerprint(row);if(!key.split('|')[1])continue;
+    const key=patternFingerprint(row,kind);if(!key.split('|')[1])continue;
     const group=groups.get(key)||[];group.push(row);groups.set(key,group);
   }
   const out=[];
@@ -123,10 +137,11 @@ function stablePatterns(rows,today,rules,kind) {
     const buckets=keys.map(k=>group.filter(r=>dateOf(r).startsWith(k)));
     if(buckets.some(b=>b.length!==1))continue;
     const sample=buckets.map(b=>b[0]),values=sample.map(r=>money(r.amount)),amount=median(values),dates=sample.map(r=>Number(dateOf(r).slice(-2)));
-    if(Math.max(...values)-Math.min(...values)>Math.max(100,amount*.05)||Math.max(...dates)-Math.min(...dates)>3)continue;
-    const catId=catOf(sample[0]),description=String(sample[0].desc||sample[0].description||sample[0].name||sample[0].type||'');
-    if(rules.some(r=>(r.rtype==='income'?'income':'expense')===kind&&(kind==='expense'?catOf(r)===catId:normalize(r.name||'')===normalize(description))))continue;
-    out.push({key,kind,categoryId:catId,description,amount,day:median(dates),evidenceMonths:keys});
+    if((kind==='expense'&&Math.max(...values)-Math.min(...values)>Math.max(100,amount*.05))||Math.max(...dates)-Math.min(...dates)>3)continue;
+    const catId=catOf(sample[0]),description=kind==='income'?String(sample[0].desc||sample[0].description||sample[0].type||'').trim():String(sample[0].desc||sample[0].description||sample[0].name||sample[0].type||'');
+    if(rules.some(r=>(r.rtype==='income'?'income':'expense')===kind&&(kind==='expense'?catOf(r)===catId&&normalize(r.name||'').trim()===normalize(description).trim():incomeDescription(r)===incomeDescription(sample[0])&&(!r.incomeType||String(r.incomeType)===String(sample[0].type||'')))))continue;
+    out.push({key,kind,categoryId:catId,description,amount,day:median(dates),evidenceMonths:keys,
+      ...(kind==='income'?{incomeType:String(sample[0].type??sample[0].itype??''),minimumAmount:Math.min(...values),maximumAmount:Math.max(...values)}:{})});
   }
   return out;
 }
@@ -160,30 +175,48 @@ function summarizeRange(rows,incomes,range,categories,full,today) {
   return result;
 }
 
+// Legacy calendar-flow estimator retained solely for existing budget calculations.
+// User-facing forecasts and assistant forecast context use buildSavingsForecast.
 export function buildFinancialForecast(options={}) {
   const {today,expenses=[],incomes=[],recurring=[],excludeExpense=()=>false,excludeIncome=()=>false}=options;
   if(!validCalendarDate(today))throw new Error('INVALID_FORECAST_DATE');
-  const exp=list(expenses).filter(row=>valid(row)&&!excludeExpense(row));
-  const inc=list(incomes).filter(row=>valid(row)&&!excludeIncome(row));
-  const rules=list(recurring).filter(row=>active(row)&&/\d/.test(String(row.amount??'')));
+  const exp=list(expenses).filter(row=>valid(row)&&!internalTransfer(row)&&!excludeExpense(row));
+  const inc=list(incomes).filter(row=>valid(row)&&!internalTransfer(row)&&!excludeIncome(row));
+  const rules=list(recurring).filter(row=>active(row)&&!internalTransfer(row)&&/\d/.test(String(row.amount??''))&&
+    !(row.rtype==='income'?excludeIncome({...row,type:row.incomeType??row.type}):excludeExpense(row)));
   const sourceRows=[...exp,...inc].filter(row=>dateOf(row)<=today);
   const historyStart=shiftCivilDate(today,-90);
-  const expenseHistory=list(options.analysisExpenses??exp).filter(row=>valid(row)&&!excludeExpense(row)&&dateOf(row)<today);
+  const expenseHistory=list(options.analysisExpenses??exp).filter(row=>valid(row)&&!internalTransfer(row)&&!excludeExpense(row)&&dateOf(row)<today);
   const earliest=expenseHistory.map(dateOf).sort()[0];
   const baselineStart=earliest && earliest>historyStart ? earliest : historyStart;
   const observationDays=earliest ? Math.min(90,daysBetween(baselineStart,today)) : 0;
-  // Any recurring category is excluded conservatively, including legacy occurrences
-  // without identity metadata. Missing variable spend in those categories is disclosed.
-  const recurringCategories=new Set(rules.filter(r=>r.rtype!=='income').map(catOf));
+  // Match generated legacy payments individually. A recurring rule must never
+  // hide unrelated ordinary spending merely because it shares the category.
   const patterns=[...stablePatterns(exp,today,rules,'expense'),...stablePatterns(inc,today,rules,'income')];
   const patternKeys=new Set(patterns.filter(p=>p.kind==='expense').map(p=>p.key));
-  const variableHistory=expenseHistory.filter(row=>privateOrdinary(row)&&!patternKeys.has(fingerprint(row))&&dateOf(row)>=baselineStart &&
-    !row._share&&!row.shareProjectId&&!row._shareProjectId&&!row.shareActivityId&&!row.rateizzato&&!row.recurringOccurrenceId&&!row.recurringId&&!row.recurringRuleId&&!row.generatedFromRecurringId &&
-    !recurringCategories.has(catOf(row)));
+  const scheduleCache=new Map();
+  function matchesRecurringExpense(row) {
+    return rules.some(rule=>{
+      if(rule.rtype==='income')return false;
+      const date=dateOf(row),key=String(rule.id)+'|'+rules.indexOf(rule)+'|'+date.slice(0,7);
+      if(validCalendarDate(rule.effectiveFrom)&&date<dateOf({date:rule.effectiveFrom}))return false;
+      if(!scheduleCache.has(key)) {
+        const schedule={...rule,rtype:'expense',confirmed:[],skipped:[],confirmedOccurrences:[],
+          skippedOccurrences:[],confirmedOccurrenceDates:[],skippedOccurrenceDates:[]};
+        scheduleCache.set(key,recurringOccurrencesInPeriod(schedule,date.slice(0,7),{mode:'calendar',startDay:1},[])
+          .map(occ=>occ._occurrenceDate));
+      }
+      return scheduleCache.get(key).includes(date)&&recurringOccurrenceAlreadyGenerated({...rule,rtype:'expense'},date,[row]);
+    });
+  }
+  const variableExpense=row=>privateOrdinary(row)&&!patternKeys.has(fingerprint(row))&&!matchesRecurringExpense(row);
+  const variableHistory=expenseHistory.filter(row=>variableExpense(row)&&dateOf(row)>=baselineStart);
   const variableByCategory=new Map(categoriesFor(variableHistory,options.categories).map(x=>[x.categoryId,x.cents]));
   const baselineAvailable=observationDays>=28;
   const end=shiftCivilDate(today,90);
   const daily=[];
+  const expectedByCategory=new Map(),coveredByCategory=new Map();
+  let priorAdditional=0;
   let month=today.slice(0,7);
   let opening=null;
   while(month<=end.slice(0,7)) {
@@ -201,14 +234,23 @@ export function buildFinancialForecast(options={}) {
       const knownExpense=entries.reduce((n,e)=>n+Math.max(0,-e.cents),0);
       const variableKnown=new Map();
       for(const e of entries)if(e.cents<0&&!e.installment&&e.provenance!=='recurring'&&e.provenance!=='share'&&
-        !recurringCategories.has(String(e.metadata?.categoryId??''))) {
+        !e.metadata?.oneOff&&!e.metadata?.exceptional&&
+        variableExpense({date:e.date,amount:-e.cents/100,catId:e.metadata?.categoryId,desc:e.title,methodId:e.metadata?.methodId,...e.metadata})) {
         const id=String(e.metadata?.categoryId??'');variableKnown.set(id,(variableKnown.get(id)||0)-e.cents);
       }
-      let additional=0;
-      // 30/60/90 means exactly that many future days; no extra average for today.
-      if(baselineAvailable&&day.date>today)for(const [id,total] of variableByCategory)
-        additional+=Math.max(0,Math.round(total/observationDays)-(variableKnown.get(id)||0));
-      daily.push({date:day.date,entries,knownIncome,knownExpense,additional,inferredIncome:0,inferredExpense:0});
+      let cumulativeAdditional=0;
+      // Reconcile each exact horizon by category: max(ordinary average - known
+      // ordinary payments, 0). A payment beyond the horizon cannot cover it.
+      if(baselineAvailable&&day.date>today)for(const [id,total] of variableByCategory) {
+        expectedByCategory.set(id,(expectedByCategory.get(id)||0)+Math.round(total/observationDays));
+        coveredByCategory.set(id,(coveredByCategory.get(id)||0)+(variableKnown.get(id)||0));
+        cumulativeAdditional+=Math.max(0,expectedByCategory.get(id)-coveredByCategory.get(id));
+      }
+      // A negative daily delta replaces earlier estimated expense with a newly
+      // scheduled payment; each cumulative horizon's additional expense is >= 0.
+      const additional=cumulativeAdditional-priorAdditional;
+      priorAdditional=cumulativeAdditional;
+      daily.push({date:day.date,entries,knownIncome,knownExpense,additional,inferredIncome:0,inferredPrudentIncome:0,inferredExpense:0,incomeHypotheses:[]});
     }
     month=shiftPeriodKey(month,1);
   }
@@ -220,14 +262,21 @@ export function buildFinancialForecast(options={}) {
       const date=m+'-'+String(Math.min(pattern.day,new Date(Date.UTC(y,mo,0)).getUTCDate())).padStart(2,'0');
       if(date<=today||date>end)continue;
       const source=pattern.kind==='income'?inc:exp;
-      if(source.some(r=>dateOf(r).startsWith(m)&&fingerprint(r)===pattern.key))continue;
-      if(allEntries.some(e=>e.date.startsWith(m)&&e.kind===pattern.kind&&(pattern.kind==='expense'?String(e.metadata?.categoryId??'')===pattern.categoryId:normalize(e.title)===normalize(pattern.description))))continue;
+      if(source.some(r=>dateOf(r).startsWith(m)&&patternFingerprint(r,pattern.kind)===pattern.key))continue;
+      if(allEntries.some(e=>e.date.startsWith(m)&&e.kind===pattern.kind&&(pattern.kind==='expense'?String(e.metadata?.categoryId??'')===pattern.categoryId&&normalize(e.title).trim()===normalize(pattern.description).trim():incomeFingerprint({desc:e.title,type:e.metadata?.incomeType})===pattern.key)))continue;
       const day=daily.find(d=>d.date===date);
-      if(day)day[pattern.kind==='income'?'inferredIncome':'inferredExpense']+=pattern.amount;
+      if(day) {
+        day[pattern.kind==='income'?'inferredIncome':'inferredExpense']+=pattern.amount;
+        if(pattern.kind==='income') {
+          day.inferredPrudentIncome+=pattern.minimumAmount;
+          day.incomeHypotheses.push({date,description:pattern.description,incomeType:pattern.incomeType,
+            amount:pattern.amount/100,minimumAmount:pattern.minimumAmount/100,maximumAmount:pattern.maximumAmount/100});
+        }
+      }
     }
   }
   const completeKeys=[-3,-2,-1].map(n=>shiftPeriodKey(today.slice(0,7),n));
-  const completeVariable=completeKeys.map(k=>sum(expenseHistory.filter(r=>privateOrdinary(r)&&!patternKeys.has(fingerprint(r))&&!recurringCategories.has(catOf(r))&&dateOf(r).startsWith(k))));
+  const completeVariable=completeKeys.map(k=>sum(expenseHistory.filter(r=>variableExpense(r)&&dateOf(r).startsWith(k))));
   const fullHistory=earliest&&earliest<=completeKeys[0]+'-01';
   const variableMean=completeVariable.reduce((a,b)=>a+b,0)/3;
   const prudentFactor=fullHistory&&variableMean>0?Math.max(1,Math.max(...completeVariable)/variableMean):null;
@@ -240,11 +289,13 @@ export function buildFinancialForecast(options={}) {
     const income=rows.reduce((n,d)=>n+d.knownIncome,0),expense=rows.reduce((n,d)=>n+d.knownExpense,0);
     const additional=rows.reduce((n,d)=>n+d.additional,0),knownChange=income-expense;
     const inferredIncome=rows.reduce((n,d)=>n+d.inferredIncome,0),inferredExpense=rows.reduce((n,d)=>n+d.inferredExpense,0);
+    const inferredPrudentIncome=rows.reduce((n,d)=>n+d.inferredPrudentIncome,0);
     const estimatedChange=baselineAvailable?knownChange+inferredIncome-inferredExpense-additional:null;
-    const prudentChange=baselineAvailable&&prudentFactor!==null?knownChange-inferredExpense-Math.round(additional*prudentFactor):null;
+    const prudentChange=baselineAvailable&&prudentFactor!==null?knownChange+inferredPrudentIncome-inferredExpense-Math.round(additional*prudentFactor):null;
     return {days,date,status:hasData?'PARTIAL':'N_D',
       knownIncome:income/100,knownExpense:expense/100,knownChange:knownChange/100,
-      inferredIncome:inferredIncome/100,inferredExpense:inferredExpense/100,
+      inferredIncome:inferredIncome/100,inferredPrudentIncome:inferredPrudentIncome/100,inferredExpense:inferredExpense/100,
+      incomeHypotheses:rows.flatMap(d=>d.incomeHypotheses),
       estimatedChange:estimatedChange===null?null:estimatedChange/100,
       prudentChange:prudentChange===null?null:prudentChange/100,
       confidence:days===30&&patterns.length&&prudentFactor!==null?'OBSERVED_PATTERNS':'LIMITED',
@@ -256,17 +307,18 @@ export function buildFinancialForecast(options={}) {
     basis:'future_flow_change_no_verified_opening_balance',openingLedgerBalance:null,
     historicalLedgerNet:openingAvailable?opening/100:null,
     openingBalanceStatus:'N_D_NO_VERIFIED_CASH_BALANCE',
-    historicalPatterns:patterns.map(({key,amount,...p})=>({...p,amount:amount/100})),
+    historicalPatterns:patterns.map(({key,amount,minimumAmount,maximumAmount,...p})=>({...p,amount:amount/100,
+      ...(minimumAmount!==undefined?{minimumAmount:minimumAmount/100,maximumAmount:maximumAmount/100}:{})})),
     baseline:{start:baselineStart,end:shiftCivilDate(today,-1),observationDays,
       status:baselineAvailable?'PARTIAL':'N_D',dailyVariableExpense:baselineAvailable?Math.round(sum(variableHistory)/observationDays)/100:null,
       categories:baselineAvailable?[...variableByCategory].map(([categoryId,total])=>({categoryId,dailyCents:Math.round(total/observationDays)})):[]},
     invalidRows,horizons,
     assumptions:['Loaded data may be incomplete; no bank opening balance is known.',
       'Known transactions, forward calendar installments and open future recurrences reuse the financial calendar.',
-      'Variable expense estimate uses up to 90 observed days, needs at least 28 days and excludes Share, installments and recurring categories.',
-      'For each future day and category, known variable expense replaces the overlapping average; budgets are limits, not extra expenses.',
-      'History-based income and fixed costs are separate hypotheses from three complete months, never guaranteed or saved; no overdue hypothetical income.',
-      'Prudent change excludes history-inferred income and uses the highest observed complete-month variable spending ratio; no statistical probability is claimed.'],
+      'Variable expense estimate uses up to 90 observed days, needs at least 28 days and excludes Share, installments, marked exceptional costs and individually matched recurring payments.',
+      'For each horizon and category, known ordinary expense replaces the overlapping average; marked exceptional costs stay additional; budgets are limits, not extra expenses.',
+      'Income hypotheses require the same source and one payment in each of three complete months on similar dates; month labels are normalized, amounts use the median and observed range. Expense stability retains the amount test. Hypotheses are never saved; no overdue hypothetical income.',
+      'Prudent change uses the minimum observed amount for regular inferred income and the highest observed complete-month variable spending ratio; neither is a statistical confidence interval or a guarantee.'],
     daily};
 }
 export function buildFinancialInsights(options={}) {
@@ -341,7 +393,7 @@ export function buildFinancialInsights(options={}) {
       usedPercentage:limit>0?Math.round(spent/limit*10000)/100:null,
       status:riskStatus};
   });
-  result.forecast={...forecast,daily:undefined};
+  result.forecast=buildSavingsForecast(options);
   result.largestExpenses=range.status==='VALID'?exp.filter(row=>inRange(row,range.start,range.end)&&dateOf(row)<=today)
     .sort((a,b)=>money(b.amount)-money(a.amount)).slice(0,10).map(row=>({
       date:dateOf(row),amount:money(row.amount)/100,category:categoryLabel(catOf(row),categories,exp),

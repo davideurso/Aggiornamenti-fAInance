@@ -71,7 +71,7 @@ function movementRows(row, kind, source, idPrefix, until, sourceIndex = 0) {
   const idValue = String(row.id ?? row._id ?? `legacy-${sourceIndex}`);
   const identifier = `${idPrefix}:${idValue}:${date}:${sourceIndex}`;
   const title = String(row.desc || row.description || row.name || (kind === 'income' ? 'Entrata' : 'Uscita'));
-  const provenance = source === 'planned' || row.recurringOccurrenceId || row.recurringId || row.generatedFromRecurringId
+  const provenance = source === 'planned' || row.recurringOccurrenceId || row.recurringId || row.recurringRuleId || row.generatedFromRecurringId
     ? 'recurring'
     : (row._share || row.shareProjectId || row.shareActivityId || source === 'share')
       ? 'share' : kind === 'income' ? 'income' : 'expense';
@@ -88,6 +88,8 @@ function movementRows(row, kind, source, idPrefix, until, sourceIndex = 0) {
     note: String(row.note || row.notes || ''),
     currency: String(row.currency || ''),
     originalAmount: row.originalAmount ?? null,
+    ...(row.oneOff ? { oneOff: true } : {}),
+    ...(row.exceptional ? { exceptional: true } : {}),
   };
   const n = row.rateizzato ? Number(row.rate) : 1;
   const accountingInstallments = Number.isInteger(n) && n > 1 && n <= 240 ? n : 1;

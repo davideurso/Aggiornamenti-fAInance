@@ -1,5 +1,8 @@
 import { readableDarkText } from '../ui/textContrast';
 import { useState, useEffect, useRef } from "react";
+import { incomeReceiptText } from '../i18n/incomeReceiptTranslations';
+import { participantForUser } from '../finance/shareUserAmount.js';
+import { shareCashDirection, shareCashMovementKey } from '../finance/shareCashMovements.js';
 import { App as CapacitorApp } from "@capacitor/app";
 import { Capacitor } from "@capacitor/core";
 import { formatNumber,
@@ -484,6 +487,8 @@ export function SharePanel() {
     exchangeRate: 1,
   });
   var [shareDesc, setShareDesc] = useState("");
+  var [shareCashMethodDraft, setShareCashMethodDraft] = useState<string | null>(null);
+  var [settlementCashMethodDraft, setSettlementCashMethodDraft] = useState<string | null>(null);
   var [sharePaidBy, setSharePaidBy] = useState("me");
   var [shareDate, setShareDate] = useState(todayStr());
   var [splitMode, setSplitMode] = useState("equal");
@@ -658,6 +663,7 @@ export function SharePanel() {
       setProjectIconDraft(selected ? selected.icon || "🤝" : "🤝");
       setProjectColorDraft(selected ? selected.color || "#4F8FF7" : "#4F8FF7");
       setProjectEditingDetails(false);
+      setShareCashMethodDraft(null);
       setShareEditingActivityId(null);
       setShareCategoryId(
         selected && (selected.categories || []).find(function (category) {
@@ -677,9 +683,11 @@ export function SharePanel() {
     function () {
       if (selected) return;
       setShareExpenseFormOpen(false);
+      setShareCashMethodDraft(null);
       setShareEditingActivityId(null);
       setSettlementPopupOpen(false);
       setEditingSettlementActivityId(null);
+    setSettlementCashMethodDraft(null);
       setShareProjectArchiveConfirmOpen(false);
       setProjectEditingDetails(false);
       setChooseProjectOpen(false);
@@ -743,6 +751,7 @@ export function SharePanel() {
     setShareDate(todayStr());
     setSplitDraft({});
     setShareSplitTouched(false);
+    setShareCashMethodDraft(null);
     setShareEditingActivityId(null);
     setShareExpenseFormOpen(false);
     setShareReceiptOpen(false);
@@ -763,6 +772,7 @@ export function SharePanel() {
       localStorage.removeItem("fainance_share_open_expense_mode");
     } catch (e) {}
     setShareExpenseFormOpen(false);
+    setShareCashMethodDraft(null);
     setShareEditingActivityId(null);
     setShareReceiptOpen(false);
     setShareReceiptReady(false);
@@ -793,11 +803,9 @@ export function SharePanel() {
         ids.find(function (id) {
           return id !== currentId;
         }) || "";
+      openNewSettlementPopup();
       setSettlementFrom(fromId);
       setSettlementTo(ids.includes(currentId) ? currentId : ids[0] || "");
-      setSettlementAmount("");
-      setSettlementDate(todayStr());
-      openNewSettlementPopup();
       return;
     }
     resetShareExpenseForm();
@@ -1513,12 +1521,14 @@ export function SharePanel() {
       setShareProjectTab("attivita");
       if (String(pending.context || "expense") === "settlement") {
         setShareExpenseFormOpen(false);
+        setShareCashMethodDraft(null);
         setShareEditingActivityId(null);
         setSettlementFrom(String(pending.settlementFrom || currentShareMemberId || "me"));
         setSettlementTo(String(pending.settlementTo || ""));
         setSettlementAmount(String(pending.settlementAmount || ""));
         setSettlementDate(String(pending.settlementDate || todayStr()));
         setSettlementComment(String(pending.settlementComment || ""));
+        setSettlementCashMethodDraft(pending.settlementCashMethodDraft ?? null);
         setEditingSettlementActivityId(pending.editingSettlementActivityId || null);
         setSettlementPopupOpen(true);
         return;
@@ -1529,6 +1539,7 @@ export function SharePanel() {
       setShareDesc(String(pending.desc || ""));
       setShareDate(String(pending.date || todayStr()));
       setSharePaidBy(String(pending.paidBy || currentShareMemberId || "me"));
+      setShareCashMethodDraft(pending.shareCashMethodDraft ?? null);
       setShareParticipantIds(
         Array.isArray(pending.participantIds)
           ? pending.participantIds
@@ -1621,6 +1632,8 @@ export function SharePanel() {
       settlementAmount: String(settlementAmount || ""),
       settlementDate: String(settlementDate || todayStr()),
       settlementComment: String(settlementComment || ""),
+      shareCashMethodDraft,
+      settlementCashMethodDraft,
       editingSettlementActivityId: editingSettlementActivityId || null,
     };
     try {
@@ -2930,6 +2943,7 @@ export function SharePanel() {
     setSettlementDate(todayStr());
     setSettlementComment("");
     setEditingSettlementActivityId(null);
+    setSettlementCashMethodDraft(null);
     setSharePendingReceipt(null);
   }
   function openNewSettlementPopup() {
@@ -2956,9 +2970,49 @@ export function SharePanel() {
     setToast(L(mode === "restore" ? "Progetto ripristinato" : "Progetto archiviato"));
   }
 
+  var cashParticipant = participantForUser(selected, userId);
+  var cashParticipantId = cashParticipant ? String(cashParticipant.id) : "";
+  var expenseCashDirection = shareCashDirection({ kind: "expense", paidBy: sharePaidBy }, cashParticipantId);
+  var settlementCashDirection = shareCashDirection({ kind: "settlement", from: settlementFrom, to: settlementTo }, cashParticipantId);
+  var cashMethods = (_c.methods || []).filter(m => !m.deleted && !m.deletedAt && m.status !== "deleted");
+  var hasCashMethods = cashMethods.some(m => !m.archived && m.status !== "archived");
+  function savedCashMethod(activityId, direction) {
+    if (!activityId || !selected || !direction) return "";
+    var link = _c.shareCashAssignments?.[shareCashMovementKey(selected.id, activityId)];
+    return link?.direction === direction ? String(link.methodId || "") : "";
+  }
+  var defaultShareMethod = cashMethods.find(m => String(m.id) === String(_c.shareDefaultMethodId || _c.defaultExpenseMethod || "") && !m.archived && m.status !== "archived");
+  var shareCashMethod = shareCashMethodDraft ?? (shareEditingActivityId != null
+    ? savedCashMethod(shareEditingActivityId, expenseCashDirection)
+    : String(defaultShareMethod?.id ?? ""));
+  var settlementCashMethod = settlementCashMethodDraft ?? savedCashMethod(editingSettlementActivityId, settlementCashDirection);
+  function cashMethodValid(direction, value) {
+    return !direction || (!value && !hasCashMethods) || cashMethods.some(m => String(m.id) === value);
+  }
+  function renderCashMethod(direction, value, onChange) {
+    if (!direction || !cashMethods.length) return null;
+    var label = direction === "income" ? incomeReceiptText(lang, "label") : L("Metodo di pagamento");
+    return (
+      <label style={{ display: "grid", gap: 5, margin: 0, minWidth: 0, fontSize: 11, fontWeight: 800, color: subC }}>
+        {label}
+        <select aria-label={label} value={value} onChange={e => onChange(e.target.value)}
+          style={{ ...sinp, background: "#FFFFFF", color: "#000000" }}>
+          <option value="" disabled={hasCashMethods}>{L("Seleziona...")}</option>
+          {cashMethods.filter(m => (!m.archived && m.status !== "archived") || String(m.id) === value).map(m =>
+            <option key={m.id} value={String(m.id)} data-fainance-icon-ref={m.icon}>{m.name}</option>
+          )}
+        </select>
+      </label>
+    );
+  }
+  function cashMethodWrite(activityId, direction, methodId) {
+    return direction && methodId ? { activityId: String(activityId), methodId, direction } : undefined;
+  }
+  var expenseCashMethodValid = cashMethodValid(expenseCashDirection, shareCashMethod);
   var settlementFormValid =
     !!selected &&
-    parseFloat(settlementAmount) > 0 &&
+    shareNum(settlementAmount) > 0 &&
+    cashMethodValid(settlementCashDirection, settlementCashMethod) &&
     !!String(settlementDate || "").trim() &&
     !!String(settlementFrom || "").trim() &&
     !!String(settlementTo || "").trim() &&
@@ -3023,7 +3077,16 @@ export function SharePanel() {
     return false;
   }
 
+  const shareMutationInFlight = useRef(false);
+  async function persistShareActivityEdit(write) {
+    if (shareMutationInFlight.current) return false;
+    shareMutationInFlight.current = true;
+    try { await write(); return true; }
+    catch { setToast({ text: L("Errore sincronizzazione Share: verifica la connessione e riapri il progetto."), type: "error" }); return false; }
+    finally { shareMutationInFlight.current = false; }
+  }
   function addSharedActivity() {
+    if (!cashMethodValid(expenseCashDirection, shareCashMethod)) return;
     try {
       localStorage.removeItem("fainance_share_receipt_draft_v2");
       localStorage.removeItem("fainance_share_receipt_flow_v2");
@@ -3090,13 +3153,12 @@ export function SharePanel() {
         ? sharePendingReceipt.id
         : previous.receiptId || "",
       createdAt: shareEditingActivityId
-        ? previous.createdAt || new Date().toISOString()
+        ? previous.createdAt || ""
         : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    function saveShareActivity() {
-      if (!shareEditingActivityId) consumePlanFeature("shareDailyExpenses", 1);
-      updateShareProject(selected.id, function (p) {
+    async function saveShareActivity() {
+      const write = () => updateShareProject(selected.id, function (p) {
         if (shareEditingActivityId) {
           return {
             ...p,
@@ -3108,7 +3170,9 @@ export function SharePanel() {
           };
         }
         return { ...p, activities: [activity].concat(p.activities || []) };
-      });
+      }, cashMethodWrite(activityId, expenseCashDirection, shareCashMethod), String(activityId), !shareEditingActivityId);
+      if (!await persistShareActivityEdit(write)) return;
+      if (!shareEditingActivityId) consumePlanFeature("shareDailyExpenses", 1);
       if (sharePendingReceipt) {
         var stored = {
           ...sharePendingReceipt,
@@ -3137,6 +3201,7 @@ export function SharePanel() {
       resetShareExpenseForm();
       setShareProjectTab("attivita");
       setShareExpenseFormOpen(false);
+      setShareCashMethodDraft(null);
       setShareEditingActivityId(null);
       setToast(
         shareEditingActivityId
@@ -3175,6 +3240,7 @@ export function SharePanel() {
   function startEditSharedActivity(a) {
     if (!a || a.kind === "settlement") return;
     var amt = shareRound(Number(a.originalAmount || a.amount || 0));
+    setShareCashMethodDraft(null);
     setShareEditingActivityId(a.id);
     setShareAmount(String(amt || ""));
     setShareFx({
@@ -3220,6 +3286,7 @@ export function SharePanel() {
   }
   function startEditSettlement(a) {
     if (!a || a.kind !== "settlement") return;
+    setSettlementCashMethodDraft(null);
     setEditingSettlementActivityId(a.id);
     setSettlementFrom(String(a.from || currentShareMemberId || "me"));
     setSettlementTo(String(a.to || ""));
@@ -3229,7 +3296,7 @@ export function SharePanel() {
     setSharePendingReceipt(activeShareReceiptForActivity(a.id) || null);
     setSettlementPopupOpen(true);
   }
-  function addSettlement() {
+  async function addSettlement() {
     if (!settlementFormValid) return;
     var toId = settlementTo;
     if (String(settlementFrom) === String(toId)) {
@@ -3252,7 +3319,8 @@ export function SharePanel() {
     var activity = {
       id: activityId,
       kind: "settlement",
-      amount: parseFloat(settlementAmount),
+      amount: shareNum(settlementAmount),
+      baseCurrency: String(_c.currency || "EUR"),
       from: settlementFrom,
       to: toId,
       date: settlementDate,
@@ -3265,11 +3333,11 @@ export function SharePanel() {
         ? sharePendingReceipt.id
         : previousSettlement && previousSettlement.receiptId || "",
       createdAt: editingSettlementActivityId
-        ? (previousSettlement && previousSettlement.createdAt) || new Date().toISOString()
+        ? (previousSettlement && previousSettlement.createdAt) || ""
         : new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    updateShareProject(selected.id, function (p) {
+    const write = () => updateShareProject(selected.id, function (p) {
       if (editingSettlementActivityId) {
         return {
           ...p,
@@ -3279,7 +3347,8 @@ export function SharePanel() {
         };
       }
       return { ...p, activities: [activity].concat(p.activities || []) };
-    });
+    }, cashMethodWrite(activityId, settlementCashDirection, settlementCashMethod), String(activityId), !editingSettlementActivityId);
+    if (!await persistShareActivityEdit(write)) return;
     if (sharePendingReceipt) {
       var stored = {
         ...sharePendingReceipt,
@@ -3310,18 +3379,19 @@ export function SharePanel() {
     setSettlementPopupOpen(false);
     setShareProjectTab("attivita");
     setShareExpenseFormOpen(false);
+    setShareCashMethodDraft(null);
     setShareEditingActivityId(null);
     setToast(L(wasEditingSettlement ? "Saldo aggiornato" : "Saldo registrato"));
   }
 
-  function deleteActivity(aid) {
+  async function deleteActivity(aid) {
     if (!selected) return;
     var targetActivity = ((selected && selected.activities) || []).find(function (a) {
       return String(a && a.id) === String(aid);
     });
     var isSettlement = !!(targetActivity && targetActivity.kind === "settlement");
     if (!window.confirm(L(isSettlement ? "Eliminare questa operazione di saldo?" : "Eliminare questa spesa Share?"))) return;
-    updateShareProject(selected.id, function (p) {
+    if (!await persistShareActivityEdit(() => updateShareProject(selected.id, function (p) {
       var deletedActivityIds = Array.isArray(p.deletedActivityIds)
         ? p.deletedActivityIds.map(String)
         : [];
@@ -3334,7 +3404,7 @@ export function SharePanel() {
           return String(a && a.id) !== deletedId;
         }),
       };
-    });
+    }, undefined, String(aid)))) return;
     setShareReceiptUploads(function (list) {
       return (list || []).filter(function (r) {
         return String(r.activityId || "") !== String(aid);
@@ -5014,6 +5084,7 @@ export function SharePanel() {
                     notifyArchivedShareProject();
                     return;
                   }
+                  setShareCashMethodDraft(null);
                   setShareEditingActivityId(null);
                   openShareExpensePopup("simple");
                 }}
@@ -5404,47 +5475,8 @@ export function SharePanel() {
                             marginBottom: 10,
                           }}
                         >
-                          <label
-                            style={{
-                              fontSize: 11,
-                              fontWeight: 800,
-                              color: subC,
-                              display: "block",
-                              marginBottom: 6,
-                            }}
-                          >
-                            {L("Descrizione")}
-                          </label>
-                          <textarea
-                            placeholder={L("Descrizione")}
-                            value={shareDesc}
-                            onChange={function (e) {
-                              setShareDesc(e.target.value);
-                            }}
-                            style={{
-                              ...sinp,
-                              minHeight: 40,
-                              height: 40,
-                              resize: "none",
-                              padding: "11px 12px",
-                              lineHeight: 1.25,
-                              fontFamily: "inherit",
-                            }}
-                          />
-                        </div>
-                        <div
-                          style={{
-                            background: dark ? "#1f1f31" : "#fff",
-                            border:
-                              "1px solid " + (dark ? "#3d3d50" : "#ECE9F6"),
-                            borderRadius: 16,
-                            padding: 10,
-                            boxShadow: dark
-                              ? "none"
-                              : "0 4px 12px rgba(83,74,183,0.05)",
-                            marginBottom: 10,
-                          }}
-                        >
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8,alignItems:"start"}}>
+                            <div style={{minWidth:0}}>
                           <label
                             style={{
                               fontSize: 11,
@@ -5472,6 +5504,9 @@ export function SharePanel() {
                               );
                             })}
                           </select>
+                            </div>
+                            {renderCashMethod(expenseCashDirection, shareCashMethod, setShareCashMethodDraft)}
+                          </div>
                           {!projectShareCategories.length && (
                             <div style={{ fontSize: 11, color: subC, marginTop: 6 }}>
                               {canManageShareCategories
@@ -5479,6 +5514,47 @@ export function SharePanel() {
                                 : L("Il proprietario del progetto non ha ancora creato categorie.")}
                             </div>
                           )}
+                        </div>
+                        <div
+                          style={{
+                            background: dark ? "#1f1f31" : "#fff",
+                            border:
+                              "1px solid " + (dark ? "#3d3d50" : "#ECE9F6"),
+                            borderRadius: 16,
+                            padding: 10,
+                            boxShadow: dark
+                              ? "none"
+                              : "0 4px 12px rgba(83,74,183,0.05)",
+                            marginBottom: 10,
+                          }}
+                        >
+                          <label
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 800,
+                              color: subC,
+                              display: "block",
+                              marginBottom: 6,
+                            }}
+                          >
+                            {L("Descrizione")}
+                          </label>
+                          <textarea
+                            placeholder={L("Descrizione")}
+                            value={shareDesc}
+                            onChange={function (e) {
+                              setShareDesc(e.target.value);
+                            }}
+                            style={{
+                              ...sinp,
+                              minHeight: 40,
+                              height: 40,
+                              resize: "none",
+                              padding: "11px 12px",
+                              lineHeight: 1.25,
+                              fontFamily: "inherit",
+                            }}
+                          />
                         </div>
                         <div
                           style={{
@@ -5690,6 +5766,7 @@ export function SharePanel() {
                           <select
                             value={sharePaidBy}
                             onChange={function (e) {
+                              setShareCashMethodDraft(null);
                               setSharePaidBy(e.target.value);
                             }}
                             style={sinp}
@@ -5993,7 +6070,7 @@ export function SharePanel() {
                             <Btn onClick={function () { requestShareReceiptUpload("expense"); }} bg={secondaryButtonColor} disabled={!shareReceiptAllowed()} style={{ padding: "11px 12px", fontWeight: 900, opacity: shareReceiptAllowed() ? 1 : .65 }}>
                               🧾 {L(sharePendingReceipt ? "Ricevuta caricata" : "Carica ricevuta")}
                             </Btn>
-                            <Btn onClick={addSharedActivity} bg={shareExpenseFormValid ? confirmButtonColor : "#A8A8A8"} disabled={!shareExpenseFormValid} style={{ padding: "11px 12px", fontWeight: 900 }}>
+                            <Btn onClick={addSharedActivity} bg={shareExpenseFormValid && expenseCashMethodValid ? confirmButtonColor : "#A8A8A8"} disabled={!shareExpenseFormValid || !expenseCashMethodValid} style={{ padding: "11px 12px", fontWeight: 900 }}>
                               {L(shareEditingActivityId ? "Aggiorna spesa" : "Salva spesa")}
                             </Btn>
                           </div>
@@ -6197,6 +6274,7 @@ export function SharePanel() {
                           <select
                             value={sharePaidBy}
                             onChange={function (e) {
+                              setShareCashMethodDraft(null);
                               setSharePaidBy(e.target.value);
                             }}
                             style={sinp}
@@ -6209,6 +6287,7 @@ export function SharePanel() {
                               );
                             })}
                           </select>
+                          {renderCashMethod(expenseCashDirection, shareCashMethod, setShareCashMethodDraft)}
                           <div style={{ fontSize: 11, color: subC }}>
                             {L(
                               "La modifica viene salvata direttamente su questa transazione."
@@ -6230,9 +6309,9 @@ export function SharePanel() {
                             </Btn>
                             <Btn
                               onClick={addSharedActivity}
-                              disabled={!shareExpenseFormValid}
+                              disabled={!shareExpenseFormValid || !expenseCashMethodValid}
                               bg={
-                                shareExpenseFormValid
+                                shareExpenseFormValid && expenseCashMethodValid
                                   ? confirmButtonColor
                                   : "#A8A8A8"
                               }
@@ -6310,6 +6389,11 @@ export function SharePanel() {
                                           return <span key={pid}>{pp ? personLabel(pp) : L("Partecipante")} {smallDecimalNode(fmt((a && a.shares && a.shares[pid]) || 0), lang)}{index < ids.length - 1 ? " · " : ""}</span>;
                                         }) : "—"}
                                     </div>
+                                    {String(a.paidBy) === cashParticipantId && (() => {
+                                      const id = savedCashMethod(a.id, "expense");
+                                      const method = (_c.methods || []).find(m => String(m.id) === id);
+                                      return method && <div style={{fontSize:11,color:subC}}>{L("Metodo di pagamento")} · {L(method.name)}</div>;
+                                    })()}
                                   </>
                                 )}
                               </div>
@@ -7613,6 +7697,7 @@ export function SharePanel() {
                     </label>
                   </div>
                 </div>
+                {renderCashMethod(settlementCashDirection, settlementCashMethod, setSettlementCashMethodDraft)}
                 <div style={{ marginBottom: 14 }}>
                   <label
                     style={{

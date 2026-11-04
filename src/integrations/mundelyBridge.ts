@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, runTransaction, setDoc, type DocumentReference } from "firebase/firestore";
 import { appEnvironment, firebaseConfig, functionsRegion } from "../config/env";
 import { fbAuth, fbDb } from "../firebase/client";
 
@@ -439,7 +439,8 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
   if (!projectId || !clean(sync.expenseId) || !activityKey) throw new Error("MUNDELY_EXPENSE_PAYLOAD_INVALID");
 
   const projectRef = doc(fbDb, "shareProjects", projectId);
-  const snapshot = await getDoc(projectRef);
+  await runTransaction(fbDb, async transaction => {
+  const snapshot = await transaction.get(projectRef);
   if (!snapshot.exists()) throw new Error("MUNDELY_SHARE_PROJECT_NOT_READY");
   const project = snapshot.data() as Record<string, unknown>;
   if (clean(project.ownerUid) !== user.uid && !((project.memberUids as unknown[]) || []).map(String).includes(user.uid)) {
@@ -452,8 +453,27 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
   const deletedActivityIds = new Set(
     (Array.isArray(project.deletedActivityIds) ? project.deletedActivityIds : []).map(shareActivityKey).filter(Boolean)
   );
+  if (!sync.deleted && (deletedActivityIds.has(activityKey) || deletedActivityIds.has(shareActivityKey(existing?.id)))) return;
+  if (!sync.deleted && clean(sync.origin) === "fainance" && sync.syncMode !== "update") {
+    // This is an acknowledgement of an outgoing Share movement. The echo can
+    // be older than a subsequent edit or deletion on the source device.
+    if (!existing) return;
+    const link = {
+      mundelyTripId: clean(sync.tripId),
+      mundelyExpenseId: clean(sync.expenseId),
+      bridgeOrigin: "fainance",
+      sourceShareActivityKey: activityKey,
+    };
+    if (Object.entries(link).every(([key, value]) => existing[key] === value)) return;
+    transaction.update(projectRef, {
+      activities: activities.map(row => row === existing ? { ...row, ...link } : row),
+      updatedAt: new Date().toISOString(),
+      updatedAtMs: Date.now(),
+      shareRevision: Date.now(),
+    });
+    return;
+  }
   if (sync.deleted) deletedActivityIds.add(activityKey);
-  else deletedActivityIds.delete(activityKey);
   const categories = Array.isArray(project.categories) ? [...project.categories] as Array<Record<string, unknown>> : [];
   let nextCategories = categories;
 
@@ -536,14 +556,24 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
     });
   }
 
-  await setDoc(projectRef, {
+  transaction.update(projectRef, {
     activities: filtered,
     categories: nextCategories,
     deletedActivityIds: [...deletedActivityIds],
     updatedAt: new Date().toISOString(),
     updatedAtMs: Date.now(),
     shareRevision: Date.now(),
-  }, { merge: true });
+  });
+  });
+}
+
+async function updateBridgeProjectIfUnchanged(projectRef: DocumentReference, observed: Record<string, unknown>, patch: Record<string, unknown>) {
+  await runTransaction(fbDb, async transaction => {
+    const current = (await transaction.get(projectRef)).data();
+    if (!current || ["updatedAtMs", "shareRevision", "activities", "deletedActivityIds", "categories"]
+      .some(key => JSON.stringify(current[key]) !== JSON.stringify(observed[key]))) return;
+    transaction.update(projectRef, patch);
+  });
 }
 
 export async function syncMundelyExpensesToShare(items: MundelyExpenseSync[]): Promise<void> {
@@ -625,14 +655,14 @@ export async function syncMundelyCategoryCatalogToShare(items: MundelyLinkedTrip
     const activitiesChanged = nextActivities.length !== rawActivities.length;
     const categoriesChanged = existingSig !== nextSig;
     if (categoriesChanged || activitiesChanged || removedKeys.size > 0) {
-      await setDoc(projectRef, {
+      await updateBridgeProjectIfUnchanged(projectRef, project, {
         categories: nextCategories,
         activities: nextActivities,
         deletedActivityIds: [...deletedIds],
         updatedAt: nowIso,
         updatedAtMs: Date.now(),
         shareRevision: Date.now()
-      }, { merge: true });
+      });
     }
   }
 }
@@ -660,13 +690,13 @@ export async function reconcileFainanceShareExpensesToMundely(items: MundelyLink
     const normalizedActivities = normalizeShareActivities(rawActivities);
     const activities = normalizedActivities.filter((item) => !deletedActivityKeys.has(shareActivityKey(item?.id)));
     if (activities.length !== rawActivities.length) {
-      await setDoc(projectRef, {
+      await updateBridgeProjectIfUnchanged(projectRef, project, {
         activities,
         deletedActivityIds: [...deletedActivityKeys],
         updatedAt: new Date().toISOString(),
         updatedAtMs: Date.now(),
         shareRevision: Date.now()
-      }, { merge: true });
+      });
     }
 
     const categories = Array.isArray(project.categories) ? project.categories as Array<Record<string, unknown>> : [];
@@ -706,15 +736,19 @@ export async function reconcileFainanceShareExpensesToMundely(items: MundelyLink
     const removeKeys = new Set((Array.isArray(result.removeShareActivityKeys) ? result.removeShareActivityKeys : []).map(clean).filter(Boolean));
     if (removeKeys.size) {
       const cleaned = activities.filter((item) => !removeKeys.has(shareActivityKey(item?.id)));
-      for (const key of removeKeys) deletedActivityKeys.add(key);
-      if (cleaned.length !== activities.length || removeKeys.size) {
-        await setDoc(projectRef, {
+      let newDeletion = false;
+      for (const key of removeKeys) {
+        if (!deletedActivityKeys.has(key)) newDeletion = true;
+        deletedActivityKeys.add(key);
+      }
+      if (cleaned.length !== activities.length || newDeletion) {
+        await updateBridgeProjectIfUnchanged(projectRef, project, {
           activities: cleaned,
           deletedActivityIds: [...deletedActivityKeys],
           updatedAt: new Date().toISOString(),
           updatedAtMs: Date.now(),
           shareRevision: Date.now()
-        }, { merge: true });
+        });
       }
     }
   }
