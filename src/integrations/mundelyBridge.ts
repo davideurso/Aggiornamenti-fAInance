@@ -48,6 +48,7 @@ export interface MundelyExpenseSync {
   origin?: string;
   bridgeOrigin?: string;
   sourceShareActivityId?: number;
+  sourceUpdatedAt?: string;
   date: string;
   time: string;
   deleted: boolean;
@@ -431,7 +432,7 @@ function rebalanceShareAmounts(rawShares: unknown, nextBaseAmount: number): Reco
   return result;
 }
 
-async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<void> {
+async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<"applied" | "deferred"> {
   const user = fbAuth.currentUser;
   if (!user) throw new Error("FAINANCE_AUTH_REQUIRED");
   const projectId = clean(sync.targetShareProjectId);
@@ -448,6 +449,16 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
 
   const activities = normalizeShareActivities(Array.isArray(project.activities) ? project.activities as unknown[] : []);
   const existing = activities.find((item) => shareActivityKey(item?.id) === activityKey || clean(item?.mundelyExpenseId) === clean(sync.expenseId));
+  const shareEditedAtMs = Date.parse(clean(existing?.mundelyShareEditedAt));
+  const sourceUpdatedAtMs = Date.parse(clean(sync.sourceUpdatedAt));
+  if (
+    existing
+    && Number.isFinite(shareEditedAtMs)
+    && shareEditedAtMs > 0
+    && (!Number.isFinite(sourceUpdatedAtMs) || sourceUpdatedAtMs <= shareEditedAtMs)
+  ) {
+    return "deferred";
+  }
   const filtered = activities.filter((item) => shareActivityKey(item?.id) !== activityKey && clean(item?.mundelyExpenseId) !== clean(sync.expenseId));
   const deletedActivityIds = new Set(
     (Array.isArray(project.deletedActivityIds) ? project.deletedActivityIds : []).map(shareActivityKey).filter(Boolean)
@@ -533,6 +544,8 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
       bridgeOrigin: clean(sync.origin) === "fainance" ? "fainance" : clean(sync.bridgeOrigin),
       sourceShareActivityKey: activityKey,
       sourceShareActivityId: /^\d+$/.test(activityKey) ? Number(activityKey) : undefined,
+      mundelySourceUpdatedAt: clean(sync.sourceUpdatedAt),
+      mundelyShareEditedAt: null,
     });
   }
 
@@ -544,14 +557,15 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
     updatedAtMs: Date.now(),
     shareRevision: Date.now(),
   }, { merge: true });
+  return "applied";
 }
 
 export async function syncMundelyExpensesToShare(items: MundelyExpenseSync[]): Promise<void> {
   if (!bridgeAvailable() || !fbAuth.currentUser || !Array.isArray(items) || items.length === 0) return;
   for (const sync of items) {
     try {
-      await upsertShareExpenseFromMundely(sync);
-      await acknowledgeMundelyExpense(sync.id, "completed");
+      const outcome = await upsertShareExpenseFromMundely(sync);
+      if (outcome === "applied") await acknowledgeMundelyExpense(sync.id, "completed");
     } catch (error) {
       const code = clean((error as { code?: string; message?: string })?.code || (error as Error)?.message || "MUNDELY_EXPENSE_SYNC_FAILED").slice(0, 120);
       await acknowledgeMundelyExpense(sync.id, "error", code).catch(() => undefined);
@@ -690,6 +704,7 @@ export async function reconcileFainanceShareExpensesToMundely(items: MundelyLink
           currency: clean(item?.currency || item?.originalCurrency || item?.mundelyCurrency || "EUR"),
           date: clean(item?.date),
           time: clean(item?.time),
+          updatedAt: clean(item?.mundelyShareEditedAt || item?.updatedAt),
         };
       })
       .filter((item) => item.activityKey && item.amount > 0);

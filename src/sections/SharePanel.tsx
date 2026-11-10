@@ -3065,7 +3065,9 @@ export function SharePanel() {
         }) || {}
       : {};
     var activityId = shareEditingActivityId || Date.now();
+    var activityUpdatedAt = new Date().toISOString();
     var activity = {
+      ...previous,
       id: activityId,
       kind: "expense",
       amount: shareAccountingAmount(),
@@ -3092,7 +3094,11 @@ export function SharePanel() {
       createdAt: shareEditingActivityId
         ? previous.createdAt || new Date().toISOString()
         : new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      updatedAt: activityUpdatedAt,
+      mundelyShareEditedAt:
+        shareEditingActivityId && (previous.mundelyExpenseId || previous.sourceApp === "mundely")
+          ? activityUpdatedAt
+          : previous.mundelyShareEditedAt || null,
     };
     function saveShareActivity() {
       if (!shareEditingActivityId) consumePlanFeature("shareDailyExpenses", 1);
