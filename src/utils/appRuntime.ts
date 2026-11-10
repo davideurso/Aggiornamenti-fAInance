@@ -1,9 +1,15 @@
 export function focusFainanceInput(ref:any, delay?:number){
   try{
+    var scheduledFrom=document.activeElement;
     setTimeout(function(){
       try{
         var el=ref&&ref.current?ref.current:null;
-        if(!el||!el.focus)return;
+        if(!el||!el.focus||!el.isConnected)return;
+                  if(document.activeElement&&document.activeElement.tagName==="SELECT")return;
+          // A delayed opening focus must not steal a later tap or a nested picker.
+          if(document.activeElement!==scheduledFrom&&document.activeElement!==el)return;
+          var dialog=document.querySelector&&document.querySelector('[role="dialog"][aria-modal="true"]');
+          if(dialog&&!dialog.contains(el))return;
         el.focus({preventScroll:true});
         if(el.select)el.select();
       }catch(e){}

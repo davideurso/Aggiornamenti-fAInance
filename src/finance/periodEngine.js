@@ -1,6 +1,18 @@
 // Civil dates, not elapsed milliseconds: period boundaries do not move with DST.
 export const CALENDAR_PERIOD = Object.freeze({ mode: 'calendar', startDay: 1 });
 
+// Monthly summaries visit the same dates/periods repeatedly. Retain only small,
+// bounded derived values, never movements or account data. Public period objects
+// are copied on return so a consumer cannot mutate the cached calculation.
+const civilCache = new Map();
+const keyPartsCache = new Map();
+const periodCache = new Map();
+function remember(cache, cacheKey, value, limit) {
+  if (cache.size >= limit) cache.delete(cache.keys().next().value);
+  cache.set(cacheKey, value);
+  return value;
+}
+
 export function validatePeriodSettings(settings = CALENDAR_PERIOD) {
   if (!settings || !['calendar', 'financial'].includes(settings.mode)) throw new Error('INVALID_PERIOD_MODE');
   const day = settings.startDay;
@@ -13,11 +25,14 @@ function civil(value) {
     if (!Number.isFinite(value.getTime())) throw new Error('INVALID_PERIOD_DATE');
     return [value.getFullYear(), value.getMonth() + 1, value.getDate()];
   }
+  const cacheable = typeof value === 'string' && value.length <= 64;
+  if (cacheable && civilCache.has(value)) return civilCache.get(value);
   const match = /^(\d{4})-(\d{2})-(\d{2})(?:$|T)/.exec(String(value));
   if (!match) throw new Error('INVALID_PERIOD_DATE');
   const [year, month, day] = match.slice(1).map(Number);
   if (year < 1 || month < 1 || month > 12 || day < 1 || day > daysInMonth(year, month)) throw new Error('INVALID_PERIOD_DATE');
-  return [year, month, day];
+  const result = [year, month, day];
+  return cacheable ? remember(civilCache, value, result, 1024) : result;
 }
 
 function daysInMonth(year, month) {
@@ -25,9 +40,11 @@ function daysInMonth(year, month) {
 }
 function key(year, month) { return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`; }
 function keyParts(value) {
+  if (typeof value === 'string' && keyPartsCache.has(value)) return keyPartsCache.get(value);
   const match = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(String(value));
   if (!match || Number(match[1]) < 1) throw new Error('INVALID_PERIOD_KEY');
-  return [Number(match[1]), Number(match[2])];
+  const result = [Number(match[1]), Number(match[2])];
+  return typeof value === 'string' ? remember(keyPartsCache, value, result, 128) : result;
 }
 export function shiftPeriodKey(value, offset) {
   const [year, month] = keyParts(value);
@@ -51,13 +68,17 @@ function previousDay(value) {
 
 export function periodForKey(periodKey, settings = CALENDAR_PERIOD) {
   const config = validatePeriodSettings(settings);
+  const cacheKey = typeof periodKey === 'string' ? `${config.mode}:${config.startDay}:${periodKey}` : null;
+  if (cacheKey !== null && periodCache.has(cacheKey)) return { ...periodCache.get(cacheKey) };
   keyParts(periodKey);
   // The agreed second-half naming rule is based on the chosen day, not its February clamp.
   const namingOffset = config.startDay > 15 ? 1 : 0;
   const startMonth = shiftPeriodKey(periodKey, -namingOffset);
   const start = boundary(startMonth, config.startDay);
   const endExclusive = boundary(shiftPeriodKey(startMonth, 1), config.startDay);
-  return { key: periodKey, start, end: previousDay(endExclusive), endExclusive };
+  const result = { key: periodKey, start, end: previousDay(endExclusive), endExclusive };
+  if (cacheKey !== null) remember(periodCache, cacheKey, result, 128);
+  return { ...result };
 }
 
 export function periodForDate(value = new Date(), settings = CALENDAR_PERIOD) {

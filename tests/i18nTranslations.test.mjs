@@ -1,20 +1,16 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import vm from "node:vm";
+import { loadTypeScript } from './loadTypeScript.mjs';
 
-const source = fs.readFileSync("src/traduzioni.tsx", "utf8").replace(/^export\s+/gm, "");
-const context = {
-  console,
-  TRANSLATIONS: undefined,
-  FAINANCE_I18N_PHRASES: undefined,
-  translateFainanceText: undefined
-};
-vm.createContext(context);
-vm.runInContext(`${source}
-this.TRANSLATIONS = TRANSLATIONS;
-this.translateFainanceText = translateFainanceText;`, context);
-
-const { translateFainanceText } = context;
+const { translateFainanceText } = loadTypeScript('src/traduzioni.tsx');
+for (const [file, name] of [['periodTranslations','periodTranslationRows'],['budgetTranslations','budgetTranslationRows'],['financeMessages','financeMessageRows']]) {
+  const rows=loadTypeScript(`src/i18n/${file}.ts`)[name];
+  assert.equal(Object.keys(rows).length,10);
+  for (const [language,values] of Object.entries(rows)) {
+    assert.equal(values.length,rows.it.length,language);
+    assert(values.every(value=>typeof value==='string'&&value.trim()),language);
+  }
+}
 
 const cases = [
   ["Uscite", "es", "Gastos"],

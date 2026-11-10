@@ -8587,7 +8587,7 @@ function fainancePostProcessTranslation(value, lang){
   add(['+ Spesa','+ Expense','+ Gasto','+ Dépense','+ Ausgabe','+ Despesa','+ Wydatek','+ Uitgave','+ Cheltuială'],{it:'+ Spesa',en:'+ Expense',es:'+ Gasto',fr:'+ Dépense',de:'+ Ausgabe',pt:'+ Despesa',pl:'+ Wydatek',nl:'+ Uitgave',ro:'+ Cheltuială',el:'+ Έξοδο'});
   add(['Primo progetto disponibile','Primo project available','Primo progetto available','Primo proyecto disponible'],{it:'Primo progetto disponibile',en:'First available project',es:'Primer proyecto disponible',fr:'Premier projet disponible',de:'Erstes verfügbares Projekt',pt:'Primeiro projeto disponível',pl:'Pierwszy dostępny projekt',nl:'Eerste beschikbare project',ro:'Primul proiect disponibil',el:'Πρώτο διαθέσιμο έργο'});
 
-  add(['Widget rapido','Aggiunta rapida','Widget aggiunta rapida','Quick add widget'],{it:'Widget rapido',en:'Quick add widget',es:'Widget de añadido rápido',fr:'Widget d’ajout rapide',de:'Schnellerfassungs-Widget',pt:'Widget de adição rápida',pl:'Widżet szybkiego dodawania',nl:'Widget voor snel toevoegen',ro:'Widget de adăugare rapidă',el:'Widget γρήγορης προσθήκης'});
+  add(['Widget rapido','Aggiunta rapida','Aggiunta Rapida','Widget aggiunta rapida','Quick add widget'],{it:'Aggiunta rapida',en:'Quick add widget',es:'Widget de añadido rápido',fr:'Widget d’ajout rapide',de:'Schnellerfassungs-Widget',pt:'Widget de adição rápida',pl:'Widżet szybkiego dodawania',nl:'Widget voor snel toevoegen',ro:'Widget de adăugare rapidă',el:'Widget γρήγορης προσθήκης'});
   add(['Widget Share'],{it:'Widget Share',en:'Share widget',es:'Widget Share',fr:'Widget Share',de:'Share-Widget',pt:'Widget Share',pl:'Widget Share',nl:'Share-widget',ro:'Widget Share',el:'Widget Share'});
   add(['Widget Nota / Coordinata','Widget Nota / Coordinata bancaria','Widget Nota / Coordinata bancaria'],{it:'Widget Nota / Coordinata',en:'Note / bank details widget',es:'Widget de nota / datos bancarios',fr:'Widget note / coordonnées bancaires',de:'Widget für Notiz / Bankdaten',pt:'Widget de nota / dados bancários',pl:'Widżet notatki / danych bankowych',nl:'Widget voor notitie / bankgegevens',ro:'Widget notă / date bancare',el:'Widget σημείωσης / τραπεζικών στοιχείων'});
   add(['Widget Obiettivo'],{it:'Widget Obiettivo',en:'Goal widget',es:'Widget de objetivo',fr:'Widget objectif',de:'Ziel-Widget',pt:'Widget de objetivo',pl:'Widżet celu',nl:'Doel-widget',ro:'Widget obiectiv',el:'Widget στόχου'});
@@ -11572,4 +11572,88 @@ Object.assign(TRANSLATIONS.el,{
   add('La foto della ricevuta è stata caricata correttamente.',{it:'La foto della ricevuta è stata caricata correttamente.',en:'The receipt photo was uploaded successfully.',es:'La foto del recibo se ha cargado correctamente.',fr:'La photo du reçu a été chargée correctement.',de:'Das Belegfoto wurde erfolgreich geladen.',pt:'A foto do recibo foi carregada corretamente.',pl:'Zdjęcie paragonu zostało poprawnie wczytane.',nl:'De foto van de bon is correct geladen.',ro:'Fotografia bonului a fost încărcată corect.',el:'Η φωτογραφία της απόδειξης φορτώθηκε σωστά.'});
   add('Impossibile recuperare la foto della ricevuta',{it:'Impossibile recuperare la foto della ricevuta',en:'Unable to recover the receipt photo',es:'No se puede recuperar la foto del recibo',fr:'Impossible de récupérer la photo du reçu',de:'Das Belegfoto konnte nicht wiederhergestellt werden',pt:'Não foi possível recuperar a foto do recibo',pl:'Nie udało się odzyskać zdjęcia paragonu',nl:'De foto van de bon kon niet worden hersteld',ro:'Fotografia bonului nu a putut fi recuperată',el:'Δεν ήταν δυνατή η ανάκτηση της φωτογραφίας της απόδειξης'});
   try{fainanceTranslationCache={};}catch(e){}
+})();
+
+
+// fAInance 2.1.5 - ricorrenze: arretrati reali, banner senza mese e messaggi coerenti.
+(function(){
+  function put(code, rows){
+    try{ if(!TRANSLATIONS[code]) TRANSLATIONS[code]={}; Object.assign(TRANSLATIONS[code],rows); }catch(e){}
+    try{ if(typeof FAINANCE_UI_TRANSLATIONS!=='undefined'){ if(!FAINANCE_UI_TRANSLATIONS[code]) FAINANCE_UI_TRANSLATIONS[code]={}; Object.assign(FAINANCE_UI_TRANSLATIONS[code],rows); } }catch(e){}
+    try{ if(typeof FAINANCE_I18N_PHRASES!=='undefined'){ if(!FAINANCE_I18N_PHRASES[code]) FAINANCE_I18N_PHRASES[code]={}; Object.assign(FAINANCE_I18N_PHRASES[code],rows); } }catch(e){}
+  }
+  var rows={
+    it:{
+      recurringPendingHome:"{count} transazioni ricorrenti da confermare",
+      recurringPendingHomeOne:"Transazione ricorrente",
+      recurringPendingHomeMany:"Transazioni ricorrenti",
+      "Da confermare":"Da confermare",
+      "Ricorrente saltata per questa occorrenza.":"Ricorrente saltata per questa occorrenza."
+    },
+    en:{
+      recurringPendingHome:"{count} recurring transactions to confirm",
+      recurringPendingHomeOne:"Recurring transaction",
+      recurringPendingHomeMany:"Recurring transactions",
+      "Da confermare":"To confirm",
+      "Ricorrente saltata per questa occorrenza.":"Recurring transaction skipped for this occurrence."
+    },
+    es:{
+      recurringPendingHome:"{count} transacciones recurrentes por confirmar",
+      recurringPendingHomeOne:"Transacción recurrente",
+      recurringPendingHomeMany:"Transacciones recurrentes",
+      "Da confermare":"Por confirmar",
+      "Ricorrente saltata per questa occorrenza.":"Transacción recurrente omitida para esta ocurrencia."
+    },
+    fr:{
+      recurringPendingHome:"{count} transactions récurrentes à confirmer",
+      recurringPendingHomeOne:"Transaction récurrente",
+      recurringPendingHomeMany:"Transactions récurrentes",
+      "Da confermare":"À confirmer",
+      "Ricorrente saltata per questa occorrenza.":"Transaction récurrente ignorée pour cette occurrence."
+    },
+    de:{
+      recurringPendingHome:"{count} wiederkehrende Transaktionen zu bestätigen",
+      recurringPendingHomeOne:"Wiederkehrende Transaktion",
+      recurringPendingHomeMany:"Wiederkehrende Transaktionen",
+      "Da confermare":"Zu bestätigen",
+      "Ricorrente saltata per questa occorrenza.":"Wiederkehrende Transaktion für diesen Termin übersprungen."
+    },
+    pt:{
+      recurringPendingHome:"{count} transações recorrentes por confirmar",
+      recurringPendingHomeOne:"Transação recorrente",
+      recurringPendingHomeMany:"Transações recorrentes",
+      "Da confermare":"Por confirmar",
+      "Ricorrente saltata per questa occorrenza.":"Transação recorrente ignorada para esta ocorrência."
+    },
+    pl:{
+      recurringPendingHome:"{count} transakcji cyklicznych do potwierdzenia",
+      recurringPendingHomeOne:"Transakcja cykliczna",
+      recurringPendingHomeMany:"Transakcje cykliczne",
+      "Da confermare":"Do potwierdzenia",
+      "Ricorrente saltata per questa occorrenza.":"Transakcja cykliczna pominięta dla tego wystąpienia."
+    },
+    nl:{
+      recurringPendingHome:"{count} terugkerende transacties te bevestigen",
+      recurringPendingHomeOne:"Terugkerende transactie",
+      recurringPendingHomeMany:"Terugkerende transacties",
+      "Da confermare":"Te bevestigen",
+      "Ricorrente saltata per questa occorrenza.":"Terugkerende transactie voor deze keer overgeslagen."
+    },
+    ro:{
+      recurringPendingHome:"{count} tranzacții recurente de confirmat",
+      recurringPendingHomeOne:"Tranzacție recurentă",
+      recurringPendingHomeMany:"Tranzacții recurente",
+      "Da confermare":"De confirmat",
+      "Ricorrente saltata per questa occorrenza.":"Tranzacție recurentă omisă pentru această apariție."
+    },
+    el:{
+      recurringPendingHome:"{count} επαναλαμβανόμενες συναλλαγές προς επιβεβαίωση",
+      recurringPendingHomeOne:"Επαναλαμβανόμενη συναλλαγή",
+      recurringPendingHomeMany:"Επαναλαμβανόμενες συναλλαγές",
+      "Da confermare":"Προς επιβεβαίωση",
+      "Ricorrente saltata per questa occorrenza.":"Η επαναλαμβανόμενη συναλλαγή παραλείφθηκε για αυτή την εμφάνιση."
+    }
+  };
+  Object.keys(rows).forEach(function(code){put(code,rows[code]);});
+  try{ fainanceTranslationCache={}; }catch(e){}
 })();

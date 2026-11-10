@@ -8,9 +8,10 @@ import {
   initializeAuth,
   setPersistence,
 } from "firebase/auth";
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { firebaseConfig } from "../config/env";
+import { firebaseConfig, appEnvironment } from "../config/env";
+import { firestoreTransportSettings } from "./firestoreTransport";
 
 function isNativePlatform(): boolean {
   try {
@@ -54,11 +55,13 @@ export const fbAuth = createFainanceAuth();
 // app/browser restarts without a custom movement outbox.
 export const fbDb = initializeFirestore(firebaseApp, {
   localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager(),
+    tabManager: nativeRuntime
+      ? persistentSingleTabManager({ forceOwnership: true })
+      : persistentMultipleTabManager(),
   }),
-  ...(firebaseConfig.projectId === 'fainance-test-20260823195207'
-    ? { experimentalForceLongPolling: true }
-    : {}),
+  // Test native uses immediate long-poll responses to avoid buffered ACKs.
+  // Production and web retain their existing auto-detection behaviour.
+  ...firestoreTransportSettings(nativeRuntime, appEnvironment),
 });
 // FIX 2.0.5 — Cloud Storage non era mai stato inizializzato. Serve per spostare gli
 // allegati fuori dal documento Firestore userData/{uid}, che ha un limite di 1 MiB.

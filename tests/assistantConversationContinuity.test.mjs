@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {assistantHistory,lastMeaningfulUserTurn,isLikelyVoiceNoise,isContinuationRequest,contextualizeFollowUp} from '../src/finance/assistantConversationContinuity.js';
+const base=[{role:'user',text:'Crea una regola quando descrizione contiene Netflix oppure Spotify',source:'text'},{role:'assistant',text:'Ti propongo una regola con due condizioni E/O.'},{role:'user',text:'Ah',source:'voice-input-final'},{role:'assistant',text:'Non ho capito bene il rumore.'},{role:'user',text:'Procedi con la richiesta precedente'}];
+assert.equal(isLikelyVoiceNoise('अपणी',null,'it'),true);
+assert.equal(isLikelyVoiceNoise('Oh',null,'it'),true);
+assert.equal(isLikelyVoiceNoise('Voglio creare una regola di pagamento',null,'it'),false);
+assert.equal(isLikelyVoiceNoise('Καλημέρα',0.9,'el'),false);
+assert.equal(isLikelyVoiceNoise('procedi con la regola',0.8,'it'),false);
+assert.equal(isContinuationRequest('Procedi con la richiesta precedente'),true);
+assert.equal(isContinuationRequest('Quanto ho speso al supermercato ieri?'),false);
+assert.equal(lastMeaningfulUserTurn(base,'Procedi con la richiesta precedente'),base[0].text);
+assert.match(contextualizeFollowUp('Procedi con la richiesta precedente',base),/Netflix oppure Spotify/);
+assert.equal(contextualizeFollowUp('Crea nuova regola',base),'Crea nuova regola');
+assert.equal(assistantHistory([{role:'user',text:'1'}, {role:'assistant',text:'2',localOnly:true}, {role:'assistant',text:'3'}]).length,2);
+console.log('[OK] Agent chat continuity, short-noise rejection, follow-up reference');

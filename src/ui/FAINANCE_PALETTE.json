@@ -1,0 +1,373 @@
+{
+  "name": "fAInance",
+  "version": "1.0",
+  "date": "2026-10-05",
+  "sourceLogo": "reference/fAInance-Logo-sfondo-bianco.png",
+  "sourceLogoSha256": "b1aac6f8267598d2e783d012243b55a6696983c051f39a9c1194f2ae346f5092",
+  "brandCore": [
+    "navy",
+    "orange"
+  ],
+  "colors": {
+    "navy": {
+      "name": "Blu fAInance",
+      "hex": "#052A5F",
+      "origin": "Campione dominante del simbolo e del wordmark approvati",
+      "role": "Colore primario: logo, titoli, navigazione attiva e pulsanti principali in tema chiaro"
+    },
+    "navy-deep": {
+      "name": "Blu profondo",
+      "hex": "#031A3D",
+      "origin": "Variante scura derivata dal blu fAInance",
+      "role": "Hover, fondi istituzionali e testo su arancio"
+    },
+    "blue": {
+      "name": "Blu operativo",
+      "hex": "#245B8E",
+      "origin": "Tinta derivata dal primario e coerente con i controlli gi� presenti nell�app",
+      "role": "Azioni secondarie, grafici e componenti informativi"
+    },
+    "orange": {
+      "name": "Arancio AI",
+      "hex": "#FAAE12",
+      "origin": "Campione dominante della freccia, delle barre e di AI nel wordmark",
+      "role": "Accento distintivo: AI, crescita, CTA selezionate e dettagli di brand"
+    },
+    "amber": {
+      "name": "Ambra",
+      "hex": "#E89600",
+      "origin": "Variante tonale dell�arancio",
+      "role": "Hover e dettagli ad alta enfasi"
+    },
+    "background": {
+      "name": "Sfondo ghiaccio",
+      "hex": "#F7F9FC",
+      "origin": "Neutro freddo derivato dal blu",
+      "role": "Sfondo principale chiaro"
+    },
+    "paper": {
+      "name": "Bianco",
+      "hex": "#FFFFFF",
+      "origin": "Neutro funzionale",
+      "role": "Superfici e testo sui fondi scuri"
+    },
+    "blue-mist": {
+      "name": "Blu chiarissimo",
+      "hex": "#EEF4FA",
+      "origin": "Tinta chiara derivata dal blu",
+      "role": "Superfici secondarie, filtri e selezioni leggere"
+    },
+    "orange-mist": {
+      "name": "Arancio chiaro",
+      "hex": "#FFF4D6",
+      "origin": "Tinta chiara derivata dall�arancio",
+      "role": "Richiami AI, suggerimenti e superfici editoriali"
+    },
+    "ink": {
+      "name": "Inchiostro blu",
+      "hex": "#14263D",
+      "origin": "Neutro scuro derivato dal primario",
+      "role": "Testo principale in tema chiaro"
+    },
+    "muted": {
+      "name": "Grigio blu",
+      "hex": "#5D6B7C",
+      "origin": "Neutro derivato dal primario",
+      "role": "Testo secondario in tema chiaro"
+    },
+    "border": {
+      "name": "Bordo chiaro",
+      "hex": "#D8E1EA",
+      "origin": "Neutro derivato dal blu",
+      "role": "Divisori e bordi chiari"
+    },
+    "night": {
+      "name": "Notte blu",
+      "hex": "#081522",
+      "origin": "Neutro scuro derivato dal primario",
+      "role": "Sfondo del tema scuro"
+    },
+    "night-surface": {
+      "name": "Superficie notte",
+      "hex": "#10243A",
+      "origin": "Neutro scuro derivato dal primario",
+      "role": "Superfici del tema scuro"
+    },
+    "night-text": {
+      "name": "Bianco notte",
+      "hex": "#F4F7FB",
+      "origin": "Neutro funzionale del tema scuro",
+      "role": "Testo principale in tema scuro"
+    },
+    "night-muted": {
+      "name": "Azzurro grigio",
+      "hex": "#B3C0CE",
+      "origin": "Tinta chiara derivata dal blu",
+      "role": "Testo secondario in tema scuro"
+    },
+    "sky-light": {
+      "name": "Azzurro luminoso",
+      "hex": "#8CC6FF",
+      "origin": "Tinta chiara derivata dal blu operativo",
+      "role": "Link e azioni secondarie in tema scuro"
+    },
+    "night-border": {
+      "name": "Bordo notte",
+      "hex": "#29455F",
+      "origin": "Neutro funzionale del tema scuro",
+      "role": "Divisori del tema scuro"
+    },
+    "success": {
+      "name": "Conferma",
+      "hex": "#18794E",
+      "origin": "Colore semantico funzionale",
+      "role": "Entrate, conferme e completamenti"
+    },
+    "warning": {
+      "name": "Attenzione",
+      "hex": "#825700",
+      "origin": "Colore semantico derivato dall�arancio",
+      "role": "Avvisi su superfici chiare"
+    },
+    "danger": {
+      "name": "Errore/Uscita",
+      "hex": "#B63B45",
+      "origin": "Colore semantico funzionale",
+      "role": "Errori, uscite e azioni distruttive"
+    },
+    "success-dark": {
+      "name": "Conferma scuro",
+      "hex": "#79D5A8",
+      "origin": "Variante accessibile per tema scuro",
+      "role": "Entrate e conferme su superfici scure"
+    },
+    "danger-dark": {
+      "name": "Errore scuro",
+      "hex": "#FF9AA3",
+      "origin": "Variante accessibile per tema scuro",
+      "role": "Errori e uscite su superfici scure"
+    }
+  },
+  "themes": {
+    "light": {
+      "background": "background",
+      "surface": "paper",
+      "surface-soft": "blue-mist",
+      "text": "ink",
+      "text-muted": "muted",
+      "border": "border",
+      "primary": "navy",
+      "on-primary": "paper",
+      "primary-hover": "navy-deep",
+      "secondary": "blue",
+      "on-secondary": "paper",
+      "accent": "orange",
+      "on-accent": "navy-deep",
+      "link": "blue",
+      "success": "success",
+      "warning": "warning",
+      "danger": "danger"
+    },
+    "dark": {
+      "background": "night",
+      "surface": "night-surface",
+      "surface-soft": "navy-deep",
+      "text": "night-text",
+      "text-muted": "night-muted",
+      "border": "night-border",
+      "primary": "orange",
+      "on-primary": "navy-deep",
+      "primary-hover": "amber",
+      "secondary": "navy-deep",
+      "on-secondary": "night-text",
+      "accent": "orange",
+      "on-accent": "navy-deep",
+      "link": "sky-light",
+      "success": "success-dark",
+      "warning": "orange",
+      "danger": "danger-dark"
+    }
+  },
+  "contrastChecks": [
+    {
+      "theme": "light",
+      "role": "Testo principale",
+      "foreground": "#14263D",
+      "background": "#F7F9FC",
+      "contrast": 14.49,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Testo secondario",
+      "foreground": "#5D6B7C",
+      "background": "#F7F9FC",
+      "contrast": 5.16,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Testo su superficie",
+      "foreground": "#14263D",
+      "background": "#FFFFFF",
+      "contrast": 15.28,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Pulsante principale",
+      "foreground": "#FFFFFF",
+      "background": "#052A5F",
+      "contrast": 13.97,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Hover principale",
+      "foreground": "#FFFFFF",
+      "background": "#031A3D",
+      "contrast": 17.23,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Azione secondaria",
+      "foreground": "#FFFFFF",
+      "background": "#245B8E",
+      "contrast": 7.09,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Accento",
+      "foreground": "#031A3D",
+      "background": "#FAAE12",
+      "contrast": 9.13,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Link",
+      "foreground": "#245B8E",
+      "background": "#FFFFFF",
+      "contrast": 7.09,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Conferma",
+      "foreground": "#18794E",
+      "background": "#FFFFFF",
+      "contrast": 5.41,
+      "normalTextPass": true
+    },
+    {
+      "theme": "light",
+      "role": "Errore",
+      "foreground": "#B63B45",
+      "background": "#FFFFFF",
+      "contrast": 5.67,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Testo principale",
+      "foreground": "#F4F7FB",
+      "background": "#081522",
+      "contrast": 17.13,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Testo secondario",
+      "foreground": "#B3C0CE",
+      "background": "#081522",
+      "contrast": 9.95,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Testo su superficie",
+      "foreground": "#F4F7FB",
+      "background": "#10243A",
+      "contrast": 14.63,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Pulsante principale",
+      "foreground": "#031A3D",
+      "background": "#FAAE12",
+      "contrast": 9.13,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Hover principale",
+      "foreground": "#031A3D",
+      "background": "#E89600",
+      "contrast": 7.21,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Azione secondaria",
+      "foreground": "#F4F7FB",
+      "background": "#031A3D",
+      "contrast": 16.03,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Accento",
+      "foreground": "#031A3D",
+      "background": "#FAAE12",
+      "contrast": 9.13,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Link",
+      "foreground": "#8CC6FF",
+      "background": "#10243A",
+      "contrast": 8.71,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Conferma",
+      "foreground": "#79D5A8",
+      "background": "#10243A",
+      "contrast": 8.91,
+      "normalTextPass": true
+    },
+    {
+      "theme": "dark",
+      "role": "Errore",
+      "foreground": "#FF9AA3",
+      "background": "#10243A",
+      "contrast": 7.79,
+      "normalTextPass": true
+    },
+    {
+      "theme": "both",
+      "role": "Blu profondo su Arancio AI",
+      "foreground": "#031A3D",
+      "background": "#FAAE12",
+      "contrast": 9.13,
+      "normalTextPass": true
+    },
+    {
+      "theme": "both",
+      "role": "Bianco su Arancio AI: combinazione da evitare per testo piccolo",
+      "foreground": "#FFFFFF",
+      "background": "#FAAE12",
+      "contrast": 1.89,
+      "normalTextPass": false
+    }
+  ],
+  "rules": {
+    "accentUsage": "Use orange selectively for AI, growth, highlights and selected CTAs; do not use it as small text on white.",
+    "semanticColors": "Success/danger remain semantic and do not replace brand blue/orange."
+  }
+}

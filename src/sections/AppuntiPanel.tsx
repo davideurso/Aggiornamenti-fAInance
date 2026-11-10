@@ -1,3 +1,4 @@
+import { readableDarkText } from '../ui/textContrast';
 import { useState, useEffect, useRef } from 'react';
 import { registerPlugin } from '@capacitor/core';
 import { useApp, EMOJI_LIST, fmtDate } from '../core';
@@ -296,6 +297,7 @@ export function AppuntiPanel() {
       String((creditCardForm || {}).number || "").replace(/\D/g, "").length > 0;
     var [editingDocumentId, setEditingDocumentId] = useState(null);
     var [documentNameDraft, setDocumentNameDraft] = useState("");
+    const [documentPreview, setDocumentPreview] = useState<{name: string; dataUrl: string} | null>(null);
     var fileInputRef = useRef(null);
     var noteEditorRef = useRef(null);
     var noteSelectionRef = useRef(null);
@@ -385,7 +387,7 @@ export function AppuntiPanel() {
       padding: "8px 10px",
       fontSize: 14,
       background: dark ? "#2a2a3e" : "#fff",
-      color: dark ? "#eee" : "#333",
+      color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
       boxSizing: "border-box",
     };
     function normalizeDocumentExtension(value) {
@@ -812,11 +814,21 @@ export function AppuntiPanel() {
     // in memoria.
     async function openAppuntiDocument(d) {
       if (!d || (!d.dataUrl && !d.storagePath)) return;
+      let dataUrl: string;
       try {
-        var dataUrl = d.dataUrl ? String(d.dataUrl) : await readAttachmentDataUrl(d);
+        dataUrl = d.dataUrl ? String(d.dataUrl) : await readAttachmentDataUrl(d);
         if (!dataUrl) throw new Error("document-data-unavailable");
-        var fullName = documentFullName(d) || "documento";
-        var mimeType = fainanceResolveMime(fullName, d.type || "");
+      } catch {
+        setToast({ text: L("File non disponibile"), type: "error", translated: true });
+        return;
+      }
+      const fullName = documentFullName(d) || "documento";
+      if (/^data:image\/(jpeg|png|webp|gif|bmp);base64,/i.test(dataUrl)) {
+        setDocumentPreview({ name: fullName, dataUrl });
+        return;
+      }
+      const mimeType = fainanceResolveMime(fullName, d.type || "");
+      try {
         await openFileWithSystem({
           dataUrl: dataUrl,
           fileName: fullName,
@@ -1249,7 +1261,7 @@ export function AppuntiPanel() {
             borderRadius: 12,
             padding: "10px 12px",
             fontSize: 12,
-            color: dark ? "#FFE5A6" : "#856404",
+            color: readableDarkText(dark ? "#FFE5A6" : "#856404", dark, dark ? "#4b3d1b" : "#FFF3CD"),
             fontWeight: 800,
             lineHeight: 1.4,
             marginBottom: 12,
@@ -1314,6 +1326,15 @@ export function AppuntiPanel() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {documentPreview && appuntiModal(documentPreview.name, () => setDocumentPreview(null),
+          <img src={documentPreview.dataUrl} alt={documentPreview.name}
+            style={{ display: "block", maxWidth: "100%", maxHeight: "62vh", margin: "0 auto", objectFit: "contain" }}
+            onError={() => {
+              setDocumentPreview(null);
+              setToast({ text: L("File non disponibile"), type: "error", translated: true });
+            }}
+          />
+        )}
         <div
           style={{
             background: documentsUnavailable ? (dark ? "#2B2B36" : "#F3F4F6") : cardBg,
@@ -1344,7 +1365,7 @@ export function AppuntiPanel() {
             )}
           </div>
           {documentsUnavailable && (
-            <div style={{fontSize:12,color:dark?"#FFE09A":"#856404",background:dark?"#3A3018":"#FFF3CD",border:"1px solid "+(dark?"#6A5520":"#FFD54F"),borderRadius:10,padding:"9px 10px",marginBottom:10,fontWeight:800,lineHeight:1.35}}>
+            <div style={{fontSize:12,color:readableDarkText(dark?"#FFE09A":"#856404", dark, dark?"#3A3018":"#FFF3CD"),background:dark?"#3A3018":"#FFF3CD",border:"1px solid "+(dark?"#6A5520":"#FFD54F"),borderRadius:10,padding:"9px 10px",marginBottom:10,fontWeight:800,lineHeight:1.35}}>
               🔒 {L("Questa funzionalità non è disponibile nel piano Gratuito. Vai in Info per passare a un piano superiore.")}
             </div>
           )}
@@ -1374,7 +1395,7 @@ export function AppuntiPanel() {
             <div
               style={{
                 fontSize: 13,
-                color: "#bbb",
+                color: readableDarkText("#bbb", dark, documentsUnavailable ? (dark ? "#2B2B36" : "#F3F4F6") : cardBg),
                 padding: "16px 0",
                 textAlign: "center",
               }}
@@ -1453,7 +1474,7 @@ export function AppuntiPanel() {
                           textAlign: "left",
                           fontSize: 13,
                           fontWeight: 750,
-                          color: confirmButtonColor,
+                          color: readableDarkText(confirmButtonColor, dark, "transparent"),
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
@@ -1486,7 +1507,7 @@ export function AppuntiPanel() {
                         display: "inline-flex", alignItems: "center", justifyContent: "center",
                         background: dark ? "#223047" : "#EEF4FF",
                         border: "1px solid " + (dark ? "#355177" : "#BFD7FF"),
-                        borderRadius: 8, cursor: "pointer", color: "#378ADD",
+                        borderRadius: 8, cursor: "pointer", color: readableDarkText("#378ADD", dark, dark ? "#223047" : "#EEF4FF"),
                         fontSize: 13, fontWeight: 900, lineHeight: 1,
                       }}
                     >
@@ -1543,7 +1564,7 @@ export function AppuntiPanel() {
                         display: "inline-flex", alignItems: "center", justifyContent: "center",
                         background: dark ? "#40262A" : "#FFF0F0",
                         border: "1px solid " + (dark ? "#6A343C" : "#FFD0D0"),
-                        borderRadius: 8, cursor: "pointer", color: "#E24B4A",
+                        borderRadius: 8, cursor: "pointer", color: readableDarkText("#E24B4A", dark, dark ? "#40262A" : "#FFF0F0"),
                         fontSize: 13, fontWeight: 900, lineHeight: 1,
                       }}
                     >
@@ -1597,7 +1618,7 @@ export function AppuntiPanel() {
             <div
               style={{
                 fontSize: 13,
-                color: "#bbb",
+                color: readableDarkText("#bbb", dark, cardBg),
                 padding: "12px 0",
                 textAlign: "center",
               }}
@@ -1664,7 +1685,7 @@ export function AppuntiPanel() {
                       border: "1px solid #BFD7FF",
                       borderRadius: 8,
                       cursor: "pointer",
-                      color: "#378ADD",
+                      color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                       fontSize: 14,
                       padding: "5px 8px",
                       fontWeight: 700,
@@ -1690,7 +1711,7 @@ export function AppuntiPanel() {
                       border: "1px solid #FFD0D0",
                       borderRadius: 8,
                       cursor: "pointer",
-                      color: "#E24B4A",
+                      color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                       fontSize: 14,
                       padding: "5px 8px",
                       fontWeight: 700,
@@ -1711,7 +1732,7 @@ export function AppuntiPanel() {
               borderRadius: 12,
               padding: "10px 12px",
               fontSize: 12,
-              color: dark ? "#FFE5A6" : "#856404",
+              color: readableDarkText(dark ? "#FFE5A6" : "#856404", dark, dark ? "#4b3d1b" : "#FFF3CD"),
               fontWeight: 800,
               lineHeight: 1.4,
             }}
@@ -1757,7 +1778,7 @@ export function AppuntiPanel() {
             <div
               style={{
                 fontSize: 13,
-                color: "#bbb",
+                color: readableDarkText("#bbb", dark, cardBg),
                 padding: "12px 0",
                 textAlign: "center",
               }}
@@ -1821,7 +1842,7 @@ export function AppuntiPanel() {
                       border: "1px solid #BFD7FF",
                       borderRadius: 8,
                       cursor: "pointer",
-                      color: "#378ADD",
+                      color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                       fontSize: 14,
                       padding: "5px 8px",
                       fontWeight: 700,
@@ -1852,7 +1873,7 @@ export function AppuntiPanel() {
                       border: "1px solid #FFD0D0",
                       borderRadius: 8,
                       cursor: "pointer",
-                      color: "#E24B4A",
+                      color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                       fontSize: 14,
                       padding: "5px 8px",
                       fontWeight: 700,
@@ -1903,7 +1924,7 @@ export function AppuntiPanel() {
             <div
               style={{
                 fontSize: 13,
-                color: "#bbb",
+                color: readableDarkText("#bbb", dark, cardBg),
                 padding: "12px 0",
                 textAlign: "center",
               }}
@@ -1975,7 +1996,7 @@ export function AppuntiPanel() {
                       border: "1px solid #BFD7FF",
                       borderRadius: 8,
                       cursor: "pointer",
-                      color: "#378ADD",
+                      color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                       fontSize: 14,
                       padding: "5px 8px",
                       fontWeight: 700,
@@ -2004,7 +2025,7 @@ export function AppuntiPanel() {
                       border: "1px solid #FFD0D0",
                       borderRadius: 8,
                       cursor: "pointer",
-                      color: "#E24B4A",
+                      color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                       fontSize: 14,
                       padding: "5px 8px",
                       fontWeight: 700,
@@ -2091,7 +2112,7 @@ export function AppuntiPanel() {
                             border: "none",
                             borderLeft: index ? "1px solid " + (dark ? "#4A4A60" : "#E4E6EC") : "none",
                             background: "transparent",
-                            color: textC,
+                            color: readableDarkText(textC, dark, "transparent"),
                             fontSize: 15,
                             fontWeight: 900,
                             cursor: "pointer",
@@ -2189,7 +2210,7 @@ export function AppuntiPanel() {
                         position: "absolute",
                         left: 12,
                         top: 11,
-                        color: dark ? "#77778B" : "#9A9DAC",
+                        color: readableDarkText(dark ? "#77778B" : "#9A9DAC", dark, dark ? "#222235" : "#fff"),
                         fontSize: 14,
                         pointerEvents: "none",
                       }}

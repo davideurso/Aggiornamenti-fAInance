@@ -1,7 +1,7 @@
 import {
   collection,
   doc,
-  deleteDoc,
+  getDoc,
   limit,
   onSnapshot,
   query,
@@ -9,6 +9,7 @@ import {
   where,
 } from "firebase/firestore";
 import { fbDb } from "../firebase/client";
+import { isSystemCommunication } from "./notificationChannels.mjs";
 
 
 export interface AppNotificationRecord {
@@ -25,6 +26,8 @@ export interface AppNotificationRecord {
   source?: string;
   sourceUid?: string;
   campaignId?: string;
+  richContent?: unknown;
+  media?: import("./NotificationMedia").NotificationMedia;
   language?: string;
   messageArgs?: Record<string, string>;
   createdAt?: string;
@@ -33,6 +36,10 @@ export interface AppNotificationRecord {
   read?: boolean;
   readAt?: string;
   status?: string;
+  recurringRuleId?: string;
+  recurringOccurrenceKey?: string;
+  recurringOccurrenceDate?: string;
+  virtual?: boolean;
 }
 
 export function watchAppNotifications(
@@ -92,9 +99,17 @@ export async function deleteAppNotification(
   const id = String(notificationId || "").trim();
   if (!targetUid || !id) return;
 
-  // FAINANCE V113 NOTIFICATION DELETE: use the rule-authorized physical delete.
-  // appNotifications rules allow the owner to physically delete the document.
-  // A soft-delete update is intentionally forbidden because owner updates are
-  // limited to read/readAt/updatedAt.
-  await deleteDoc(doc(fbDb, "appNotifications", id));
+  const snapshot = await getDoc(doc(fbDb, "appNotifications", id));
+  if (snapshot.exists() && isSystemCommunication(snapshot.data().type)) {
+    throw new Error("System communications cannot be deleted.");
+  }
+  // The authenticated callable keeps a tombstone for dismissible personal notices.
+  const { getApp } = await import("firebase/app");
+  const { getFunctions, httpsCallable } = await import("firebase/functions");
+  const result = await httpsCallable(getFunctions(getApp(), "europe-west1"), "fainanceDeleteAppNotification")({ notificationId: id });
+  const occurrenceId = String((result.data as any)?.occurrenceId || "");
+  if (occurrenceId) {
+    const { removeLocalReminder } = await import("./localCustomReminders.mjs");
+    removeLocalReminder(targetUid, occurrenceId);
+  }
 }

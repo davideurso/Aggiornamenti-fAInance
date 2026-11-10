@@ -1,4 +1,5 @@
-import { participantForUser, shareAmountForUser } from './shareUserAmount';
+import { participantForUser, shareAmountForUser } from './shareUserAmount.js';
+import { activeShareActivities, isActiveShareActivity } from './shareCashMovements.js';
 
 function sid(value) {
   return String(value == null ? '' : value);
@@ -87,6 +88,30 @@ export function resolveStoredShareHistoryExpense(expense, mappings, defaultCateg
   };
 }
 
+export function expensesWithoutShareShadows(expenses, projects, preferLive = true) {
+  const byId = new Map((projects || []).filter(Boolean).map(project => [sid(project.id), project]));
+  const blocked = new Map();
+  for (const [id, project] of byId) {
+    const ids = new Set((project.deletedActivityIds || []).map(String));
+    for (const row of project.activities || []) {
+      if (!isActiveShareActivity(row)) ids.add(sid(row?.id));
+    }
+    if (preferLive) for (const row of activeShareActivities(project)) ids.add(sid(row.id));
+    blocked.set(id, ids);
+  }
+  return (expenses || []).filter(expense => {
+    if (!expense || expense.deleted || expense.deletedAt || ['deleted','cancelled','void'].includes(String(expense.status || '').toLowerCase())) return false;
+    if (!['share_project_history','share_analytics'].includes(expense.source)) return true;
+    const projectId = sid(expense.shareProjectId || expense._shareProjectId);
+    const project = byId.get(projectId);
+    if (!project) return true; // An archived export can outlive access to its project.
+    const activityId = sid(expense.shareActivityId);
+    // An absent source row is also a deletion in legacy snapshots without IDs.
+    if (!activeShareActivities(project).some(row => sid(row.id) === activityId)) return false;
+    return !blocked.get(projectId)?.has(activityId);
+  });
+}
+
 export function buildShareAnalyticalExpenses(options) {
   var projects = Array.isArray(options?.projects) ? options.projects : [];
   var userId = options?.userId;
@@ -100,7 +125,7 @@ export function buildShareAnalyticalExpenses(options) {
   var rows = [];
   projects.forEach(function (project) {
     if (!project || String(project.status || '') === 'deleted') return;
-    (Array.isArray(project.activities) ? project.activities : []).forEach(function (activity) {
+    activeShareActivities(project).forEach(function (activity) {
       if (!activity || activity.kind === 'settlement') return;
       var amount = shareAmountForUser(project, activity, userId);
       if (!(amount > 0)) return;
@@ -151,7 +176,7 @@ export function buildShareAnalyticalExpenses(options) {
 }
 
 export function buildExpensesForAnalysis(options) {
-  var rawExpenses = Array.isArray(options?.expenses) ? options.expenses : [];
+  var rawExpenses = expensesWithoutShareShadows(options?.expenses, options?.projects);
   var resolvedRaw = rawExpenses.map(function (expense) {
     return resolveStoredShareHistoryExpense(
       expense,

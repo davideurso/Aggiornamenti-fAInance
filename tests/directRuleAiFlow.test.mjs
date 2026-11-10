@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const panel=fs.readFileSync('src/sections/AutomaticRulesPanel.tsx','utf8');
+const trans=fs.readFileSync('src/i18n/directRuleAiTranslations.ts','utf8');
+const method=panel.split('async function generateRuleFromPrompt(){')[1]?.split('  useEffect(()=>{\n    function openAiProposal()')[0];
+assert.ok(method,'Direct AI handler exists');
+for(const expected of ['buildAssistantRequestPayload','getIdToken','fetch(AI_AGENT_ENDPOINT','combineBuilderRuleProposals','previewRuleRequest','setDraft(',"setEditorTab('when')",'ctx.aiExternalConsent','ctx.canUsePlanFeature'])assert.ok(method.includes(expected),`missing ${expected}`);
+assert.ok(!/setTab\(|saveAutomaticRule\(|setFinanceEvolution\(/.test(method),'Direct flow cannot navigate to chat or persist any rule');
+assert.ok(panel.includes('rule-ai-rephrase'),'Reformulation stays inside ordinary rule editor');
+assert.ok(panel.includes('expectedRevision===undefined'),'Existing rules must not be silently replaced');
+assert.ok(panel.includes('onSubmit={e=>{e.preventDefault();generateRuleFromPrompt();}}'),'Prompt invokes direct processing');
+for(const lang of ['it','en','es','fr','de','pt','pl','nl','ro','el'])assert.ok(trans.includes('  '+lang+':{'),`missing translation ${lang}`);
+for(const key of ['create','rephrase','generate','hint','thinking','consent','quota','auth','failure','timeout'])assert.ok(trans.includes(key+':'),`missing UI message ${key}`);
+console.log('[OK] Direct rule AI flow: no chat/no writes, in-editor review, 10 locales');

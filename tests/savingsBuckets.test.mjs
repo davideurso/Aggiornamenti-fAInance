@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict';
+import { createFinanceEvolution, migrateFinanceEvolution, mergeFinanceEvolution } from '../src/data/financeEvolution.js';
+import { createSavingsBucket, updateSavingsBucket } from '../src/finance/savingsBuckets.js';
+import { loadTypeScript } from './loadTypeScript.mjs';
+
+const original=createFinanceEvolution();
+const initial=JSON.stringify(original);
+let model=createSavingsBucket(original,{id:'travel',name:'  Viaggio   estate  ',currency:'EUR'});
+assert.equal(JSON.stringify(original),initial,'Creating a bucket must not mutate existing state');
+assert.equal(model.savings.buckets[0].name,'Viaggio estate');
+assert.equal(model.savings.buckets[0].balanceMinor,0);
+assert.equal(model.savings.buckets[0].plannedMinor,0);
+assert.deepEqual(model.budget,original.budget);
+assert.deepEqual(model.savings.entries,[]);
+for(const name of ['', '   ', 'x'.repeat(61)]) assert.throws(()=>createSavingsBucket(model,{id:'invalid',name,currency:'EUR'}),/INVALID_BUCKET_NAME/);
+assert.throws(()=>createSavingsBucket(model,{id:'other',name:'VIAGGIO  ESTATE',currency:'EUR'}),/DUPLICATE/);
+assert.throws(()=>createSavingsBucket(model,{id:'travel',name:'Extra',currency:'EUR'}),/INVALID_BUCKET_ID/);
+assert.throws(()=>createSavingsBucket(model,{id:'other',name:'Extra',currency:'invalid'}),/CURRENCY/);
+model.savings.buckets[0]={...model.savings.buckets[0],balanceMinor:12345,plannedMinor:1000,goalId:'goal',futureField:{preserve:true}};
+model.savings.entries=[{id:'entry',bucketId:'travel',source:'extra',amountMinor:12345}];
+const snapshot=JSON.stringify(model);
+let disabled=updateSavingsBucket(model,'travel',{active:false});
+assert.equal(JSON.stringify(model),snapshot);
+assert.equal(disabled.savings.buckets[0].active,false);
+assert.throws(()=>createSavingsBucket(disabled,{id:'other',name:'Viaggio estate',currency:'EUR'}),/DUPLICATE/,'Inactive names must remain reserved');
+let renamed=updateSavingsBucket(disabled,'travel',{name:'Vacanze'});
+assert.deepEqual(renamed.savings.buckets[0],{...model.savings.buckets[0],active:false,name:'Vacanze'},'Rename and disable preserve money, currency, identity, goal and unknown fields');
+assert.deepEqual(renamed.savings.entries,model.savings.entries);
+assert.equal(updateSavingsBucket(renamed,'travel',{name:'Vacanze'}),renamed,'No-op edits must not trigger cloud writes');
+assert.throws(()=>updateSavingsBucket(model,'missing',{name:'New'}),/NOT_FOUND/);
+assert.throws(()=>updateSavingsBucket(model,'travel',{balanceMinor:0}),/INVALID_BUCKET_PATCH/);
+assert.throws(()=>updateSavingsBucket(model,'travel',{active:'false'}),/INVALID_BUCKET_ACTIVE/);
+const restored=migrateFinanceEvolution(JSON.parse(JSON.stringify(renamed)));
+assert.deepEqual(restored,renamed);
+assert.deepEqual(mergeFinanceEvolution(restored,restored),restored,'Backup merge must not duplicate a bucket or its entries');
+assert.equal(updateSavingsBucket(restored,'travel',{active:true}).savings.buckets[0].balanceMinor,12345);
+const translations=loadTypeScript('src/i18n/savingsTranslations.ts');
+assert.equal(Object.keys(translations.savingsTranslationRows).length,10);
+for(const [language,strings] of Object.entries(translations.savingsTranslationRows)){
+  assert.equal(strings.length,27,language);
+  assert(strings.every(value=>typeof value==='string'&&value.trim()),language);
+}
+console.log('Savings categories: create, rename, activate, duplicates, unchanged balances/history, backup roundtrip and 10 languages passed');

@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+const source=ts.createSourceFile('share.tsx',fs.readFileSync('src/sections/SharePanel.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+let callback;
+function visit(n){if(ts.isCallExpression(n)&&n.expression.getText(source)==='useEffect'&&n.arguments[0]?.getText(source).includes('const draft=_c.toolShareDraft'))callback=n.arguments[0];ts.forEachChild(n,visit);}visit(source);assert(callback);
+const code=ts.transpileModule('const effect='+callback.getText(source),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const draft={id:'transfer',projectId:'project',amount:'15000',currency:'JPY',baseCurrency:'EUR',exchangeRate:1/175.5,baseAmount:85.47,date:'2026-09-15',exchangeRateDate:'2026-09-15',exchangeRateSource:'exchangerate-api.com'};
+let state={},consumed={current:null};
+const context={_c:{toolShareDraft:draft,setToolShareDraft:v=>state.pending=v},selected:{id:'other'},selectedShareArchived:false,notifyArchivedShareProject:()=>{state.archived=true;},consumedToolDraft:consumed,currentShareMemberId:'member',resetShareExpenseForm:()=>{state.reset=true;}};
+for(const key of ['Amount','Date','Desc','Fx','PaidBy','ProjectTab','ExpenseMode','ExpenseFormOpen'])context['setShare'+key]=v=>state[key]=v;
+const run=()=>new Function(...Object.keys(context),code+';effect();')(...Object.values(context));
+run();assert.deepEqual(state,{},'A different project must never consume the Tool draft');
+context.selected={id:'project'};run();
+assert.equal(state.Amount,'15000');assert.equal(state.Fx.currency,'JPY');assert.equal(state.Fx.baseCurrency,'EUR');assert.equal(state.Fx.baseAmount,85.47);assert.equal(state.PaidBy,'member');assert.equal(state.Desc,'');assert.equal(state.ExpenseFormOpen,true);assert.equal(state.pending,null);assert.equal(state.ProjectTab,'attivita');
+assert(!JSON.stringify(state).includes('USD'),'Original pre-conversion currency must not leak to Share');
+state={};run();assert.deepEqual(state,{},'A Tool draft must only be applied once');
+console.log('Actual Share handoff: selected project guard, converted amount/currency, base amount, current payer, empty description, form opening and one-time consumption passed');
+
+state={};consumed.current=null;context.selectedShareArchived=true;run();
+assert.equal(state.pending,null);assert.equal(state.archived,true);assert.equal(state.ExpenseFormOpen,undefined);assert.equal(state.Amount,undefined);
+console.log("Archived Share projects reject the Tool draft without opening an expense form");

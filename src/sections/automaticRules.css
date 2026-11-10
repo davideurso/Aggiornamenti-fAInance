@@ -8,20 +8,20 @@
 .fainance-rules .rule-card { background:var(--rule-card); border:1px solid var(--rule-border); border-radius:18px; padding:16px; margin-bottom:12px; min-width:0; box-shadow:0 3px 12px rgba(0,0,0,.025); }
 .fainance-rules .rule-grid { display:grid; gap:12px; min-width:0; }
 .fainance-rules .rule-section-title { display:flex; align-items:center; gap:8px; font-size:13px; font-weight:800; margin:0 0 12px; }
-.fainance-rules .rule-step { display:grid; place-items:center; width:25px; height:25px; border-radius:8px; background:var(--rule-soft); color:var(--rule-primary); }
+.fainance-rules .rule-step { display:grid; place-items:center; width:25px; height:25px; border-radius:8px; background:var(--rule-soft); color:var(--rule-link,var(--rule-primary)); }
 .fainance-rules label { display:grid; gap:5px; min-width:0; font-size:12px; font-weight:650; }
 .fainance-rules input:not([type=checkbox]), .fainance-rules select, .fainance-rules textarea { width:100%; min-width:0; border:1px solid var(--rule-border); border-radius:11px; background:var(--rule-input); color:var(--rule-text); font:inherit; font-size:14px; font-weight:400; padding:11px; min-height:42px; }
 .fainance-rules textarea { min-height:90px; resize:vertical; }
 .fainance-rules button { border:1px solid var(--rule-border); background:var(--rule-card); color:var(--rule-text); border-radius:var(--rule-radius); padding:9px 12px; min-height:38px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; touch-action:manipulation; overflow-wrap:anywhere; }
 .fainance-rules button:disabled { opacity:.4; cursor:default; }
 .fainance-rules .rule-primary { background:var(--rule-primary); color:white; border-color:transparent; }
-.fainance-rules .rule-secondary { color:var(--rule-primary); background:var(--rule-soft); border-color:transparent; }
+.fainance-rules .rule-secondary { color:var(--rule-link,var(--rule-primary)); background:var(--rule-soft); border-color:transparent; }
 .fainance-rules .rule-actions { display:flex; gap:8px; flex-wrap:wrap; }
 .fainance-rules .rule-toolbar { display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap; margin:12px 0; }
 .fainance-rules .rule-row { border:1px solid var(--rule-border); border-radius:13px; padding:12px; margin:0; min-width:0; display:grid; gap:9px; }
 .fainance-rules legend { font-size:11px; font-weight:750; padding:0 5px; color:var(--rule-sub); }
 .fainance-rules .rule-remove { justify-self:end; min-height:30px; padding:4px 8px; color:var(--rule-sub); font-size:12px; }
-.fainance-rules .rule-join { text-align:center; font-weight:800; font-size:11px; color:var(--rule-primary); }
+.fainance-rules .rule-join { text-align:center; font-weight:800; font-size:11px; color:var(--rule-link,var(--rule-primary)); }
 .fainance-rules .rule-status { font-size:11px; border-radius:20px; padding:4px 9px; background:var(--rule-soft); color:var(--rule-text); white-space:nowrap; }
 .fainance-rules .rule-name { flex:1; min-width:0; overflow-wrap:anywhere; }
 .fainance-rules .rule-card-top { display:flex; align-items:center; gap:8px; }
@@ -73,7 +73,7 @@
 .fainance-rules .rule-editor-shell > .rule-card { background:var(--rule-card); }
 .fainance-rules .rule-editor-shell > .rule-card:first-of-type { padding:14px 16px; }
 .fainance-rules .rule-section-title { align-items:center; gap:8px; font-size:14px; font-weight:900; margin:0 0 12px; }
-.fainance-rules .rule-step { width:24px; height:24px; border-radius:8px; background:#e7f1ff; color:var(--rule-primary); font-size:12px; font-weight:900; }
+.fainance-rules .rule-step { width:24px; height:24px; border-radius:8px; background:#e7f1ff; color:var(--rule-link,var(--rule-primary)); font-size:12px; font-weight:900; }
 .fainance-rules .rule-section-icon { display:grid; place-items:center; width:24px; height:24px; border-radius:8px; background:var(--rule-soft); }
 .fainance-rules label { font-size:11px; font-weight:800; color:var(--rule-sub); }
 .fainance-rules input:not([type=checkbox]), .fainance-rules select, .fainance-rules textarea { border-radius:12px; padding:11px 12px; min-height:44px; background:var(--rule-input); }
@@ -91,7 +91,7 @@
 }
 
 
-/* 2.0.4 — Regole automatiche allineate visivamente alle altre Impostazioni e al form Obiettivi */
+/* 2.0.4 â€” Regole automatiche allineate visivamente alle altre Impostazioni e al form Obiettivi */
 .fainance-rules .rule-screen { display:grid; gap:14px; }
 .fainance-rules .rule-heading-card { display:none !important; }
 .fainance-rules .rule-info-card { margin:0; border-radius:16px; padding:14px 16px; box-shadow:none; }
@@ -135,7 +135,7 @@
 }
 
 
-/* Option 4 — tabs distinte e look illustrato */
+/* Option 4 â€” tabs distinte e look illustrato */
 .fainance-rules .rule-toolbar { display:grid; grid-template-columns:auto minmax(0,1fr); gap:10px; align-items:center; }
 .fainance-rules .rule-toolbar .rule-primary { width:100%; }
 .fainance-rules .rule-editor-shell { max-width:430px; border-radius:28px; }
@@ -160,7 +160,7 @@
 }
 
 
-/* Option 4 refinement — illustrated cards + 3D dropdowns across QUANDO / SE / ALLORA */
+/* Option 4 refinement â€” illustrated cards + 3D dropdowns across QUANDO / SE / ALLORA */
 .fainance-rules .rule-editor-tab {
   display:flex; align-items:center; justify-content:center; gap:6px;
   background:linear-gradient(180deg,#f8fbff,#edf2f8);
@@ -255,7 +255,7 @@
 .fainance-rules .rule-card > .rule-name-card:first-child { padding:0; background:transparent; border:none; box-shadow:none; }
 .fainance-rules .rule-match-label { margin-top:4px; }
 .fainance-rules .rule-match-label select { margin-top:6px; }
-.fainance-rules .rule-remove { background:var(--rule-soft); color:var(--rule-primary); border:1px solid transparent; border-radius:12px; min-height:42px; font-weight:800; }
+.fainance-rules .rule-remove { background:var(--rule-soft); color:var(--rule-link,var(--rule-primary)); border:1px solid transparent; border-radius:12px; min-height:42px; font-weight:800; }
 .fainance-rules .rule-editor-footer { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 .fainance-rules .rule-editor-footer .rule-primary { order:2; }
 .fainance-rules .rule-editor-footer .rule-secondary { order:1; }
@@ -288,7 +288,7 @@
 .fainance-rules .rule-editor-footer.tab-when > *,.fainance-rules .rule-editor-footer.tab-if > *,.fainance-rules .rule-editor-footer.tab-then > * { width:100%; }
 .fainance-rules .rule-editor-footer .rule-footer-spacer { min-height:48px; }
 .fainance-rules .rule-editor-footer .rule-primary { background:var(--rule-primary); color:#fff; border-color:transparent; }
-.fainance-rules .rule-editor-footer .rule-secondary { background:var(--rule-soft); color:var(--rule-primary); border-color:transparent; }
+.fainance-rules .rule-editor-footer .rule-secondary { background:var(--rule-soft); color:var(--rule-link,var(--rule-primary)); border-color:transparent; }
 .fainance-rules .rule-editor-footer.tab-when > :first-child { grid-column:1; }
 .fainance-rules .rule-editor-footer.tab-when > :last-child { grid-column:2; }
 .fainance-rules .rule-editor-footer.tab-then .rule-secondary,
@@ -320,7 +320,7 @@
 .fainance-rules .rule-editor-footer.tab-then > :nth-child(2) { grid-column:1; grid-row:2; }
 .fainance-rules .rule-editor-footer.tab-then > :nth-child(3) { grid-column:2; grid-row:1 / span 2; align-self:stretch; }
 .fainance-rules .rule-editor-footer.tab-then .rule-primary { display:flex; align-items:center; justify-content:center; }
-.fainance-rules .rule-editor-footer .rule-secondary { background:linear-gradient(180deg,#f8fbff,#e9f1f9); color:var(--rule-primary); border:1px solid #d6e2ef; box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 4px 10px rgba(55,138,221,.06); }
+.fainance-rules .rule-editor-footer .rule-secondary { background:linear-gradient(180deg,#f8fbff,#e9f1f9); color:var(--rule-link,var(--rule-primary)); border:1px solid #d6e2ef; box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 4px 10px rgba(55,138,221,.06); }
 .fainance-rules .rule-editor-footer .rule-primary { background:linear-gradient(180deg,#47a0f4,#378add); color:#fff; border:1px solid transparent; box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 9px 20px rgba(55,138,221,.2); }
 .fainance-rules .rule-editor-shell input::placeholder, .fainance-rules .rule-editor-shell textarea::placeholder { color:#c3c9d3; }
 @media (max-width:640px){
@@ -328,7 +328,7 @@
 }
 
 
-/* update 5 — exact requested controls/footer */
+/* update 5 â€” exact requested controls/footer */
 .fainance-rules .rule-editor-tabs { margin-top:18px !important; margin-bottom:14px !important; }
 .fainance-rules .rule-editor-tab { gap:16px !important; min-height:38px !important; padding:7px 12px !important; }
 .fainance-rules .rule-field-label { font-size:11px; font-weight:800; color:var(--rule-sub); margin-bottom:7px; }
@@ -336,7 +336,7 @@
 .fainance-rules .rule-toggle-button { min-width:0; }
 .fainance-rules .rule-match-buttons { grid-template-columns:1fr 1fr !important; gap:10px; }
 .fainance-rules .rule-match-button { min-width:0; white-space:normal !important; overflow:visible; text-overflow:clip; line-height:1.25; padding:10px 8px; }
-.fainance-rules .rule-remove { background:linear-gradient(180deg,#f8fbff,#e9f1f9) !important; color:var(--rule-primary) !important; border:1px solid #d6e2ef !important; box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 4px 10px rgba(55,138,221,.06); }
+.fainance-rules .rule-remove { background:linear-gradient(180deg,#f8fbff,#e9f1f9) !important; color:var(--rule-link,var(--rule-primary)) !important; border:1px solid #d6e2ef !important; box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 4px 10px rgba(55,138,221,.06); }
 .fainance-rules .rule-editor-footer { grid-template-columns:1fr 1fr !important; gap:10px !important; }
 .fainance-rules .rule-editor-footer.tab-when > .rule-footer-spacer { grid-column:1 !important; grid-row:1 !important; }
 .fainance-rules .rule-editor-footer.tab-when > .rule-primary { grid-column:2 !important; grid-row:1 !important; width:100% !important; }
@@ -347,7 +347,7 @@
 .fainance-rules .rule-editor-footer.tab-then > .rule-back-footer { grid-column:1 !important; grid-row:2 !important; }
 .fainance-rules .rule-editor-footer.tab-then > .rule-footer-spacer { grid-column:2 !important; grid-row:2 !important; }
 .fainance-rules .rule-editor-footer .rule-primary { background:linear-gradient(180deg,#47a0f4,#378add) !important; color:#fff !important; border:1px solid transparent !important; }
-.fainance-rules .rule-editor-footer .rule-secondary { background:linear-gradient(180deg,#f8fbff,#e9f1f9) !important; color:var(--rule-primary) !important; border:1px solid #d6e2ef !important; }
+.fainance-rules .rule-editor-footer .rule-secondary { background:linear-gradient(180deg,#f8fbff,#e9f1f9) !important; color:var(--rule-link,var(--rule-primary)) !important; border:1px solid #d6e2ef !important; }
 
 
 /* update 6 - icon actions and tighter controls */
@@ -355,7 +355,7 @@
 .fainance-rules .rule-actions-block { margin-top:12px; display:grid; gap:8px; }
 .fainance-rules .rule-actions-label { font-size:12px; color:var(--rule-sub); font-weight:800; }
 .fainance-rules .rule-icon-actions { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:8px; }
-.fainance-rules .rule-icon-button { min-height:40px; border-radius:12px; border:1px solid #dfe7f0; background:linear-gradient(180deg,#ffffff,#f3f7fb); box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 4px 10px rgba(55,138,221,.05); color:var(--rule-primary); display:grid; place-items:center; font-size:18px; }
+.fainance-rules .rule-icon-button { min-height:40px; border-radius:12px; border:1px solid #dfe7f0; background:linear-gradient(180deg,#ffffff,#f3f7fb); box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 4px 10px rgba(55,138,221,.05); color:var(--rule-link,var(--rule-primary)); display:grid; place-items:center; font-size:18px; }
 .fainance-rules .rule-icon-button:disabled { opacity:.45; }
 .fainance-rules .rule-icon-button span { line-height:1; }
 .fainance-rules .rule-editor-tabs { margin-top:22px !important; margin-bottom:14px !important; padding:0 8px !important; gap:8px !important; }
@@ -406,3 +406,172 @@
   .fainance-rules .rule-editor-tabs { width:calc(100% - 18px) !important; margin:22px auto 12px !important; }
   .fainance-rules .rule-editor-tab { min-height:34px !important; padding:6px 7px !important; gap:8px !important; }
 }
+
+
+/* 2.1.5 - automatic rules test UX: dedicated probe, stable mobile layout, semantic results */
+.fainance-rules .rule-test-card {
+  grid-template-columns:minmax(0,1fr) !important;
+  width:100%;
+  min-width:0;
+  overflow:hidden;
+}
+.fainance-rules .rule-test-card > label:not(.rule-check) {
+  width:100% !important;
+  min-width:0 !important;
+}
+.fainance-rules .rule-test-card .rule-check {
+  display:grid !important;
+  grid-template-columns:20px minmax(0,1fr) !important;
+  align-items:start !important;
+  gap:10px !important;
+  width:100% !important;
+  min-width:0 !important;
+  font-size:12px;
+  font-weight:500;
+  line-height:1.4;
+}
+.fainance-rules .rule-test-card .rule-check input {
+  width:18px !important;
+  height:18px !important;
+  margin:1px 0 0 !important;
+  flex:none !important;
+}
+.fainance-rules .rule-test-card .rule-check span {
+  display:block;
+  min-width:0;
+  white-space:normal;
+  word-break:normal;
+  overflow-wrap:break-word;
+}
+.fainance-rules .rule-result {
+  border:1px solid transparent;
+  box-shadow:none;
+}
+.fainance-rules .rule-result.rule-result-success {
+  background:#ecfdf3 !important;
+  border-color:#a7e3bd !important;
+  color:#234c36 !important;
+}
+.fainance-rules .rule-result.rule-result-failure {
+  background:#fff1f2 !important;
+  border-color:#f4b8bf !important;
+  color:#6f2f36 !important;
+}
+.fainance-rules .rule-probe-footer {
+  grid-template-columns:1fr !important;
+}
+.fainance-rules .rule-probe-footer > button {
+  grid-column:1 !important;
+  width:100% !important;
+}
+
+/* Dark text audit. These overrides follow the existing layered editor styles. */
+.fainance-rules[data-dark=true] .rule-editor-tab,
+.fainance-rules[data-dark=true] .rule-toggle-button,
+.fainance-rules[data-dark=true] .rule-match-button,
+.fainance-rules[data-dark=true] .rule-icon-button,
+.fainance-rules[data-dark=true] .rule-counter,
+.fainance-rules[data-dark=true] .rule-row,
+.fainance-rules[data-dark=true] .rule-editor-body > .rule-card { background:var(--rule-card)!important; color:var(--rule-text); box-shadow:none; }
+.fainance-rules[data-dark=true] .rule-editor-shell input:not([type=checkbox]),
+.fainance-rules[data-dark=true] .rule-editor-shell textarea,
+.fainance-rules[data-dark=true] .rule-editor-shell select { background:var(--rule-input)!important; color:var(--rule-text)!important; box-shadow:none; color-scheme:dark; }
+.fainance-rules[data-dark=true] .rule-editor-shell input:not(:focus)::placeholder,
+.fainance-rules[data-dark=true] .rule-editor-shell textarea:not(:focus)::placeholder { color:var(--rule-sub)!important; opacity:1; }
+.fainance-rules[data-dark=true] select option { background:var(--rule-input); color:var(--rule-text); }
+.fainance-rules[data-dark=true] .rule-primary,
+.fainance-rules[data-dark=true] .rule-editor-footer .rule-primary,
+.fainance-rules[data-dark=true] .rule-editor-tab.active,
+.fainance-rules[data-dark=true] .rule-match-button.active { background:var(--rule-primary)!important; color:var(--rule-on-primary)!important; }
+.fainance-rules[data-dark=true] .rule-toggle-button.expense.active { background:var(--rule-expense)!important; color:var(--rule-on-expense)!important; }
+.fainance-rules[data-dark=true] .rule-toggle-button.income.active { background:var(--rule-income)!important; color:var(--rule-on-income)!important; }
+.fainance-rules[data-dark=true] .rule-secondary,
+.fainance-rules[data-dark=true] .rule-editor-footer .rule-secondary,
+.fainance-rules[data-dark=true] .rule-remove { background:var(--rule-soft)!important; color:var(--rule-link)!important; box-shadow:none; }
+.fainance-rules[data-dark=true] .rule-step,
+.fainance-rules[data-dark=true] .rule-join { color:var(--rule-link); }
+.fainance-rules[data-dark=true] .rule-notice,
+.fainance-rules[data-dark=true] .rule-conflict { background:#352d18; color:#ffe9b5; }
+.fainance-rules[data-dark=true] .rule-enabled,
+.fainance-rules[data-dark=true] .rule-result.rule-result-success { background:#17352d!important; color:#b8f5d6!important; border-color:#458a70!important; }
+.fainance-rules[data-dark=true] .rule-result.rule-result-failure { background:#351f24!important; color:#ffd0d0!important; border-color:#97505c!important; }
+
+.fainance-rules[data-dark=true] .rule-editor-close { background:#351f24; color:#ffd0d0; border-color:#97505c; }
+
+.fainance-rules[data-dark=true] .rule-step { background:var(--rule-soft); }
+.fainance-rules[data-dark=true] .rule-icon-button { color:var(--rule-link); }
+/* Additional rule conditions and read-only historical preview */
+.fainance-rules .rule-add-condition.at-limit { background:#D8E1EA!important; color:#5D6B7C!important; border-color:#D8E1EA!important; box-shadow:none!important; cursor:pointer; }
+.fainance-rules[data-dark=true] .rule-add-condition.at-limit { background:#29455F!important; color:#B3C0CE!important; border-color:#29455F!important; }
+.fainance-rules .rule-join select { min-width:90px; max-width:100%; font-weight:800; text-align:center; border:1px solid var(--rule-border); border-radius:10px; padding:8px; background:var(--rule-card); color:var(--rule-text); }
+.fainance-rules .rule-range-input { display:grid; grid-template-columns:1fr 1fr; gap:8px; min-width:0; }
+.fainance-rules .rule-range-input label { display:grid; gap:3px; min-width:0; }
+.fainance-rules .rule-range-input input { width:100%; min-width:0; }
+.fainance-rules .rule-edit-optin { display:flex; gap:10px; align-items:center; margin:12px 0 4px; color:var(--rule-text); }
+.fainance-rules .rule-history-test { display:grid; gap:10px; }
+.fainance-rules .rule-history-test .rule-result { display:block; }
+
+/* 2.1.12 corrective: modal containment and bracketed condition builder */
+.fainance-rules .rule-editor-overlay .rule-goal-like { min-width:0!important; width:min(620px,100%)!important; max-width:calc(100vw - 24px)!important; overflow-x:hidden!important; }
+.fainance-rules .rule-editor-body, .fainance-rules .rule-editor-body > .rule-card { min-width:0!important; max-width:100%; overflow-wrap:anywhere; }
+.fainance-rules .rule-edit-optin { display:grid!important; grid-template-columns:20px minmax(0,1fr)!important; align-items:start!important; justify-content:start!important; width:100%!important; min-width:0!important; gap:10px!important; }
+.fainance-rules .rule-edit-optin input[type=checkbox] { width:18px!important; height:18px!important; margin:0!important; min-width:18px!important; max-width:18px!important; position:static!important; transform:none!important; }
+.fainance-rules .rule-edit-optin span { display:block!important; min-width:0!important; width:auto!important; white-space:normal!important; overflow-wrap:anywhere!important; text-align:left!important; }
+.fainance-rules .rule-group-builder { display:grid; gap:8px; min-width:0; padding:12px; border:1px solid var(--rule-border); border-radius:14px; background:var(--rule-soft); }
+.fainance-rules .rule-group-controls { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:8px; min-width:0; }
+.fainance-rules .rule-group-controls > button { grid-column:1 / -1; }
+.fainance-rules .rule-group-chip { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:5px 10px; border-radius:10px; border:1px solid var(--rule-border); background:var(--rule-card); }
+.fainance-rules .rule-group-chip button { min-height:32px; }
+.fainance-rules .rule-expression { margin:6px 0; width:100%; min-width:0; padding:10px; border-radius:10px; border:1px solid var(--rule-border); background:var(--rule-card); color:var(--rule-text); line-height:1.55; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.fainance-rules .rule-limit-inline { padding:10px 12px; border-radius:10px; background:var(--rule-soft); border:1px solid var(--rule-border); font-size:13px; font-weight:700; color:var(--rule-text); }
+.fainance-rules .rule-explanation { min-width:0; padding:0 8px; }
+.fainance-rules .rule-explanation p { font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.fainance-rules .rule-join select { border:2px solid var(--rule-primary); font-weight:800; }
+
+/* Rule builder v3: inline parenthesization, AI composer and responsive grouping */
+.fainance-rules .rule-inline-brackets {display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:flex-start; min-width:0;}
+.fainance-rules .rule-inline-brackets button {font-size:12px; min-height:36px; padding:7px 10px;}
+.fainance-rules .rule-group-pending {border:2px solid var(--rule-primary);}
+.fainance-rules .rule-group-list {display:grid; gap:6px;}
+.fainance-rules .rule-cancel-bracket {justify-self:start;}
+.fainance-rules .rule-ai-prompt-open {width:100%; background:var(--rule-soft); color:var(--rule-link); text-align:center; border:1px solid var(--rule-border);}
+.fainance-rules .rule-ai-prompt-dialog {width:min(540px,calc(100vw - 24px))!important; max-width:calc(100vw - 24px)!important; min-width:0!important;}
+.fainance-rules .rule-ai-prompt-content {display:grid; gap:12px; min-width:0; padding:6px 16px 20px;}
+.fainance-rules .rule-ai-prompt-content textarea {width:100%; min-height:140px; resize:vertical;}
+.fainance-rules .rule-ai-prompt-dialog .rule-editor-footer {display:flex; gap:10px; flex-wrap:wrap; justify-content:space-between;}
+.fainance-rules .rule-ai-prompt-dialog .rule-editor-footer button {flex:1 1 130px; white-space:normal;}
+
+/* Rule formula wizard (V5): use existing fAInance tokens and component surfaces. */
+.fainance-rules .rule-formula-wizard {min-width:0;max-width:100%;}
+.fainance-rules .rule-formula-steps {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+.fainance-rules .rule-formula-steps button {min-width:0;min-height:32px;padding:4px 8px;border-radius:12px;border:1px solid var(--rule-border);background:var(--rule-soft);color:var(--rule-text);font-weight:700;font-size:13px;}
+.fainance-rules .rule-formula-steps button.active {background:var(--rule-primary);color:var(--rule-on-primary);border-color:var(--rule-primary);}
+.fainance-rules .rule-formula-content {display:grid;gap:12px;min-width:0;}
+.fainance-rules .rule-formula-expression {display:flex;align-items:center;flex-wrap:wrap;gap:5px;min-height:62px;padding:12px;background:var(--rule-card);border:2px solid var(--rule-border);border-radius:14px;}
+.fainance-rules .rule-formula-token {min-width:27px;min-height:30px;display:inline-flex;align-items:center;justify-content:center;padding:3px 7px;font-size:16px;font-weight:800;border-radius:9px;color:var(--rule-text);}
+.fainance-rules .rule-formula-token.number {background:var(--rule-soft);color:var(--rule-link);}
+.fainance-rules .rule-formula-keypad {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;min-width:0;}
+.fainance-rules .rule-formula-keypad button {min-width:0;min-height:48px;padding:6px;border:1px solid var(--rule-border);border-radius:12px;background:var(--rule-card);color:var(--rule-text);font-size:16px;font-weight:800;box-shadow:none;}
+.fainance-rules .rule-formula-keypad button:disabled {opacity:.35;cursor:not-allowed;}
+.fainance-rules .rule-formula-keypad .rule-formula-number {color:var(--rule-link);background:var(--rule-soft);}
+.fainance-rules .rule-formula-keypad .rule-formula-operator {background:var(--rule-primary);color:var(--rule-on-primary);}
+.fainance-rules .rule-formula-keypad .rule-formula-clear {color:var(--rule-text);}
+.fainance-rules .rule-formula-available,.fainance-rules .rule-formula-preview {min-width:0;padding:12px;border-radius:12px;border:1px solid var(--rule-border);background:var(--rule-card);}
+.fainance-rules .rule-formula-available {display:grid;gap:6px;}
+.fainance-rules .rule-formula-available p {display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere;margin:0;color:var(--rule-text);font-size:13px;}
+.fainance-rules .rule-formula-available-number {flex:0 0 28px;display:inline-flex;justify-content:center;align-items:center;min-height:28px;border-radius:100%;background:var(--rule-soft);color:var(--rule-link);font-weight:800;}
+.fainance-rules .rule-formula-preview {display:grid;gap:8px;}
+.fainance-rules .rule-formula-preview p {margin:0;line-height:1.5;overflow-wrap:anywhere;color:var(--rule-text);}
+.fainance-rules .rule-formula-valid {color:var(--fainance-success,#18794E);font-weight:800;}
+.fainance-rules .rule-formula-invalid {color:var(--fainance-error,#B63B45);font-weight:800;}
+.fainance-rules[data-dark=true] .rule-formula-valid {color:#79D5A8;}
+.fainance-rules[data-dark=true] .rule-formula-invalid {color:#FF9AA3;}
+
+/* Direct AI rule composition: prompt over standard editor; no alternative review page. */
+.fainance-rules .rule-ai-direct-overlay { z-index:10030; }
+.fainance-rules .rule-ai-rephrase { display:block; width:calc(100% - 32px); margin:0 16px 10px; min-height:36px; padding:6px 12px; background:var(--rule-soft); border:1px solid var(--rule-border); border-radius:12px; color:var(--rule-link); font-size:13px; font-weight:700; }
+.fainance-rules .rule-ai-rephrase:focus-visible { outline:2px solid var(--rule-primary); outline-offset:2px; }
+.fainance-rules[data-dark=true] .rule-ai-rephrase { background:var(--rule-soft); color:var(--rule-text); }
+
+/* The shared movement picker occupies a full row inside the action editor. */
+.fainance-rules .rule-installments{grid-column:1/-1;min-width:0;width:100%}

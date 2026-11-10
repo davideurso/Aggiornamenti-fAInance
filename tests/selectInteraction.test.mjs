@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import ts from 'typescript';
+const file='src/utils/appRuntime.ts',source=fs.readFileSync(file,'utf8');
+const ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true);
+const node=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='focusFainanceInput');
+const code=ts.transpileModule(node.getText(ast).replace('export ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+let callback,focuses=0,selections=0;const doc={activeElement:{tagName:'SELECT'}},target={isConnected:true,focus(){focuses++},select(){selections++}};
+const focus=new Function('document','setTimeout',code+';return focusFainanceInput;')(doc,fn=>{callback=fn});
+focus({current:target},90);callback();assert.equal(focuses,0);assert.equal(selections,0);
+doc.activeElement={tagName:'BODY'};focus({current:target},90);callback();assert.equal(focuses,1);assert.equal(selections,1);
+target.isConnected=false;focus({current:target},90);callback();assert.equal(focuses,1);
+console.log('OK focus guard: open select preserved, initial focus retained, detached target ignored');

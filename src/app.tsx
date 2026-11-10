@@ -1,6 +1,36 @@
+import { commitNativeShareActivity, useNativeShareCommit } from './firebase/shareActivityCommit';
+import { syncMundelyShareDeletionToMundely } from './integrations/mundelyBridge';
+import {mergeSensitiveRecords} from './integrations/chatgptSensitiveMerge.js';
+import {preferLocalAIConsent,pendingChatgptLanguage} from './integrations/chatgptTestPreferences.js';
+import {resolveChatgptTestRoute} from './integrations/chatgptTestRoutes.js';
+import {appEnvironment as chatgptAppEnvironment,firebaseConfig as chatgptFirebaseConfig} from './config/env';
+import {trackAccountWrite,skipTestAccountEcho} from './data/accountSnapshotEcho';
+import {noteGrowthCreations} from './data/growthCreationIntents';
+import { notifyGrowthSourceCommitted } from "./data/growthMetricsCommit";
+import { growthLocalCounts } from "./data/growthLocalCounts";
+import { civilToday, derivePatrimony } from './finance/patrimonyAutoBalance.js';
+import { activeShareActivities, shareCashMovementKey, shareCashMovementsForUser, shareProjectsForRead } from './finance/shareCashMovements.js';
+import { incomeReceiptFields } from "./finance/incomeReceipt";
+import {triggeredSpendingAlerts} from './finance/spendingAlerts.js';
+import {useSpendingAlertDispatch} from './notifications/useSpendingAlertDispatch';
+import { notificationShowsInApp, mergeNotificationChannelState } from './notifications/notificationChannels.mjs';
+import { collectDueLocalReminders } from './notifications/localCustomReminders.mjs';
+import { loadNotificationChannels } from './notifications/pushNotifications';
+import { PERIOD_CONFIRMATION_KEY, readPeriodConfirmation, keepPeriodConfirmation } from './data/periodConfirmation';
+import { readCatalogEdits, persistCatalogEdit, protectCatalogEdit, confirmCatalogEdits, catalogEditEqual, migrateLegacyCatalogEdits } from "./data/catalogLocalEdits";
+import { reconcileAuthorityCatalogs } from "./data/currentCatalogAuthority";
+import { INTERNAL_DESTINATIONS, readNotificationMedia } from "../functions/notificationMedia.mjs";
+import { mergeIncomingMovements } from "./data/incomingMovements";
+import { DarkTextDefaults } from './ui/DarkTextDefaults';
+import { readableDarkText } from './ui/textContrast';
+import { getDocFromCache, getDocFromServer, runTransaction, writeBatch } from "firebase/firestore";
+import { preserveNewerPatrimony, reconcilePatrimonyAuthority } from "./finance/patrimonyWriteConflict.js";
+import { readExistingCachedDocument, serializeSnapshotHandler, needsCategoryRecovery, hasResumeCheckpoint, writeResumeCheckpoint } from "./utils/resumeCache";
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import {ToolsPanel} from './sections/ToolsPanel';
 import {toolsText} from './i18n/toolsTranslations';
-import {pruneToolHistory} from './finance/tools';
+import {pruneToolHistory,addToolHistory} from './finance/tools';
 import { evaluateAutomaticRules } from './finance/automaticRules';
 import { rulesText } from './i18n/automaticRulesTranslations';
 import { goalSavedAmount } from './finance/savingsGoals';
@@ -12,13 +42,17 @@ import './ui/responsiveLayout.css';
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { createFinanceEvolution, migrateFinanceEvolution, selectFinanceEvolution } from './data/financeEvolution';
+import { mergeAutomaticRulesIntoFinanceEvolution, trackAutomaticRuleLocalChange } from './data/automaticRuleAccountSync';
 import { createAccountingPeriod } from './finance/accountingPeriod';
 import { PeriodPreferences } from './settings/PeriodPreferences';
 import { periodText } from './i18n/periodTranslations';
 import { budgetForPeriod, saveBudgetForPeriod, resetBudgetForPeriod } from './finance/budgetEngine';
+import { readRecoverySnapshot, persistRecoverySnapshot, clearRecoverySnapshots } from "./data/recoverySnapshots";
+import { markStartupPhase, measureStartup } from "./utils/startupDiagnostics";
+import { assertFinanceWriteReady } from "./data/financeWriteGate";
 import { financeMessage } from './i18n/financeMessages';
 import { participantForUser, shareAmountForUser } from './finance/shareUserAmount';
-import { buildExpensesForAnalysis, resolveSharePersonalCategoryId, fallbackPersonalCategoryId } from './finance/shareAnalytics';
+import { buildExpensesForAnalysis, expensesWithoutShareShadows, resolveSharePersonalCategoryId, fallbackPersonalCategoryId } from './finance/shareAnalytics';
 import {
   useState,
   useEffect,
@@ -29,7 +63,7 @@ import {
   createContext,
   Component,
 } from "react";
-import { registerPlugin, SystemBars, SystemBarsStyle, SystemBarType } from "@capacitor/core";
+import { CapacitorHttp, registerPlugin, SystemBars, SystemBarsStyle, SystemBarType } from "@capacitor/core";
 import {
   AppCtx,
   useApp,
@@ -88,6 +122,7 @@ import {
   clearFainanceLocalAccountData,
   fmtDate,
   fmtAmt,
+  formatNumber,
   rateMonth,
   balancePeriodRangeForDate,
   amountForBalancePeriodMonth,
@@ -220,6 +255,7 @@ import { ShoppingPanel } from "./sections/ShoppingPanel";
 import { PatrimonioPanel } from "./sections/PatrimonioPanel";
 import { SharePanel } from "./sections/SharePanel";
 import { MorePanel } from "./sections/MorePanel";
+import { FinancialCalendarPanel } from "./sections/FinancialCalendarPanel";
 import { SettingsPanel } from "./settings/SettingsPanel";
 import { AdminCenterPanel } from "./admin/AdminCenterPanel";
 import { resolveAdminSession, type AdminSession } from "./admin/session";
@@ -247,7 +283,12 @@ import {
   fainanceCompressAccountDataV5,
   fainanceExpandAccountCloudDataV5,
 } from "./data/accountCloudCodec";
-import { createAutomaticAccountBackup } from "./data/automaticBackups";
+import {
+  createAutomaticAccountBackup,
+  saveUserStateAuthorityBackupV6,
+  readLatestUserStateAuthorityBackupV6,
+  readUserStateAuthorityBackupV6ById,
+} from "./data/automaticBackups";
 import { writeTechnicalLog } from "./observability/technicalLogs";
 import {
   accountSyncErrorInfo,
@@ -273,6 +314,8 @@ import {
   movementSyncV2AccountStatus,
   watchMovementSyncV2,
   writeMovementDiffV2,
+  replaceMovementSetsV2,
+  readMovementSetsV2,
 } from "./data/movementSyncCleanV2";
 import {
   bulkMovementRowLimit,
@@ -283,7 +326,7 @@ import {
   nextBulkMovementAllowedAt,
   isBulkMovementLocked,
 } from "./finance/bulkMovementPolicy";
-import { recurringOccurrencesInPeriod } from './finance/recurringOccurrences';
+import { recurringDueOccurrences, recurringOccurrenceForDate, recurringMovementId } from './finance/recurringOccurrences';
 import { sortFinancialHistoryItems } from "./finance/historySorting";
 import { debtCreditBalance } from "./finance/debtCredit";
 import { maskPaymentCardNumber } from "./finance/paymentCards";
@@ -306,6 +349,8 @@ import {
   watchAccountDeletionState,
 } from "./security/accountLifecycle";
 import { NotificationCenter } from "./notifications/NotificationCenter";
+import { AppViewport, AppSummaryHeader } from "./ui/AppSummaryHeader";
+import { PremiumProfileIcon } from "./ui/release215";
 import { startNativePushNotifications, syncNotificationProfile } from "./notifications/pushNotifications";
 
 /* fainanceBasicUserPayload extracted */
@@ -395,7 +440,7 @@ class SectionErrorBoundary extends Component {
               style={{
                 fontSize: 20,
                 fontWeight: 900,
-                color: dark ? "#ffd0d0" : "#8a2d2d",
+                color: readableDarkText(dark ? "#ffd0d0" : "#8a2d2d", dark, dark ? "#2a2424" : "#fff0f0"),
                 marginBottom: 8,
               }}
             >
@@ -431,7 +476,7 @@ class SectionErrorBoundary extends Component {
               onClick={this.props.onHome}
               style={{
                 background: "#7F77DD",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, "#7F77DD"),
                 border: "none",
                 borderRadius: 14,
                 padding: "11px 18px",
@@ -510,6 +555,7 @@ function AdminOnlyApp({ session, onLogout }: { session: AdminSession; onLogout: 
 
   return (
     <AppCtx.Provider value={ctxValue}>
+      <AppViewport /><DarkTextDefaults dark={dark} background={bgColor} />
       <div
         data-fainance-admin-only="true"
         style={{
@@ -537,7 +583,7 @@ function AdminOnlyApp({ session, onLogout }: { session: AdminSession; onLogout: 
               <div style={{ fontSize: 16, fontWeight: 950 }}>Admin</div>
               <div style={{ marginTop: 2, color: subC, fontSize: 10 }}>Centro di amministrazione fAInance</div>
             </div>
-            <span style={{ borderRadius: 999, padding: "5px 9px", background: primary + "18", color: primary, fontSize: 10, fontWeight: 900 }}>
+            <span style={{ borderRadius: 999, padding: "5px 9px", background: primary + "18", color: readableDarkText(primary, dark, primary + "18"), fontSize: 10, fontWeight: 900 }}>
               {String(session.role || "admin").toUpperCase()}
             </span>
             <button
@@ -628,6 +674,7 @@ function AppWithLogin() {
           if (deleted) {
             try {
               clearFainanceLocalAccountData(user.uid);
+              await clearRecoverySnapshots(user.uid);
             } catch (e) {}
             setFbUser(null);
             setUserData(null);
@@ -729,6 +776,19 @@ function AppWithLogin() {
     [fbUser && fbUser.uid]
   );
 
+  const photoProfileUid = fbUser?.uid;
+  useEffect(() => {
+    if (chatgptAppEnvironment !== "test" || chatgptFirebaseConfig.projectId !== "fainance-test-20260823195207" || !photoProfileUid || adminSession?.isAdmin) return;
+    return onSnapshot(doc(fbDb, "users", photoProfileUid), { includeMetadataChanges: true }, (snapshot) => {
+      if (!snapshot.exists() || snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
+      const photo = String(snapshot.data().profilePhotoDataUrl || "");
+      setUserData((profile) => {
+        if (profile?.id !== photoProfileUid || (profile.profilePhotoDataUrl || "") === photo) return profile;
+        return { ...profile, profilePhotoDataUrl: photo };
+      });
+    }, (error) => console.warn("Profile photo synchronization failed", error.code));
+  }, [photoProfileUid, adminSession?.isAdmin]);
+
   if (fbUser === undefined)
     return (
       <div
@@ -796,6 +856,39 @@ function StableNestedPanelHost({ render }: { render: () => any }) {
   return render();
 }
 
+// Progress belongs to this small component, not the financial app shell.
+// Updating the shell on every acknowledgement recalculates thousands of rows.
+function MovementBulkProgressOverlay({ dark, L, movementBulkCancelRef, progressRef }) {
+  const [movementBulkProgress, setMovementBulkProgress] = useState(() => progressRef.current);
+  useEffect(() => {
+    const update = () => setMovementBulkProgress(progressRef.current);
+    window.addEventListener('fainance-movement-bulk-progress', update);
+    update();
+    return () => window.removeEventListener('fainance-movement-bulk-progress', update);
+  }, [progressRef]);
+  return (<div role="alertdialog" aria-modal="true" aria-label={L('Sincronizzazione in corso, attendi...')}
+        tabIndex={-1} ref={node => { if (node) node.focus(); }}
+        onKeyDown={event => { if (event.key === 'Tab') event.preventDefault(); }}
+        style={{ position: 'fixed', inset: 0, zIndex: 200000, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: dark ? '#081522' : '#F7F9FC', color: dark ? '#F4F7FB' : '#14263D', padding: 24, textAlign: 'center' }}>
+        <div role="status" aria-live="polite">
+          <strong>{L('Sincronizzazione in corso, attendi...')}</strong>
+          {movementBulkProgress.phase === 'pending' && <>
+            <p>{L('Attendo la conferma delle modifiche precedenti. Nessuna nuova cancellazione o sostituzione è iniziata.')}</p>
+            <p>{L('Movimenti ancora da sincronizzare')}: {movementBulkProgress.done}</p>
+            <button type="button" onClick={() => movementBulkCancelRef.current?.()}
+              style={{ padding: '12px 20px', borderRadius: 12, border: '1px solid currentColor', background: 'transparent', color: 'inherit' }}>
+              {L('Annulla')}
+            </button>
+          </>}
+          {movementBulkProgress.phase === 'checking' && <p>{L('Verifica della sincronizzazione')}</p>}
+          {movementBulkProgress.phase === 'reading' && <p>{L('Lettura dei movimenti confermati')}</p>}
+          {movementBulkProgress.phase === 'verifying' && <p>{L('Verifica finale dei movimenti')}</p>}
+          {movementBulkProgress.phase !== 'pending' && movementBulkProgress.total > 0 && <p>{movementBulkProgress.done}/{movementBulkProgress.total}</p>}
+        </div>
+      </div>);
+}
+
 function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   currentUser = currentUser || {
     id: fbUser && fbUser.uid ? fbUser.uid : "",
@@ -833,6 +926,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var marker = prefix + "legacy_account_storage_migrated_v3";
     var ownerKey = "fainance_legacy_storage_owner_uid_v2";
     try {
+      // This migration is intentionally one-shot. Replaying recovery_legacy_*
+      // on every login can resurrect values that the user has explicitly
+      // deleted or disabled after the original migration.
+      if (localStorage.getItem(marker) === "1") return;
       var keys = [
         "exp_v10",
         "inc_v10",
@@ -1198,8 +1295,254 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
     ensureArrayValue(expenseList, []).forEach(maybeAdd);
     ensureArrayValue(recurringList, []).forEach(maybeAdd);
-    return out.length ? out : ensureArrayValue(DEFAULT_METHODS, []);
+    // An explicit empty catalog is an authoritative user choice.
+    // Defaults are only used by useStorage when the key has never existed.
+    return out;
   }
+  function validRecurringReference(value) {
+    if (value === undefined || value === null || String(value).trim() === "") return false;
+    var n = Number(value);
+    return Number.isFinite(n) && n > 0;
+  }
+  function recurringRuleKey(item) {
+    if (!item || typeof item !== "object") return "";
+    if (item.id !== undefined && item.id !== null && String(item.id) !== "")
+      return String(item.id);
+    return String(accountSyncRecordKey("recurring", item) || "");
+  }
+  function preserveRecurringRuleReferences(currentValue, nextValue) {
+    var current = ensureArrayValue(currentValue, []);
+    var next = ensureArrayValue(nextValue, []);
+    var previousByKey: any = {};
+    current.forEach(function (rule) {
+      var key = recurringRuleKey(rule);
+      if (key) previousByKey[key] = rule;
+    });
+    return next.map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      var previous = previousByKey[recurringRuleKey(rule)];
+      if (!previous) return rule;
+      var repaired = rule;
+      if (!validRecurringReference(rule.catId) && validRecurringReference(previous.catId))
+        repaired = { ...repaired, catId: previous.catId };
+      if (!validRecurringReference(rule.methodId) && validRecurringReference(previous.methodId))
+        repaired = { ...repaired, methodId: previous.methodId };
+      return repaired;
+    });
+  }
+  function repairMergedRecurringReferences(mergedValue, localValue, cloudValue) {
+    var candidatesByKey: any = {};
+    ensureArrayValue(localValue, []).concat(ensureArrayValue(cloudValue, [])).forEach(function (rule) {
+      var key = recurringRuleKey(rule);
+      if (!key) return;
+      if (!candidatesByKey[key]) candidatesByKey[key] = [];
+      candidatesByKey[key].push(rule);
+    });
+    return ensureArrayValue(mergedValue, []).map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      var candidates = (candidatesByKey[recurringRuleKey(rule)] || []).slice().sort(function (a, b) {
+        return Number(syncRecordTime(b) || 0) - Number(syncRecordTime(a) || 0);
+      });
+      var repaired = rule;
+      if (!validRecurringReference(rule.catId)) {
+        var catSource = candidates.find(function (candidate) { return validRecurringReference(candidate && candidate.catId); });
+        if (catSource) repaired = { ...repaired, catId: catSource.catId };
+      }
+      if (!validRecurringReference(rule.methodId)) {
+        var methodSource = candidates.find(function (candidate) { return validRecurringReference(candidate && candidate.methodId); });
+        if (methodSource) repaired = { ...repaired, methodId: methodSource.methodId };
+      }
+      return repaired;
+    });
+  }
+  function repairRecurringRuleReferencesFromCatalogs(recurringValue, categoryValue, methodValue) {
+    var categoryList = ensureArrayValue(categoryValue, []);
+    var methodList = ensureArrayValue(methodValue, []);
+    var changed = false;
+    var repaired = ensureArrayValue(recurringValue, []).map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      var next = rule;
+      if (!validRecurringReference(rule.catId) && String(rule.categoryNameSnapshot || "").trim()) {
+        var categoryName = String(rule.categoryNameSnapshot || "").trim().toLowerCase();
+        var category = categoryList.find(function (item) {
+          return String(item && item.name || "").trim().toLowerCase() === categoryName;
+        });
+        if (category && validRecurringReference(category.id)) {
+          next = { ...next, catId: category.id };
+          changed = true;
+        }
+      }
+      if (!validRecurringReference(rule.methodId) && String(rule.methodNameSnapshot || "").trim()) {
+        var methodName = String(rule.methodNameSnapshot || "").trim().toLowerCase();
+        var method = methodList.find(function (item) {
+          return String(item && item.name || "").trim().toLowerCase() === methodName;
+        });
+        if (method && validRecurringReference(method.id)) {
+          next = { ...next, methodId: method.id };
+          changed = true;
+        }
+      }
+      return next;
+    });
+    return { recurring: repaired, repaired: changed };
+  }
+  function repairRecurringRuleReferencesFromMovements(recurringValue, expenseValue) {
+    var movementsByRule: any = {};
+    ensureArrayValue(expenseValue, []).forEach(function (row) {
+      var ruleId = String((row && row.recurringRuleId) || "");
+      if (!ruleId) return;
+      if (!movementsByRule[ruleId]) movementsByRule[ruleId] = [];
+      movementsByRule[ruleId].push(row);
+    });
+    var changed = false;
+    var repaired = ensureArrayValue(recurringValue, []).map(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return rule;
+      if (validRecurringReference(rule.catId) && validRecurringReference(rule.methodId)) return rule;
+      var rows = (movementsByRule[String(rule.id)] || []).slice().sort(function (a, b) {
+        var bd = String((b && b.date) || "");
+        var ad = String((a && a.date) || "");
+        if (bd !== ad) return bd.localeCompare(ad);
+        return Number(syncRecordTime(b) || 0) - Number(syncRecordTime(a) || 0);
+      });
+      var next = rule;
+      if (!validRecurringReference(rule.catId)) {
+        var catRow = rows.find(function (row) { return validRecurringReference(row && row.catId); });
+        if (catRow) { next = { ...next, catId: catRow.catId }; changed = true; }
+      }
+      if (!validRecurringReference(rule.methodId)) {
+        var methodRow = rows.find(function (row) { return validRecurringReference(row && row.methodId); });
+        if (methodRow) { next = { ...next, methodId: methodRow.methodId }; changed = true; }
+      }
+      return next;
+    });
+    return { recurring: repaired, repaired: changed };
+  }
+  function recurringExpenseRuleScheduleMatchesDate(rule, dateValue) {
+    var date = String(dateValue || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !rule) return false;
+    var month = Number(date.slice(5, 7));
+    var day = Number(date.slice(8, 10));
+    var rawDay = Number(rule.dayOfMonth == null ? 1 : rule.dayOfMonth);
+    var expectedDay = rawDay === 0 ? new Date(Number(date.slice(0, 4)), month, 0).getDate() : Math.max(1, Math.min(31, rawDay || 1));
+    var actualExpectedDay = Math.min(expectedDay, new Date(Number(date.slice(0, 4)), month, 0).getDate());
+    if (day !== actualExpectedDay) return false;
+    if (String(rule.frequency || "monthly") === "annual") {
+      var annualMonth = Number(rule.annualMonth ?? rule.monthOfYear ?? rule.month ?? 1) || 1;
+      if (month !== annualMonth) return false;
+    }
+    var effectiveFrom = String(rule.effectiveFrom || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) && date < effectiveFrom) return false;
+    return true;
+  }
+  function recurringExpenseRuleMatchesLegacyMovement(rule, row) {
+    if (!rule || !row || String(rule.rtype || "expense") === "income") return false;
+    var rowName = String(row.desc || row.description || "").trim().toLowerCase();
+    var ruleName = String(rule.name || "").trim().toLowerCase();
+    if (!rowName || !ruleName || rowName !== ruleName) return false;
+    if (Math.abs(parseMoney(row.amount) - parseMoney(rule.amount)) > 0.005) return false;
+    return recurringExpenseRuleScheduleMatchesDate(rule, row.date);
+  }
+  function repairRecurringExpenseMovementReferences(expenseValue, recurringValue) {
+    var rules = ensureArrayValue(recurringValue, []).filter(function (rule) {
+      return rule && String(rule.rtype || "expense") !== "income";
+    });
+    var rulesById: any = {};
+    rules.forEach(function (rule) {
+      var key = recurringRuleKey(rule);
+      if (key) rulesById[key] = rule;
+    });
+    var changed = false;
+    var repaired = ensureArrayValue(expenseValue, []).map(function (row) {
+      if (!row) return row;
+      var rule = row.recurringRuleId
+        ? (rulesById[String(row.recurringRuleId)] || rulesById[recurringRuleKey({ id: row.recurringRuleId })])
+        : null;
+      if (!rule) {
+        // Le vecchie occorrenze potevano essere salvate senza recurringRuleId e,
+        // in alcuni casi, anche senza categoria/metodo. Le riconosciamo solo con
+        // una corrispondenza univoca nome + importo + data prevista, evitando
+        // associazioni per semplice somiglianza.
+        var candidates = rules.filter(function (candidate) {
+          return recurringExpenseRuleMatchesLegacyMovement(candidate, row);
+        });
+        if (candidates.length === 1) rule = candidates[0];
+      }
+      if (!rule) return row;
+      var next = row;
+      var occurrenceDate = String(row.recurringOccurrenceDate || row.date || "").slice(0, 10);
+      var occurrenceId = String(rule.id) + "@" + occurrenceDate;
+      if (!row.recurringRuleId || String(row.recurringRuleId) !== String(rule.id)) {
+        next = { ...next, recurringRuleId: String(rule.id) };
+        changed = true;
+      }
+      if (!row.recurringOccurrenceDate && occurrenceDate) {
+        next = { ...next, recurringOccurrenceDate: occurrenceDate };
+        changed = true;
+      }
+      if (!row.recurringOccurrenceId && occurrenceDate) {
+        next = { ...next, recurringOccurrenceId: occurrenceId };
+        changed = true;
+      }
+      if (String(row.source || "") !== "recurring") {
+        next = { ...next, source: "recurring" };
+        changed = true;
+      }
+      if (!validRecurringReference(next.catId) && validRecurringReference(rule.catId)) {
+        next = { ...next, catId: rule.catId };
+        changed = true;
+      }
+      if (!validRecurringReference(next.methodId) && validRecurringReference(rule.methodId)) {
+        next = { ...next, methodId: rule.methodId };
+        changed = true;
+      }
+      return next;
+    });
+    return { expenses: repaired, repaired: changed };
+  }
+  function restoreReferencedPaymentMethods(methodList, candidateLists, expenseRows, recurringRows) {
+    var current = ensureArrayValue(methodList, []).slice();
+    var byId: any = {};
+    current.forEach(function (method) {
+      if (method && method.id !== undefined && method.id !== null) byId[String(method.id)] = method;
+    });
+    var candidatesById: any = {};
+    ensureArrayValue(candidateLists, []).forEach(function (list) {
+      ensureArrayValue(list, []).forEach(function (method) {
+        if (!method || method.id === undefined || method.id === null) return;
+        var id = String(method.id);
+        if (!id || candidatesById[id]) return;
+        candidatesById[id] = method;
+      });
+    });
+    var referenced: any = {};
+    var recurringReferenced: any = {};
+    ensureArrayValue(expenseRows, []).forEach(function (row) {
+      if (row && validRecurringReference(row.methodId)) referenced[String(row.methodId)] = true;
+    });
+    ensureArrayValue(recurringRows, []).forEach(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income" || !validRecurringReference(rule.methodId)) return;
+      var id = String(rule.methodId);
+      referenced[id] = true;
+      recurringReferenced[id] = true;
+    });
+    var repaired = false;
+    Object.keys(referenced).forEach(function (id) {
+      var existing = byId[id];
+      var source = candidatesById[id];
+      var activeRecurringReference = !!recurringReferenced[id];
+      if (!existing && source) {
+        // A historical reference supplies a label, never permission to reactivate a method.
+        var added = { ...source, archived: true, deleted: true, recovered: true };
+        current.push(added);
+        byId[id] = added;
+        repaired = true;
+        return;
+      }
+
+    });
+    return { methods: current, repaired: repaired };
+  }
+
   function hasFallbackItems(fallback) {
     return Array.isArray(fallback) && fallback.length > 0;
   }
@@ -1233,8 +1576,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return map;
   }
   function compactProtectedArray(value, fallback, dict) {
-    var arr = Array.isArray(value) ? value.slice() : [];
-    if (!arr.length) arr = ensureArrayValue(fallback, []).slice();
+    // IMPORTANT: [] is a valid, authoritative user state. Never interpret
+    // an empty array as "missing" and never repopulate defaults after setup.
+    var arr = Array.isArray(value)
+      ? value.slice()
+      : ensureArrayValue(fallback, []).slice();
     var defaults = ensureArrayValue(fallback, []);
     var defaultIds = {};
     defaults.forEach(function (d) {
@@ -1297,21 +1643,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return defaultProtectedArray(value, fallback, dict);
   }
   function patrimonioProtectedArray(value, fallback, dict) {
-    var stored = Array.isArray(value) ? value : [];
-    // Mantiene l'ordine scelto dall'utente e aggiunge in coda soltanto gli
-    // elementi predefiniti realmente mancanti. Le personalizzazioni/tombstone
-    // del catalogo salvato hanno sempre precedenza sui default.
-    return compactProtectedArray(
-      mergeProtectedArrayByStableId(
-        stored,
-        ensureArrayValue(fallback, []),
-        fallback,
-        dict,
-        false
-      ),
-      fallback,
-      dict
-    );
+    // Patrimonio follows the same invariant as every other user-owned catalog:
+    // defaults seed a brand-new account only. Missing/deleted/disabled items
+    // must NEVER be silently appended again after the user has changed them.
+    return compactProtectedArray(value, fallback, dict);
   }
   function resolvePatrimonioProtectedNext(next, current, fallback, dict) {
     var base = patrimonioProtectedArray(current, fallback, dict);
@@ -1326,8 +1661,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var merged = mergeArrayByStableId(c, l);
       if (merged.length || !fallbackHasItems) return merged;
     }
-    if (c && (c.length || !fallbackHasItems)) return c;
-    if (l && (l.length || !fallbackHasItems)) return l;
+    // Explicit empty arrays are authoritative. Fallback is allowed only
+    // when neither cloud nor local has a stored array at all.
+    if (c) return c;
+    if (l) return l;
     return ensureArrayValue(fallback, []);
   }
   function chooseCloudLocalObject(cloud, local, fallback) {
@@ -1449,27 +1786,1050 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     return out.concat(recoveredCatalogs);
   }
+  var remoteApplyResumeTimerRef = useRef<any>(null);
   var firestoreHydratedRef = useRef(false);
   var applyingFirestoreRef = useRef(false);
   var remoteApplyDepthRef = useRef(0);
   var pendingAccountSyncRef = useRef<any>({ revision: 0, token: "" });
+  var userStateAuthoritySaveTimerRef = useRef<any>(null);
+  var latestUserStateAuthoritySaveRef = useRef<any>(null);
+  var userStateAuthorityV3SaveChainRef = useRef<any>(Promise.resolve(true));
+  var userStateAuthorityV3RevisionRef = useRef(0);
+  var userStateAuthorityV5SaveChainRef = useRef<any>(Promise.resolve(true));
+  var userStateAuthorityV5RevisionRef = useRef(0);
+  var userStateAuthorityV5AnchorRef = useRef<any>(null);
+  var userStateAuthorityV6SaveChainRef = useRef<any>(Promise.resolve(true));
+  var userStateAuthorityV6RevisionRef = useRef(0);
+  var userStateAuthorityV6AnchorRef = useRef<any>(null);
   var accountSyncSavingRef = useRef(false);
   var accountSyncRetryRequestedRef = useRef(false);
   var lastCloudIntegrityRef = useRef<any>({});
   var lastCloudExpandedDataRef = useRef<any>({});
   var financeSchemaCompatibleRef = useRef(false);
+  // Private preference backups use the last validated account while a new
+  // financial snapshot is being read. Financial writes retain their own gate.
+  var userStateAuthorityV6ValidatedUidRef = useRef("");
   const [financeCloudReceipt, setFinanceCloudReceipt] = useState<any>(null);
   var lastCloudRawKeysRef = useRef<string[]>([]);
   var catalogAnchorV1Ref = useRef<any>(null);
   var catalogAnchorLoadedRef = useRef(false);
+  var catalogRealtimeRefreshRef = useRef<any>(null);
+  var legacyCatalogUpgradeRef = useRef<any>(null);
+  if (userId && legacyCatalogUpgradeRef.current?.uid !== String(userId)) {
+    const marker = "fainance_catalog_journal_upgrade_v1_" + String(userId);
+    const previous = localStorage.getItem(marker);
+    const eligible = previous === "pending" || (previous !== "done" && localStorage.getItem(userKey("account_sync_pending_v1")) === "1");
+    legacyCatalogUpgradeRef.current = { uid:String(userId), marker, eligible };
+    // A migration hint is best-effort. A full local store must never abort
+    // React rendering; keep eligibility in the ref and preserve the durable journal.
+    try {
+      const nextMarker = eligible ? "pending" : "done";
+      if (previous !== nextMarker) localStorage.setItem(marker, nextMarker);
+    } catch (_markerStorageError) {}
+  }
   var postHydrationSyncRequestedRef = useRef(false);
   var accountSyncErrorToastAtRef = useRef(0);
   var [accountSyncRetryPulse, setAccountSyncRetryPulse] = useState(0);
+
+  // USER STATE AUTHORITY V2 - snapshot generico delle preferenze.
+  // La lista copre categorie/aree, impostazioni visuali, widget, notifiche e
+  // preferenze funzionali. Dati transazionali e impostazioni di sicurezza
+  // locali (PIN/biometria) restano volutamente esclusi.
+  var USER_STATE_AUTHORITY_PREFERENCE_KEYS_V2: any = {
+    cats_v10: true, meth_v10: true, expense_groups_v1: true, method_groups_v1: true,
+    income_groups_v1: true, custom_income_types_v1: true, income_type_overrides_v1: true,
+    cat_order_v1: true, method_order_v1: true, cat_sort_mode: true, method_sort_mode: true,
+    default_expense_area_v1: true, default_expense_cat_v1: true, default_expense_method_v1: true,
+    default_income_area_v1: true, default_income_type_v1: true, default_method_area_v1: true,
+    income_type_order_v1: true, budget_plan_v1: true, patrimonio_areas_v1: true,
+    patrimonio_entries_v1: true, patrimonio_mode_v1: true, home_worklets_v1: true,
+    notif_prefs_v1: true, custom_notifs_v1: true, history_future_mode_v1: true,
+    history_sort_date_v1: true, history_sort_direction_v1: true, history_sort_secondary_v1: true,
+    history_sort_secondary_direction_v1: true, terms_accepted_v1: true, privacy_accepted_v1: true,
+    meta_events_consent_v1: true, legal_acceptance_date_v1: true, onboarding_guide_seen_v1: true,
+    initial_setup_status_v1: true, share_show_history_v1: true, share_category_mappings_v1: true,
+    share_default_category_v1: true, share_default_method_v1: true, shopping_areas_v1: true, shopping_units_v1: true,
+    shopping_area_icons_v1: true, shopping_area_colors_v1: true, shopping_bought_color_v1: true,
+    shopping_active_list_id_v2: true, shopping_product_sort_v1: true, shopping_default_area_v1: true,
+    shopping_default_unit_v1: true, debt_credits_show_patrimonio_v1: true,
+    debt_credits_show_expenses_v1: true, ai_dismissed_v1: true, ai_data_access_v1: true,
+    ai_floating_enabled_v1: true, ai_floating_pos_v1: true, ai_tab_v1: true,
+    expense_cats_settings_view_v1: true, expense_methods_settings_view_v1: true,
+    income_cats_settings_view_v1: true, patrimonio_settings_area_view: true,
+    patrimonio_settings_entry_view: true
+  };
+  function userStateAuthorityPreferenceKeyAllowed(baseKey: string) {
+    var key = String(baseKey || "");
+    if (!key) return false;
+    // Metadati di sync/receipt non sono preferenze utente. In V3/V4 il wildcard
+    // pref_* li includeva e rendeva la verifica cloud instabile anche quando i
+    // dati funzionali erano corretti.
+    if (/_updated_at$/.test(key)) return false;
+    if (/(?:^|_)receipt(?:_|$)/.test(key)) return false;
+    if (/sync_(?:pending|last_error|error_toast)/.test(key)) return false;
+    if (/^pref_(?:biometric|local_lock)/.test(key)) return false;
+    if (/^pref_/.test(key)) return true;
+    if (/^widget/.test(key)) return true;
+    return !!USER_STATE_AUTHORITY_PREFERENCE_KEYS_V2[key];
+  }
+  function preservePeriodConfirmation(values: any) {
+    return keepPeriodConfirmation(values,
+      localStorage.getItem(userKey(PERIOD_CONFIRMATION_KEY)),
+      localStorage.getItem(userKey('finance_evolution_v1')),
+      Number(localStorage.getItem(userKey('finance_evolution_v1_updated_at')) || 0));
+  }
+  function readUserPreferenceStorageSnapshotV2() {
+    var values: any = {};
+    if (!userId) return preservePeriodConfirmation(values);
+    var prefix = "user_" + String(userId) + "_";
+    try {
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = localStorage.getItem(fullKey);
+        if (raw !== null) values[baseKey] = raw;
+      });
+    } catch (e) {}
+    return preservePeriodConfirmation(values);
+  }
+  function restoreUserPreferenceStorageSnapshotV2(data: any) {
+    var values = data && data.values && typeof data.values === "object" ? data.values : null;
+    if (!values || !userId) return;
+    values = preservePeriodConfirmation(values);
+    Object.keys(values).forEach(function (baseKey) {
+      if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+      var fullKey = userKey(baseKey);
+      var pendingCatalogEntry = readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))[baseKey];
+      var raw = pendingCatalogEntry ? JSON.stringify(pendingCatalogEntry.value) : values[baseKey];
+      if (typeof raw !== "string") return;
+      try {
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        if (typeof window !== "undefined" && window.dispatchEvent) {
+          var ev: any;
+          try { ev = new CustomEvent("fainance-storage-restore", { detail: { key: fullKey } }); }
+          catch (_e) { ev = new Event("fainance-storage-restore"); ev.detail = { key: fullKey }; }
+          window.dispatchEvent(ev);
+        }
+      } catch (e) {}
+    });
+  }
+  // USER STATE AUTHORITY V3
+  // Documento indipendente e verificabile dello stato configurabile dell'utente.
+  // Viene salvato in un campo Firestore separato dal grande snapshot compresso,
+  // cosi' una scrittura legacy/stale non puo' sovrascriverlo.
+  function validUserStateAuthorityV3(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      Number(value.schemaVersion || 0) === 3 &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+  function canonicalUserStateAuthorityValue(value: any): string {
+    function normalize(v: any): any {
+      if (Array.isArray(v)) return v.map(normalize);
+      if (v && typeof v === "object") {
+        var out: any = {};
+        Object.keys(v)
+          .sort()
+          .forEach(function (key) {
+            out[key] = normalize(v[key]);
+          });
+        return out;
+      }
+      return v;
+    }
+    var raw = String(value ?? "");
+    try {
+      return JSON.stringify(normalize(JSON.parse(raw)));
+    } catch (e) {
+      return raw;
+    }
+  }
+  function userStateAuthorityStorageValueEqual(a: any, b: any) {
+    if (String(a ?? "") === String(b ?? "")) return true;
+    return (
+      canonicalUserStateAuthorityValue(a) ===
+      canonicalUserStateAuthorityValue(b)
+    );
+  }
+  function userStateAuthorityV3ValuesEqual(a: any, b: any) {
+    var aa = a && typeof a === "object" ? a : {};
+    var bb = b && typeof b === "object" ? b : {};
+    var keys = Array.from(new Set(Object.keys(aa).concat(Object.keys(bb)))).sort();
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i];
+      if (!userStateAuthorityStorageValueEqual(aa[k], bb[k])) return false;
+    }
+    return true;
+  }
+  function currentUserStateAuthorityV3Values() {
+    return readUserPreferenceStorageSnapshotV2();
+  }
+  function dispatchUserStorageRestore(fullKey: string) {
+    try {
+      if (typeof window === "undefined" || !window.dispatchEvent) return;
+      var ev: any;
+      try {
+        ev = new CustomEvent("fainance-storage-restore", { detail: { key: fullKey } });
+      } catch (_e) {
+        ev = new Event("fainance-storage-restore");
+        ev.detail = { key: fullKey };
+      }
+      window.dispatchEvent(ev);
+    } catch (e) {}
+  }
+  function restoreUserStateAuthorityV3(value: any) {
+    if (Object.keys(readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))).length) return false;
+    if (!validUserStateAuthorityV3(value) || !userId) return false;
+    // Recovery snapshots cannot undo a newer catalog already delivered live.
+    value = reconcileAuthorityCatalogs(value, lastCloudExpandedDataRef.current?.catalogSyncV4, catalogAnchorV1Ref.current?.catalogSyncV4);
+    var values: any = preservePeriodConfirmation(value.values || {});
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      // V3 e' uno snapshot completo, non un merge. Una chiave configurabile
+      // assente nello snapshot deve restare assente anche su un vecchio device.
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+      var ts = Math.max(1, Number(value.updatedAtMs || Date.now()));
+      [
+        "preference_storage_v2",
+        "expense_catalog_v2",
+        "cats",
+        "payment_catalog_v2",
+        "methods",
+        "income_catalog_v2",
+        "income_catalog_v1",
+        "category_preferences_v2",
+        "patrimonio_catalog_v2",
+        "budget_plan_v1",
+        "home_preferences",
+        "display_preferences_v2",
+        "shopping_preferences_v2",
+        "patrimony_preferences_v2",
+      ].forEach(function (groupKey) {
+        writeUserLocalUpdatedAt(groupKey, ts);
+      });
+      userStateAuthorityV3RevisionRef.current = Math.max(
+        Number(userStateAuthorityV3RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+
+  // USER STATE AUTHORITY V4
+  // V4 vive DENTRO lo snapshot account compresso gia' usato e autorizzato
+  // da fAInance. Non dipende quindi da un nuovo campo Firestore top-level,
+  // che puo' essere rifiutato da regole esistenti o da build precedenti.
+  function validUserStateAuthorityV4(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      Number(value.schemaVersion || 0) === 4 &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+  function buildUserStateAuthorityV4(previous: any) {
+    var values = currentUserStateAuthorityV3Values();
+    var prevValid = validUserStateAuthorityV4(previous);
+    var same =
+      prevValid &&
+      userStateAuthorityV3ValuesEqual(
+        (previous && previous.values) || {},
+        values
+      );
+    return {
+      schemaVersion: 4,
+      scope: "compressed-complete-user-config-v1",
+      revision: prevValid
+        ? Number(previous.revision || 0) + (same ? 0 : 1)
+        : 1,
+      updatedAtMs:
+        prevValid && same
+          ? Number(previous.updatedAtMs || Date.now())
+          : Date.now(),
+      writerId: catalogSyncWriterId(),
+      values: values,
+    };
+  }
+  function restoreUserStateAuthorityV4(value: any) {
+    if (Object.keys(readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))).length) return false;
+    if (!validUserStateAuthorityV4(value) || !userId) return false;
+    // Recovery snapshots cannot undo a newer catalog already delivered live.
+    value = reconcileAuthorityCatalogs(value, lastCloudExpandedDataRef.current?.catalogSyncV4, catalogAnchorV1Ref.current?.catalogSyncV4);
+    var values: any = preservePeriodConfirmation(value.values || {});
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      // V4 e' uno snapshot COMPLETO: cio' che l'utente ha eliminato o
+      // disabilitato non puo' essere ricreato da default o merge legacy.
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+      var ts = Math.max(1, Number(value.updatedAtMs || Date.now()));
+      [
+        "preference_storage_v2",
+        "expense_catalog_v2",
+        "cats",
+        "payment_catalog_v2",
+        "methods",
+        "income_catalog_v2",
+        "income_catalog_v1",
+        "category_preferences_v2",
+        "patrimonio_catalog_v2",
+        "budget_plan_v1",
+        "home_preferences",
+        "display_preferences_v2",
+        "shopping_preferences_v2",
+        "patrimony_preferences_v2",
+      ].forEach(function (groupKey) {
+        writeUserLocalUpdatedAt(groupKey, ts);
+      });
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v4_receipt"),
+          JSON.stringify({
+            revision: Number(value.revision || 0),
+            updatedAtMs: Number(value.updatedAtMs || 0),
+            appliedAtMs: Date.now(),
+          })
+        );
+      } catch (e) {}
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+
+  // USER STATE AUTHORITY V5
+  // Documento separato in users/{uid}/backups, lo stesso percorso gia' usato
+  // dal catalog anchor. Le vecchie build che riscrivono userData/{uid} non
+  // possono quindi cancellare lo stato scelto dall'utente.
+  function userStateAuthorityV5DocRef() {
+    if (!userId) return null;
+    return doc(
+      fbDb,
+      "users",
+      String(userId),
+      "backups",
+      "user_state_authority_v5"
+    );
+  }
+  function validUserStateAuthorityV5(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      String(value.kind || "") === "user-state-authority-v5" &&
+      Number(value.schemaVersion || 0) === 5 &&
+      String(value.uid || "") === String(userId || "") &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+  function parseAuthorityStorageValue(values: any, key: string) {
+    if (
+      !values ||
+      !Object.prototype.hasOwnProperty.call(values, key) ||
+      typeof values[key] !== "string"
+    )
+      return undefined;
+    try {
+      return JSON.parse(values[key]);
+    } catch (e) {
+      return undefined;
+    }
+  }
+  function applyUserStateAuthorityV5ToCloudData(data: any, authority: any) {
+    if (!validUserStateAuthorityV5(authority)) return data;
+    var d: any = { ...(data || {}) };
+    var values: any = authority.values || {};
+    var ts = Math.max(1, Number(authority.updatedAtMs || Date.now()));
+
+    function put(storageKey: string, cloudKey: string) {
+      var value = parseAuthorityStorageValue(values, storageKey);
+      if (value !== undefined) d[cloudKey] = value;
+      return value;
+    }
+
+    var catsV5 = put("cats_v10", "cats");
+    var expenseGroupsV5 = put("expense_groups_v1", "expenseGroups");
+    var methodsV5 = put("meth_v10", "methods");
+    var methodGroupsV5 = put("method_groups_v1", "methodGroups");
+    var incomeGroupsV5 = put("income_groups_v1", "incomeGroups");
+    var customIncomeV5 = put("custom_income_types_v1", "customIncomeTypes");
+    var incomeOverridesV5 = put("income_type_overrides_v1", "incomeTypeOverrides");
+    var budgetV5 = put("budget_plan_v1", "budgetPlan");
+    var patAreasV5 = put("patrimonio_areas_v1", "patrimonioAreas");
+    var patEntriesV5 = put("patrimonio_entries_v1", "patrimonioEntries");
+    var patModeV5 = put("patrimonio_mode_v1", "patrimonioMode");
+
+    if (catsV5 !== undefined || expenseGroupsV5 !== undefined) {
+      d.expenseCatalogUpdatedAt = ts;
+      d.catsUpdatedAt = ts;
+      d.expenseCatalogV2 = {
+        ...(d.expenseCatalogV2 || {}),
+        categories:
+          catsV5 !== undefined
+            ? catsV5
+            : ((d.expenseCatalogV2 || {}).categories || d.cats || []),
+        groups:
+          expenseGroupsV5 !== undefined
+            ? expenseGroupsV5
+            : ((d.expenseCatalogV2 || {}).groups || d.expenseGroups || []),
+        updatedAtMs: ts,
+      };
+    }
+    if (methodsV5 !== undefined || methodGroupsV5 !== undefined) {
+      d.methodsUpdatedAt = ts;
+      d.paymentCatalogUpdatedAt = ts;
+      d.methodCatalogUpdatedAt = ts;
+      d.paymentCatalogV2 = {
+        ...(d.paymentCatalogV2 || {}),
+        methods:
+          methodsV5 !== undefined
+            ? methodsV5
+            : ((d.paymentCatalogV2 || {}).methods || d.methods || []),
+        groups:
+          methodGroupsV5 !== undefined
+            ? methodGroupsV5
+            : ((d.paymentCatalogV2 || {}).groups || d.methodGroups || []),
+        updatedAtMs: ts,
+      };
+    }
+    if (
+      incomeGroupsV5 !== undefined ||
+      customIncomeV5 !== undefined ||
+      incomeOverridesV5 !== undefined
+    ) {
+      d.incomeCatalogUpdatedAt = ts;
+      d.incomeCatalogV2 = {
+        ...(d.incomeCatalogV2 || {}),
+        groups:
+          incomeGroupsV5 !== undefined
+            ? incomeGroupsV5
+            : ((d.incomeCatalogV2 || {}).groups || d.incomeGroups || []),
+        customTypes:
+          customIncomeV5 !== undefined
+            ? customIncomeV5
+            : ((d.incomeCatalogV2 || {}).customTypes ||
+              d.customIncomeTypes ||
+              []),
+        overrides:
+          incomeOverridesV5 !== undefined
+            ? incomeOverridesV5
+            : ((d.incomeCatalogV2 || {}).overrides ||
+              d.incomeTypeOverrides ||
+              {}),
+        updatedAtMs: ts,
+      };
+    }
+    if (budgetV5 !== undefined) {
+      d.budgetPlanUpdatedAt = ts;
+      if (budgetV5 === null) d.budgetPlanClearedAt = ts;
+    }
+    if (patAreasV5 !== undefined || patEntriesV5 !== undefined) {
+      d.patrimonioCatalogUpdatedAt = ts;
+    }
+    if (patModeV5 !== undefined) {
+      d.patrimonyPreferencesV2 = {
+        ...(d.patrimonyPreferencesV2 || {}),
+        patrimonioMode: patModeV5,
+      };
+      d.patrimonyPreferencesUpdatedAt = ts;
+    }
+
+    // Mantiene coerente anche CatalogSyncV4, evitando che il merge legacy
+    // scelga una copia precedente solo perche' possiede un timestamp maggiore.
+    var catalogV4: any =
+      d.catalogSyncV4 && typeof d.catalogSyncV4 === "object"
+        ? { ...d.catalogSyncV4 }
+        : { schemaVersion: 4, writerId: String(authority.writerId || "") };
+    if (catsV5 !== undefined || expenseGroupsV5 !== undefined) {
+      catalogV4.expenseCatalog = {
+        updatedAtMs: ts,
+        data: {
+          categories: catsV5 !== undefined ? catsV5 : d.cats || [],
+          groups:
+            expenseGroupsV5 !== undefined
+              ? expenseGroupsV5
+              : d.expenseGroups || [],
+        },
+      };
+    }
+    if (methodsV5 !== undefined || methodGroupsV5 !== undefined) {
+      catalogV4.paymentCatalog = {
+        updatedAtMs: ts,
+        data: {
+          methods: methodsV5 !== undefined ? methodsV5 : d.methods || [],
+          groups:
+            methodGroupsV5 !== undefined ? methodGroupsV5 : d.methodGroups || [],
+        },
+      };
+    }
+    if (
+      incomeGroupsV5 !== undefined ||
+      customIncomeV5 !== undefined ||
+      incomeOverridesV5 !== undefined
+    ) {
+      catalogV4.incomeCatalog = {
+        updatedAtMs: ts,
+        data: {
+          groups:
+            incomeGroupsV5 !== undefined ? incomeGroupsV5 : d.incomeGroups || [],
+          customTypes:
+            customIncomeV5 !== undefined
+              ? customIncomeV5
+              : d.customIncomeTypes || [],
+          overrides:
+            incomeOverridesV5 !== undefined
+              ? incomeOverridesV5
+              : d.incomeTypeOverrides || {},
+        },
+      };
+    }
+    d.catalogSyncV4 = catalogV4;
+    d.userStateAuthorityV5 = authority;
+    return d;
+  }
+  function restoreUserStateAuthorityV5(value: any) {
+    if (Object.keys(readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))).length) return false;
+    if (!validUserStateAuthorityV5(value) || !userId) return false;
+    // Recovery snapshots cannot undo a newer catalog already delivered live.
+    value = reconcileAuthorityCatalogs(value, lastCloudExpandedDataRef.current?.catalogSyncV4, catalogAnchorV1Ref.current?.catalogSyncV4);
+    var values: any = preservePeriodConfirmation(value.values || {});
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+      userStateAuthorityV5RevisionRef.current = Math.max(
+        Number(userStateAuthorityV5RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+      userStateAuthorityV5AnchorRef.current = value;
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v5_receipt"),
+          JSON.stringify({
+            revision: Number(value.revision || 0),
+            updatedAtMs: Number(value.updatedAtMs || 0),
+            appliedAtMs: Date.now(),
+          })
+        );
+      } catch (e) {}
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+  async function readUserStateAuthorityV5(preferCache = false) {
+    var ref: any = userStateAuthorityV5DocRef();
+    if (!ref) return null;
+    try {
+      var snap: any = preferCache
+        ? await readExistingCachedDocument(
+            () => getDocFromCache(ref),
+            () => getDoc(ref)
+          )
+        : await fainancePromiseTimeout(
+            getDocFromServer(ref),
+            15000,
+            "Timeout lettura User State Authority V5."
+          );
+      if (!snap || !snap.exists || !snap.exists()) return null;
+      var value: any = snap.data() || {};
+      if (!validUserStateAuthorityV5(value)) return null;
+      userStateAuthorityV5RevisionRef.current = Math.max(
+        Number(userStateAuthorityV5RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+      userStateAuthorityV5AnchorRef.current = value;
+      return value;
+    } catch (error) {
+      console.error(
+        "User State Authority V5 read failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      return null;
+    }
+  }
+  async function saveUserStateAuthorityV5Direct(
+    reason?: string,
+    verifyServer = false
+  ) {
+    var execute = async function () {
+      if (
+        !financeSchemaCompatibleRef.current ||
+        !userId ||
+        !firestoreHydratedRef.current ||
+        applyingFirestoreRef.current
+      )
+        return false;
+      if (!navigator.onLine) return false;
+
+      var ref: any = userStateAuthorityV5DocRef();
+      if (!ref) return false;
+      var values = currentUserStateAuthorityV3Values();
+      var previous: any = userStateAuthorityV5AnchorRef.current;
+      var same =
+        validUserStateAuthorityV5(previous) &&
+        userStateAuthorityV3ValuesEqual(previous.values || {}, values);
+      if (same && !verifyServer) return true;
+
+      var revision =
+        Math.max(
+          Date.now(),
+          Number(userStateAuthorityV5RevisionRef.current || 0) + 1,
+          validUserStateAuthorityV5(previous)
+            ? Number(previous.revision || 0) + 1
+            : 1
+        );
+      var now = Date.now();
+      var authority: any = {
+        kind: "user-state-authority-v5",
+        schemaVersion: 5,
+        scope: "complete-user-config-v2",
+        uid: String(userId),
+        createdAtMs: 4102444800000,
+        updatedAtMs: now,
+        updatedAtIso: new Date(now).toISOString(),
+        revision: revision,
+        writerId: catalogSyncWriterId(),
+        values: values,
+      };
+      if (JSON.stringify(authority).length > 300000)
+        throw new Error("USER_STATE_AUTHORITY_V5_TOO_LARGE");
+
+      try {
+        if (!same) {
+          await setDoc(ref, authority, { merge: false });
+          userStateAuthorityV5RevisionRef.current = revision;
+          userStateAuthorityV5AnchorRef.current = authority;
+        }
+        if (!verifyServer) return true;
+
+        var serverSnap: any = await fainancePromiseTimeout(
+          getDocFromServer(ref),
+          15000,
+          "Timeout verifica User State Authority V5."
+        );
+        var serverValue: any =
+          serverSnap && serverSnap.exists && serverSnap.exists()
+            ? serverSnap.data() || {}
+            : null;
+        var ok =
+          validUserStateAuthorityV5(serverValue) &&
+          userStateAuthorityV3ValuesEqual(
+            (serverValue && serverValue.values) || {},
+            values || {}
+          );
+        if (ok) {
+          userStateAuthorityV5RevisionRef.current = Math.max(
+            Number(userStateAuthorityV5RevisionRef.current || 0),
+            Number(serverValue.revision || 0)
+          );
+          userStateAuthorityV5AnchorRef.current = serverValue;
+        }
+        return ok;
+      } catch (error) {
+        var code =
+          (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          "unknown";
+        console.error(
+          "User State Authority V5 save/verify failed",
+          String(reason || "change"),
+          code
+        );
+        persistAccountSyncError("user-state-authority-v5", error, false);
+        try {
+          localStorage.setItem(
+            userKey("user_state_authority_v5_last_error"),
+            String(code)
+          );
+        } catch (e) {}
+        return false;
+      }
+    };
+
+    var chained = Promise.resolve(userStateAuthorityV5SaveChainRef.current)
+      .catch(function () {
+        return false;
+      })
+      .then(execute);
+    userStateAuthorityV5SaveChainRef.current = chained;
+    return chained;
+  }
+
+
+  // USER STATE AUTHORITY V6
+  // V6 deliberately uses the exact same Firestore document shape as the
+  // already-established automatic backup flow. Earlier attempts introduced
+  // new fields/documents whose writes could be rejected or ignored by existing
+  // rules. A V6 snapshot is an ordinary private backup with a dedicated reason,
+  // so the persistence path is already exercised by fAInance.
+  function validUserStateAuthorityV6(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      String(value.kind || "") === "user-state-authority-v6" &&
+      Number(value.schemaVersion || 0) === 6 &&
+      String(value.uid || "") === String(userId || "") &&
+      value.values &&
+      typeof value.values === "object" &&
+      !Array.isArray(value.values)
+    );
+  }
+
+  function restoreUserStateAuthorityV6(value: any) {
+    if (Object.keys(readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))).length) return false;
+    if (!validUserStateAuthorityV6(value) || !userId) return false;
+    // Recovery snapshots cannot undo a newer catalog already delivered live.
+    value = reconcilePatrimonyAuthority(reconcileAuthorityCatalogs(value, lastCloudExpandedDataRef.current?.catalogSyncV4, catalogAnchorV1Ref.current?.catalogSyncV4), lastCloudExpandedDataRef.current);
+    var values: any = preservePeriodConfirmation(value.values || {});
+    var prefix = "user_" + String(userId) + "_";
+    var changedKeys: string[] = [];
+    try {
+      // Full snapshot semantics: absence is intentional. This is the critical
+      // invariant that prevents defaults, migration snapshots and old devices
+      // from reviving a user-deleted setting.
+      Object.keys(localStorage).forEach(function (fullKey) {
+        if (String(fullKey).indexOf(prefix) !== 0) return;
+        var baseKey = String(fullKey).slice(prefix.length);
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        if (Object.prototype.hasOwnProperty.call(values, baseKey)) return;
+        localStorage.removeItem(fullKey);
+        changedKeys.push(fullKey);
+      });
+      Object.keys(values).forEach(function (baseKey) {
+        if (!userStateAuthorityPreferenceKeyAllowed(baseKey)) return;
+        var raw = values[baseKey];
+        if (typeof raw !== "string") return;
+        var fullKey = userKey(baseKey);
+        if (localStorage.getItem(fullKey) === raw) return;
+        localStorage.setItem(fullKey, raw);
+        changedKeys.push(fullKey);
+      });
+
+      var ts = Math.max(1, Number(value.updatedAtMs || Date.now()));
+      [
+        "preference_storage_v2",
+        "expense_catalog_v2",
+        "cats",
+        "payment_catalog_v2",
+        "methods",
+        "income_catalog_v2",
+        "income_catalog_v1",
+        "category_preferences_v2",
+        "patrimonio_catalog_v2",
+        "budget_plan_v1",
+        "home_preferences",
+        "display_preferences_v2",
+        "shopping_preferences_v2",
+        "patrimony_preferences_v2",
+      ].forEach(function (groupKey) {
+        writeUserLocalUpdatedAt(groupKey, groupKey === "patrimonio_catalog_v2" ? Number(value.__patrimonioCatalogUpdatedAt || ts) : ts);
+      });
+      userStateAuthorityV6RevisionRef.current = Math.max(
+        Number(userStateAuthorityV6RevisionRef.current || 0),
+        Number(value.revision || 0)
+      );
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v6_receipt"),
+          JSON.stringify({
+            revision: Number(value.revision || 0),
+            updatedAtMs: Number(value.updatedAtMs || 0),
+            backupId: String((value as any).__backupId || ""),
+            appliedAtMs: Date.now(),
+          })
+        );
+      } catch (e) {}
+    } catch (e) {
+      return false;
+    }
+    changedKeys.forEach(dispatchUserStorageRestore);
+    return true;
+  }
+
+  function applyUserStateAuthorityV6ToCloudData(data: any, authority: any) {
+    if (!validUserStateAuthorityV6(authority)) return data;
+    // Reuse the mature field overlay mapping from V5, but V6 itself remains
+    // the authority and is persisted through the verified backup schema.
+    var bridge: any = {
+      ...authority,
+      kind: "user-state-authority-v5",
+      schemaVersion: 5,
+    };
+    var out: any = applyUserStateAuthorityV5ToCloudData(data, bridge);
+    try { delete out.userStateAuthorityV5; } catch (e) {}
+    if (authority.__patrimonioCatalogUpdatedAt) out.patrimonioCatalogUpdatedAt = Number(authority.__patrimonioCatalogUpdatedAt);
+    out.userStateAuthorityV6 = authority;
+    return out;
+  }
+
+  async function readLatestUserStateAuthorityV6() {
+    if (!userId) return null;
+    try {
+      var row: any = await fainancePromiseTimeout(
+        readLatestUserStateAuthorityBackupV6(String(userId), true, useNativeShareCommit(fbDb.app.options.projectId)),
+        15000,
+        "Timeout lettura User State Authority V6."
+      );
+      var authority: any = row && row.authority;
+      if (!validUserStateAuthorityV6(authority)) return null;
+      authority = { ...authority, __backupId: String(row.id || "") };
+      var previous = userStateAuthorityV6AnchorRef.current;
+      if (validUserStateAuthorityV6(previous) && Number(previous.revision || 0) > Number(authority.revision || 0)) return previous;
+      userStateAuthorityV6RevisionRef.current = Math.max(
+        Number(userStateAuthorityV6RevisionRef.current || 0),
+        Number(authority.revision || 0)
+      );
+      userStateAuthorityV6AnchorRef.current = authority;
+      return authority;
+    } catch (error) {
+      console.error(
+        "User State Authority V6 read failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      return null;
+    }
+  }
+
+  async function verifyUserStateAuthorityV6Server(
+    authority: any,
+    backupId: string
+  ) {
+    if (!validUserStateAuthorityV6(authority) || !backupId || !userId)
+      return false;
+    try {
+      var serverValue: any = await fainancePromiseTimeout(
+        readUserStateAuthorityBackupV6ById(
+          String(userId),
+          String(backupId)
+        ),
+        15000,
+        "Timeout verifica User State Authority V6."
+      );
+      return (
+        validUserStateAuthorityV6(serverValue) &&
+        Number(serverValue.revision || 0) === Number(authority.revision || 0) &&
+        userStateAuthorityV3ValuesEqual(
+          (serverValue && serverValue.values) || {},
+          (authority && authority.values) || {}
+        )
+      );
+    } catch (error) {
+      var verifyCode =
+        (error && (error as any).code) ||
+        (error && (error as any).message) ||
+        "unknown";
+      try {
+        localStorage.setItem(
+          userKey("user_state_authority_v6_last_error"),
+          String(verifyCode)
+        );
+      } catch (e) {}
+      console.error("User State Authority V6 verify failed", verifyCode);
+      return false;
+    }
+  }
+
+  async function saveUserStateAuthorityV6Direct(
+    reason?: string,
+    verifyServer = false
+  ) {
+    var execute = async function () {
+      if (
+        userStateAuthorityV6ValidatedUidRef.current !== String(userId || "") ||
+        !userId ||
+        !firestoreHydratedRef.current ||
+        applyingFirestoreRef.current
+      )
+        return false;
+      if (!navigator.onLine) return false;
+
+      var values = currentUserStateAuthorityV3Values();
+      var previous: any = userStateAuthorityV6AnchorRef.current;
+      var same =
+        validUserStateAuthorityV6(previous) &&
+        userStateAuthorityV3ValuesEqual(previous.values || {}, values);
+      var previousBackupId = String(
+        (previous && (previous as any).__backupId) || ""
+      );
+
+      if (same && !verifyServer) return true;
+      if (same && verifyServer && previousBackupId) {
+        var previousConfirmed = await verifyUserStateAuthorityV6Server(
+          previous,
+          previousBackupId
+        );
+        if (userStateAuthorityV6ValidatedUidRef.current !== String(userId || "")) return false;
+        if (previousConfirmed) return true;
+        // The referenced backup may have been pruned by another device, or
+        // its values may predate a reconciled catalog. Renew the private
+        // snapshot and verify that new document before permitting logout.
+      }
+
+      var revision = Math.max(
+        Date.now(),
+        Number(userStateAuthorityV6RevisionRef.current || 0) + 1,
+        validUserStateAuthorityV6(previous)
+          ? Number(previous.revision || 0) + 1
+          : 1
+      );
+      var now = Date.now();
+      var authority: any = {
+        kind: "user-state-authority-v6",
+        schemaVersion: 6,
+        scope: "complete-user-config-backup-v1",
+        uid: String(userId),
+        updatedAtMs: now,
+        updatedAtIso: new Date(now).toISOString(),
+        revision: revision,
+        writerId: catalogSyncWriterId(),
+        values: values,
+      };
+      if (JSON.stringify(authority).length > 300000)
+        throw new Error("USER_STATE_AUTHORITY_V6_TOO_LARGE");
+
+      try {
+        // SDK writes remain durable while offline or queued. Await their real
+        // ACK; a read deadline must not abandon a mutation and start a duplicate.
+        var saved: any = await saveUserStateAuthorityBackupV6({
+          uid: String(userId),
+          authority: authority,
+          appVersion: "2.1.7",
+        });
+        var backupId = String((saved && saved.id) || "");
+        if (!backupId) throw new Error("USER_STATE_AUTHORITY_V6_BACKUP_ID_MISSING");
+
+        // A retry can share an older in-flight write. Anchor only the authority
+        // actually acknowledged by Firebase, never the newer caller's snapshot.
+        if (userStateAuthorityV6ValidatedUidRef.current !== String(userId || "")) return false;
+        var acknowledgedAuthority: any = saved.authority;
+        if (!validUserStateAuthorityV6(acknowledgedAuthority)) throw new Error("USER_STATE_AUTHORITY_V6_ACK_INVALID");
+        var anchored: any = { ...acknowledgedAuthority, __backupId: backupId };
+        userStateAuthorityV6RevisionRef.current = Number(acknowledgedAuthority.revision || 0);
+        userStateAuthorityV6AnchorRef.current = anchored;
+        try {
+          localStorage.removeItem(
+            userKey("user_state_authority_v6_last_error")
+          );
+        } catch (e) {}
+
+        if (!userStateAuthorityV3ValuesEqual(acknowledgedAuthority.values || {}, currentUserStateAuthorityV3Values())) return false;
+        if (!verifyServer) return true;
+        var serverConfirmed = await verifyUserStateAuthorityV6Server(
+          anchored,
+          backupId
+        );
+        return serverConfirmed && userStateAuthorityV6ValidatedUidRef.current === String(userId || "");
+      } catch (error) {
+        var code =
+          (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          "unknown";
+        console.error(
+          "User State Authority V6 save failed",
+          String(reason || "change"),
+          code
+        );
+        persistAccountSyncError("user-state-authority-v6", error, false);
+        try {
+          localStorage.setItem(
+            userKey("user_state_authority_v6_last_error"),
+            String(code)
+          );
+        } catch (e) {}
+        return false;
+      }
+    };
+
+    var chained = Promise.resolve(userStateAuthorityV6SaveChainRef.current)
+      .catch(function () {
+        return false;
+      })
+      .then(execute);
+    userStateAuthorityV6SaveChainRef.current = chained;
+    return chained;
+  }
+
   // Clean Movement Sync V2 is deliberately enabled only for accounts with no
   // legacy expenses/incomes. Old accounts stay on the untouched legacy path until
   // the engine has passed isolated tests and a separate migration is added.
   var movementSyncV2InitiallyActive = isMovementSyncV2LocallyActive(userId);
   var movementSyncV2ActiveRef = useRef(movementSyncV2InitiallyActive);
+  var movementBulkInProgressRef = useRef(false);
+  var movementBulkCancelRef = useRef(null);
+  var [movementBulkBusy, setMovementBulkBusy] = useState(false);
+  var movementBulkProgressRef = useRef({ done: 0, total: 0, phase: 'checking' });
+  var movementBulkLatestSnapshotRef = useRef(null);
+  var movementBulkSnapshotSequenceRef = useRef(0);
+  var movementAccountUidRef = useRef(userId);
+  movementAccountUidRef.current = userId;
   // During migration the UI stays on the legacy state, but every live movement
   // change is mirrored to V2. This keeps the app fully usable while the old
   // archive is copied in the background.
@@ -1523,7 +2883,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   function restoreAccountSyncPendingFromDevice() {
     if (!userId) return false;
     try {
-      if (localStorage.getItem(userKey("account_sync_pending_v1")) !== "1")
+      if (localStorage.getItem(userKey("account_sync_pending_v1")) !== "1" && !Object.keys(readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))).length)
         return false;
       var prev: any = pendingAccountSyncRef.current || {
         revision: 0,
@@ -1554,8 +2914,19 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       Number(remoteApplyDepthRef.current || 0) - 1
     );
     applyingFirestoreRef.current = remoteApplyDepthRef.current > 0;
+    // A save deferred by any catalog or account merge must be re-armed when
+    // the outermost merge finishes, including merges outside the main listener.
+    if (!applyingFirestoreRef.current && Number(pendingAccountSyncRef.current?.revision || 0) > 0 && !remoteApplyResumeTimerRef.current) {
+      remoteApplyResumeTimerRef.current = setTimeout(function () {
+        remoteApplyResumeTimerRef.current = null;
+        // Resume the writer directly. A render pulse here can repeat catalog
+        // normalization effects and indefinitely postpone their own save.
+        latestAccountSaveRef.current();
+      }, 250);
+    }
   }
   var accountRecoveryTimerRef = useRef<any>(null);
+  var accountRecoveryPendingRef = useRef(false);
   var ACCOUNT_RECOVERY_KEYS = [
     "exp_v10",
     "inc_v10",
@@ -1610,7 +2981,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     "custom_notifs_v1",
     "notif_prefs_v1",
   ];
-  function persistCompleteAccountRecoverySnapshot(reason?: string) {
+  async function persistCompleteAccountRecoverySnapshot(reason?: string) {
     if (!userId) return;
     try {
       var values: any = {};
@@ -1619,31 +2990,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           raw = localStorage.getItem(storageKey);
         if (raw !== null) values[key] = raw;
       });
-      var snapshot = JSON.stringify({
+      var snapshotValue = {
         schema: 1,
         userId: String(userId),
         savedAt: new Date().toISOString(),
         reason: String(reason || "change"),
         values: values,
-      });
+      };
+      var snapshot = JSON.stringify(snapshotValue);
       var currentKey = userKey("account_recovery_complete_v1"),
         previousKey = userKey("account_recovery_complete_previous_v1");
-      var previous = localStorage.getItem(currentKey);
-      if (previous) localStorage.setItem(previousKey, previous);
-      localStorage.setItem(currentKey, snapshot);
+      accountRecoveryPendingRef.current = false;
+      await persistRecoverySnapshot(currentKey, previousKey, snapshot);
       try {
         createAutomaticAccountBackup({
           uid: String(userId),
-          snapshot: JSON.parse(snapshot),
+          snapshot: snapshotValue,
           reason: String(reason || "change"),
           appVersion: String(FAINANCE_CURRENT_VERSION || "2.0 Test"),
         }).catch(function () {});
       } catch (_backupError) {}
     } catch (e) {
-      console.warn("Account recovery snapshot skipped", (e && e.message) || e);
+      accountRecoveryPendingRef.current = true;
+      console.warn("Account recovery snapshot skipped", e && e.name);
     }
   }
   function scheduleCompleteAccountRecoverySnapshot(reason?: string) {
+    accountRecoveryPendingRef.current = true;
     try {
       if (accountRecoveryTimerRef.current)
         clearTimeout(accountRecoveryTimerRef.current);
@@ -1651,7 +3024,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     accountRecoveryTimerRef.current = setTimeout(function () {
       accountRecoveryTimerRef.current = null;
       var run = function () {
-        persistCompleteAccountRecoverySnapshot(reason || "change");
+        if (accountRecoveryPendingRef.current)
+          persistCompleteAccountRecoverySnapshot(reason || "change");
       };
       try {
         var idle = (window as any).requestIdleCallback;
@@ -1674,6 +3048,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
     markAccountSyncPendingOnDevice();
     scheduleCompleteAccountRecoverySnapshot("local-change");
+    // Salva rapidamente in cloud lo stato autoritativo delle preferenze.
+    // Il callback usa il ref dell'ultimo render, quindi legge sempre i valori
+    // aggiornati anche se markPendingAccountSync e' partito dal setter precedente.
+    try {
+      if (userStateAuthoritySaveTimerRef.current)
+        clearTimeout(userStateAuthoritySaveTimerRef.current);
+      userStateAuthoritySaveTimerRef.current = setTimeout(function () {
+        userStateAuthoritySaveTimerRef.current = null;
+        var saver = latestUserStateAuthoritySaveRef.current;
+        if (typeof saver === "function") saver("pending-change");
+      }, 220);
+    } catch (e) {}
     if (accountSyncSavingRef.current)
       accountSyncRetryRequestedRef.current = true;
   }
@@ -1682,7 +3068,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       function onStorageWrite(ev: any) {
         if (applyingFirestoreRef.current) return;
         var key = String((ev && ev.detail && ev.detail.key) || "");
-        if (!key || key.indexOf("user_" + userId + "_") !== 0) return;
+        var prefix = "user_" + userId + "_";
+        if (!key || key.indexOf(prefix) !== 0) return;
+        var baseKey = key.slice(prefix.length);
+        if (userStateAuthorityPreferenceKeyAllowed(baseKey))
+          writeUserLocalUpdatedAt("preference_storage_v2", Date.now());
         markPendingAccountSync();
       }
       try {
@@ -1704,6 +3094,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
 
   var [lang, setLang] = useStorage("pref_lang_v2", getDefaultLang());
+  useEffect(function () {
+    if (chatgptAppEnvironment !== 'test' || chatgptFirebaseConfig.projectId !== 'fainance-test-20260823195207' || !userId) return;
+    const appliedKey = 'fainance_chatgpt_language_applied_' + userId;
+    return onSnapshot(doc(fbDb, 'users', userId), function (snapshot) {
+      const preference = snapshot.data()?.chatgptLanguagePreference;
+      const pending = pendingChatgptLanguage(chatgptAppEnvironment, chatgptFirebaseConfig.projectId, preference, localStorage.getItem(appliedKey));
+      if (!pending) return;
+      setLang(pending.language);
+      localStorage.setItem(appliedKey, String(pending.stamp));
+    }, function (error) { console.warn('ChatGPT Test language synchronization failed', error.code); });
+  }, [userId]);
+
   var CATALOG_SYNC_V3_KEYS = {
     cats_v10: true,
     meth_v10: true,
@@ -1821,7 +3223,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       ];
       for (var i = 0; i < recoveryKeys.length; i++) {
         try {
-          var snapRaw = localStorage.getItem(recoveryKeys[i]);
+          var snapRaw = readRecoverySnapshot(recoveryKeys[i]);
           if (!snapRaw) continue;
           var snap = JSON.parse(snapRaw),
             saved = snap && snap.values ? snap.values[key] : null;
@@ -1839,7 +3241,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   function restoreLocalJson(key, value) {
     try {
       if (value !== undefined)
-        localStorage.setItem(userKey(key), JSON.stringify(value));
+        localStorage.setItem(userKey(key), JSON.stringify(protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), key, value)));
     } catch (e) {}
   }
   function markUserLocalChange(key) {
@@ -1860,10 +3262,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     )
       touchCatalogSyncMetaV3(now);
   }
-  function markUserLocalChanges(keys) {
-    if (!firestoreHydratedRef.current || applyingFirestoreRef.current) return;
+  function markUserLocalChanges(keys, userInitiated = false) {
+    if (!userInitiated && (!firestoreHydratedRef.current || applyingFirestoreRef.current)) return;
 
-    markPendingAccountSync();
+    markPendingAccountSync(userInitiated);
     var now = Date.now();
     (Array.isArray(keys) ? keys : []).forEach(function (key) {
       try {
@@ -2034,6 +3436,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     return out;
   }
+  function userSynchronizedSetting(setter, storageKey: string, scope: string) {
+    // Only the public UI setter records explicit intent. Hydration continues to
+    // use the internal setter and every cloud write retains its validation gate.
+    if (fbDb.app.options.projectId !== "fainance-test-20260823195207") return setter;
+    return function (next) {
+      if ((applyingFirestoreRef.current || !firestoreHydratedRef.current) && (typeof next === "function" || !syncJsonEqual(readUserLocalJson(storageKey, undefined), next))) markUserLocalChanges([scope], true);
+      return setter(next);
+    };
+  }
   function markHomePreferencesChange() {
     if (!applyingFirestoreRef.current) markUserLocalChange("home_preferences");
   }
@@ -2070,7 +3481,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       : valid;
   }
   function normalizeStringOrderValue(value, fallback) {
-    var source = Array.isArray(value) ? value : [];
+    var hasStoredValue = Array.isArray(value);
+    var source = hasStoredValue ? value : [];
     var seen = {};
     var out = [];
     source.forEach(function (item) {
@@ -2080,7 +3492,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         out.push(id);
       }
     });
-    return out.length ? out : Array.isArray(fallback) ? fallback.slice() : [];
+    return hasStoredValue
+      ? out
+      : Array.isArray(fallback)
+      ? fallback.slice()
+      : [];
   }
 
   var [accountDeletedRecords, setAccountDeletedRecordsRaw] = useStorage(
@@ -2106,6 +3522,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var expensesRef = useRef(expenses);
   expensesRef.current = expenses;
   function setExpenses(nextValue, fromCloud = false) {
+    if (movementBulkInProgressRef.current && !fromCloud)
+      throw new Error('SYNC_V2_BULK_OPERATION_BUSY');
     var current = Array.isArray(expensesRef.current) ? expensesRef.current : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
@@ -2129,6 +3547,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (v2WriteThroughNow && !fromCloud) {
       writeMovementDiffV2(userId, "expense", current, prepared, function (error) {
         console.error("Movement Sync V2 expense write failed", error);
+        if (movementAccountUidRef.current === userId)
+          setToast({ text: L('Sincronizzazione non completata. Verifica i dati e la connessione.'), type: 'error' });
       });
     }
     if (!fromCloud && !v2ActiveNow) {
@@ -2141,6 +3561,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var incomesRef = useRef(incomes);
   incomesRef.current = incomes;
   function setIncomes(nextValue, fromCloud = false) {
+    if (movementBulkInProgressRef.current && !fromCloud)
+      throw new Error('SYNC_V2_BULK_OPERATION_BUSY');
     var current = Array.isArray(incomesRef.current) ? incomesRef.current : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
@@ -2159,6 +3581,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (v2WriteThroughNow && !fromCloud) {
       writeMovementDiffV2(userId, "income", current, prepared, function (error) {
         console.error("Movement Sync V2 income write failed", error);
+        if (movementAccountUidRef.current === userId)
+          setToast({ text: L('Sincronizzazione non completata. Verifica i dati e la connessione.'), type: 'error' });
       });
     }
     if (!fromCloud && !v2ActiveNow) {
@@ -2167,18 +3591,106 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     incomesRef.current = prepared;
     return setIncomesRaw(prepared);
   }
+  // Bulk operations use the existing per-record V2 identities and tombstones.
+  // They never change migration markers or switch accounts to a new sync path.
+  async function replaceAccountMovementsV2(replacements, onProgress, source = 'backup') {
+    if (movementBulkInProgressRef.current) throw new Error('SYNC_V2_BULK_OPERATION_BUSY');
+    if (!userId || !movementSyncV2ActiveRef.current || movementSyncV2MigrationRunningRef.current)
+      throw new Error('SYNC_V2_WAIT_FOR_MIGRATION');
+    const owner = userId;
+    const prepared = { ...replacements };
+    if (source === 'import') {
+      ['expense', 'income'].forEach(function (kind) {
+        if (!Array.isArray(prepared[kind])) return;
+        prepared[kind] = prepared[kind].map(function (row) {
+          return { ...(kind === 'expense' ? expenseWithMethodSnapshot(row) : row),
+            amount: Math.abs(parseMoney(row.amount)),
+            createdAt: row.createdAt || new Date().toISOString() };
+        }).filter(function (row) { return row.amount > 0; });
+      });
+    }
+    const bulkAbort = new AbortController();
+    let lastBulkProgressAt = 0;
+    let lastBulkProgressPhase = '';
+    movementBulkCancelRef.current = () => bulkAbort.abort();
+    movementBulkInProgressRef.current = true;
+    setMovementBulkBusy(true);
+    movementBulkProgressRef.current = { done: 0, total: 0, phase: 'checking' };
+    movementBulkLatestSnapshotRef.current = null;
+    try {
+      return await replaceMovementSetsV2(owner, prepared, function (done, total, phase) {
+          const now = Date.now();
+          // Re-rendering the entire app for every commit makes large imports
+          // compete with Firestore's acknowledgement processing on Android.
+          if (phase === 'writing' && phase === lastBulkProgressPhase &&
+              done < total && now - lastBulkProgressAt < 500) return;
+          lastBulkProgressAt = now;
+          lastBulkProgressPhase = phase;
+          movementBulkProgressRef.current = { done, total, phase };
+          window.dispatchEvent(new CustomEvent('fainance-movement-bulk-progress'));
+          if (onProgress) onProgress(done, total, phase);
+        },
+        function () { return movementAccountUidRef.current === owner; }, bulkAbort.signal);
+    } finally {
+      // A failed operation may have committed some records. Re-read the real
+      // state; never copy the pre-operation arrays back over committed changes.
+      const readSequence = movementBulkSnapshotSequenceRef.current;
+      try {
+        const server = await readMovementSetsV2(owner);
+        if (movementAccountUidRef.current === owner) {
+          const buffered = movementBulkLatestSnapshotRef.current;
+          const latest = buffered && movementBulkSnapshotSequenceRef.current > readSequence
+            ? movementStateFromV2(buffered) : server;
+          setExpenses(latest.expenses, true);
+          setIncomes(latest.incomes, true);
+        }
+      } catch (refreshError) {
+        const buffered = movementBulkLatestSnapshotRef.current;
+        if (buffered && movementAccountUidRef.current === owner) {
+          const latest = movementStateFromV2(buffered);
+          setExpenses(latest.expenses, true);
+          setIncomes(latest.incomes, true);
+        }
+        console.error('Movement refresh unavailable; realtime listener remains active', refreshError);
+      } finally {
+        movementBulkLatestSnapshotRef.current = null;
+        movementBulkInProgressRef.current = false;
+        movementBulkCancelRef.current = null;
+        setMovementBulkBusy(false);
+      }
+    }
+  }
+  function legacyCatalogWritePending() {
+    return Number(pendingAccountSyncRef.current?.revision || 0) > 0 || localStorage.getItem(userKey("account_sync_pending_v1")) === "1";
+  }
+  function preserveLegacyCatalogIntent(catalog) {
+    const upgrade = legacyCatalogUpgradeRef.current;
+    if (!upgrade?.eligible || upgrade.uid !== String(userId) || Number(catalog?.schemaVersion) !== 4) return;
+    const count = migrateLegacyCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"), userKey, catalog, legacyCatalogWritePending(), readUserLocalUpdatedAt);
+    if (count) { postHydrationSyncRequestedRef.current = true; markPendingAccountSync(); }
+    if (catalog.expenseCatalog?.data && catalog.paymentCatalog?.data && catalog.incomeCatalog?.data) {
+      // migrateLegacyCatalogEdits above must succeed before marking completion.
+      // Failure to persist this redundant hint must not abort account hydration.
+      try { localStorage.setItem(upgrade.marker, "done"); } catch (_markerStorageError) {}
+      upgrade.eligible = false;
+    }
+  }
+  function catalogMutationValue(key, requested, keys, fromUser) {
+    var journalKey = userKey("catalog_pending_edits_v1");
+    if (!fromUser) return protectCatalogEdit(localStorage, journalKey, key, requested);
+    var previous = readUserLocalJson(key, undefined);
+    if (catalogEditEqual(previous, requested)) return requested;
+    persistCatalogEdit(localStorage, journalKey, userKey(key), key, requested, Date.now());
+    markUserLocalChanges(keys, true);
+    return requested;
+  }
   var [cats, setCatsRaw] = useStorage(userKey("cats_v10"), DEFAULT_CATS);
-  function setCats(nextCats) {
-    if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-      markUserLocalChanges(["cats", "expense_catalog_v2"]);
-    return setCatsRaw(
-      resolveDefaultProtectedNext(
-        nextCats,
-        cats,
-        DEFAULT_CATS,
-        DEFAULT_EXPENSE_CATEGORY_NAMES
-      )
-    );
+  function setCats(nextCats, fromUser = false) {
+    var current = readUserLocalJson("cats_v10", cats);
+    var requested = resolveDefaultProtectedNext(nextCats, current, DEFAULT_CATS,
+        DEFAULT_EXPENSE_CATEGORY_NAMES);
+    if (!fromUser && firestoreHydratedRef.current && !applyingFirestoreRef.current) markUserLocalChanges(["cats", "expense_catalog_v2"]);
+    return setCatsRaw(catalogMutationValue("cats_v10", requested, ["cats", "expense_catalog_v2"], fromUser));
   }
   cats = defaultProtectedArray(
     cats,
@@ -2189,17 +3701,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("meth_v10"),
     DEFAULT_METHODS
   );
-  function setMethods(nextMethods) {
-    if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-      markUserLocalChanges(["methods", "payment_catalog_v2"]);
-    return setMethodsRaw(
-      resolveDefaultProtectedNext(
-        nextMethods,
-        methods,
-        DEFAULT_METHODS,
-        DEFAULT_METHOD_NAMES
-      )
-    );
+  function setMethods(nextMethods, fromUser = false) {
+    var current = readUserLocalJson("meth_v10", methods);
+    var requested = resolveDefaultProtectedNext(nextMethods, current, DEFAULT_METHODS,
+        DEFAULT_METHOD_NAMES);
+    if (!fromUser && firestoreHydratedRef.current && !applyingFirestoreRef.current) markUserLocalChanges(["methods", "payment_catalog_v2"]);
+    return setMethodsRaw(catalogMutationValue("meth_v10", requested, ["methods", "payment_catalog_v2"], fromUser));
   }
   methods = defaultProtectedArray(
     methods,
@@ -2210,17 +3717,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("method_groups_v1"),
     DEFAULT_METHOD_GROUPS
   );
-  function setMethodGroups(nextGroups) {
-    if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-      markUserLocalChanges(["payment_catalog_v2"]);
-    return setMethodGroupsRaw(
-      resolveDefaultProtectedNext(
-        nextGroups,
-        methodGroups,
-        DEFAULT_METHOD_GROUPS,
-        DEFAULT_METHOD_GROUP_NAMES
-      )
-    );
+  function setMethodGroups(nextGroups, fromUser = false) {
+    var current = readUserLocalJson("method_groups_v1", methodGroups);
+    var requested = resolveDefaultProtectedNext(nextGroups, current, DEFAULT_METHOD_GROUPS,
+        DEFAULT_METHOD_GROUP_NAMES);
+    if (!fromUser && firestoreHydratedRef.current && !applyingFirestoreRef.current) markUserLocalChanges(["payment_catalog_v2"]);
+    return setMethodGroupsRaw(catalogMutationValue("method_groups_v1", requested, ["payment_catalog_v2"], fromUser));
   }
   methodGroups = defaultProtectedArray(
     methodGroups,
@@ -2231,17 +3733,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("expense_groups_v1"),
     DEFAULT_EXPENSE_GROUPS
   );
-  function setExpenseGroups(nextGroups) {
-    if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-      markUserLocalChanges(["expense_catalog_v2"]);
-    return setExpenseGroupsRaw(
-      resolveDefaultProtectedNext(
-        nextGroups,
-        expenseGroups,
-        DEFAULT_EXPENSE_GROUPS,
-        DEFAULT_EXPENSE_GROUP_NAMES
-      )
-    );
+  function setExpenseGroups(nextGroups, fromUser = false) {
+    var current = readUserLocalJson("expense_groups_v1", expenseGroups);
+    var requested = resolveDefaultProtectedNext(nextGroups, current, DEFAULT_EXPENSE_GROUPS,
+        DEFAULT_EXPENSE_GROUP_NAMES);
+    if (!fromUser && firestoreHydratedRef.current && !applyingFirestoreRef.current) markUserLocalChanges(["expense_catalog_v2"]);
+    return setExpenseGroupsRaw(catalogMutationValue("expense_groups_v1", requested, ["expense_catalog_v2"], fromUser));
   }
   expenseGroups = defaultProtectedArray(
     expenseGroups,
@@ -2252,16 +3749,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("income_groups_v1"),
     DEFAULT_INCOME_GROUPS
   );
-  function setIncomeGroups(nextGroups) {
-    if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-      markUserLocalChanges(["income_catalog_v2"]);
-    return setIncomeGroupsRaw(
-      resolveDefaultProtectedNext(
-        nextGroups,
-        incomeGroups,
-        DEFAULT_INCOME_GROUPS
-      )
-    );
+  function setIncomeGroups(nextGroups, fromUser = false) {
+    var current = readUserLocalJson("income_groups_v1", incomeGroups);
+    var requested = resolveDefaultProtectedNext(nextGroups, current, DEFAULT_INCOME_GROUPS);
+    if (!fromUser && firestoreHydratedRef.current && !applyingFirestoreRef.current) markUserLocalChanges(["income_catalog_v2"]);
+    return setIncomeGroupsRaw(catalogMutationValue("income_groups_v1", requested, ["income_catalog_v2"], fromUser));
   }
   incomeGroups = defaultProtectedArray(incomeGroups, DEFAULT_INCOME_GROUPS);
   useEffect(
@@ -2311,19 +3803,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("custom_income_types_v1"),
     []
   );
-  function setCustomIncomeTypes(nextValue) {
-    if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-      markUserLocalChanges(["income_catalog_v2"]);
-    return setCustomIncomeTypesRaw(nextValue);
+  function setCustomIncomeTypes(nextValue, fromUser = false) {
+    var current = readUserLocalJson("custom_income_types_v1", customIncomeTypes);
+    var requested = (typeof nextValue === "function" ? nextValue(current) : nextValue);
+    if (!fromUser && firestoreHydratedRef.current && !applyingFirestoreRef.current) markUserLocalChanges(["income_catalog_v2"]);
+    return setCustomIncomeTypesRaw(catalogMutationValue("custom_income_types_v1", requested, ["income_catalog_v2"], fromUser));
   }
   var [incomeTypeOverrides, setIncomeTypeOverridesRaw] = useStorage(
     userKey("income_type_overrides_v1"),
     {}
   );
-  function setIncomeTypeOverrides(nextValue) {
-    if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-      markUserLocalChanges(["income_catalog_v2"]);
-    return setIncomeTypeOverridesRaw(nextValue);
+  function setIncomeTypeOverrides(nextValue, fromUser = false) {
+    var current = readUserLocalJson("income_type_overrides_v1", incomeTypeOverrides);
+    var requested = (typeof nextValue === "function" ? nextValue(current) : nextValue);
+    if (!fromUser && firestoreHydratedRef.current && !applyingFirestoreRef.current) markUserLocalChanges(["income_catalog_v2"]);
+    return setIncomeTypeOverridesRaw(catalogMutationValue("income_type_overrides_v1", requested, ["income_catalog_v2"], fromUser));
   }
   var incomeTypes = useMemo(
     function () {
@@ -2347,7 +3841,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
   function catalogRecoverySnapshotValues(storageKey) {
     try {
-      var raw = localStorage.getItem(storageKey);
+      var raw = readRecoverySnapshot(storageKey);
       if (!raw) return null;
       var snap = JSON.parse(raw);
       return snap && snap.values && typeof snap.values === "object"
@@ -2494,9 +3988,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       if (!isRecoveredExpenseCategory(category)) return category;
       var source = candidatesById[String(category && category.id)];
       if (!source) return category;
+      var restored = { ...source, ...category, id: category.id };
+      // Repeated snapshots must be no-ops; retain authoritative archived/deleted flags.
+      if (syncJsonEqual(category, restored)) return category;
       repaired = true;
-      var restored = { ...source, id: category.id };
-      delete restored.recovered;
       return restored;
     });
     return { categories: categories, repaired: repaired };
@@ -2504,43 +3999,108 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
   async function readCloudExpenseCategoryBackupCandidates() {
     if (!userId) return [];
-    try {
-      var backupSnap: any = await getDocs(
-        query(collection(fbDb, "users", String(userId), "backups"), limit(16))
-      );
-      var rows = (backupSnap.docs || [])
-        .map(function (row) { return row && row.data ? row.data() : null; })
-        .filter(function (row) { return !!(row && row.payload); })
-        .sort(function (a, b) { return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0); });
-      var out: any[] = [];
-      for (var i = 0; i < rows.length && out.length < 8; i++) {
-        try {
-          var row: any = rows[i];
-          if (String(row.encoding || "") !== "gzip-base64-json-v1") continue;
-          var raw = String(row.payload || "");
-          if (!raw) continue;
-          var binary = atob(raw);
-          var bytes = new Uint8Array(binary.length);
-          for (var j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
-          var DecompressionCtor: any = (globalThis as any).DecompressionStream;
-          if (!DecompressionCtor) break;
-          var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionCtor("gzip"));
-          var decoded = new TextDecoder().decode(await new Response(stream).arrayBuffer());
-          var parsed: any = JSON.parse(decoded);
-          var snapshot = parsed && parsed.snapshot && typeof parsed.snapshot === "object" ? parsed.snapshot : null;
-          var values = snapshot && snapshot.values && typeof snapshot.values === "object" ? snapshot.values : null;
-          var catsRaw = values ? values.cats_v10 : null;
-          if (catsRaw === null || catsRaw === undefined || catsRaw === "") continue;
-          var catsValue = typeof catsRaw === "string" ? JSON.parse(catsRaw) : catsRaw;
-          if (Array.isArray(catsValue) && catsValue.length) out.push(catsValue);
-        } catch (_backupCategoryError) {}
+    const uid = String(userId);
+    const authUser = fbAuth.currentUser;
+    const project = fbDb.app.options.projectId;
+    const cacheKey = userKey("recovery_category_backups_v2");
+    async function decodeCategories(row: any) {
+      if (row?.encoding !== "gzip-base64-json-v1" || !row.payload) return null;
+      const binary = atob(String(row.payload));
+      const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+      const DecompressionCtor = (globalThis as any).DecompressionStream;
+      if (!DecompressionCtor) throw new Error("CATEGORY_BACKUP_DECOMPRESSION_UNAVAILABLE");
+      const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionCtor("gzip"));
+      const decoded = new TextDecoder().decode(await new Response(stream).arrayBuffer());
+      const catsRaw = JSON.parse(decoded)?.snapshot?.values?.cats_v10;
+      const categories = typeof catsRaw === "string" && catsRaw ? JSON.parse(catsRaw) : catsRaw;
+      return Array.isArray(categories) && categories.length ? categories : null;
+    }
+    async function readNativeCandidates() {
+      const token = await authUser.getIdToken();
+      const base = "https://firestore.googleapis.com/v1/projects/" + project + "/databases/(default)/documents";
+      const payloadFields = ["encoding", "payload", "createdAtMs"];
+      async function request(path: string, data: any) {
+        if (fbAuth.currentUser !== authUser) throw new Error("CATEGORY_BACKUP_ACCOUNT_CHANGED");
+        const response = await CapacitorHttp.post({
+          url: base + path,
+          headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+          responseType: "json",
+          connectTimeout: 4000,
+          readTimeout: 6500,
+          data,
+        });
+        if (fbAuth.currentUser !== authUser || response.status !== 200 || !Array.isArray(response.data)
+          || !response.data.length || response.data.some(row => !row || row.error)) {
+          throw new Error("CATEGORY_BACKUP_READ_FAILED");
+        }
+        return response.data;
       }
-      return out;
-    } catch (_backupReadError) {
+      async function queryBackups(fields: string[]) {
+        const rows = await request("/users/" + encodeURIComponent(uid) + ":runQuery", {
+          structuredQuery: { from: [{ collectionId: "backups" }],
+            select: { fields: fields.map(fieldPath => ({ fieldPath })) }, limit: 16 },
+        });
+        if (rows.some(row => !row.document && !row.readTime)) throw new Error("CATEGORY_BACKUP_RESULT_MISSING");
+        return rows.flatMap(row => row.document ? [row.document] : []);
+      }
+      let cached: any = {};
+      try { cached = JSON.parse(localStorage.getItem(cacheKey) || "{}") || {}; } catch {}
+      const hasCache = Object.keys(cached).length > 0;
+      const documents = await queryBackups(hasCache ? ["__name__"] : payloadFields);
+      if (documents.some(doc => !doc.name || !doc.updateTime)) throw new Error("CATEGORY_BACKUP_REVISION_MISSING");
+      const missing = documents.filter(doc => cached[doc.name]?.revision !== doc.updateTime);
+      const payloads = hasCache && missing.length
+        ? (await request(":batchGet", { documents: missing.map(doc => doc.name), mask: { fieldPaths: payloadFields } }))
+          .flatMap(row => row.found ? [row.found] : [])
+        : documents;
+      const byName = new Map(payloads.map(doc => [doc.name, doc]));
+      const next: Record<string, any> = {};
+      const sorted = [];
+      for (const doc of documents) {
+        const hit = cached[doc.name];
+        if (hit?.revision === doc.updateTime && (hit.categories === null || Array.isArray(hit.categories))) {
+          next[doc.name] = hit;
+        } else {
+          const payload = byName.get(doc.name);
+          if (payload?.updateTime !== doc.updateTime) throw new Error("CATEGORY_BACKUP_REVISION_CHANGED");
+          const fields = payload.fields || {};
+          const createdAtMs = Number(fields.createdAtMs?.integerValue ?? fields.createdAtMs?.doubleValue ?? 0);
+          try {
+            const categories = await decodeCategories({ encoding: fields.encoding?.stringValue, payload: fields.payload?.stringValue });
+            next[doc.name] = { revision: doc.updateTime, createdAtMs, categories };
+          } catch {
+            continue;
+          }
+        }
+        sorted.push(next[doc.name]);
+      }
+      try { localStorage.setItem(cacheKey, JSON.stringify(next)); } catch {}
+      return sorted.sort((a, b) => b.createdAtMs - a.createdAtMs)
+        .flatMap(row => row.categories ? [row.categories] : []).slice(0, 8);
+    }
+    try {
+      if (useNativeShareCommit(project) && authUser?.uid === uid) {
+        try { return await measureStartup("catalog_fetch", readNativeCandidates()); } catch {}
+      }
+      const snap = await measureStartup("catalog_fetch", getDocs(
+        query(collection(fbDb, "users", uid, "backups"), limit(16))
+      ));
+      const rows = snap.docs.map(row => row.data()).filter(row => !!row?.payload)
+        .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
+      const candidates: any[] = [];
+      for (const row of rows) {
+        try {
+          const categories = await decodeCategories(row);
+          if (categories) candidates.push(categories);
+        } catch {}
+        if (candidates.length === 8) break;
+      }
+      return candidates;
+    } catch {
       return [];
     }
   }
-  function restoreReferencedExpenseCategories(categoryList, candidateLists, expenseRows) {
+  function restoreReferencedExpenseCategories(categoryList, candidateLists, expenseRows, recurringRows) {
     var current = ensureArrayValue(categoryList, []).slice();
     var byId: any = {};
     current.forEach(function (category) {
@@ -2556,25 +4116,35 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
     });
     var referenced: any = {};
+    var recurringReferenced: any = {};
     ensureArrayValue(expenseRows, []).forEach(function (row) {
       if (row && row.catId !== undefined && row.catId !== null && String(row.catId) !== "") referenced[String(row.catId)] = true;
+    });
+    ensureArrayValue(recurringRows, []).forEach(function (rule) {
+      if (!rule || String(rule.rtype || "expense") === "income") return;
+      if (rule.catId === undefined || rule.catId === null || String(rule.catId) === "") return;
+      var id = String(rule.catId);
+      referenced[id] = true;
+      recurringReferenced[id] = true;
     });
     var repaired = false;
     Object.keys(referenced).forEach(function (id) {
       var existing = byId[id];
       var source = candidatesById[id];
       if (!source) return;
+      var activeRecurringReference =
+        !!recurringReferenced[id] && !source.deleted && !source.archived;
       if (!existing) {
-        var added = { ...source };
-        delete added.recovered;
+        // Old movements/rules may recover display metadata, never active catalog entries.
+        var added = { ...source, archived: true, deleted: true, recovered: true };
         current.push(added);
         byId[id] = added;
         repaired = true;
         return;
       }
       if (isRecoveredExpenseCategory(existing)) {
-        var replacement = { ...source, id: existing.id };
-        delete replacement.recovered;
+        var replacement = { ...source, ...existing, id: existing.id };
+        if (syncJsonEqual(existing, replacement)) return;
         var index = current.findIndex(function (category) { return String(category && category.id) === id; });
         if (index >= 0) current[index] = replacement;
         byId[id] = replacement;
@@ -2658,12 +4228,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         anchor[name] && typeof anchor[name] === "object" ? anchor[name] : null;
       if (!a) return b;
       if (!b) return a;
-      if (name === "expenseCatalog") {
-        var aPersonalized = expenseCatalogHasPersonalization(a.data || a);
-        var bPersonalized = expenseCatalogHasPersonalization(b.data || b);
-        if (aPersonalized !== bPersonalized)
-          return aPersonalized ? a : b;
-      }
       return Number(b.updatedAtMs || 0) > Number(a.updatedAtMs || 0) ? b : a;
     }
     return {
@@ -2675,11 +4239,79 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       categoryPreferences: section("categoryPreferences"),
     };
   }
-  async function readCatalogAnchorV1() {
+  // Catalog delivery is independent of the serialized, potentially slow account
+  // expansion/recovery queue. No second cloud writer is introduced.
+  useEffect(function () {
+    if (!userId) return;
+    let active = true;
+    const owner = String(userId);
+    const revisions: any = {};
+    let lastSnapshot: any = null;
+    const applySnapshot = function (snapshot: any) {
+      if (!active || !snapshot.exists() || snapshot.metadata?.hasPendingWrites) return;
+      const value = snapshot.data();
+      if (value?.kind !== "catalog-sync-anchor-v1" || String(value.uid || "") !== owner || !validCatalogSyncV4(value.catalogSyncV4)) return;
+      const shapes: any = { expenseCatalog: { categories: true, groups: true }, paymentCatalog: { methods: true, groups: true }, incomeCatalog: { groups: true, customTypes: true, overrides: false } };
+      for (const name of Object.keys(shapes)) {
+        const section = value.catalogSyncV4[name];
+        if (!section) continue;
+        if (!Number.isFinite(Number(section.updatedAtMs)) || Number(section.updatedAtMs) <= 0 || !section.data) return;
+        for (const field of Object.keys(shapes[name])) {
+          const data = section.data[field];
+          if (shapes[name][field] ? !Array.isArray(data) || !data.every(item => item && typeof item === "object" && item.id !== undefined && item.id !== null) : !data || typeof data !== "object" || Array.isArray(data)) return;
+        }
+      }
+      // An old cached anchor cannot establish whether a legacy pending edit
+      // was committed. Wait for the server while keeping the existing local UI.
+      if (snapshot.metadata?.fromCache && legacyCatalogWritePending()) return;
+      preserveLegacyCatalogIntent(value.catalogSyncV4);
+      lastSnapshot = snapshot;
+      catalogAnchorV1Ref.current = { ...value, catalogSyncV4: mergeCatalogSyncV4WithAnchor(catalogAnchorV1Ref.current?.catalogSyncV4, value.catalogSyncV4) };
+      catalogAnchorLoadedRef.current = true;
+      // Initial hydration still validates the complete account schema first.
+      if (!financeSchemaCompatibleRef.current || !firestoreHydratedRef.current) return;
+      const catalog = catalogAnchorV1Ref.current.catalogSyncV4;
+      const sections: any[] = [
+        ["expenseCatalog", [["categories", setCats, true], ["groups", setExpenseGroups, true]]],
+        ["paymentCatalog", [["methods", setMethods, true], ["groups", setMethodGroups, true]]],
+        ["incomeCatalog", [["groups", setIncomeGroups, true], ["customTypes", setCustomIncomeTypes, true], ["overrides", setIncomeTypeOverrides, false]]]
+      ];
+      beginRemoteApply();
+      try {
+        for (const [name, fields] of sections) {
+          const section = catalog[name], stamp = Number(section?.updatedAtMs || 0), data = section?.data;
+          if (!Number.isFinite(stamp) || stamp <= 0 || stamp < Number(revisions[name] || 0) || !data) continue;
+          if (!fields.every(([field, , array]) => array ? Array.isArray(data[field]) : data[field] && typeof data[field] === "object" && !Array.isArray(data[field]))) continue;
+          for (const [field, setter] of fields) setter(data[field]);
+          revisions[name] = stamp;
+        }
+      } finally { endRemoteApply(); }
+    };
+    const refresh = function () { if (active && lastSnapshot) applySnapshot(lastSnapshot); };
+    catalogRealtimeRefreshRef.current = refresh;
+    const unsubscribe = onSnapshot(catalogAnchorDocRefV1(), { includeMetadataChanges: true }, applySnapshot, function (error: any) { console.warn("Catalog realtime listener unavailable", error?.code || "CATALOG_LISTENER_ERROR"); });
+    return function () { active = false; if (catalogRealtimeRefreshRef.current === refresh) catalogRealtimeRefreshRef.current = null; unsubscribe(); };
+  }, [userId]);
+
+  async function readCatalogAnchorV1(preferCache = false) {
     var ref: any = catalogAnchorDocRefV1();
     if (!ref) return null;
     try {
-      var snap: any = await getDoc(ref);
+      async function readCurrentAnchor() {
+        if (useNativeShareCommit(fbDb.app.options.projectId) && fbAuth.currentUser?.uid === userId) {
+          try {
+            const lite = await import("firebase/firestore/lite");
+            return await fainancePromiseTimeout(
+              lite.getDoc(lite.doc(lite.getFirestore(fbDb.app), ref.path)), 3000, "CATALOG_DIRECT_READ_TIMEOUT"
+            );
+          } catch {}
+        }
+        return getDoc(ref);
+      }
+      var snap: any = await fainancePromiseTimeout(
+        preferCache ? readExistingCachedDocument(() => getDocFromCache(ref), () => getDoc(ref)) : readCurrentAnchor(),
+        8000, "CATALOG_ANCHOR_READ_TIMEOUT"
+      );
       if (!snap.exists()) return null;
       var value: any = snap.data() || {};
       if (
@@ -2711,7 +4343,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
     try {
       await setDoc(ref, anchor, { merge: false });
-      catalogAnchorV1Ref.current = anchor;
+      catalogAnchorV1Ref.current = { ...anchor, catalogSyncV4: mergeCatalogSyncV4WithAnchor(catalogAnchorV1Ref.current?.catalogSyncV4, anchor.catalogSyncV4) };
       catalogAnchorLoadedRef.current = true;
       return true;
     } catch (e) {
@@ -3165,11 +4797,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       : [];
     var requested =
       typeof nextValue === "function" ? nextValue(current) : nextValue;
+    var requestedWithReferences = preserveRecurringRuleReferences(current, requested);
     var prepared = applyingFirestoreRef.current
-      ? Array.isArray(requested)
-        ? requested
+      ? Array.isArray(requestedWithReferences)
+        ? requestedWithReferences
         : []
-      : prepareAccountCollectionWrite("recurring", current, requested);
+      : prepareAccountCollectionWrite("recurring", current, requestedWithReferences);
     recurringRef.current = prepared;
     return setRecurringRaw(prepared);
   }
@@ -3185,6 +4818,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         ? requested
         : []
       : prepareAccountCollectionWrite("goal", current, requested);
+    if(!applyingFirestoreRef.current&&typeof nextValue==='function')noteGrowthCreations(String(userId||''),'goals',current,prepared);
     goalsRef.current = prepared;
     return setGoalsRaw(prepared);
   }
@@ -3200,6 +4834,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         ? requested
         : []
       : prepareAccountCollectionWrite("alert", current, requested);
+    if(!applyingFirestoreRef.current&&typeof nextValue==='function')noteGrowthCreations(String(userId||''),'alerts',current,prepared);
     alertsRef.current = prepared;
     return setAlertsRaw(prepared);
   }
@@ -3241,6 +4876,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [financeEvolutionRaw, setFinanceEvolutionRaw] = useStorage(
     userKey('finance_evolution_v1'), createFinanceEvolution()
   );
+  var [periodConfirmationRaw, setPeriodConfirmationRaw] = useStorage(userKey(PERIOD_CONFIRMATION_KEY), null);
+  var periodConfirmation = readPeriodConfirmation(periodConfirmationRaw);
   var financeEvolution = useMemo(() => migrateFinanceEvolution(financeEvolutionRaw), [financeEvolutionRaw]);
   var accountingPeriod = useMemo(() => createAccountingPeriod(financeEvolution.period), [financeEvolution.period.mode, financeEvolution.period.startDay]);
   const [accountingDate, setAccountingDate] = useState(todayStr);
@@ -3251,26 +4888,148 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     document.addEventListener('visibilitychange', refresh);
     return () => { clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
   }, []);
+  // fAInance 2.1.5: migrazione prudente delle ricorrenze legacy.
+  // effectiveFrom diventa il punto stabile da cui cercare occorrenze aperte.
+  // Per le regole gia' esistenti partiamo dall'inizio del periodo corrente,
+  // cosi' non vengono creati arretrati storici mai realmente richiesti.
+  useEffect(function () {
+    if (!Array.isArray(recurring) || recurring.length === 0) return;
+    var baseline = accountingPeriod.forDate(accountingDate).start;
+    var changed = false;
+    var migrated = recurring.map(function (rule) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(String(rule && rule.effectiveFrom || ""))) return rule;
+      changed = true;
+      return { ...rule, effectiveFrom: baseline };
+    });
+    if (changed) setRecurring(migrated);
+  }, [
+    userId,
+    accountingDate,
+    financeEvolution.period.mode,
+    financeEvolution.period.startDay,
+    recurring,
+  ]);
+  useEffect(function () {
+    if (movementBulkInProgressRef.current) return;
+    if (!Array.isArray(recurring) || !recurring.length) return;
+    var catalogRepair = repairRecurringRuleReferencesFromCatalogs(recurring, cats, methods);
+    if (catalogRepair.repaired) {
+      setRecurring(catalogRepair.recurring);
+      return;
+    }
+    var ruleRepair = repairRecurringRuleReferencesFromMovements(recurring, expensesRef.current);
+    if (ruleRepair.repaired) {
+      setRecurring(ruleRepair.recurring);
+      return;
+    }
+    var movementRepair = repairRecurringExpenseMovementReferences(expensesRef.current, recurring);
+    if (movementRepair.repaired) setExpenses(movementRepair.expenses);
+  }, [recurring, expenses, cats, methods, movementBulkBusy]);
   var [toolShareDraft,setToolShareDraft]=useState<any>(null);
   useEffect(()=>{setToolShareDraft(null);},[userId]);
   var financeEvolutionRef = useRef(financeEvolution);
   financeEvolutionRef.current = financeEvolution;
   function setFinanceEvolution(nextValue) {
-    // Validate before marking a write or touching the existing state.
     const next = migrateFinanceEvolution(typeof nextValue === 'function' ? nextValue(financeEvolutionRef.current) : nextValue);
-    if (syncJsonEqual(next, financeEvolutionRef.current)) return;
-    // Cloud hydration uses the raw setter. This public setter always represents
-    // an explicit edit, including an edit made during an async cloud callback.
-    localStorage.setItem(userKey('finance_evolution_v1'), JSON.stringify(next));
-    writeUserLocalUpdatedAt('finance_evolution_v1', Date.now());
+    const now = Date.now();
+    const nextWithRuleSync = migrateFinanceEvolution(trackAutomaticRuleLocalChange(financeEvolutionRef.current, next, now));
+    const changed = !syncJsonEqual(nextWithRuleSync, financeEvolutionRef.current);
+    // Preserve the previous durable and in-memory document when storage rejects
+    // an edit. This setter is also called by React effects and timed maintenance.
+    if (changed) {
+      try {
+        localStorage.setItem(userKey('finance_evolution_v1'), JSON.stringify(nextWithRuleSync));
+      } catch (error) {
+        persistAccountSyncError('finance-local-write', error, false);
+        setToast({ text: L('Modifica non salvata: memoria locale non disponibile. I dati precedenti sono conservati.'), type: 'error' });
+        return false;
+      }
+    }
+    // This small marker is redundant with the durable finance document. Failure
+    // to cache it must not unmount React; V6 also derives it from that document.
+    if (nextWithRuleSync.periodIntroductionSeen === true) {
+      let previousConfirmation = null;
+      try { previousConfirmation = readPeriodConfirmation(localStorage.getItem(userKey(PERIOD_CONFIRMATION_KEY))); } catch (_readError) {}
+      if (!previousConfirmation || !syncJsonEqual(previousConfirmation.period, nextWithRuleSync.period)) {
+        const confirmation = { confirmed: true, period: nextWithRuleSync.period, updatedAt: now };
+        try { localStorage.setItem(userKey(PERIOD_CONFIRMATION_KEY), JSON.stringify(confirmation)); } catch (_markerError) {}
+        setPeriodConfirmationRaw(confirmation);
+        markPendingAccountSync(true);
+      }
+    }
+    if (!changed) return true;
+    if(!applyingFirestoreRef.current&&typeof nextValue==='function'){
+      const previous=financeEvolutionRef.current;
+      noteGrowthCreations(String(userId||''),'rules',previous.rules,nextWithRuleSync.rules);
+      noteGrowthCreations(String(userId||''),'budgetVersions',previous.budget?.standardVersions,nextWithRuleSync.budget?.standardVersions);
+      noteGrowthCreations(String(userId||''),'budgetOverrides',previous.budget?.overrides,nextWithRuleSync.budget?.overrides);
+    }
+    writeUserLocalUpdatedAt('finance_evolution_v1', now);
     markPendingAccountSync(true);
-    financeEvolutionRef.current = next;
-    return setFinanceEvolutionRaw(next);
+    financeEvolutionRef.current = nextWithRuleSync;
+    setFinanceEvolutionRaw(nextWithRuleSync);
+    return true;
   }
+  useEffect(() => {
+    if (!userId || !firestoreReady || !firestoreHydratedRef.current ||
+        !financeSchemaCompatibleRef.current || applyingFirestoreRef.current ||
+        financeCloudReceipt?.uid !== userId) return;
+    if (financeEvolution.periodIntroductionSeen === true) {
+      if (!periodConfirmation) setFinanceEvolution(previous => previous);
+    } else if (periodConfirmation) {
+      setFinanceEvolution(previous => ({ ...previous, period: periodConfirmation.period, periodIntroductionSeen: true }));
+    }
+  }, [userId, firestoreReady, financeCloudReceipt, financeEvolution, periodConfirmationRaw]);
   useEffect(()=>{
     const clean=()=>{const current=financeEvolutionRef.current,tools=pruneToolHistory(current.tools);if(tools.calculator.length!==current.tools.calculator.length||tools.converter.length!==current.tools.converter.length)setFinanceEvolution({...current,tools});};
     clean();const timer=setInterval(clean,60000);return ()=>clearInterval(timer);
   },[userId,financeEvolution.tools]);
+  useEffect(function () {
+    var disposed = false;
+    var resumeListener = null;
+    async function pullToolWidgetHistory() {
+      try {
+        if (!(window && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+        var bridge = window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetBridge;
+        if (!bridge || !bridge.consumeToolHistory) return;
+        var response = await bridge.consumeToolHistory();
+        if (disposed) return;
+        var rows = [];
+        try { rows = JSON.parse((response && response.items) || "[]"); } catch (e) { rows = []; }
+        if (!Array.isArray(rows) || !rows.length) return;
+        setFinanceEvolution(function (previous) {
+          var nextTools = previous.tools;
+          var changed = false;
+          rows.forEach(function (row) {
+            try {
+              var section = String(row && row.section || "");
+              if (section !== "calculator" && section !== "converter") return;
+              var created = Number(row && row.createdAtMs || Date.parse(row && row.createdAt || "")) || Date.now();
+              var item = section === "calculator"
+                ? { id: String(row.id || ("widget-calculator-" + created)), result: Number(row.result) }
+                : { id: String(row.id || ("widget-converter-" + created)), from: String(row.from || ""), to: String(row.to || ""), amount: Number(row.amount), result: Number(row.result), rate: Number(row.rate) };
+              nextTools = addToolHistory(nextTools, section, item, created);
+              changed = true;
+            } catch (e) {}
+          });
+          return changed ? { ...previous, tools: nextTools } : previous;
+        });
+      } catch (e) {}
+    }
+    pullToolWidgetHistory();
+    try {
+      import("@capacitor/app").then(function (mod) {
+        if (!disposed && mod && mod.App && mod.App.addListener) {
+          mod.App.addListener("resume", pullToolWidgetHistory).then(function (listener) { resumeListener = listener; }).catch(function () {});
+        }
+      }).catch(function () {});
+    } catch (e) {}
+    return function () {
+      disposed = true;
+      try { if (resumeListener && resumeListener.remove) resumeListener.remove(); } catch (e) {}
+    };
+  }, [userId]);
+
   function savePeriodBudget(key, plan, scope = 'future') {
     setFinanceEvolution(previous => saveBudgetForPeriod(previous, budgetPlan, key, plan, scope as 'month' | 'future'));
   }
@@ -3509,7 +5268,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     markDisplayPreferencesChange();
     return setShowPatrimonioDecimalsRaw(!!value);
   }
-  var [secRate, setSecRate] = useState(null);
+  var [secRateCache, setSecRateCache] = useStorage(
+    userKey("pref_secondary_rate_cache_v1"),
+    null
+  );
+  var [secRate, setSecRate] = useState(function () {
+    try {
+      var cached = secRateCache && typeof secRateCache === "object" ? secRateCache : null;
+      if (
+        cached &&
+        String(cached.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+        String(cached.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase() &&
+        Number(cached.rate) > 0
+      ) return Number(cached.rate);
+    } catch (e) {}
+    return null;
+  });
   var [secRateLoading, setSecRateLoading] = useState(false);
   var secSym = secondaryCurrency
     ? (
@@ -3520,21 +5294,55 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     : "";
   useEffect(
     function () {
+      try {
+        if (
+          secRateCache &&
+          typeof secRateCache === "object" &&
+          String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+          String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase() &&
+          Number(secRateCache.rate) > 0
+        ) setSecRate(Number(secRateCache.rate));
+      } catch (e) {}
+    },
+    [secRateCache, currency, secondaryCurrency]
+  );
+  useEffect(
+    function () {
       if (!secondaryCurrency) {
         setSecRate(null);
         return;
       }
+      var cachedRate = null;
+      try {
+        if (
+          secRateCache &&
+          typeof secRateCache === "object" &&
+          String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+          String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase() &&
+          Number(secRateCache.rate) > 0
+        ) cachedRate = Number(secRateCache.rate);
+      } catch (e) {}
+      if (cachedRate) setSecRate(cachedRate);
       setSecRateLoading(true);
       fetch("https://api.exchangerate-api.com/v4/latest/" + currency)
         .then(function (r) {
+          if (!r || !r.ok) throw new Error("FX_HTTP");
           return r.json();
         })
         .then(function (d) {
-          var r = d.rates && d.rates[secondaryCurrency];
-          setSecRate(r || null);
+          var r = Number(d && d.rates && d.rates[secondaryCurrency]);
+          if (!Number.isFinite(r) || r <= 0) throw new Error("FX_RATE");
+          var cached = {
+            from: String(currency || "EUR").toUpperCase(),
+            to: String(secondaryCurrency || "USD").toUpperCase(),
+            rate: r,
+            createdAt: new Date().toISOString(),
+          };
+          setSecRate(r);
+          setSecRateCache(cached);
         })
         .catch(function () {
-          setSecRate(null);
+          if (!cachedRate) setSecRate(null);
         })
         .finally(function () {
           setSecRateLoading(false);
@@ -3542,17 +5350,27 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     },
     [secondaryCurrency, currency]
   );
+  useEffect(
+    function () {
+      try {
+        if (!secondaryCurrency || !Number(secRate) || Number(secRate) <= 0) return;
+        if (!(window && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+        var bridge = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.WidgetBridge;
+        if (!bridge || !bridge.saveToolRate) return;
+        bridge.saveToolRate({
+          from: String(currency || "EUR"),
+          to: String(secondaryCurrency || "USD"),
+          rate: Number(secRate),
+          createdAt: secRateCache && secRateCache.createdAt ? String(secRateCache.createdAt) : new Date().toISOString(),
+        }).catch(function () {});
+      } catch (e) {}
+    },
+    [currency, secondaryCurrency, secRate, secRateCache && secRateCache.createdAt]
+  );
   function fmtSec(val) {
     if (!secRate || !secondaryCurrency) return null;
     var conv = val * secRate;
-    // Same format as fmt() - no K/M abbreviations
-    return (
-      secSym +
-      conv
-        .toFixed(2)
-        .replace(".", ",")
-        .replace(/\B(?=(\d{3})+(?!\d))/g, ".")
-    );
+    return String(secSym || "") + "\u00A0" + formatNumber(conv, lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
   var [dateFmt, setDateFmtRaw] = useStorage(
     userKey("pref_datefmt"),
@@ -3596,6 +5414,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return setHomeBalanceViewRaw(value);
   }
   var DEFAULT_HOME_WORKLETS = [
+    { id: "home_button_transfer", type: "button_transfer", size: "1x", color: "#FFFFFF", params: {} },
     {
       id: "home_quick_actions",
       type: "quick_actions",
@@ -3745,6 +5564,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     "consulenteAI",
     "patrimonio",
     "budget",
+    "calendar",
     "share",
     "debtCredits",
     "shopping",
@@ -3791,6 +5611,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           out.push(id);
         }
       });
+      // Il Calendario resta una voce autonoma, immediatamente dopo Budget.
+      // Migra anche i vecchi menu che lo avevano inserito dopo Storico.
+      var calendarIndex = out.indexOf("calendar");
+      if (calendarIndex >= 0) out.splice(calendarIndex, 1);
+      var budgetIndex = out.indexOf("budget");
+      out.splice(budgetIndex >= 0 ? budgetIndex + 1 : out.length, 0, "calendar");
       var toolsIndex = out.indexOf("tools");
       var notesIndex = out.indexOf("appunti");
       if (toolsIndex >= 0 && notesIndex >= 0 && toolsIndex > notesIndex) {
@@ -3814,7 +5640,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     markDisplayPreferencesChange();
     return setStatsViewRaw(value);
   }
-  var [bgTheme, setBgTheme] = useStorage(userKey("pref_bg"), "default");
+  const syncChatgptTheme = chatgptAppEnvironment === "test" && chatgptFirebaseConfig.projectId === "fainance-test-20260823195207";
+  var [bgTheme, setBgThemeRaw] = useStorage(userKey("pref_bg"), "default");
+  function setBgTheme(value) {
+    if (syncChatgptTheme && value !== readUserLocalJson("pref_bg", "default")) markDisplayPreferencesChange();
+    return setBgThemeRaw(value);
+  }
   var [btnStyle, setBtnStyleRaw] = useStorage(
     userKey("pref_btn_style"),
     "soft"
@@ -4111,6 +5942,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     useStorage(userKey("widget_debt_credits_auto_update_v1"), true);
 
   var [tab, setTabRaw] = useState("home");
+  var lastNonHomeTabRef = useRef(
+    String(tab || "") && String(tab || "") !== "home" ? String(tab) : ""
+  );
+  var androidBackPreviewReturnRef = useRef(0);
+  useEffect(() => {
+    // New sessions start on Home; background/resume retains current React state.
+  }, [userId, tab]);
+  useEffect(() => { trackAnalyticsSection(tab); }, [tab]);
+  useEffect(() => {
+    if (String(tab || "") && String(tab || "") !== "home")
+      lastNonHomeTabRef.current = String(tab);
+  }, [tab]);
   function setTab(nextTab) {
     var requestedTab = String(nextTab || "");
     if (requestedTab === "debtCredits" && currentPlan !== "premium") {
@@ -4155,6 +5998,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     stipendioHour: "18:00",
     stipendioDay: 0,
     spesaRicorrente: true,
+    periodClosureActive: true,
   });
   var [customNotifs, setCustomNotifsRaw] = useStorage(
     userKey("custom_notifs_v1"),
@@ -4176,6 +6020,35 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     customNotifsRef.current = prepared;
     return setCustomNotifsRaw(prepared);
   }
+  var notifPrefsRef = useRef(notifPrefs);
+  notifPrefsRef.current = notifPrefs;
+  // Foreground reminder dispatcher: previous versions only stored custom rules and
+  // never evaluated them. Account-scoped, idempotent and without server writes.
+  useEffect(function () {
+    if (!userId) return;
+    var cancelled = false;
+    function checkDue() {
+      if (cancelled || document.visibilityState === "hidden") return;
+      try {
+        var modes = notifPrefsRef.current?.notificationChannels;
+        var allowedCustom = []; // Custom reminders are created once by the server scheduler.
+        var allowedAutomatic = notificationShowsInApp(modes, "salary_reminder") ? notifPrefsRef.current : {};
+        collectDueLocalReminders(userId, allowedCustom, Date.now(), allowedAutomatic);
+      }
+      catch (_error) { /* storage unavailable: do not modify financial state */ }
+    }
+    checkDue();
+    var timer = window.setInterval(checkDue, 15000);
+    document.addEventListener("visibilitychange", checkDue);
+    window.addEventListener("focus", checkDue);
+    return function () {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", checkDue);
+      window.removeEventListener("focus", checkDue);
+    };
+  }, [userId]);
+
   var [patrimonioHistory, setPatrimonioHistoryRaw] = useStorage(
     userKey("patrimonio_history_v1"),
     {}
@@ -4185,6 +6058,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       markUserLocalChanges(["patrimonio_data_v2"]);
     return setPatrimonioHistoryRaw(nextValue);
   }
+  // Read-only derived balances: hydration and replay never increment stored amounts.
+  var [patrimonioToday, setPatrimonioToday] = useState(civilToday);
+  useEffect(function () {
+    var update = function () { setPatrimonioToday(civilToday()); };
+    var timer = window.setInterval(update, 60000);
+    window.addEventListener("focus", update);
+    document.addEventListener("visibilitychange", update);
+    return function () { window.clearInterval(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", update); };
+  }, []);
   var [patrimonioNotes, setPatrimonioNotesRaw] = useStorage(
     userKey("patrimonio_notes_v1"),
     {}
@@ -4578,10 +6460,62 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     },
     [userId, initialSetupStatus]
   );
-  var [shareProjects, setShareProjectsRaw] = useStorage(
+  var [storedShareProjects, setShareProjectsRaw] = useStorage(
     userKey("share_projects_v1"),
     []
   );
+  var [shareCashCloud, setShareCashCloud] = useState({uid:"", projects:[]});
+  var shareProjects = useMemo(() => shareProjectsForRead(storedShareProjects,
+    userId && shareCashCloud.uid === String(userId) ? shareCashCloud.projects : null),
+    [storedShareProjects, shareCashCloud, userId]);
+  var shareCashReceipts = useRef({ uid: "", projects: new Map<string, any>() });
+  var shareCashMethodReceipts = useRef({ uid: "", methods: new Map<string, { previous: any; confirmed: any }>() });
+  var [shareCashSnapshot, setShareCashSnapshot] = useState({ uid: "", assignments: {} });
+  function sameShareCashMethod(a, b) {
+    return a?.methodId === b?.methodId && a?.direction === b?.direction;
+  }
+  useEffect(function () {
+    if (!userId || !fbDb) return;
+    var uid = String(userId);
+    let cancelled = false;
+    let usedDirectRead = false;
+    let unsubscribe: (() => void) | undefined;
+    function applyAssignments(documents) {
+      if (cancelled || fbAuth.currentUser?.uid !== uid) return;
+      const assignments = Object.fromEntries(documents.map(d => [d.id, d.data()]));
+      const pending = shareCashMethodReceipts.current;
+      if (pending.uid === uid) for (const [key, receipt] of pending.methods) {
+        if (sameShareCashMethod(assignments[key], receipt.confirmed)) pending.methods.delete(key);
+        else if (!assignments[key] || sameShareCashMethod(assignments[key], receipt.previous)) assignments[key] = receipt.confirmed;
+        else pending.methods.delete(key);
+      }
+      setShareCashSnapshot({ uid, assignments });
+    }
+    function subscribe() {
+      if (cancelled) return;
+      unsubscribe = onSnapshot(collection(fbDb, "users", uid, "shareCashMethods"), { includeMetadataChanges: true }, snapshot => {
+        if (!usedDirectRead || !snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) applyAssignments(snapshot.docs);
+      }, error => console.warn("Share cash method listener unavailable", error.code));
+    }
+    if (useNativeShareCommit(fbDb.app.options.projectId) && fbAuth.currentUser?.uid === uid) {
+      void import("firebase/firestore/lite").then(async lite => {
+        const db = lite.getFirestore(fbDb.app);
+        const result = await fainancePromiseTimeout(lite.getDocs(lite.collection(db, "users", uid, "shareCashMethods")), 4000, "SHARE_METHOD_READ_TIMEOUT");
+        usedDirectRead = true;
+        applyAssignments(result.docs);
+      }).catch(() => undefined).finally(subscribe);
+    } else subscribe();
+    return () => { cancelled = true; unsubscribe?.(); };
+  }, [userId]);
+  var shareCashAssignments = shareCashSnapshot.uid === String(userId) ? shareCashSnapshot.assignments : null;
+  var shareCashMovements = useMemo(function () {
+    if (userId && (!shareCashAssignments || shareCashCloud.uid !== String(userId))) return null;
+    return shareCashMovementsForUser(shareProjects, shareCashAssignments, userId, currency);
+  }, [shareCashCloud, shareProjects, shareCashAssignments, userId, currency]);
+  var patrimonioAutomatic = useMemo(function () {
+    return derivePatrimony({ entries: patrimonioEntries, values: patrimonioValues, history: patrimonioHistory,
+      expenses, incomes, shareCashMovements, mode: shareCashMovements===null ? "manuale" : patrimonioMode, today: patrimonioToday, periodSettings: accountingPeriod.settings });
+  }, [patrimonioEntries, patrimonioValues, patrimonioHistory, expenses, incomes, shareCashMovements, patrimonioMode, patrimonioToday, accountingPeriod]);
   var shareProjectsRef = useRef(shareProjects);
   shareProjectsRef.current = shareProjects;
   function setShareProjects(nextValue) {
@@ -4618,10 +6552,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("share_default_category_v1"),
     "17"
   );
+  var [shareDefaultMethodId, setShareDefaultMethodIdRaw] = useStorage(userKey("share_default_method_v1"), "");
   var effectiveShareDefaultCategoryId = fallbackPersonalCategoryId(
     cats,
     shareDefaultCategoryId
   );
+  const activePersonalExpenses = useMemo(() => expensesWithoutShareShadows(expenses, shareProjects),
+    [expenses, shareProjects]);
+  const expensesForHistory = useMemo(() => showShareInHistory ? activePersonalExpenses : expensesWithoutShareShadows(expenses, shareProjects, false),
+    [activePersonalExpenses, expenses, shareProjects, showShareInHistory]);
   var expensesForAnalysis = useMemo(
     function () {
       return buildExpensesForAnalysis({
@@ -4643,6 +6582,198 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       cats,
       currency,
     ]
+  );
+  // "Escludi dai calcoli" e' una proprieta' della categoria, non del movimento.
+  // Ogni ricalcolo deve quindi risolvere la categoria ATTUALE anche per righe
+  // storiche/legacy, incluse quelle che conservano solo il nome categoria.
+  var allIncomeTypesForTotals = getAllIncomeTypes(
+    customIncomeTypes,
+    incomeTypeOverrides
+  );
+  function normalizeCalculationCategoryName(value) {
+    try {
+      return String(value == null ? "" : value)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+    } catch (e) {
+      return String(value == null ? "" : value)
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ");
+    }
+  }
+  function calculationCatalogId(value) {
+    if (value === undefined || value === null) return "";
+    var raw = String(value).trim().replace(/^(expense|income):/i, "");
+    if (!raw) return "";
+    if (/^-?\d+(?:\.0+)?$/.test(raw)) return String(Number(raw));
+    return raw;
+  }
+  function calculationCatalogIdsMatch(a, b) {
+    var left = calculationCatalogId(a);
+    var right = calculationCatalogId(b);
+    return !!left && !!right && left === right;
+  }
+  function expenseCategoryMatchesCalculationName(category, wantedName) {
+    var wanted = normalizeCalculationCategoryName(wantedName);
+    if (!wanted || !category) return false;
+    if (normalizeCalculationCategoryName(category.name) === wanted) return true;
+    var aliases =
+      DEFAULT_EXPENSE_CATEGORY_NAMES &&
+      (DEFAULT_EXPENSE_CATEGORY_NAMES[category.id] ||
+        DEFAULT_EXPENSE_CATEGORY_NAMES[String(category.id)]);
+    if (aliases && typeof aliases === "object") {
+      return Object.keys(aliases).some(function (key) {
+        return normalizeCalculationCategoryName(aliases[key]) === wanted;
+      });
+    }
+    return false;
+  }
+  function resolveExpenseCategoryForCalculations(itemOrCategoryId) {
+    var list = cats || [];
+    var item =
+      itemOrCategoryId && typeof itemOrCategoryId === "object"
+        ? itemOrCategoryId
+        : null;
+    var ids = item
+      ? [
+          item.catId,
+          item.categoryId,
+          item.category && typeof item.category === "object"
+            ? item.category.id
+            : null,
+          item.cat && typeof item.cat === "object" ? item.cat.id : null,
+        ]
+      : [itemOrCategoryId];
+    for (var i = 0; i < ids.length; i += 1) {
+      var id = ids[i];
+      if (id === undefined || id === null || String(id) === "") continue;
+      var byId = list.find(function (category) {
+        return calculationCatalogIdsMatch(category && category.id, id);
+      });
+      if (byId) return byId;
+    }
+    if (!item) return null;
+    var names = [
+      item.catName,
+      item.categoryName,
+      item.categoryLabel,
+      item.category && typeof item.category !== "object"
+        ? item.category
+        : item.category && item.category.name,
+      item.cat && typeof item.cat !== "object"
+        ? item.cat
+        : item.cat && item.cat.name,
+    ];
+    for (var n = 0; n < names.length; n += 1) {
+      var name = names[n];
+      if (!normalizeCalculationCategoryName(name)) continue;
+      var byName = list.find(function (category) {
+        return expenseCategoryMatchesCalculationName(category, name);
+      });
+      if (byName) return byName;
+    }
+    return null;
+  }
+  function resolveIncomeTypeForCalculations(itemOrTypeId) {
+    var list = allIncomeTypesForTotals || [];
+    var item =
+      itemOrTypeId && typeof itemOrTypeId === "object" ? itemOrTypeId : null;
+    var ids = item
+      ? [
+          item.type,
+          item.incomeType,
+          item.typeId,
+          item.catId,
+          item.categoryId,
+          item.category && typeof item.category === "object"
+            ? item.category.id
+            : null,
+        ]
+      : [itemOrTypeId];
+    for (var i = 0; i < ids.length; i += 1) {
+      var id = ids[i];
+      if (id === undefined || id === null || String(id) === "") continue;
+      var byId = list.find(function (incomeType) {
+        return calculationCatalogIdsMatch(incomeType && incomeType.id, id);
+      });
+      if (byId) return byId;
+    }
+    if (!item) return null;
+    var names = [
+      item.typeName,
+      item.incomeTypeName,
+      item.categoryName,
+      item.categoryLabel,
+      item.category && typeof item.category !== "object"
+        ? item.category
+        : item.category && item.category.name,
+    ];
+    for (var n = 0; n < names.length; n += 1) {
+      var wanted = normalizeCalculationCategoryName(names[n]);
+      if (!wanted) continue;
+      var byName = list.find(function (incomeType) {
+        return normalizeCalculationCategoryName(incomeType && incomeType.name) === wanted;
+      });
+      if (byName) return byName;
+    }
+    return null;
+  }
+  function isExpenseExcludedFromTotals(itemOrCategoryId) {
+    var cat = resolveExpenseCategoryForCalculations(itemOrCategoryId);
+    return !!(cat && cat.excludeFromTotals);
+  }
+  function isIncomeExcludedFromTotals(itemOrTypeId) {
+    var it = resolveIncomeTypeForCalculations(itemOrTypeId);
+    return !!(it && it.excludeFromTotals);
+  }
+  // Le signature rendono il filtro reattivo anche se un catalogo viene
+  // aggiornato in-place: attivare/disattivare una categoria ricalcola subito
+  // TUTTI i movimenti esistenti senza riscrivere le transazioni.
+  var expenseCalculationCategorySignature = (cats || [])
+    .map(function (category) {
+      return [
+        String(category && category.id),
+        normalizeCalculationCategoryName(category && category.name),
+        category && category.excludeFromTotals ? "1" : "0",
+      ].join(":");
+    })
+    .join("|");
+  var incomeCalculationCategorySignature = (allIncomeTypesForTotals || [])
+    .map(function (incomeType) {
+      return [
+        String(incomeType && incomeType.id),
+        normalizeCalculationCategoryName(incomeType && incomeType.name),
+        incomeType && incomeType.excludeFromTotals ? "1" : "0",
+      ].join(":");
+    })
+    .join("|");
+  var countedExpenses = useMemo(
+    function () {
+      return activePersonalExpenses.filter(function (e) {
+        return !isExpenseExcludedFromTotals(e);
+      });
+    },
+    [activePersonalExpenses, expenseCalculationCategorySignature]
+  );
+  var countedExpensesForAnalysis = useMemo(
+    function () {
+      return (expensesForAnalysis || []).filter(function (e) {
+        return !isExpenseExcludedFromTotals(e);
+      });
+    },
+    [expensesForAnalysis, expenseCalculationCategorySignature]
+  );
+  var countedIncomes = useMemo(
+    function () {
+      return (incomes || []).filter(function (i) {
+        return !isIncomeExcludedFromTotals(i);
+      });
+    },
+    [incomes, incomeCalculationCategorySignature]
   );
   var DEFAULT_SHOPPING_AREAS = [
     "Alimenti",
@@ -4983,7 +7114,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         return item;
       });
       var base = (
-        Array.isArray(shoppingUnits) && shoppingUnits.length
+        Array.isArray(shoppingUnits)
           ? shoppingUnits
           : DEFAULT_SHOPPING_UNITS
       )
@@ -4993,7 +7124,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       base.forEach(function (unit) {
         if (unit && nextUnits.indexOf(unit) < 0) nextUnits.push(unit);
       });
-      if (!nextUnits.length) nextUnits = DEFAULT_SHOPPING_UNITS.slice();
+      // [] means the user intentionally disabled/removed all units.
+      // Never repopulate defaults after the initial seed.
+      if (!Array.isArray(shoppingUnits) && !nextUnits.length)
+        nextUnits = DEFAULT_SHOPPING_UNITS.slice();
       if (
         JSON.stringify(nextUnits) !==
         JSON.stringify(Array.isArray(shoppingUnits) ? shoppingUnits : [])
@@ -5002,9 +7136,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       if (itemsChanged) setShoppingItems(normalizedItems);
       var normalizedDefault =
         canonicalShoppingUnitName(shoppingDefaultUnit) || "Unità";
-      if (nextUnits.indexOf(normalizedDefault) < 0)
+      if (nextUnits.length && nextUnits.indexOf(normalizedDefault) < 0)
         normalizedDefault =
           nextUnits.indexOf("Unità") >= 0 ? "Unità" : nextUnits[0];
+      if (!nextUnits.length && Array.isArray(shoppingUnits))
+        normalizedDefault = "";
       if (String(shoppingDefaultUnit || "") !== String(normalizedDefault || ""))
         setShoppingDefaultUnit(normalizedDefault);
     },
@@ -5246,6 +7382,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // come sorgente condivisa. Le sezioni con contenuti modificabili da più dispositivi
   // (in particolare Spesa) vengono unite per elemento tramite timestamp e cancellazioni.
   var [firestoreReady, setFirestoreReady] = useState(false);
+  var [accountCacheReady, setAccountCacheReady] = useState(false);
+  var accountUiReady = firestoreReady || accountCacheReady;
   var [isOffline, setIsOffline] = useState(!navigator.onLine);
   useEffect(function () {
     function goOnline() {
@@ -5294,6 +7432,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           setMovementSyncV2Mode(String(result.reason || "legacy"));
 
           var migrationReason = String(result.reason || "");
+          if (migrationReason === "status-check-unavailable") {
+            if (!isOffline) scheduleMigrationRetry();
+            return;
+          }
           var shouldMirror = migrationReason === "migration-running" || migrationReason === "device-catchup-required";
           if (shouldMirror) movementSyncV2WriteThroughRef.current = true;
 
@@ -5364,12 +7506,28 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
   useEffect(
     function () {
+      // Bulk transactions read/guard each document and finish with a full
+      // server verification. Suspend the expensive realtime collection target
+      // until that refresh completes; normal offline writes remain unchanged.
       if (!movementSyncV2Active || !userId) return;
+      if (movementBulkBusy) return;
       return watchMovementSyncV2(
         userId,
         function (records) {
+          if (movementBulkInProgressRef.current) {
+            movementBulkLatestSnapshotRef.current = records;
+            movementBulkSnapshotSequenceRef.current += 1;
+            return;
+          }
           var state = movementStateFromV2(records);
-          setExpenses(state.expenses, true);
+          var repairedRecurringExpenses = repairRecurringExpenseMovementReferences(
+            state.expenses,
+            recurringRef.current
+          );
+          if (repairedRecurringExpenses.repaired)
+            setExpenses(repairedRecurringExpenses.expenses);
+          else
+            setExpenses(state.expenses, true);
           setIncomes(state.incomes, true);
         },
         function (error) {
@@ -5377,7 +7535,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         }
       );
     },
-    [movementSyncV2Active, userId]
+    [movementSyncV2Active, userId, movementBulkBusy]
   );
 
   function currentHomeSyncValue() {
@@ -5464,6 +7622,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       balancePeriodMode: balancePeriodMode === "financial" ? "financial" : "calendar",
       financialMonthStartDay: Math.max(1, Math.min(31, Number(financialMonthStartDay) || 27)),
       statsView: String(statsView || "rateizzato"),
+      ...(syncChatgptTheme ? { bgTheme } : {}),
       btnStyle: String(btnStyle || "soft"),
       expenseColor: String(expenseColor || "#E24B4A"),
       incomeColor: String(incomeColor || "#1D9E75"),
@@ -5487,7 +7646,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       shoppingBoughtColor: String(shoppingBoughtColor || "#EAF7EE"),
       shoppingDefaultArea: String(shoppingDefaultArea || "Alimenti"),
       shoppingUnits:
-        Array.isArray(shoppingUnits) && shoppingUnits.length
+        Array.isArray(shoppingUnits)
           ? shoppingUnits
           : DEFAULT_SHOPPING_UNITS,
       shoppingDefaultUnit: String(shoppingDefaultUnit || "Unità"),
@@ -5521,6 +7680,218 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         : "",
       version: LEGAL_ACCEPTANCE_VERSION,
     };
+  }
+
+  // USER STATE AUTHORITY V2
+  // Ogni modifica esplicita dell'utente e' autoritativa per la sua sezione.
+  // I default servono solo quando una sezione non e' mai stata personalizzata.
+  function validUserStateAuthorityV2(value: any) {
+    return !!(
+      value &&
+      typeof value === "object" &&
+      Number(value.schemaVersion || 0) === 2 &&
+      value.sections &&
+      typeof value.sections === "object"
+    );
+  }
+  function currentUserStateAuthorityV2(previousValue: any, methodsValue?: any) {
+    var previous = validUserStateAuthorityV2(previousValue)
+      ? previousValue
+      : { schemaVersion: 2, sections: {} };
+    var sections: any = { ...(previous.sections || {}) };
+    function put(name: string, updatedAtMs: number, data: any) {
+      var ts = Math.max(0, Number(updatedAtMs || 0));
+      if (!ts) return;
+      var oldTs = Math.max(
+        0,
+        Number(sections[name] && sections[name].updatedAtMs || 0)
+      );
+      if (ts < oldTs) return;
+      sections[name] = { updatedAtMs: ts, data: data };
+    }
+    var catsTs = readUserLocalUpdatedAt("cats");
+    var methodsTs = readUserLocalUpdatedAt("methods");
+    put(
+      "expenseCatalog",
+      Math.max(readUserLocalUpdatedAt("expense_catalog_v2"), catsTs),
+      { categories: Array.isArray(cats) ? cats : [], groups: Array.isArray(expenseGroups) ? expenseGroups : [] }
+    );
+    put(
+      "paymentCatalog",
+      Math.max(readUserLocalUpdatedAt("payment_catalog_v2"), methodsTs),
+      { methods: Array.isArray(methodsValue) ? methodsValue : (Array.isArray(methods) ? methods : []), groups: Array.isArray(methodGroups) ? methodGroups : [] }
+    );
+    put(
+      "incomeCatalog",
+      Math.max(
+        readUserLocalUpdatedAt("income_catalog_v2"),
+        readUserLocalUpdatedAt("income_catalog_v1")
+      ),
+      {
+        groups: Array.isArray(incomeGroups) ? incomeGroups : [],
+        customTypes: Array.isArray(customIncomeTypes) ? customIncomeTypes : [],
+        overrides: incomeTypeOverrides && typeof incomeTypeOverrides === "object" ? incomeTypeOverrides : {},
+      }
+    );
+    put(
+      "categoryPreferences",
+      readUserLocalUpdatedAt("category_preferences_v2"),
+      currentCategoryPreferencesV2()
+    );
+    // This compatibility copy must use the same persisted revision as the
+    // account payload, even when encryption outlives the render that started it.
+    var livePatrimonioAreas = readUserLocalJson("patrimonio_areas_v1", patrimonioAreas);
+    var livePatrimonioEntries = readUserLocalJson("patrimonio_entries_v1", patrimonioEntries);
+    put(
+      "patrimonioCatalog",
+      readUserLocalUpdatedAt("patrimonio_catalog_v2"),
+      {
+        areas: Array.isArray(livePatrimonioAreas) ? livePatrimonioAreas : [],
+        entries: Array.isArray(livePatrimonioEntries) ? livePatrimonioEntries : [],
+      }
+    );
+    put(
+      "budget",
+      readUserLocalUpdatedAt("budget_plan_v1"),
+      { plan: budgetPlan, clearedAt: readBudgetPlanClearedAt() }
+    );
+    put(
+      "homePreferences",
+      readUserLocalUpdatedAt("home_preferences"),
+      currentHomeSyncValue()
+    );
+    put(
+      "displayPreferences",
+      readUserLocalUpdatedAt("display_preferences_v2"),
+      currentDisplayPreferencesV2()
+    );
+    put(
+      "shoppingPreferences",
+      readUserLocalUpdatedAt("shopping_preferences_v2"),
+      currentShoppingPreferencesV2()
+    );
+    put(
+      "patrimonyPreferences",
+      readUserLocalUpdatedAt("patrimony_preferences_v2"),
+      currentPatrimonyPreferencesV2()
+    );
+    put(
+      "preferenceStorage",
+      readUserLocalUpdatedAt("preference_storage_v2"),
+      { values: readUserPreferenceStorageSnapshotV2() }
+    );
+    var maxTs = Object.keys(sections).reduce(function (max, key) {
+      return Math.max(max, Number(sections[key] && sections[key].updatedAtMs || 0));
+    }, 0);
+    return {
+      schemaVersion: 2,
+      writerId: String(previous.writerId || catalogSyncWriterId()),
+      updatedAtMs: maxTs,
+      sections: sections,
+    };
+  }
+  function applyUserStateAuthorityV2(source: any) {
+    var d: any = source && typeof source === "object" ? { ...source } : {};
+    var authority: any = d.userStateAuthorityV2;
+    if (!validUserStateAuthorityV2(authority)) return d;
+    var sections: any = authority.sections || {};
+    function newerOrEqual(name: string, legacyTs: number) {
+      var section = sections[name];
+      if (!section || typeof section !== "object" || !section.data) return null;
+      return Number(section.updatedAtMs || 0) >= Number(legacyTs || 0)
+        ? section
+        : null;
+    }
+    var expense = newerOrEqual(
+      "expenseCatalog",
+      Math.max(Number(d.expenseCatalogUpdatedAt || 0), Number(d.catsUpdatedAt || 0))
+    );
+    if (expense) {
+      d.cats = Array.isArray(expense.data.categories) ? expense.data.categories : [];
+      d.expenseGroups = Array.isArray(expense.data.groups) ? expense.data.groups : [];
+      d.catsUpdatedAt = Number(expense.updatedAtMs || 0);
+      d.expenseCatalogUpdatedAt = Number(expense.updatedAtMs || 0);
+      d.expenseCatalogV2 = { categories: d.cats, groups: d.expenseGroups, updatedAtMs: Number(expense.updatedAtMs || 0) };
+    }
+    var payment = newerOrEqual(
+      "paymentCatalog",
+      Math.max(
+        Number(d.paymentCatalogUpdatedAt || 0),
+        Number(d.methodCatalogUpdatedAt || 0),
+        Number(d.methodsUpdatedAt || 0)
+      )
+    );
+    if (payment) {
+      d.methods = Array.isArray(payment.data.methods) ? payment.data.methods : [];
+      d.methodGroups = Array.isArray(payment.data.groups) ? payment.data.groups : [];
+      d.methodsUpdatedAt = Number(payment.updatedAtMs || 0);
+      d.methodCatalogUpdatedAt = Number(payment.updatedAtMs || 0);
+      d.paymentCatalogUpdatedAt = Number(payment.updatedAtMs || 0);
+      d.paymentCatalogV2 = { methods: d.methods, groups: d.methodGroups, updatedAtMs: Number(payment.updatedAtMs || 0) };
+    }
+    var income = newerOrEqual("incomeCatalog", Number(d.incomeCatalogUpdatedAt || 0));
+    if (income) {
+      d.incomeGroups = Array.isArray(income.data.groups) ? income.data.groups : [];
+      d.customIncomeTypes = Array.isArray(income.data.customTypes) ? income.data.customTypes : [];
+      d.incomeTypeOverrides = income.data.overrides && typeof income.data.overrides === "object" ? income.data.overrides : {};
+      d.incomeCatalogUpdatedAt = Number(income.updatedAtMs || 0);
+      d.incomeCatalogV2 = { groups: d.incomeGroups, customTypes: d.customIncomeTypes, overrides: d.incomeTypeOverrides, updatedAtMs: Number(income.updatedAtMs || 0) };
+    }
+    var category = newerOrEqual("categoryPreferences", Number(d.categoryPreferencesUpdatedAt || 0));
+    if (category) {
+      d.categoryPreferencesV2 = { ...(category.data || {}) };
+      Object.assign(d, d.categoryPreferencesV2);
+      d.categoryPreferencesUpdatedAt = Number(category.updatedAtMs || 0);
+    }
+    var patrimonio = newerOrEqual("patrimonioCatalog", Number(d.patrimonioCatalogUpdatedAt || 0));
+    if (patrimonio) {
+      d.patrimonioAreas = Array.isArray(patrimonio.data.areas) ? patrimonio.data.areas : [];
+      d.patrimonioEntries = Array.isArray(patrimonio.data.entries) ? patrimonio.data.entries : [];
+      d.patrimonioCatalogUpdatedAt = Number(patrimonio.updatedAtMs || 0);
+    }
+    var budget = newerOrEqual("budget", Number(d.budgetPlanUpdatedAt || 0));
+    if (budget) {
+      if (Object.prototype.hasOwnProperty.call(budget.data, "plan")) d.budgetPlan = budget.data.plan;
+      d.budgetPlanUpdatedAt = Number(budget.updatedAtMs || 0);
+      d.budgetPlanClearedAt = Number(budget.data.clearedAt || 0);
+    }
+    var home = newerOrEqual("homePreferences", Number(d.homePreferencesUpdatedAt || 0));
+    if (home) {
+      Object.assign(d, home.data || {});
+      d.homePreferencesUpdatedAt = Number(home.updatedAtMs || 0);
+    }
+    var display = newerOrEqual("displayPreferences", Number(d.displayPreferencesUpdatedAt || 0));
+    if (display) {
+      d.displayPreferencesV2 = { ...(display.data || {}) };
+      Object.assign(d, d.displayPreferencesV2);
+      d.displayPreferencesUpdatedAt = Number(display.updatedAtMs || 0);
+    }
+    var shopping = newerOrEqual("shoppingPreferences", Number(d.shoppingPreferencesUpdatedAt || 0));
+    if (shopping) {
+      d.shoppingPreferencesV2 = { ...(shopping.data || {}) };
+      Object.assign(d, d.shoppingPreferencesV2);
+      d.shoppingPreferencesUpdatedAt = Number(shopping.updatedAtMs || 0);
+    }
+    var patrimony = newerOrEqual("patrimonyPreferences", Number(d.patrimonyPreferencesUpdatedAt || 0));
+    if (patrimony) {
+      d.patrimonyPreferencesV2 = { ...(patrimony.data || {}) };
+      Object.assign(d, d.patrimonyPreferencesV2);
+      d.patrimonyPreferencesUpdatedAt = Number(patrimony.updatedAtMs || 0);
+    }
+    var preferenceStorage = newerOrEqual("preferenceStorage", Number(d.preferenceStorageUpdatedAt || 0));
+    if (preferenceStorage) {
+      restoreUserPreferenceStorageSnapshotV2(preferenceStorage.data || {});
+      d.preferenceStorageUpdatedAt = Number(preferenceStorage.updatedAtMs || 0);
+    }
+    var catalogV4: any = validCatalogSyncV4(d.catalogSyncV4)
+      ? { ...d.catalogSyncV4 }
+      : { schemaVersion: 4, writerId: String(authority.writerId || catalogSyncWriterId()) };
+    if (expense) catalogV4.expenseCatalog = { updatedAtMs: expense.updatedAtMs, data: { categories: d.cats, groups: d.expenseGroups } };
+    if (payment) catalogV4.paymentCatalog = { updatedAtMs: payment.updatedAtMs, data: { methods: d.methods, groups: d.methodGroups } };
+    if (income) catalogV4.incomeCatalog = { updatedAtMs: income.updatedAtMs, data: { groups: d.incomeGroups, customTypes: d.customIncomeTypes, overrides: d.incomeTypeOverrides } };
+    if (category) catalogV4.categoryPreferences = { updatedAtMs: category.updatedAtMs, data: d.categoryPreferencesV2 };
+    d.catalogSyncV4 = catalogV4;
+    return d;
   }
   function syncValueIsDefault(value, defaultValue) {
     return syncJsonEqual(value, defaultValue);
@@ -5579,14 +7950,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         return;
       }
       if (!sensitiveStorageReady) {
+        setAccountCacheReady(false);
         setFirestoreReady(false);
         return;
       }
       // Un pending reale della sessione precedente deve essere noto PRIMA
       // del primo snapshot. In questo modo un cambio offline non viene perso,
       // mentre le normali inizializzazioni della sessione corrente restano escluse.
+      var canResumeLocalAccount = hasResumeCheckpoint(localStorage, userId);
+      setAccountCacheReady(false);
       restoreAccountSyncPendingFromDevice();
       financeSchemaCompatibleRef.current = false;
+      userStateAuthorityV6ValidatedUidRef.current = "";
       firestoreHydratedRef.current = false;
       catalogAnchorV1Ref.current = null;
       catalogAnchorLoadedRef.current = false;
@@ -5684,6 +8059,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           balancePeriodMode: readUserLocalJson("pref_balance_period_mode_v1", "calendar"),
           financialMonthStartDay: readUserLocalJson("pref_financial_month_start_day_v1", 27),
           statsView: readUserLocalJson("pref_statsview", "rateizzato"),
+          ...(syncChatgptTheme ? { bgTheme: readUserLocalJson("pref_bg", "default") } : {}),
           btnStyle: readUserLocalJson("pref_btn_style", "soft"),
           expenseColor: readUserLocalJson("pref_exp_color", "#E24B4A"),
           incomeColor: readUserLocalJson("pref_inc_color", "#1D9E75"),
@@ -5861,16 +8237,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           }
         )
       );
-      setBudgetPlan(localSnap.budgetPlan || DEFAULT_BUDGET_PLAN);
+      setBudgetPlan(
+        localSnap.budgetPlan === undefined
+          ? DEFAULT_BUDGET_PLAN
+          : localSnap.budgetPlan
+      );
       setFinanceEvolutionRaw(localSnap.financeEvolution);
       setCats(
-        Array.isArray(localSnap.cats) && localSnap.cats.length
-          ? localSnap.cats
-          : DEFAULT_CATS
+        Array.isArray(localSnap.cats) ? localSnap.cats : DEFAULT_CATS
       );
       setMethods(
         ensureReferencedMethods(
-          Array.isArray(localSnap.methods) && localSnap.methods.length
+          Array.isArray(localSnap.methods)
             ? localSnap.methods
             : DEFAULT_METHODS,
           localSnap.expenses,
@@ -5878,17 +8256,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         )
       );
       setExpenseGroups(
-        Array.isArray(localSnap.expenseGroups) && localSnap.expenseGroups.length
+        Array.isArray(localSnap.expenseGroups)
           ? localSnap.expenseGroups
           : DEFAULT_EXPENSE_GROUPS
       );
       setIncomeGroups(
-        Array.isArray(localSnap.incomeGroups) && localSnap.incomeGroups.length
+        Array.isArray(localSnap.incomeGroups)
           ? localSnap.incomeGroups
           : DEFAULT_INCOME_GROUPS
       );
       setMethodGroups(
-        Array.isArray(localSnap.methodGroups) && localSnap.methodGroups.length
+        Array.isArray(localSnap.methodGroups)
           ? localSnap.methodGroups
           : DEFAULT_METHOD_GROUPS
       );
@@ -6035,7 +8413,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       );
       var lsp = localSnap.shoppingPreferencesV2;
       setShoppingAreas(
-        Array.isArray(lsp.shoppingAreas) && lsp.shoppingAreas.length
+        Array.isArray(lsp.shoppingAreas)
           ? lsp.shoppingAreas
           : DEFAULT_SHOPPING_AREAS
       );
@@ -6057,7 +8435,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           }
         )
       );
-      setNotifPrefs(localSnap.notifPrefs || {});
+      setNotifPrefs((previous) => mergeNotificationChannelState(previous, localSnap.notifPrefs || {}));
       setPlanUsage(localSnap.planUsage || {});
       setShownAlertIds(
         Array.isArray(localSnap.shownAlertIds) ? localSnap.shownAlertIds : []
@@ -6124,10 +8502,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setLegalAcceptanceDate(String(localSnap.legalAcceptanceDate || ""));
       }
       endRemoteApply();
+      if (canResumeLocalAccount) {
+        // Local state is now restored. User edits must be tracked immediately,
+        // while remote writes remain blocked by financeSchemaCompatibleRef until
+        // the incoming account has been validated and merged.
+        firestoreHydratedRef.current = true;
+        setAccountCacheReady(true);
+        markStartupPhase("local_ready");
+      }
 
       var docRef = doc(fbDb, "userData", userId);
       var cancelled = false;
       var firstSnapshot = true;
+      var lastAppliedAccountSnapshot: any = null;
+      var catalogReadFromCache = false;
+      var userStateAuthorityV5ReadFromCache = false;
       var readyFallback = setTimeout(function () {
         if (!cancelled) {
           console.warn("Firestore load timeout", userId);
@@ -6136,45 +8525,135 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         }
       }, 12000);
       var unsubData: any = null;
+      let observerDelivered = false;
+      let bootstrapStamp = 0;
+      const snapshotStamp = (data: any) => Math.max(Number(data?.accountDataUpdatedAtMsV5) || 0, Number(data?.updatedAtMs) || 0);
       try {
-        unsubData = onSnapshot(
-          docRef,
-          async function (snap: any) {
+        const applyAccountSnapshot = serializeSnapshotHandler(async function (snap: any) {
             if (cancelled) return;
+            if (firstSnapshot) markStartupPhase("snapshot_received");
             clearTimeout(readyFallback);
-            beginRemoteApply();
+            var snapshotRemoteApplyStarted = false;
 
             try {
             if (snap.exists()) {
               var rawCloud: any = snap.data() || {};
+              if (skipTestAccountEcho({ project: fbDb.app.options.projectId, uid: String(userId || ""), validatedUid: userStateAuthorityV6ValidatedUidRef.current, ready: financeSchemaCompatibleRef.current, raw: rawCloud, metadata: snap.metadata, last: lastAppliedAccountSnapshot }, syncJsonEqual)) return;
               lastCloudRawKeysRef.current = Object.keys(rawCloud);
               financeSchemaCompatibleRef.current = false;
               var d: any;
+              var cloudUserStateAuthorityV3: any = null;
+              var cloudUserStateAuthorityV4: any = null;
+              var cloudUserStateAuthorityV5: any = null;
+              var cloudUserStateAuthorityV6: any = null;
               try {
-                d = await fainanceExpandAccountCloudDataV5(rawCloud);
+                d = await measureStartup("session_decode", fainanceExpandAccountCloudDataV5(rawCloud));
+                if (cancelled) return;
+                // Independent recovery reads run together, with their existing validation.
+                // Neither network wait is itself a state application.
+                var catalogAnchorRead = (!catalogAnchorLoadedRef.current || (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites))
+                  ? measureStartup("A3", readCatalogAnchorV1(!!snap.metadata.fromCache)) : null;
+                var authorityV6Read = (!userStateAuthorityV6AnchorRef.current || (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites))
+                  ? measureStartup("A4", readLatestUserStateAuthorityV6()) : null;
+
+
+              if (!catalogAnchorLoadedRef.current || (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites)) {
+                catalogReadFromCache = !!snap.metadata.fromCache;
+                var readAnchor = await catalogAnchorRead;
+                if (readAnchor) catalogAnchorV1Ref.current = { ...readAnchor, catalogSyncV4: mergeCatalogSyncV4WithAnchor(catalogAnchorV1Ref.current?.catalogSyncV4, readAnchor.catalogSyncV4) };
+
+                if (cancelled) return;
+                catalogAnchorLoadedRef.current = true;
+              }
+                // V6 is loaded from the ordinary private-backup path using the
+                // exact schema already supported by the app/rules.
+                if (!userStateAuthorityV6AnchorRef.current || (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites)) {
+                  var authorityV6 = await authorityV6Read;
+                  if (authorityV6)
+                    userStateAuthorityV6AnchorRef.current = authorityV6;
+                }
+                cloudUserStateAuthorityV6 = validUserStateAuthorityV6(
+                  userStateAuthorityV6AnchorRef.current
+                )
+                  ? userStateAuthorityV6AnchorRef.current
+                  : null;
+                if (cloudUserStateAuthorityV6) {
+                  cloudUserStateAuthorityV6 = reconcilePatrimonyAuthority(reconcileAuthorityCatalogs(cloudUserStateAuthorityV6, d.catalogSyncV4, catalogAnchorV1Ref.current && catalogAnchorV1Ref.current.catalogSyncV4), d);
+                  d = applyUserStateAuthorityV6ToCloudData(d, cloudUserStateAuthorityV6);
+                }
+
+                // Older authority formats are migration fallback only.
+                if (
+                  !cloudUserStateAuthorityV6 &&
+                  (!userStateAuthorityV5AnchorRef.current ||
+                    (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites))
+                ) {
+                  userStateAuthorityV5ReadFromCache = !!snap.metadata.fromCache;
+                  var authorityV5 = await measureStartup("A7", readUserStateAuthorityV5(
+                    userStateAuthorityV5ReadFromCache
+                  ));
+                  if (authorityV5) userStateAuthorityV5AnchorRef.current = authorityV5;
+                }
+                cloudUserStateAuthorityV5 =
+                  !cloudUserStateAuthorityV6 &&
+                  validUserStateAuthorityV5(userStateAuthorityV5AnchorRef.current)
+                    ? userStateAuthorityV5AnchorRef.current
+                    : null;
+                if (cloudUserStateAuthorityV5) {
+                  cloudUserStateAuthorityV5 = reconcileAuthorityCatalogs(cloudUserStateAuthorityV5, d.catalogSyncV4, catalogAnchorV1Ref.current && catalogAnchorV1Ref.current.catalogSyncV4);
+                  d = applyUserStateAuthorityV5ToCloudData(d, cloudUserStateAuthorityV5);
+                }
+                cloudUserStateAuthorityV4 = validUserStateAuthorityV4(
+                  d && d.userStateAuthorityV4
+                )
+                  ? d.userStateAuthorityV4
+                  : null;
+                cloudUserStateAuthorityV3 = validUserStateAuthorityV3(
+                  d && d.userStateAuthorityV3
+                )
+                  ? d.userStateAuthorityV3
+                  : null;
+                // V6 is definitive. V5/V4/V3/V2 remain migration fallback.
+                if (
+                  !cloudUserStateAuthorityV6 &&
+                  !cloudUserStateAuthorityV5 &&
+                  !cloudUserStateAuthorityV4 &&
+                  !cloudUserStateAuthorityV3
+                )
+                  d = applyUserStateAuthorityV2(d);
+                else if (
+                  !cloudUserStateAuthorityV6 &&
+                  !cloudUserStateAuthorityV5 &&
+                  !cloudUserStateAuthorityV4 &&
+                  cloudUserStateAuthorityV3
+                )
+                  userStateAuthorityV3RevisionRef.current = Math.max(
+                    Number(userStateAuthorityV3RevisionRef.current || 0),
+                    Number(cloudUserStateAuthorityV3.revision || 0)
+                  );
                 if (cancelled) return;
                 migrateFinanceEvolution(d.financeEvolution);
                 financeSchemaCompatibleRef.current = true;
+                userStateAuthorityV6ValidatedUidRef.current = String(userId);
                 if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
                   setFinanceCloudReceipt({ uid: userId, value: d.financeEvolution });
                 }
               } catch (error) {
                 financeSchemaCompatibleRef.current = false;
-                
+                userStateAuthorityV6ValidatedUidRef.current = "";
+                setAccountCacheReady(false);
+                try { localStorage.removeItem(userKey("resume_checkpoint_v1")); } catch (_) {}
                 setFirestoreReady(false);
                 setToast({ text: financeMessage(lang, 'sync'), type: 'error' });
                 return;
               }
+              if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites)
+                confirmCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"), d.catalogSyncV4);
+              beginRemoteApply();
+              snapshotRemoteApplyStarted = true;
               lastCloudExpandedDataRef.current = d;
               var isFirstSnapshot = firstSnapshot;
               firstSnapshot = false;
-              if (!catalogAnchorLoadedRef.current) {
-
-                catalogAnchorV1Ref.current = await readCatalogAnchorV1();
-
-                if (cancelled) return;
-                catalogAnchorLoadedRef.current = true;
-              }
               lastCloudIntegrityRef.current =
                 d.dataIntegrityV1 && typeof d.dataIntegrityV1 === "object"
                   ? d.dataIntegrityV1
@@ -6217,6 +8696,40 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var preserveLatestLocalOnFirst =
                 isFirstSnapshot && Number(pendingSync.revision || 0) > 0;
               if (!isFirstSnapshot && Number(pendingSync.revision || 0) > 0) {
+                const remoteTheme = d.displayPreferencesV2?.bgTheme ?? d.bgTheme;
+                if (
+                  syncChatgptTheme &&
+                  !snap.metadata.fromCache && !snap.metadata.hasPendingWrites &&
+                  /^(default|slate|warm|ocean|forest|viola|dark|darkslate)$/.test(remoteTheme) &&
+                  Number(d.displayPreferencesUpdatedAt || 0) > readUserLocalUpdatedAt("display_preferences_v2")
+                ) {
+                  setBgThemeRaw(remoteTheme);
+                }
+                if (fbDb.app.options.projectId === "fainance-test-20260823195207") {
+                  // A queued unrelated account edit must not hide a newer balance
+                  // from another device. Apply only strictly newer Patrimonio groups.
+                  var newerData = Number(d.patrimonioDataUpdatedAt || 0) > readUserLocalUpdatedAt("patrimonio_data_v2");
+                  var newerCatalog = Number(d.patrimonioCatalogUpdatedAt || 0) > readUserLocalUpdatedAt("patrimonio_catalog_v2");
+                  if (newerData || newerCatalog) {
+                    // The snapshot already owns one remote-apply scope above.
+                    // Opening a second scope here would leave the writer blocked.
+                    var applyPatrimonyField = function (key: string, value: any, setter: any) {
+                      localStorage.setItem(userKey(key), JSON.stringify(value));
+                      setter(value);
+                    };
+                    if (newerData) {
+                      applyPatrimonyField("patrimonio_values_v1", ensureObjectValue(d.patrimonioValues, {}), setPatrimonioValues);
+                      applyPatrimonyField("patrimonio_history_v1", ensureObjectValue(d.patrimonioHistory, {}), setPatrimonioHistory);
+                      applyPatrimonyField("patrimonio_notes_v1", ensureObjectValue(d.patrimonioNotes, {}), setPatrimonioNotes);
+                      writeUserLocalUpdatedAt("patrimonio_data_v2", Number(d.patrimonioDataUpdatedAt));
+                    }
+                    if (newerCatalog && Array.isArray(d.patrimonioEntries) && Array.isArray(d.patrimonioAreas)) {
+                      applyPatrimonyField("patrimonio_entries_v1", d.patrimonioEntries, setPatrimonioEntries);
+                      applyPatrimonyField("patrimonio_areas_v1", d.patrimonioAreas, setPatrimonioAreas);
+                      writeUserLocalUpdatedAt("patrimonio_catalog_v2", Number(d.patrimonioCatalogUpdatedAt));
+                    }
+                  }
+                }
                 var incomingSyncToken = String(d.syncClientWriteToken || "");
                 if (
                   pendingSync.token &&
@@ -6383,20 +8896,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 : [];
               var cloudGoals = Array.isArray(d.goals) ? d.goals : [];
               var cloudAlerts = Array.isArray(d.alerts) ? d.alerts : [];
-              var mergedExpenses = mergeSyncRecords(
-                latestLocalExpenses,
-                cloudExpenses,
-                mergedAccountDeleted,
-                expenseKey,
-                true
-              );
-              var mergedIncomes = mergeSyncRecords(
-                latestLocalIncomes,
-                cloudIncomes,
-                mergedAccountDeleted,
-                incomeKey,
-                true
-              );
+              var mergedMovements = mergeIncomingMovements({
+                expenses: latestLocalExpenses, incomes: latestLocalIncomes, deleted: mergedAccountDeleted,
+              }, { expenses: cloudExpenses, incomes: cloudIncomes });
+              var mergedExpenses = mergedMovements.expenses;
+              var mergedIncomes = mergedMovements.incomes;
               var mergedRecurringBase = mergeSyncRecords(
                 latestLocalRecurring,
                 cloudRecurring,
@@ -6427,17 +8931,26 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 (item.confirmedOccurrences || item.confirmedOccurrenceDates || []).forEach(function (value) { state.confirmedOccurrences.add(String(value)); });
                 (item.skippedOccurrences || item.skippedOccurrenceDates || []).forEach(function (value) { state.skippedOccurrences.add(String(value)); });
               });
-              var mergedRecurring = mergedRecurringBase.map(function (item) {
-                var state = recurringOccurrenceState[recurringKey(item)];
-                if (!state) return item;
-                return {
-                  ...item,
-                  confirmed: Array.from(state.confirmed),
-                  skipped: Array.from(state.skipped),
-                  confirmedOccurrences: Array.from(state.confirmedOccurrences),
-                  skippedOccurrences: Array.from(state.skippedOccurrences),
-                };
-              });
+              var mergedRecurring = repairMergedRecurringReferences(
+                mergedRecurringBase.map(function (item) {
+                  var state = recurringOccurrenceState[recurringKey(item)];
+                  if (!state) return item;
+                  return {
+                    ...item,
+                    confirmed: Array.from(state.confirmed),
+                    skipped: Array.from(state.skipped),
+                    confirmedOccurrences: Array.from(state.confirmedOccurrences),
+                    skippedOccurrences: Array.from(state.skippedOccurrences),
+                  };
+                }),
+                latestLocalRecurring,
+                cloudRecurring
+              );
+              var recurringDefinitionRepair = repairRecurringRuleReferencesFromMovements(
+                mergedRecurring,
+                mergedExpenses
+              );
+              mergedRecurring = recurringDefinitionRepair.recurring;
               var mergedGoals = mergeSyncRecords(
                 latestLocalGoals,
                 cloudGoals,
@@ -6517,6 +9030,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 mainCloudCatalogSyncV4,
                 anchorCloudCatalogSyncV4
               );
+              if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) preserveLegacyCatalogIntent(cloudCatalogSyncV4);
               var cloudExpenseV4 =
                 cloudCatalogSyncV4 &&
                 cloudCatalogSyncV4.expenseCatalog &&
@@ -6735,6 +9249,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 incomeCatalogEvidence,
                 cloudIncomeExists
               );
+              // A confirmed current catalog wins over a clean device cache,
+              // including deliberate removals and equal legacy timestamps.
+              // Pending local edits retain the existing conflict/flush path.
+              const pendingCatalog = readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"));
+              if (!pendingCatalog.cats_v10 && !pendingCatalog.expense_groups_v1 && cloudExpenseV4 && cloudExpenseExists) expenseChoice = { source: "cloud", value: cloudExpenseCatalog };
+              if (!pendingCatalog.meth_v10 && !pendingCatalog.method_groups_v1 && cloudPaymentV4 && cloudPaymentExists) paymentChoice = { source: "cloud", value: cloudPaymentCatalog };
+              if (!pendingCatalog.income_groups_v1 && !pendingCatalog.custom_income_types_v1 && !pendingCatalog.income_type_overrides_v1 && cloudIncomeV4 && cloudIncomeExists) incomeChoice = { source: "cloud", value: cloudIncomeCatalog };
+              // On a cache-only hydration, keep known uncommitted legacy edits
+              // until a confirmed server snapshot can migrate their journal.
+              if (snap.metadata.fromCache && legacyCatalogWritePending()) {
+                if (localExpenseTs > cloudExpenseTs) expenseChoice = { source:"local",value:localExpenseCatalog };
+                if (localPaymentTs > cloudPaymentTs) paymentChoice = { source:"local",value:localPaymentCatalog };
+                if (localIncomeTs > cloudIncomeTs) incomeChoice = { source:"local",value:localIncomeCatalog };
+              }
               var mergedCats = compactProtectedArray(
                 expenseChoice.value.categories,
                 DEFAULT_CATS,
@@ -6753,10 +9281,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 !legacyOwnerForCats || legacyOwnerForCats === String(userId)
                   ? parseCatalogStorageValue("cats_v10")
                   : undefined;
-              var cloudBackupCategoryCandidates = isFirstSnapshot
-                ? await readCloudExpenseCategoryBackupCandidates()
-                : [];
-              if (cancelled) return;
               var categoryRecoveryCandidates = [
                 latestLocalCats,
                 cloudExpenseCatalog.categories,
@@ -6765,7 +9289,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 catalogValueFromSnapshot(previousRecoveryValues, "cats_v10"),
                 parseCatalogStorageValue(userKey("recovery_legacy_cats_v10")),
                 legacyUnscopedCats,
-              ].concat(cloudBackupCategoryCandidates);
+              ];
               var repairedCategoryResult = repairRecoveredExpenseCategories(
                 mergedCats,
                 categoryRecoveryCandidates
@@ -6774,15 +9298,40 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var referencedCategoryResult = restoreReferencedExpenseCategories(
                 mergedCats,
                 categoryRecoveryCandidates,
-                mergedExpenses
+                mergedExpenses,
+                mergedRecurring
               );
               mergedCats = referencedCategoryResult.categories;
               var repairedExpenseCategories = !!(
                 repairedCategoryResult.repaired || referencedCategoryResult.repaired
               );
+              // Backups are a recovery source, not a prerequisite for opening
+              // an already complete account. Try every local/cloud catalog first.
+              var recurringExpenseCategoryReferences = mergedRecurring
+                .filter(function (rule) {
+                  return rule && String(rule.rtype || "expense") !== "income";
+                })
+                .map(function (rule) {
+                  return { catId: rule.catId };
+                });
+              var allExpenseCategoryReferences = mergedExpenses.concat(
+                recurringExpenseCategoryReferences
+              );
+              if (isFirstSnapshot && needsCategoryRecovery(mergedCats, allExpenseCategoryReferences, isRecoveredExpenseCategory)) {
+                var cloudBackupCategoryCandidates = await measureStartup("A5", readCloudExpenseCategoryBackupCandidates());
+                if (cancelled) return;
+                var backupRepair = repairRecoveredExpenseCategories(mergedCats, cloudBackupCategoryCandidates);
+                var backupReferences = restoreReferencedExpenseCategories(
+                  backupRepair.categories,
+                  cloudBackupCategoryCandidates,
+                  mergedExpenses,
+                  mergedRecurring
+                );
+                mergedCats = backupReferences.categories;
+                repairedExpenseCategories = repairedExpenseCategories || backupRepair.repaired || backupReferences.repaired;
+              }
               var mergedExpenseGroups =
-                Array.isArray(expenseChoice.value.groups) &&
-                expenseChoice.value.groups.length
+                Array.isArray(expenseChoice.value.groups)
                   ? expenseChoice.value.groups
                   : DEFAULT_EXPENSE_GROUPS;
               var mergedMethodsBase = compactProtectedArray(
@@ -6790,19 +9339,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 DEFAULT_METHODS,
                 DEFAULT_METHOD_NAMES
               );
-              var mergedMethods = ensureReferencedMethods(
-                mergedMethodsBase,
+              var methodRecoveryCandidates = [
+                latestLocalMethods,
+                cloudPaymentCatalog.methods,
+                localPaymentCatalog.methods,
+              ];
+              var referencedMethodResult = restoreReferencedPaymentMethods(
+                ensureReferencedMethods(mergedMethodsBase, mergedExpenses, mergedRecurring),
+                methodRecoveryCandidates,
                 mergedExpenses,
                 mergedRecurring
               );
+              var mergedMethods = referencedMethodResult.methods;
               var mergedMethodGroups =
-                Array.isArray(paymentChoice.value.groups) &&
-                paymentChoice.value.groups.length
+                Array.isArray(paymentChoice.value.groups)
                   ? paymentChoice.value.groups
                   : DEFAULT_METHOD_GROUPS;
               var mergedIncomeGroups =
-                Array.isArray(incomeChoice.value.groups) &&
-                incomeChoice.value.groups.length
+                Array.isArray(incomeChoice.value.groups)
                   ? incomeChoice.value.groups
                   : DEFAULT_INCOME_GROUPS;
               var mergedCustomIncomeTypes = Array.isArray(
@@ -6845,7 +9399,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               if (
                 !readOnlyTestBuild &&
                 isFirstSnapshot &&
-                (paymentChoice.source === "local" || !cloudPaymentV2)
+                (paymentChoice.source === "local" || !cloudPaymentV2 || referencedMethodResult.repaired)
               ) {
                 var pct = Math.max(localPaymentTs, cloudPaymentTs, Date.now());
                 backfill.methods = mergedMethods;
@@ -6881,9 +9435,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 writeUserLocalUpdatedAt("income_catalog_v2", ict);
                 needsBackfill = true;
               }
+              var recurringExpenseRepair = repairRecurringExpenseMovementReferences(
+                mergedExpenses,
+                mergedRecurring
+              );
+              if (isFirstSnapshot && recurringExpenseRepair.repaired && !movementSyncV2ActiveRef.current) {
+                backfill.expenses = recurringExpenseRepair.expenses;
+                needsBackfill = true;
+              }
               setAccountDeletedRecordsRaw(mergedAccountDeleted);
               if (!movementSyncV2ActiveRef.current) {
-                setExpenses(mergedExpenses, true);
+                setExpenses(recurringExpenseRepair.expenses, true);
                 setIncomes(mergedIncomes, true);
               }
               setRecurring(mergedRecurring);
@@ -6925,7 +9487,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               const localFinance = readUserLocalJson('finance_evolution_v1', localSnap.financeEvolution);
               const localFinanceTs = readUserLocalUpdatedAt('finance_evolution_v1');
               const cloudFinanceTs = Number(d.financeEvolutionUpdatedAt || 0);
-              const mergedFinance = selectFinanceEvolution(localFinance, d.financeEvolution, localFinanceTs, cloudFinanceTs, preserveLatestLocalOnFirst);
+              const selectedFinance = selectFinanceEvolution(localFinance, d.financeEvolution, localFinanceTs, cloudFinanceTs, preserveLatestLocalOnFirst);
+              const mergedFinance = migrateFinanceEvolution(mergeAutomaticRulesIntoFinanceEvolution(
+                selectedFinance,
+                localFinance,
+                d.financeEvolution,
+                localFinanceTs,
+                cloudFinanceTs,
+                preserveLatestLocalOnFirst
+              ));
+              financeEvolutionRef.current = mergedFinance;
               setFinanceEvolutionRaw(mergedFinance);
               const financeTs = Math.max(localFinanceTs, cloudFinanceTs) || Date.now();
               writeUserLocalUpdatedAt('finance_evolution_v1', financeTs);
@@ -7115,13 +9686,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 String(mergedCategory.defaultIncomeType || "")
               );
               setDefaultExpenseArea(
-                String(mergedCategory.defaultExpenseArea || "vita")
+                String(mergedCategory.defaultExpenseArea ?? "vita")
               );
               setDefaultIncomeArea(
-                String(mergedCategory.defaultIncomeArea || "lavoro")
+                String(mergedCategory.defaultIncomeArea ?? "lavoro")
               );
               setDefaultMethodArea(
-                String(mergedCategory.defaultMethodArea || "conti_carte")
+                String(mergedCategory.defaultMethodArea ?? "conti_carte")
               );
               setIncomeTypeOrder(mergedCategory.incomeTypeOrder);
               if (
@@ -7179,6 +9750,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 needsBackfill = true;
               }
 
+              // Category recovery above can await the network. Re-read balances
+              // and catalog together with their timestamps after that await,
+              // so a user edit made meanwhile is never paired with an old value.
+              latestLocalPatrimonioValues = readUserLocalJson("patrimonio_values_v1", patrimonioValues);
+              latestLocalPatrimonioHistory = readUserLocalJson("patrimonio_history_v1", patrimonioHistory);
+              latestLocalPatrimonioNotes = readUserLocalJson("patrimonio_notes_v1", patrimonioNotes);
+              latestLocalPatrimonioAreas = readUserLocalJson("patrimonio_areas_v1", patrimonioAreas);
+              latestLocalPatrimonioEntries = readUserLocalJson("patrimonio_entries_v1", patrimonioEntries);
               var localPatrimonioCatalogTs = readUserLocalUpdatedAt(
                   "patrimonio_catalog_v2"
                 ),
@@ -7190,10 +9769,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   localPatrimonioCatalogTs > cloudPatrimonioCatalogTs;
               var mergedPatrimonioAreas = patrimonioProtectedArray(
                 preferLocalPatrimonioCatalog
-                  ? mergeArrayPreferLocalByStableId(
-                      Array.isArray(d.patrimonioAreas) ? d.patrimonioAreas : [],
-                      latestLocalPatrimonioAreas
-                    )
+                  ? (Array.isArray(latestLocalPatrimonioAreas)
+                      ? latestLocalPatrimonioAreas
+                      : [])
                   : chooseCloudLocalArray(
                       d.patrimonioAreas,
                       localSnap.patrimonioAreas,
@@ -7205,12 +9783,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               );
               var mergedPatrimonioEntries = patrimonioProtectedArray(
                 preferLocalPatrimonioCatalog
-                  ? mergeArrayPreferLocalByStableId(
-                      Array.isArray(d.patrimonioEntries)
-                        ? d.patrimonioEntries
-                        : [],
-                      latestLocalPatrimonioEntries
-                    )
+                  ? (Array.isArray(latestLocalPatrimonioEntries)
+                      ? latestLocalPatrimonioEntries
+                      : [])
                   : chooseCloudLocalArray(
                       d.patrimonioEntries,
                       localSnap.patrimonioEntries,
@@ -7331,7 +9906,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   preferLocalPat
                 ),
               };
-              setPatrimonioMode(String(mergedPat.patrimonioMode || "manuale"));
+              setPatrimonioMode(String(mergedPat.patrimonioMode ?? "manuale"));
               if (
                 !d.patrimonyPreferencesV2 ||
                 preferLocalPat ||
@@ -7481,6 +10056,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   preferLocalDisplay
                 );
               });
+              if (syncChatgptTheme) {
+                const localTheme = readUserLocalJson("pref_bg", "default");
+                const cloudTheme = cloudDisplay?.bgTheme ?? d.bgTheme;
+                const validCloudTheme = typeof cloudTheme === "string" &&
+                  /^(default|slate|warm|ocean|forest|viola|dark|darkslate)$/.test(cloudTheme);
+                mergedDisplay.bgTheme = validCloudTheme && !preferLocalDisplay ? cloudTheme : localTheme;
+                setBgThemeRaw(mergedDisplay.bgTheme);
+              }
               setCurrency(
                 String(mergedDisplay.currency || getDefaultCurrency())
               );
@@ -7679,12 +10262,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   cloudBank = Array.isArray(rawBank)
                     ? rawBank
                     : localSnap.bankCoords;
-                var mergedBank = preserveLatestLocalOnFirst
-                  ? mergeArrayPreferLocalByStableId(
-                      cloudBank,
-                      latestLocalBankCoords
-                    )
-                  : cloudBank;
+                var mergedBank = chatgptAppEnvironment === 'test'
+                  ? mergeSensitiveRecords(cloudBank, preserveLatestLocalOnFirst ? latestLocalBankCoords : [], d.accountDeletedRecords, 'bank')
+                  : preserveLatestLocalOnFirst ? mergeArrayPreferLocalByStableId(cloudBank, latestLocalBankCoords) : cloudBank;
                 setBankCoords(
                   Array.isArray(mergedBank) ? mergedBank : latestLocalBankCoords
                 );
@@ -7714,12 +10294,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   cloudCredit = Array.isArray(rawCredit)
                     ? rawCredit
                     : localSnap.creditCards;
-                var mergedCredit = preserveLatestLocalOnFirst
-                  ? mergeArrayPreferLocalByStableId(
-                      cloudCredit,
-                      latestLocalCreditCards
-                    )
-                  : cloudCredit;
+                var mergedCredit = chatgptAppEnvironment === 'test'
+                  ? mergeSensitiveRecords(cloudCredit, preserveLatestLocalOnFirst ? latestLocalCreditCards : [], d.accountDeletedRecords, 'card')
+                  : preserveLatestLocalOnFirst ? mergeArrayPreferLocalByStableId(cloudCredit, latestLocalCreditCards) : cloudCredit;
                 setCreditCards(
                   Array.isArray(mergedCredit)
                     ? mergedCredit
@@ -7744,7 +10321,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               if (d.aiDataAccess) setAiDataAccess(d.aiDataAccess);
               if (d.aiFloatingEnabled !== undefined)
                 setAiFloatingEnabled(!!d.aiFloatingEnabled);
-              if (d.notifPrefs) setNotifPrefs(d.notifPrefs);
+              if (d.notifPrefs) setNotifPrefs((previous) => mergeNotificationChannelState(previous, d.notifPrefs));
               var notificationKey = function (item) {
                 return accountSyncRecordKey("notification", item);
               };
@@ -8191,8 +10768,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 );
               });
               setShoppingAreas(
-                Array.isArray(mergedShopPrefs.shoppingAreas) &&
-                  mergedShopPrefs.shoppingAreas.length
+                Array.isArray(mergedShopPrefs.shoppingAreas)
                   ? mergedShopPrefs.shoppingAreas
                   : DEFAULT_SHOPPING_AREAS
               );
@@ -8202,19 +10778,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 String(mergedShopPrefs.shoppingBoughtColor || "#EAF7EE")
               );
               setShoppingDefaultArea(
-                String(mergedShopPrefs.shoppingDefaultArea || "Alimenti")
+                String(mergedShopPrefs.shoppingDefaultArea ?? "Alimenti")
               );
               setShoppingUnits(
-                Array.isArray(mergedShopPrefs.shoppingUnits) &&
-                  mergedShopPrefs.shoppingUnits.length
+                Array.isArray(mergedShopPrefs.shoppingUnits)
                   ? mergedShopPrefs.shoppingUnits
                   : DEFAULT_SHOPPING_UNITS
               );
               setShoppingDefaultUnit(
-                String(mergedShopPrefs.shoppingDefaultUnit || "Unità")
+                String(mergedShopPrefs.shoppingDefaultUnit ?? "Unità")
               );
               setShoppingProductSort(
-                String(mergedShopPrefs.shoppingProductSort || "custom")
+                String(mergedShopPrefs.shoppingProductSort ?? "custom")
               );
               var shoppingNeedsBackfill =
                 isFirstSnapshot &&
@@ -8267,10 +10842,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               var localConsentTs = readUserLocalUpdatedAt("ai_consent_v2"),
                 cloudConsentTs = Number(d.aiConsentUpdatedAt || 0);
               var preferLocalConsent =
-                localConsentTs > cloudConsentTs ||
-                !cloudConsent ||
-                (localConsent.accepted === true &&
-                  cloudConsent.accepted !== true);
+                preferLocalAIConsent(localConsent, localConsentTs, cloudConsent, cloudConsentTs);
               var mergedConsent: any = preferLocalConsent
                 ? localConsent
                 : cloudConsent;
@@ -8324,13 +10896,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 postHydrationSyncRequestedRef.current = true;
               }
             } else {
+              beginRemoteApply();
+              snapshotRemoteApplyStarted = true;
               var initialHome: any = localSnap.homePreferencesV2;
               financeSchemaCompatibleRef.current = true;
+              userStateAuthorityV6ValidatedUidRef.current = String(userId);
               var initialCategory: any = localSnap.categoryPreferencesV2;
               var initialDisplay: any = localSnap.displayPreferencesV2;
               var initialShopPrefs: any = localSnap.shoppingPreferencesV2;
               var initialMethods = ensureReferencedMethods(
-                Array.isArray(localSnap.methods) && localSnap.methods.length
+                Array.isArray(localSnap.methods)
                   ? localSnap.methods
                   : DEFAULT_METHODS,
                 localSnap.expenses,
@@ -8354,6 +10929,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               );
               var initialPayload: any = {
                 accountSyncSchemaVersion: 5,
+                userStateAuthorityV4: buildUserStateAuthorityV4(null),
                 lang: String(lang || getDefaultLang()),
                 activeShoppingListId: String(activeShoppingListId || "main"),
                 accountDeletedRecords: localSnap.accountDeletedRecords || {},
@@ -8606,9 +11182,94 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 postHydrationSyncRequestedRef.current = true;
               }
             }
+            // Apply the authoritative snapshot again at the very end. This
+            // makes legacy merge/migration code unable to win over an explicit
+            // user choice during login or reinstall.
+            var pendingBeforeAuthorityRestore: any =
+              pendingAccountSyncRef.current || { revision: 0, token: "" };
+            if (
+              cloudUserStateAuthorityV6 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV6(cloudUserStateAuthorityV6);
+            } else if (
+              cloudUserStateAuthorityV5 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV5(cloudUserStateAuthorityV5);
+            } else if (
+              cloudUserStateAuthorityV4 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV4(cloudUserStateAuthorityV4);
+            } else if (
+              cloudUserStateAuthorityV3 &&
+              Number(pendingBeforeAuthorityRestore.revision || 0) <= 0
+            ) {
+              restoreUserStateAuthorityV3(cloudUserStateAuthorityV3);
+            }
             firestoreHydratedRef.current = true;
+            if (catalogRealtimeRefreshRef.current) catalogRealtimeRefreshRef.current();
             setFirestoreReady(true);
-            
+            writeResumeCheckpoint(localStorage, userId, ACCOUNT_RECOVERY_KEYS);
+            scheduleCompleteAccountRecoverySnapshot("account-hydrated");
+
+            // One post-hydration guard catches late React effects or legacy
+            // normalization code that tries to overwrite the freshly restored
+            // V6 configuration after the Firestore callback has completed.
+            if (cloudUserStateAuthorityV6) {
+              var guardedAuthorityV6: any = cloudUserStateAuthorityV6;
+              setTimeout(function () {
+                if (cancelled || !validUserStateAuthorityV6(guardedAuthorityV6) ||
+                    String((userStateAuthorityV6AnchorRef.current || {}).__backupId || "") !== String(guardedAuthorityV6.__backupId || "") ||
+                    Number((pendingAccountSyncRef.current || {}).revision || 0) > 0)
+                  return;
+                var currentValues = currentUserStateAuthorityV3Values();
+                if (
+                  userStateAuthorityV3ValuesEqual(
+                    currentValues || {},
+                    guardedAuthorityV6.values || {}
+                  )
+                )
+                  return;
+                var mismatchKeys = Array.from(
+                  new Set(
+                    Object.keys(currentValues || {}).concat(
+                      Object.keys(guardedAuthorityV6.values || {})
+                    )
+                  )
+                ).filter(function (key) {
+                  return !userStateAuthorityStorageValueEqual(
+                    (currentValues || {})[key],
+                    (guardedAuthorityV6.values || {})[key]
+                  );
+                });
+                try {
+                  localStorage.setItem(
+                    userKey("user_state_authority_v6_guard_mismatch"),
+                    JSON.stringify({
+                      at: new Date().toISOString(),
+                      keys: mismatchKeys.slice(0, 20),
+                    })
+                  );
+                } catch (e) {}
+                console.warn(
+                  "USER STATE V6 LATE OVERRIDE RESTORED",
+                  mismatchKeys.slice(0, 20)
+                );
+                // Safety net only: restore silently. The previous warning toast
+                // was triggered even by semantically identical JSON serialized
+                // with a different object-key order, creating a false alarm
+                // after reinstall/login. Real differences are still restored.
+                restoreUserStateAuthorityV6(guardedAuthorityV6);
+              }, 700);
+            }
+
+            if (financeSchemaCompatibleRef.current && userStateAuthorityV6ValidatedUidRef.current === String(userId || "")) {
+              lastAppliedAccountSnapshot = { raw: snap.data(), fromCache: !!snap.metadata.fromCache };
+              if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) markStartupPhase("account_data_ready");
+            }
+
             if (postHydrationSyncRequestedRef.current) {
               setTimeout(function () {
                 if (cancelled) return;
@@ -8622,17 +11283,25 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } catch (error) {
               if (!cancelled) {
                 persistAccountSyncError("firestore-apply", error, false);
+                userStateAuthorityV6ValidatedUidRef.current = "";
+                setAccountCacheReady(false);
                 setFirestoreReady(false);
               }
             } finally {
 
-              endRemoteApply();
-              // Resume edits deferred by this asynchronous cloud merge. Synchronous
-              // display translations must not repeatedly restart the save timer.
-              if (!cancelled && !applyingFirestoreRef.current && pendingAccountSyncRef.current.revision > 0) {
-                setAccountSyncRetryPulse(function (v) { return v + 1; });
-              }
+              if (snapshotRemoteApplyStarted) endRemoteApply();
             }
+          });
+        unsubData = onSnapshot(
+          docRef,
+          { includeMetadataChanges: true },
+          function (snap) {
+            observerDelivered = true;
+            if (bootstrapStamp && !snap.metadata.hasPendingWrites) {
+              if (snap.metadata.fromCache || (snap.exists() && snapshotStamp(snap.data()) < bootstrapStamp)) return;
+              bootstrapStamp = 0;
+            }
+            void applyAccountSnapshot(snap);
           },
           function (err) {
             if (cancelled) return;
@@ -8645,6 +11314,21 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             setFirestoreReady(true);
           }
         );
+        if (useNativeShareCommit(fbDb.app.options.projectId) && fbAuth.currentUser?.uid === userId) {
+          // The authenticated Lite read and the durable SDK observer use the
+          // same project and rules. Only the first authoritative result starts
+          // hydration; all account validation still runs in the shared handler.
+          void import("firebase/firestore/lite").then(async lite => {
+            const database = lite.getFirestore(fbDb.app);
+            const snap = await lite.getDoc(lite.doc(database, "userData", userId));
+            if (cancelled || observerDelivered || fbAuth.currentUser?.uid !== userId || !snap.exists()) return;
+            const raw = snap.data();
+            const stamp = snapshotStamp(raw);
+            if (!stamp) return;
+            bootstrapStamp = stamp;
+            await applyAccountSnapshot({ exists: () => true, data: () => raw, metadata: { fromCache: false, hasPendingWrites: false } });
+          }).catch(() => undefined);
+        }
       } catch (err) {
         clearTimeout(readyFallback);
         console.error(
@@ -8666,7 +11350,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
 
   async function writeCompactAccountDocument(docRef: any, payload: any) {
-    if (!financeSchemaCompatibleRef.current) throw new Error('UNSUPPORTED_FINANCE_SCHEMA');
+    assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
     var compactSource: any = { ...(payload || {}) };
     var previous: any = lastCloudExpandedDataRef.current || {};
     [
@@ -8697,9 +11381,16 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       }
     }
     compactSource.accountSyncSchemaVersion = 5;
-    var compressed = await fainanceCompressAccountDataV5(compactSource);
+    // V3 vive esclusivamente come campo Firestore separato e verificabile.
+    // Non deve mai essere incorporato nello snapshot compresso, altrimenti una
+    // save legacy potrebbe riportare in vita una copia precedente.
+    delete compactSource.userStateAuthorityV3;
+    delete compactSource.growthLocalCountsV1;
+    async function commitCompact(candidate: any, rawKeys: string[], transaction?: any) {
+    var compressed = await fainanceCompressAccountDataV5(candidate);
     var write: any = {};
     var reserved: any = {
+      growthLocalCountsV1: true,
       currentPlan: true,
       plan: true,
       subscriptionPlan: true,
@@ -8708,36 +11399,281 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       accountDataRawBytesV5: true,
       accountDataCompressedBytesV5: true,
       accountDataUpdatedAtMsV5: true,
+      userStateAuthorityV2: true,
+      userStateAuthorityV3: true,
+      userStateAuthorityV4: true,
     };
     Array.from(
       new Set(
-        (lastCloudRawKeysRef.current || []).concat(Object.keys(compactSource))
+        rawKeys.concat(Object.keys(candidate))
       )
     ).forEach(function (key) {
       if (!reserved[key]) write[key] = deleteField();
     });
     write.accountSyncSchemaVersion = 5;
+    write.userStateAuthorityV2 = candidate.userStateAuthorityV2 || previous.userStateAuthorityV2 || null;
     write.accountDataCompressedV5 = compressed.value;
     write.accountDataCompressionV5 = compressed.encoding;
     write.accountDataRawBytesV5 = compressed.rawBytes;
     write.accountDataCompressedBytesV5 = compressed.compressedBytes;
     write.accountDataUpdatedAtMsV5 = Number(
-      compactSource.updatedAtMs || Date.now()
+      candidate.updatedAtMs || Date.now()
     );
-    write.dataIntegrityV1 = compactSource.dataIntegrityV1 || {};
+    write.dataIntegrityV1 = candidate.dataIntegrityV1 || {};
+    // Reuse the existing account save: no extra request, writer or timer.
+    // V2 movements are kept locally even when omitted from the compressed cloud document.
+    write.growthLocalCountsV1 = growthLocalCounts({ ...candidate,
+      expenses: movementSyncV2ActiveRef.current ? expenses : candidate.expenses,
+      incomes: movementSyncV2ActiveRef.current ? incomes : candidate.incomes
+    }, {projectId:String(fbDb.app.options.projectId || ''), owner:String(docRef.id),
+      hydrated:firestoreHydratedRef.current && !applyingFirestoreRef.current,
+      movementReady:!movementSyncV2MigrationRunningRef.current});
     write.syncClientWriteToken = String(
-      compactSource.syncClientWriteToken || ""
+      candidate.syncClientWriteToken || ""
     );
     write.updatedAt = String(
-      compactSource.updatedAt || new Date().toISOString()
+      candidate.updatedAt || new Date().toISOString()
     );
-    write.updatedAtMs = Number(compactSource.updatedAtMs || Date.now());
-    await setDoc(docRef, write, { merge: true });
+    write.updatedAtMs = Number(candidate.updatedAtMs || Date.now());
+    assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
+    if (transaction) transaction.set(docRef, write, { merge: true });
+    else await setDoc(docRef, write, { merge: true });
+    return write;
+    }
+    var write: any;
+    if (fbDb.app.options.projectId === "fainance-test-20260823195207") {
+      // The document version is checked atomically: a resumed client cannot
+      // overwrite a newer web balance with its queued account snapshot.
+      await runTransaction(fbDb, async function (transaction) {
+        var server = await transaction.get(docRef);
+        var remote = server.exists()
+          ? await fainanceExpandAccountCloudDataV5(server.data()) : {};
+        var candidate = { ...preserveNewerPatrimony(compactSource, remote) };
+        const remoteTheme = remote.displayPreferencesV2?.bgTheme ?? remote.bgTheme;
+        if (
+          /^(default|slate|warm|ocean|forest|viola|dark|darkslate)$/.test(remoteTheme) &&
+          Number(remote.displayPreferencesUpdatedAt || 0) > Number(candidate.displayPreferencesUpdatedAt || 0)
+        ) {
+          candidate.bgTheme = remoteTheme;
+          candidate.displayPreferencesV2 = { ...candidate.displayPreferencesV2, bgTheme: remoteTheme };
+        }
+        candidate.accountDeletedRecords = mergeSyncTombstones(candidate.accountDeletedRecords, remote.accountDeletedRecords);
+        candidate.appuntiDocuments = mergeSyncRecords(
+          candidate.appuntiDocuments,
+          remote.appuntiDocuments,
+          candidate.accountDeletedRecords,
+          (item) => accountSyncRecordKey("document", item),
+          true
+        );
+        write = await commitCompact(candidate, Object.keys(server.data() || {}), transaction);
+        compactSource = candidate;
+      });
+    } else {
+      write = await commitCompact(compactSource, lastCloudRawKeysRef.current || []);
+    }
+    notifyGrowthSourceCommitted(String(docRef.id), "FUNCTIONS", "SNAPSHOT", compactSource);
     setFinanceCloudReceipt({ uid: docRef.id, value: compactSource.financeEvolution });
     lastCloudRawKeysRef.current = Object.keys(write).filter(function (key) {
       return write[key] !== undefined;
     });
-    lastCloudExpandedDataRef.current = compactSource;
+    if (
+      previous.userStateAuthorityV3 &&
+      lastCloudRawKeysRef.current.indexOf("userStateAuthorityV3") < 0
+    )
+      lastCloudRawKeysRef.current.push("userStateAuthorityV3");
+    lastCloudExpandedDataRef.current = {
+      ...compactSource,
+      ...(previous.userStateAuthorityV3
+        ? { userStateAuthorityV3: previous.userStateAuthorityV3 }
+        : {}),
+    };
+  }
+
+  async function saveUserStateAuthorityV2Direct(reason?: string) {
+    if (
+      !financeSchemaCompatibleRef.current ||
+      !userId ||
+      !firestoreHydratedRef.current ||
+      applyingFirestoreRef.current ||
+      !navigator.onLine
+    )
+      return false;
+    var safeMethods = ensureReferencedMethods(methods, expenses, recurring);
+    var previousAuthority =
+      lastCloudExpandedDataRef.current &&
+      lastCloudExpandedDataRef.current.userStateAuthorityV2;
+    var authority = currentUserStateAuthorityV2(previousAuthority, safeMethods);
+    if (!authority || !Object.keys(authority.sections || {}).length) return true;
+    if (syncJsonEqual(previousAuthority || null, authority)) return true;
+    try {
+      await setDoc(
+        doc(fbDb, "userData", userId),
+        { userStateAuthorityV2: authority },
+        { merge: true }
+      );
+      lastCloudExpandedDataRef.current = {
+        ...(lastCloudExpandedDataRef.current || {}),
+        userStateAuthorityV2: authority,
+      };
+      if ((lastCloudRawKeysRef.current || []).indexOf("userStateAuthorityV2") < 0)
+        lastCloudRawKeysRef.current = (lastCloudRawKeysRef.current || []).concat([
+          "userStateAuthorityV2",
+        ]);
+      return true;
+    } catch (error) {
+      console.error(
+        "User state authority save failed",
+        String(reason || "change"),
+        (error && (error as any).code) || (error && (error as any).message) || error
+      );
+      return false;
+    }
+  }
+
+  async function saveUserStateAuthorityV3Direct(
+    reason?: string,
+    verifyServer = false
+  ) {
+    var execute = async function () {
+      if (
+        !financeSchemaCompatibleRef.current ||
+        !userId ||
+        !firestoreHydratedRef.current ||
+        applyingFirestoreRef.current
+      )
+        return false;
+
+      var values = currentUserStateAuthorityV3Values();
+      var previous: any =
+        lastCloudExpandedDataRef.current &&
+        lastCloudExpandedDataRef.current.userStateAuthorityV3;
+      var previousValid = validUserStateAuthorityV3(previous);
+      var sameAsPrevious =
+        previousValid &&
+        userStateAuthorityV3ValuesEqual(previous.values || {}, values);
+
+      // Se il device e' offline possiamo uscire solo quando non esiste alcuna
+      // modifica configurabile non ancora confermata rispetto all'ultima copia cloud.
+      if (!navigator.onLine) return !!sameAsPrevious;
+
+      var docRef = doc(fbDb, "userData", userId);
+
+      async function verifySnapshot(expected: any) {
+        try {
+          var serverSnap: any = await fainancePromiseTimeout(
+            getDocFromServer(docRef),
+            12000,
+            "Timeout verifica stato utente."
+          );
+          if (!serverSnap || !serverSnap.exists || !serverSnap.exists())
+            return false;
+          var serverValue: any =
+            (serverSnap.data() || {}).userStateAuthorityV3;
+          var ok =
+            validUserStateAuthorityV3(serverValue) &&
+            Number(serverValue.revision || 0) ===
+              Number(expected.revision || 0) &&
+            userStateAuthorityV3ValuesEqual(
+              serverValue.values || {},
+              expected.values || {}
+            );
+          if (ok) {
+            userStateAuthorityV3RevisionRef.current = Math.max(
+              Number(userStateAuthorityV3RevisionRef.current || 0),
+              Number(serverValue.revision || 0)
+            );
+            try {
+              localStorage.setItem(
+                userKey("user_state_authority_v3_receipt"),
+                JSON.stringify({
+                  revision: Number(serverValue.revision || 0),
+                  updatedAtMs: Number(serverValue.updatedAtMs || 0),
+                  confirmedAtMs: Date.now(),
+                })
+              );
+            } catch (e) {}
+          }
+          return ok;
+        } catch (error) {
+          console.error(
+            "User state authority V3 verify failed",
+            String(reason || "change"),
+            (error && (error as any).code) ||
+              (error && (error as any).message) ||
+              error
+          );
+          return false;
+        }
+      }
+
+      if (sameAsPrevious) {
+        return verifyServer ? await verifySnapshot(previous) : true;
+      }
+
+      var revision =
+        Math.max(
+          Number(userStateAuthorityV3RevisionRef.current || 0),
+          previousValid ? Number(previous.revision || 0) : 0
+        ) + 1;
+      var authority: any = {
+        schemaVersion: 3,
+        scope: "complete-user-config-v1",
+        revision: revision,
+        updatedAtMs: Date.now(),
+        writerId: catalogSyncWriterId(),
+        values: values,
+      };
+      // Manteniamo un margine ampio sotto il limite del documento Firestore:
+      // il grande snapshot account e' gia' compresso e limitato separatamente.
+      if (JSON.stringify(authority).length > 120000)
+        throw new Error("USER_STATE_AUTHORITY_V3_TOO_LARGE");
+
+      try {
+        // mergeFields sostituisce l'intera mappa V3: una chiave eliminata
+        // dall'utente non puo' sopravvivere come figlia di una vecchia mappa.
+        await setDoc(
+          docRef,
+          { userStateAuthorityV3: authority },
+          { mergeFields: ["userStateAuthorityV3"] }
+        );
+        userStateAuthorityV3RevisionRef.current = revision;
+        lastCloudExpandedDataRef.current = {
+          ...(lastCloudExpandedDataRef.current || {}),
+          userStateAuthorityV3: authority,
+        };
+        if (
+          (lastCloudRawKeysRef.current || []).indexOf(
+            "userStateAuthorityV3"
+          ) < 0
+        )
+          lastCloudRawKeysRef.current = (
+            lastCloudRawKeysRef.current || []
+          ).concat(["userStateAuthorityV3"]);
+        return verifyServer ? await verifySnapshot(authority) : true;
+      } catch (error) {
+        console.error(
+          "User state authority V3 save failed",
+          String(reason || "change"),
+          (error && (error as any).code) ||
+            (error && (error as any).message) ||
+            error
+        );
+        persistAccountSyncError("user-state-authority-v3", error, false);
+        return false;
+      }
+    };
+
+    // Serializza tutte le scritture V3: due modifiche rapide non possono arrivare
+    // al server in ordine inverso e resuscitare uno stato precedente.
+    var chained = Promise.resolve(
+      userStateAuthorityV3SaveChainRef.current
+    )
+      .catch(function () {
+        return false;
+      })
+      .then(execute);
+    userStateAuthorityV3SaveChainRef.current = chained;
+    return chained;
   }
 
   async function saveToFirestore() {
@@ -8813,6 +11749,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       }, 30000);
       return;
     }
+    // The UI persists these synchronously; asynchronous encryption may span more edits.
+    // Capture Patrimonio data after asynchronous encryption, alongside its
+    // current revision timestamps. A delayed writer must not label old links
+    // or balances with a newer local edit timestamp and erase the actual edit.
+    const latestPatrimonySaveV1 = {
+      areas: readUserLocalJson("patrimonio_areas_v1", patrimonioAreas),
+      entries: readUserLocalJson("patrimonio_entries_v1", patrimonioEntries),
+      values: readUserLocalJson("patrimonio_values_v1", patrimonioValues),
+      history: readUserLocalJson("patrimonio_history_v1", patrimonioHistory),
+      notes: readUserLocalJson("patrimonio_notes_v1", patrimonioNotes),
+    };
+    var cats = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "cats_v10", readUserLocalJson("cats_v10", []));
+    var methods = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "meth_v10", readUserLocalJson("meth_v10", []));
+    var methodGroups = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "method_groups_v1", readUserLocalJson("method_groups_v1", []));
+    var expenseGroups = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "expense_groups_v1", readUserLocalJson("expense_groups_v1", []));
+    var incomeGroups = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "income_groups_v1", readUserLocalJson("income_groups_v1", []));
+    var customIncomeTypes = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "custom_income_types_v1", readUserLocalJson("custom_income_types_v1", []));
+    var incomeTypeOverrides = protectCatalogEdit(localStorage, userKey("catalog_pending_edits_v1"), "income_type_overrides_v1", readUserLocalJson("income_type_overrides_v1", {}));
     var catsTs = readUserLocalUpdatedAt("cats"),
       methodsTs = readUserLocalUpdatedAt("methods"),
       expenseCatalogTs = Math.max(
@@ -9018,8 +11972,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         data: categoryValue,
       },
     };
+    var userStateAuthorityV2 = currentUserStateAuthorityV2(
+      previousCloudForCatalog.userStateAuthorityV2,
+      safeMethodsToSave
+    );
+    var userStateAuthorityV4 = buildUserStateAuthorityV4(
+      previousCloudForCatalog.userStateAuthorityV4
+    );
     var savePayload: any = {
       accountSyncSchemaVersion: 5,
+      userStateAuthorityV2,
+      userStateAuthorityV4,
       dataIntegrityV1,
       lang: String(lang || getDefaultLang()),
       activeShoppingListId: String(activeShoppingListId || "main"),
@@ -9039,12 +12002,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       financeEvolution,
       financeEvolutionUpdatedAt: readUserLocalUpdatedAt('finance_evolution_v1'),
       budgetPlanClearedAt: readBudgetPlanClearedAt(),
-      patrimonioValues,
-      patrimonioAreas,
-      patrimonioEntries,
+      patrimonioValues: latestPatrimonySaveV1.values,
+      patrimonioAreas: latestPatrimonySaveV1.areas,
+      patrimonioEntries: latestPatrimonySaveV1.entries,
       patrimonioCatalogUpdatedAt: patrimonioCatalogTs,
-      patrimonioHistory,
-      patrimonioNotes,
+      patrimonioHistory: latestPatrimonySaveV1.history,
+      patrimonioNotes: latestPatrimonySaveV1.notes,
       patrimonioDataUpdatedAt: patrimonioDataTs,
       patrimonioMode: patValue.patrimonioMode,
       patrimonyPreferencesV2: patValue,
@@ -9336,9 +12299,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       groups: expenseGroups,
     });
     var protectExpenseCatalog =
-      (previousExpensePersonalized && !currentExpensePersonalized) ||
-      (previousExpenseCustom > currentExpenseCustom &&
-        Number(expenseCatalogTs || 0) <= previousExpenseTs);
+      ((previousExpensePersonalized && !currentExpensePersonalized) ||
+        previousExpenseCustom > currentExpenseCustom) &&
+      Number(expenseCatalogTs || 0) <= previousExpenseTs;
     var protectPaymentCatalog =
       (previousPaymentCustom > currentPaymentCustom ||
         (previousActiveMethods > 0 && currentActiveMethods === 0)) &&
@@ -9516,13 +12479,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     try {
 
+      assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
       scheduleCompleteAccountRecoverySnapshot("before-cloud-save");
       await writeCatalogAnchorV1(
         savePayload.catalogSyncV4,
         savePayload.dataIntegrityV1 || {}
       );
 
-      await writeCompactAccountDocument(docRef, savePayload);
+      const releaseOwnAccountWrite = trackAccountWrite(fbDb.app.options.projectId, String(userId || ""), writeToken);
+      try { await writeCompactAccountDocument(docRef, savePayload); }
+      finally { releaseOwnAccountWrite(); }
+      // The committed main write is an ACK of this exact payload; an older ACK
+      // cannot clear a newer local edit. Replay any peer change buffered meanwhile.
+      confirmCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"), savePayload.catalogSyncV4);
+      if (catalogRealtimeRefreshRef.current) catalogRealtimeRefreshRef.current();
 
       if (legalValue && legalValue.accepted) {
         var legalProfileUpdate: any = {
@@ -9560,14 +12530,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           itemsTs
         );
     } catch (e) {
+      var validationPending = e && e.code === "aborted" && e.message === "FINANCE_SCHEMA_VALIDATION_PENDING";
       var syncTransient = accountSyncIsTransientError(e);
       var syncInfo = accountSyncErrorInfo(e);
-      console.error(
+      if (!validationPending) console.error(
         "Firestore save V5 error",
         syncInfo.rawCode,
         syncInfo.message
       );
-      persistAccountSyncError("firestore-save", e, syncTransient);
+      if (!validationPending) persistAccountSyncError("firestore-save", e, syncTransient);
       markAccountSyncPendingOnDevice();
       if (!syncTransient) {
         var syncErrorNow = Date.now(),
@@ -9613,7 +12584,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           token: "",
         };
       accountSyncRetryRequestedRef.current = true;
-      accountSyncRetryDelay = 30000;
+      accountSyncRetryDelay = validationPending ? 350 : 30000;
     } finally {
       accountSyncSavingRef.current = false;
       var afterSave: any = pendingAccountSyncRef.current || {
@@ -9634,12 +12605,193 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
   }
 
+  async function writeUserStateAuthorityV4IntoCompressedServer(
+    expectedValues: any
+  ) {
+    if (!userId || !navigator.onLine) return false;
+    try {
+      var docRef = doc(fbDb, "userData", userId);
+      var serverSnap: any = await fainancePromiseTimeout(
+        getDocFromServer(docRef),
+        15000,
+        "Timeout lettura stato utente V4."
+      );
+      if (!serverSnap || !serverSnap.exists || !serverSnap.exists())
+        return false;
+
+      var expanded: any = await fainanceExpandAccountCloudDataV5(
+        serverSnap.data() || {}
+      );
+      var next: any = { ...(expanded || {}) };
+
+      // Mai ricomprimere il blob dentro se stesso.
+      [
+        "accountDataCompressedV5",
+        "accountDataCompressionV5",
+        "accountDataRawBytesV5",
+        "accountDataCompressedBytesV5",
+        "accountDataUpdatedAtMsV5",
+      ].forEach(function (key) {
+        delete next[key];
+      });
+
+      var previousAuthority = validUserStateAuthorityV4(
+        expanded && expanded.userStateAuthorityV4
+      )
+        ? expanded.userStateAuthorityV4
+        : null;
+      var built = buildUserStateAuthorityV4(previousAuthority);
+      built.values = { ...(expectedValues || {}) };
+      built.updatedAtMs = Date.now();
+      built.revision =
+        Math.max(
+          Number((previousAuthority && previousAuthority.revision) || 0),
+          Number((built && built.revision) || 0)
+        ) + 1;
+      next.userStateAuthorityV4 = built;
+      next.updatedAt = new Date().toISOString();
+      next.updatedAtMs = Date.now();
+      next.accountSyncSchemaVersion = 5;
+
+      var compressed = await fainanceCompressAccountDataV5(next);
+      await setDoc(
+        docRef,
+        {
+          accountDataCompressedV5: compressed.value,
+          accountDataCompressionV5: compressed.encoding,
+          accountDataRawBytesV5: compressed.rawBytes,
+          accountDataCompressedBytesV5: compressed.compressedBytes,
+          accountDataUpdatedAtMsV5: Date.now(),
+          updatedAt: next.updatedAt,
+          updatedAtMs: next.updatedAtMs,
+        },
+        { merge: true }
+      );
+      return true;
+    } catch (error) {
+      console.error(
+        "User state authority V4 direct compressed save failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      persistAccountSyncError(
+        "user-state-authority-v4-direct-compressed",
+        error,
+        false
+      );
+      return false;
+    }
+  }
+
+  async function verifyUserStateAuthorityV4FromServer(expectedValues: any) {
+    if (!userId || !navigator.onLine) return false;
+    try {
+      var serverSnap: any = await fainancePromiseTimeout(
+        getDocFromServer(doc(fbDb, "userData", userId)),
+        15000,
+        "Timeout verifica stato utente V4."
+      );
+      if (!serverSnap || !serverSnap.exists || !serverSnap.exists())
+        return false;
+      var expanded: any = await fainanceExpandAccountCloudDataV5(
+        serverSnap.data() || {}
+      );
+      var serverValue: any = expanded && expanded.userStateAuthorityV4;
+      var ok =
+        validUserStateAuthorityV4(serverValue) &&
+        userStateAuthorityV3ValuesEqual(
+          (serverValue && serverValue.values) || {},
+          expectedValues || {}
+        );
+      if (ok) {
+        try {
+          localStorage.setItem(
+            userKey("user_state_authority_v4_server_receipt"),
+            JSON.stringify({
+              revision: Number(serverValue.revision || 0),
+              updatedAtMs: Number(serverValue.updatedAtMs || 0),
+              confirmedAtMs: Date.now(),
+            })
+          );
+        } catch (e) {}
+      }
+      return ok;
+    } catch (error) {
+      console.error(
+        "User state authority V4 verify failed",
+        (error && (error as any).code) ||
+          (error && (error as any).message) ||
+          error
+      );
+      persistAccountSyncError("user-state-authority-v4-verify", error, false);
+      return false;
+    }
+  }
+
+  async function flushUserStateAndLogout() {
+    // V6 writes an ordinary private backup using the already-established
+    // backup schema, then verifies that exact document from the server.
+    if (!navigator.onLine) {
+      setToast({
+        text: "Per uscire dall'account serve una connessione: prima devo confermare le tue impostazioni nel cloud.",
+        type: "error",
+        color: "#E24B4A",
+        icon: "☁️",
+      });
+      return false;
+    }
+
+    await new Promise(function (resolve) {
+      setTimeout(resolve, 80);
+    });
+
+    var confirmed: any = false;
+    try {
+      // Bound the logout UI wait, not the underlying durable write. No logout
+      // or second backup is allowed while the original ACK remains pending.
+      confirmed = await fainancePromiseTimeout(saveUserStateAuthorityV6Direct("logout", true), 15000, "USER_STATE_SYNC_PENDING");
+    } catch (error) {
+      setToast({ text: L("Sincronizzazione ancora in corso. Attendi la conferma prima di uscire."), type: "warning", color: "#EF9F27", icon: "☁️" });
+      return false;
+    }
+
+    if (!confirmed) {
+      var detail = "";
+      try {
+        detail = String(
+          localStorage.getItem(
+            userKey("user_state_authority_v6_last_error")
+          ) || ""
+        );
+      } catch (e) {}
+      setToast({
+        text:
+          "Impossibile confermare le impostazioni nel cloud V6" +
+          (detail ? " (" + detail + ")" : "") +
+          ". Logout annullato.",
+        type: "error",
+        color: "#E24B4A",
+        icon: "☁️",
+      });
+      return false;
+    }
+
+    // Align the main account snapshot too, but V6 is already durably confirmed
+    // in the private backup document before logout can continue.
+    markPendingAccountSync(true);
+    try {
+      await saveToFirestore();
+    } catch (e) {}
+
+    return Promise.resolve(onLogout && onLogout());
+  }
+
   useEffect(
     function () {
       function deferCriticalAccountData() {
-        persistCompleteAccountRecoverySnapshot("app-background");
-        if (firestoreHydratedRef.current && !applyingFirestoreRef.current)
-          markPendingAccountSync();
+        if (accountRecoveryPendingRef.current)
+          persistCompleteAccountRecoverySnapshot("app-background");
       }
       function requestForegroundSync() {
         if (
@@ -10407,7 +13559,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
     return value;
   }
-  function syncShareProjectToCloud(project) {
+  function syncShareProjectToCloud(project, cashMethod?: { activityId: string; methodId: string; direction: string }) {
     if (!project || !userId) return;
     var pid = String(project.id);
     var nowIso = new Date().toISOString();
@@ -10423,9 +13575,41 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     if (!cloudProject.ownerUid || String(cloudProject.ownerUid) !== String(userId || ""))
       delete cloudProject.categories;
+    // MUNDELY_52_SHARE_WRITE_REFRESH
+    function notifyMundelyBridgeAfterShareCloudWrite() {
+      var isMundelyLinked =
+        String((cloudProject && cloudProject.sourceApp) || "").toLowerCase() === "mundely" ||
+        !!String((cloudProject && cloudProject.mundelyTripId) || "").trim() ||
+        String(pid || "").indexOf("mundely_") === 0;
+      if (!isMundelyLinked || typeof window === "undefined") return;
+      [0, 180, 650, 1600].forEach(function (delay) {
+        window.setTimeout(function () {
+          try {
+            window.dispatchEvent(new CustomEvent("fainance:share-mutated"));
+          } catch (_eventError) {}
+          try {
+            var refreshNow = (window as any).__mundelyBridgeRefreshNow;
+            if (typeof refreshNow === "function") refreshNow();
+          } catch (_refreshError) {}
+        }, delay);
+      });
+    }
     function attemptShareSync(attempt) {
-      setDoc(doc(fbDb, "shareProjects", pid), cloudProject, {
-        merge: true,
+      var projectDoc = doc(fbDb, "shareProjects", pid);
+      var write: Promise<void>;
+      if (cashMethod) {
+        var key = shareCashMovementKey(pid, cashMethod.activityId);
+        var batch = writeBatch(fbDb);
+        batch.set(projectDoc, cloudProject, { merge: true });
+        batch.set(doc(fbDb, "users", userId, "shareCashMethods", key), {
+          projectId: pid, activityId: cashMethod.activityId, methodId: cashMethod.methodId, direction: cashMethod.direction,
+        });
+        write = batch.commit();
+      } else {
+        write = setDoc(projectDoc, cloudProject, { merge: true });
+      }
+      write.then(function () {
+        notifyMundelyBridgeAfterShareCloudWrite();
       }).catch(async function (e) {
         var code = String((e && e.code) || "unknown")
           .replace(/^firestore\//, "")
@@ -10550,12 +13734,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setShareInviteLoading(false);
       });
   }
+  useEffect(function () {
+    if (!userId || !useNativeShareCommit(fbDb.app.options.projectId)) return;
+    const onCommitted = event => acceptMundelyShareProjectCommit(event);
+    window.addEventListener("fainance:share-project-committed", onCommitted);
+    return () => window.removeEventListener("fainance:share-project-committed", onCommitted);
+  }, [userId]);
+  const shareListenerReady = firestoreReady || useNativeShareCommit(fbDb.app.options.projectId);
   useEffect(
     function () {
-      if (!firestoreReady || !userId) return;
+      if (!shareListenerReady || !userId || fbAuth.currentUser?.uid !== userId) return;
       var email = normalizeEmail(currentUser && currentUser.email);
       setShareInviteLoading(true);
       var projectMaps = { member: {}, owner: {} };
+      var projectServerReady = { member: false, owner: false };
       var inviteMaps = { email: {}, uid: {} };
       function applyProjects() {
         var all = {};
@@ -10568,6 +13760,25 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         var remoteArr = Object.keys(all).map(function (k) {
           return all[k];
         });
+        if (projectServerReady.member && projectServerReady.owner) {
+          const receipts = shareCashReceipts.current;
+          const localById = new Map(shareProjectsRef.current.map(project => [String(project.id), project]));
+          const cashProjects = remoteArr.map(project => {
+            const id = String(project.id);
+            const receipt = receipts.uid === String(userId) ? receipts.projects.get(id) : null;
+            let confirmed = project;
+            if (receipt) {
+              if (shareProjectStamp(project) < shareProjectStamp(receipt)) confirmed = mergeShareProjectDeep(project, receipt);
+              else receipts.projects.delete(id);
+            }
+            const local = localById.get(id);
+            if (!local?.deletedActivityIds?.length) return confirmed;
+            return { ...confirmed, deletedActivityIds: [...new Set([
+              ...(confirmed.deletedActivityIds || []).map(String), ...local.deletedActivityIds.map(String),
+            ])] };
+          });
+          setShareCashCloud({uid:String(userId),projects:filterShareProjectsByTombstones(cashProjects,latestShareProjectTombstones())});
+        }
         setShareProjects(function (current) {
           return filterShareProjectsByTombstones(
             mergeShareProjectArrays(current, remoteArr),
@@ -10600,17 +13811,24 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setShareInviteLoading(false);
       }
       var unsubs = [];
+      let projectsCancelled = false;
+      let usedDirectProjects = false;
+      function subscribeProjects() {
+      if (projectsCancelled) return;
       unsubs.push(
         onSnapshot(
           query(
             collection(fbDb, "shareProjects"),
             where("memberUids", "array-contains", userId)
           ),
+          { includeMetadataChanges:true },
           function (snap) {
+            if (usedDirectProjects && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
             var map = {};
             snap.forEach(function (d) {
               map[d.id] = { ...d.data(), id: d.id };
             });
+            if (!snap.metadata.fromCache) projectServerReady.member = true;
             projectMaps.member = map;
             applyProjects();
           },
@@ -10629,11 +13847,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             collection(fbDb, "shareProjects"),
             where("ownerUid", "==", userId)
           ),
+          { includeMetadataChanges:true },
           function (snap) {
+            if (usedDirectProjects && snap.metadata.fromCache && !snap.metadata.hasPendingWrites) return;
             var map = {};
             snap.forEach(function (d) {
               map[d.id] = { ...d.data(), id: d.id };
             });
+            if (!snap.metadata.fromCache) projectServerReady.owner = true;
             projectMaps.owner = map;
             applyProjects();
           },
@@ -10645,6 +13866,23 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           }
         )
       );
+      }
+      if (useNativeShareCommit(fbDb.app.options.projectId)) {
+        void import("firebase/firestore/lite").then(async lite => {
+          const projects = lite.collection(lite.getFirestore(fbDb.app), "shareProjects");
+          const [member, owner] = await fainancePromiseTimeout(Promise.all([
+            lite.getDocs(lite.query(projects, lite.where("memberUids", "array-contains", userId))),
+            lite.getDocs(lite.query(projects, lite.where("ownerUid", "==", userId))),
+          ]), 4000, "SHARE_PROJECTS_READ_TIMEOUT");
+          if (projectsCancelled || fbAuth.currentUser?.uid !== userId) return;
+          const map = snapshot => Object.fromEntries(snapshot.docs.map(d => [d.id, { ...d.data(), id: d.id }]));
+          projectMaps.member = map(member);
+          projectMaps.owner = map(owner);
+          projectServerReady.member = projectServerReady.owner = true;
+          usedDirectProjects = true;
+          applyProjects();
+        }).catch(() => undefined).finally(subscribeProjects);
+      } else subscribeProjects();
       if (email) {
         unsubs.push(
           onSnapshot(
@@ -10716,6 +13954,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         )
       );
       return function () {
+        projectsCancelled = true;
         unsubs.forEach(function (u) {
           try {
             u && u();
@@ -10723,7 +13962,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
       };
     },
-    [firestoreReady, userId, currentUser && currentUser.email]
+    [shareListenerReady, userId, currentUser && currentUser.email]
   );
   useEffect(
     function () {
@@ -10848,7 +14087,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setToast("Progetto Share non trovato");
         return false;
       }
-      var project = { ...projectSnap.data(), id: String(invite.projectId) };
+      var project: { id: string; [key: string]: any } = { ...projectSnap.data(), id: String(invite.projectId) };
       var email = normalizeEmail(currentUser && currentUser.email);
       var participants = Array.isArray(project.participants)
         ? project.participants.slice()
@@ -11176,6 +14415,46 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return inviteId;
   }
 
+  // Salvataggio piccolo e prioritario dello stato scelto dall'utente.
+  // Il timer viene armato direttamente da markPendingAccountSync: non dipende
+  // da un re-render causato dalla mutazione di un ref.
+  latestUserStateAuthoritySaveRef.current = async function (
+    reason?: string
+  ) {
+    if (Object.keys(readCatalogEdits(localStorage, userKey("catalog_pending_edits_v1"))).length)
+      await saveToFirestore();
+    // V6 uses the exact private-backup document schema already exercised
+    // by fAInance. This is intentionally independent of userData.
+    var authoritySaved = await saveUserStateAuthorityV6Direct(
+      String(reason || "pending-change"),
+      false
+    );
+    try {
+      await saveToFirestore();
+    } catch (e) {}
+    return authoritySaved;
+  };
+  useEffect(function () {
+    return function () {
+      try {
+        if (userStateAuthoritySaveTimerRef.current)
+          clearTimeout(userStateAuthoritySaveTimerRef.current);
+      } catch (e) {}
+      userStateAuthoritySaveTimerRef.current = null;
+      if (remoteApplyResumeTimerRef.current) clearTimeout(remoteApplyResumeTimerRef.current);
+      remoteApplyResumeTimerRef.current = null;
+      latestUserStateAuthoritySaveRef.current = null;
+      userStateAuthorityV3SaveChainRef.current = Promise.resolve(true);
+      userStateAuthorityV3RevisionRef.current = 0;
+      userStateAuthorityV5SaveChainRef.current = Promise.resolve(true);
+      userStateAuthorityV5RevisionRef.current = 0;
+      userStateAuthorityV5AnchorRef.current = null;
+      userStateAuthorityV6SaveChainRef.current = Promise.resolve(true);
+      userStateAuthorityV6RevisionRef.current = 0;
+      userStateAuthorityV6AnchorRef.current = null;
+    };
+  }, [userId]);
+
   // Debounce durable local revisions, not render-time arrays and objects.
   // Use the latest render's state when the timer fires and retry after hydration.
   const latestAccountSaveRef = useRef(saveToFirestore);
@@ -11192,6 +14471,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [addSubTab, setAddSubTab] = useState("single");
 
   function openQuickAddFromUrl(rawUrl) {
+    const chatgptRoute=resolveChatgptTestRoute(String(rawUrl||''),chatgptAppEnvironment,chatgptFirebaseConfig.projectId);
+    if(chatgptRoute){
+      setTab(chatgptRoute.tab);setSettingsPage(chatgptRoute.settings);setMobileMenu(false);
+      if(chatgptRoute.projectId)setShareSelectedProjectId(chatgptRoute.projectId);
+      if(chatgptRoute.input){setSpeseSubTab('add');setAddType('expense');setAddSubTab(chatgptRoute.input);}
+      return;
+    }
     var raw = String(rawUrl || "");
     var url = raw.toLowerCase();
     if (!url) return;
@@ -11202,6 +14488,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var debtCreditId = "";
     var goalId = "";
     var widgetSettingsType = "";
+    var widgetSettingsId = "";
     try {
       var parsed = new URL(
         raw,
@@ -11237,6 +14524,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         parsed.searchParams.get("widget") ||
         parsed.searchParams.get("type") ||
         "";
+      widgetSettingsId = parsed.searchParams.get("widgetId") || "";
     } catch (e) {
       var im = raw.match(/[?&](?:shareInvite|invite)=([^&]+)/);
       var pm = raw.match(/[?&](?:shareProject|project)=([^&]+)/);
@@ -11245,6 +14533,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var dm = raw.match(/[?&](?:debtId|debt|creditId|credit)=([^&]+)/);
       var gm = raw.match(/[?&](?:goalId|goal)=([^&]+)/);
       var wm = raw.match(/[?&](?:widget|type)=([^&]+)/);
+      var wim = raw.match(/[?&]widgetId=([^&]+)/);
       shareInviteId = im ? decodeURIComponent(im[1]) : "";
       shareProjectId = pm ? decodeURIComponent(pm[1]) : "";
       fidelityCardId = cm ? decodeURIComponent(cm[1]) : "";
@@ -11252,6 +14541,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       debtCreditId = dm ? decodeURIComponent(dm[1]) : "";
       goalId = gm ? decodeURIComponent(gm[1]) : "";
       widgetSettingsType = wm ? decodeURIComponent(wm[1]) : "";
+      widgetSettingsId = wim ? decodeURIComponent(wim[1]) : "";
     }
     function dispatchWidgetEvent(eventName, detail) {
       [80, 240, 650, 1200, 2000].forEach(function (ms) {
@@ -11263,6 +14553,29 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           } catch (e) {}
         }, ms);
       });
+    }
+    if (url.indexOf("tool-transaction") >= 0 || url.indexOf("open-tools") >= 0) {
+      var toolPacket = null;
+      try {
+        var toolUrl = new URL(raw, window && window.location ? window.location.origin : SHARE_WEB_APP_URL);
+        toolPacket = {
+          source: toolUrl.searchParams.get("source") || toolUrl.searchParams.get("tool") || "calculator",
+          resultAmount: Number(toolUrl.searchParams.get("resultAmount") || toolUrl.searchParams.get("amount") || 0),
+          resultCurrency: toolUrl.searchParams.get("resultCurrency") || toolUrl.searchParams.get("currency") || currency || "EUR",
+          originalAmount: Number(toolUrl.searchParams.get("originalAmount") || 0),
+          originalCurrency: toolUrl.searchParams.get("originalCurrency") || "",
+          rate: Number(toolUrl.searchParams.get("rate") || 0),
+          ts: Date.now(),
+        };
+      } catch (e) {}
+      if (url.indexOf("tool-transaction") >= 0 && toolPacket) {
+        try { localStorage.setItem("fainance_tool_widget_transaction_v1", JSON.stringify(toolPacket)); } catch (e) {}
+        dispatchWidgetEvent("fainance-open-tool-transaction", toolPacket);
+      }
+      setTab("tools");
+      setSettingsPage(null);
+      setMobileMenu(false);
+      return;
     }
     if (
       url.indexOf("open-plan-info") >= 0 ||
@@ -11498,6 +14811,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       setMobileMenu(false);
     }
     if (url.indexOf("widget-settings") >= 0) {
+      try {
+        var parsedWidgetId = parseInt(String(widgetSettingsId || ""), 10);
+        if (Number.isFinite(parsedWidgetId) && parsedWidgetId > 0) {
+          localStorage.setItem("fainance_widget_settings_instance_v1", JSON.stringify({ type: String(widgetSettingsType || ""), id: parsedWidgetId, at: Date.now() }));
+        }
+      } catch (e) {}
       var widgetPageMap = {
         quick: "appearance_widget_quick",
         note: "appearance_widget_note",
@@ -11508,6 +14827,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         debtcredits: "appearance_widget_debt_credits",
         debt_credits: "appearance_widget_debt_credits",
         share: "appearance_widget_share",
+        calculator: "appearance_widget_calculator",
+        converter: "appearance_widget_converter",
+        ai: "appearance_widget_ai",
+        agent: "appearance_widget_ai",
       };
       var normalizedWidgetType = String(widgetSettingsType || "")
         .replace(/[^a-zA-Z_]/g, "")
@@ -11772,6 +15095,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var [mergeTo, setMergeTo] = useState("");
   var [mobileMenu, setMobileMenu] = useState(false);
   var [nativeBannerSuppressed, setNativeBannerSuppressed] = useState(false);
+  var [recurringScreenActive, setRecurringScreenActive] = useState(false);
   useEffect(
     function () {
       if (!mobileMenu) return;
@@ -13391,11 +16715,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       // index.html imposta il flag nativo; il controllo del protocollo è un'ulteriore tutela.
       var nativeDomTranslationDisabled = false;
       try {
+        var cap = (window as any).Capacitor;
         nativeDomTranslationDisabled =
           !!(window as any).__FAINANCE_DISABLE_DOM_TRANSLATION__ ||
-          String(
-            (window.location && window.location.protocol) || ""
-          ).toLowerCase() === "capacitor:";
+          !!(cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) ||
+          String((window.location && window.location.protocol) || "").toLowerCase() === "capacitor:";
       } catch (e) {}
       if (nativeDomTranslationDisabled) return;
       var root = document.getElementById("root");
@@ -13527,6 +16851,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         )
           return true;
         if (el.closest && el.closest('[data-no-translate="true"]')) return true;
+        // Options are translated during React render; DOM writes can dismiss an open native menu.
+        if (el.closest && el.closest("select")) return true;
         return false;
       }
       function applyExactTranslations() {
@@ -13953,8 +17279,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.1.3";
-  var FAINANCE_CURRENT_VERSION_CODE = 223;
+  var FAINANCE_CURRENT_VERSION = "2.2.0";
+  var FAINANCE_CURRENT_VERSION_CODE = 239;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
     "market://details?id=" + FAINANCE_ANDROID_PACKAGE_ID;
@@ -15522,7 +18848,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           <span
             style={{
               fontSize: 10,
-              color: active ? primary : subC,
+              color: readableDarkText(active ? primary : subC, dark, active
+              ? dark
+                ? primary + "2B"
+                : primary + "12"
+              : dark
+              ? "#252535"
+              : "#fff"),
               fontWeight: active ? 900 : 700,
               whiteSpace: "nowrap",
             }}
@@ -15686,7 +19018,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             >
               {selectedLabel(id, value)}
             </span>
-            <span aria-hidden="true" style={{ color: primary, fontSize: 18 }}>
+            <span aria-hidden="true" style={{ color: readableDarkText(primary, dark, dark ? "#1E1E30" : "#fff"), fontSize: 18 }}>
               ⌄
             </span>
           </button>
@@ -15732,7 +19064,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               return (
                 <div key={x[0]} style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 9, color: subC }}>{SL(x[0])}</div>
-                  <div style={{ fontSize: 13, fontWeight: 950, color: x[2] }}>
+                  <div style={{ fontSize: 13, fontWeight: 950, color: readableDarkText(x[2], dark, "#35354a") }}>
                     {x[1]}
                   </div>
                 </div>
@@ -15783,7 +19115,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   display: "block",
                   fontSize: 14,
                   fontWeight: 900,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                 }}
               >
                 {SL("Mostra riepilogo in alto?")}
@@ -15792,7 +19124,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   display: "block",
                   fontSize: 12,
-                  color: subC,
+                  color: readableDarkText(subC, dark, "transparent"),
                   marginTop: 4,
                   lineHeight: 1.35,
                 }}
@@ -16293,7 +19625,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   {active && (
                     <span
                       aria-hidden="true"
-                      style={{ color: primary, fontWeight: 950, flexShrink: 0 }}
+                      style={{ color: readableDarkText(primary, dark, active
+                      ? dark
+                        ? primary + "28"
+                        : primary + "12"
+                      : dark
+                      ? "#252535"
+                      : "#fff"), fontWeight: 950, flexShrink: 0 }}
                     >
                       ✓
                     </span>
@@ -16373,7 +19711,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   fontSize: 11,
                   fontWeight: 950,
-                  color: primary,
+                  color: readableDarkText(primary, dark, cardBg),
                   textTransform: "uppercase",
                   letterSpacing: 0.6,
                   marginBottom: 6,
@@ -16506,7 +19844,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   border: "1px solid " + primary,
                   background: dark ? "#252535" : "#fff",
-                  color: primary,
+                  color: readableDarkText(primary, dark, dark ? "#252535" : "#fff"),
                   borderRadius: 15,
                   padding: "13px 14px",
                   fontSize: 14,
@@ -16619,7 +19957,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   marginTop: 10,
                   border: "none",
                   background: "transparent",
-                  color: subC,
+                  color: readableDarkText(subC, dark, "transparent"),
                   fontSize: 12,
                   fontWeight: 850,
                   cursor: "pointer",
@@ -16704,9 +20042,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         if (part !== "fAInance") return <span key={i}>{part}</span>;
         return (
           <span key={i} style={{ fontWeight: 950, whiteSpace: "nowrap" }}>
-            <span style={{ color: "#111827" }}>f</span>
-            <span style={{ color: "#F2C94C" }}>AI</span>
-            <span style={{ color: "#111827" }}>nance</span>
+            <span style={{ color: readableDarkText("#111827", dark, "#35354a") }}>f</span>
+            <span style={{ color: readableDarkText("#F2C94C", dark, "#35354a") }}>AI</span>
+            <span style={{ color: readableDarkText("#111827", dark, "#35354a") }}>nance</span>
           </span>
         );
       });
@@ -16884,7 +20222,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             style={{
               fontSize: 11,
               fontWeight: 900,
-              color: primary,
+              color: readableDarkText(primary, dark, dark ? "#1E1E30" : "#fff"),
               letterSpacing: 0.5,
               textTransform: "uppercase",
               marginBottom: 12,
@@ -16935,7 +20273,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               >
                 {LANGUAGES.map(function (x) {
                   return (
-                    <option key={x.code} value={x.code}>
+                    <option key={x.code} value={x.code} data-fainance-icon-ref={(x as any).icon || "\u{1F4C1}"}>
                       {x.label}
                     </option>
                   );
@@ -17051,7 +20389,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               marginTop: 12,
               border: "none",
               background: "transparent",
-              color: subC,
+              color: readableDarkText(subC, dark, "transparent"),
               fontSize: 12,
               fontWeight: 800,
               cursor: "pointer",
@@ -17466,7 +20804,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setBiometricLockMessage("");
         return;
       }
-      if (!firestoreReady || biometricInitialCheckRef.current) return;
+      if (!accountUiReady || biometricInitialCheckRef.current) return;
       biometricInitialCheckRef.current = true;
       if (Date.now() < Number(biometricSkipAutoLockUntilRef.current || 0))
         return;
@@ -17478,7 +20816,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           "Sblocca fAInance per visualizzare i tuoi dati finanziari"
         );
     },
-    [biometricLockEnabled, firestoreReady, localLockMethod, localLockPin]
+    [biometricLockEnabled, accountUiReady, localLockMethod, localLockPin]
   );
   useEffect(
     function () {
@@ -17641,6 +20979,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               });
               return;
             }
+            var lastVisitedTab = String(lastNonHomeTabRef.current || "");
+            if (
+              lastVisitedTab &&
+              lastVisitedTab !== "home" &&
+              nowBack - Number(androidBackPreviewReturnRef.current || 0) > 2500
+            ) {
+              androidBackPreviewReturnRef.current = nowBack;
+              setTab(lastVisitedTab);
+              setMobileMenu(false);
+              return;
+            }
             if (nowBack - Number(androidBackLastPressRef.current || 0) < 1800) {
               if (CapApp.exitApp) CapApp.exitApp();
               return;
@@ -17795,9 +21144,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }) || { symbol: "€" }
   ).symbol;
   var fmt = function (n) {
-    return fmtAmt(n, sym);
+    return fmtAmt(n, sym, lang);
   };
-  var fmtHeader = function (n) { return sym + "\u00A0" + Number(n).toFixed(0); };
+  var fmtHeader = function (n) { return String(sym || "") + "\u00A0" + formatNumber(n, lang, { minimumFractionDigits: 0, maximumFractionDigits: 0 }); };
   var now = new Date();
   var curMonthKey = accountingPeriod.keyForDate(accountingDate);
   var curYear = Number(curMonthKey.slice(0,4));
@@ -18729,10 +22078,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       ? ADMOB_BANNER_AD_UNIT_ID_IOS
       : ADMOB_BANNER_AD_UNIT_ID_ANDROID;
   }
+  // No ad request or native overlay during any onboarding/setup stage, including transitions.
+  var adsBlockedBySetup = !!(initialSetupOpen || onboardingGuideOpen ||
+    initialSetupStatus === "essential_pending" || initialSetupStatus === "advanced_pending" ||
+    onboardingGuideEligibleNow() || !userId || !accountUiReady || !termsAccepted || !privacyAccepted || appLocked);
+  var adsBlockedBySetupRef = useRef(adsBlockedBySetup);
+  adsBlockedBySetupRef.current = adsBlockedBySetup;
   var adConsentRequestedRef = useRef(false);
   var rewardedAdInProgressRef = useRef(false);
   var rewardedAdCompletedAtRef = useRef(0);
   function requestAdConsentIfNeeded() {
+    if (adsBlockedBySetupRef.current) return;
     var ads = nativePlugin("FainanceAds");
     if (!isNativeMobileApp() || !ads || !ads.requestConsent) return;
     if (adConsentRequestedRef.current) return;
@@ -19308,7 +22664,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       alignItems: "flex-start",
                     }}
                   >
-                    <span style={{ color: green, fontWeight: 950 }}>✓</span>
+                    <span style={{ color: readableDarkText(green, dark, "#35354a"), fontWeight: 950 }}>✓</span>
                     <span>{translateUiRuntimeText(x)}</span>
                   </div>
                 );
@@ -19378,6 +22734,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
 
   function showShortInterstitialForExtraMovement(onDismiss) {
+    if (adsBlockedBySetupRef.current) return;
     var nowMs = Date.now();
     if (rewardedAdInProgressRef.current) return;
     if (nowMs - Number(rewardedAdCompletedAtRef.current || 0) < 2500) return;
@@ -19426,6 +22783,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
 
   function showRewardedAdForExtraMovement(onReward) {
+    if (adsBlockedBySetupRef.current) return;
     var nowMs = Date.now();
     if (rewardedAdInProgressRef.current) return;
     if (nowMs - Number(rewardedAdCompletedAtRef.current || 0) < 2500) return;
@@ -19472,6 +22830,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
   var WIDGET_PLAN_REQUIREMENTS = {
     quick: "free",
+    calculator: "free",
+    converter: "free",
     note: "base",
     goal: "base",
     shoppingList: "free",
@@ -19482,6 +22842,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   };
   var WIDGET_TYPE_ORDER = [
     "quick",
+    "calculator",
+    "converter",
     "fidelity",
     "shoppingList",
     "note",
@@ -19542,13 +22904,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
   }
   function setExpenseCatsFromSettings(nextItems) {
+    var currentCats = readUserLocalJson("cats_v10", cats);
     var nextList =
-      typeof nextItems === "function" ? nextItems(cats) : nextItems;
+      typeof nextItems === "function" ? nextItems(currentCats) : nextItems;
     nextList = Array.isArray(nextList) ? nextList : [];
     var nextIds = nextList.map(function (c) {
       return String(c.id);
     });
-    var removedItems = (cats || []).filter(function (c) {
+    var removedItems = (currentCats || []).filter(function (c) {
       return nextIds.indexOf(String(c.id)) < 0 && !c.deleted;
     });
     var removedIds = removedItems.map(function (c) {
@@ -19609,7 +22972,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         nextList,
         DEFAULT_CATS,
         DEFAULT_EXPENSE_CATEGORY_NAMES
-      )
+      ), true
     );
   }
   function guardedHandler(fn, requiredPlan) {
@@ -19800,7 +23163,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return false;
   }
   function prepareAutomaticMovements(items,direction,source){
-    const results=items.map(item=>evaluateAutomaticRules(financeEvolutionRef.current.rules,item,direction,source||'manual',{plan:currentPlan,cats,methods,incomeTypes}));
+    const results=items.map(item=>evaluateAutomaticRules(financeEvolutionRef.current.rules,item,direction,source||'manual',{plan:currentPlan,cats,methods,incomeTypes,instalmentOptions:planLimits.instalmentOptions}));
     return {items:results.map(r=>r.item),alerts:results.flatMap(r=>r.alerts).filter((a,i,list)=>list.findIndex(b=>b.ruleId===a.ruleId)===i)};
   }
   function approveAutomaticAlerts(alerts){
@@ -19829,9 +23192,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
       return true;
     }
+    startAnalyticsFlow("movement", { method: source || "manual", kind: "expense" });
     var ruleBatch;
     try {ruleBatch=prepareAutomaticMovements(list,'expense',source);list=ruleBatch.items;}
-    catch {setToast({text:rulesText(lang,'error'),type:'error'});return false;}
+    catch {setToast({text:rulesText(lang,'error'),type:'error'});finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;}
     var hasInstalment = list.some(function (x) {
       return !!x.rateizzato;
     });
@@ -19858,7 +23222,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           color: "#EF9F27",
           icon: "⚠️",
         });
-        return false;
+        finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
       }
     }
     if (!canUsePlanFeature(feature, amount)) {
@@ -19868,9 +23232,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         color: "#E24B4A",
         icon: "🚫",
       });
-      return false;
+      finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
     }
-    if(!approveAutomaticAlerts(ruleBatch.alerts))return false;
+    if(!approveAutomaticAlerts(ruleBatch.alerts)){finishAnalyticsFlow("movement", "cancelled", { reason: "user_cancel" });return false;}
     function save() {
       var usedAfter = rewardedFeatureConfig(feature)
         ? planCount(featureUsageKey(feature)) + amount
@@ -19897,6 +23261,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           })
           .concat(p);
       });
+      finishAnalyticsFlow("movement", list.some(x => Math.abs(parseMoney(x.amount)) > 0) ? "completed" : "failed", { kind: "expense" });
       if (feature === "manualMovement")
         setToast(singleMovementSuccessToast("Uscita aggiunta.", usedAfter));
       else if (feature === "instalmentMovement")
@@ -19964,9 +23329,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
       return true;
     }
+    startAnalyticsFlow("movement", { method: source || "manual", kind: "income" });
     var ruleBatch;
     try {ruleBatch=prepareAutomaticMovements(list,'income',source);list=ruleBatch.items;}
-    catch {setToast({text:rulesText(lang,'error'),type:'error'});return false;}
+    catch {setToast({text:rulesText(lang,'error'),type:'error'});finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;}
     var hasInstalment = list.some(function (x) {
       return !!x.rateizzato;
     });
@@ -19991,7 +23357,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           color: "#EF9F27",
           icon: "⚠️",
         });
-        return false;
+        finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
       }
     }
     if (!canUsePlanFeature(feature, amount)) {
@@ -20001,9 +23367,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         color: "#E24B4A",
         icon: "🚫",
       });
-      return false;
+      finishAnalyticsFlow("movement", "failed", { reason: "validation" }); return false;
     }
-    if(!approveAutomaticAlerts(ruleBatch.alerts))return false;
+    if(!approveAutomaticAlerts(ruleBatch.alerts)){finishAnalyticsFlow("movement", "cancelled", { reason: "user_cancel" });return false;}
     function save() {
       var usedAfter = rewardedFeatureConfig(feature)
         ? planCount(featureUsageKey(feature)) + amount
@@ -20030,6 +23396,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           })
           .concat(p);
       });
+      finishAnalyticsFlow("movement", list.some(x => Math.abs(parseMoney(x.amount)) > 0) ? "completed" : "failed", { kind: "income" });
       if (feature === "manualMovement")
         setToast(singleMovementSuccessToast("Entrata aggiunta.", usedAfter));
       else if (feature === "instalmentMovement")
@@ -20081,32 +23448,51 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       return;
     }
     var generatedRecurringMovements = r.rtype === "expense" ? expenses : incomes;
-    const occurrence = recurringOccurrencesInPeriod(
-      r,
-      curMonthKey,
-      accountingPeriod.settings,
-      generatedRecurringMovements
-    ).find(value =>
-      r._occurrenceDate
-        ? value._occurrenceDate === r._occurrenceDate
-        : value._occurrenceKey === (r._occurrenceKey || mk)
-    );
-    if (!occurrence) return;
+    var requestedDate = String(r && r._occurrenceDate || "").slice(0, 10);
+    var occurrence = requestedDate
+      ? recurringOccurrenceForDate(
+          r,
+          requestedDate,
+          accountingDate,
+          accountingPeriod.settings,
+          generatedRecurringMovements
+        )
+      : recurringDueOccurrences(
+          r,
+          accountingDate,
+          accountingPeriod.settings,
+          generatedRecurringMovements
+        ).find(function (value) {
+          return value._occurrenceKey === (r._occurrenceKey || mk);
+        });
+    if (!occurrence) return false;
     mk = occurrence._occurrenceKey;
     var ds = occurrence._occurrenceDate;
     let prepared;
     try {
       const item = {
-        id: Date.now(), amount: r.amount, desc: r.name, date: ds,
-        rateizzato: r.rateizzato, rate: r.rate,
+        id: recurringMovementId(r, ds), amount: r.amount, desc: r.name, date: ds,
+        currency: r.currency || currency,
+        baseCurrency: r.baseCurrency || currency,
+        originalAmount: r.originalAmount == null ? null : r.originalAmount,
+        baseAmount: r.baseAmount == null ? r.amount : r.baseAmount,
+        exchangeRate: r.exchangeRate == null ? 1 : r.exchangeRate,
+        exchangeRateDate: r.exchangeRateDate || ds,
+        exchangeRateSource: r.exchangeRateSource || "base",
+        rateizzato: r.rateizzato, rate: r.rate, rateDirection: r.rateDirection || "forward",
         recurringRuleId: String(r.id),
         recurringOccurrenceDate: ds,
         recurringOccurrenceId: String(r.id) + "@" + ds,
         source: "recurring",
         createdAt: new Date().toISOString(),
         ...(r.rtype === "expense"
-          ? {catId: Number(r.catId), methodId: Number(r.methodId)}
-          : {type: r.incomeType}),
+          ? {
+              catId: r.catId,
+              methodId: r.methodId,
+              recurringCategoryName: String(r.categoryNameSnapshot || ""),
+              recurringMethodName: String(r.methodNameSnapshot || ""),
+            }
+          : {type: r.incomeType,...incomeReceiptFields(r,methods)}),
       };
       prepared = prepareAutomaticMovements([item], r.rtype, 'recurring');
     } catch {
@@ -20132,26 +23518,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return true;
   }
 
-  var curMonthExp = totalForMonth(
-    expensesForAnalysis,
-    curMonthKey,
-    homeBalanceView === "reale" ? "reale" : "rateizzato",
-    accountingPeriod.settings
-  );
-  var curMonthInc = totalForMonth(
-    incomes,
-    curMonthKey,
-    homeBalanceView === "reale" ? "reale" : "rateizzato",
-    accountingPeriod.settings
-  );
-  var yearExp = expensesForAnalysis
+  var balanceViewMode: "reale" | "rateizzato" = homeBalanceView === "reale" ? "reale" : "rateizzato";
+  // La barra superiore usa lo stesso motore del periodo finanziario della Home.
+  // Il periodo e' quello salvato in financeEvolution.period (non le preferenze legacy).
+  var curMonthExp = accountingPeriod.total(countedExpensesForAnalysis, curMonthKey, balanceViewMode);
+  var curMonthInc = accountingPeriod.total(countedIncomes, curMonthKey, balanceViewMode);
+  var curMonthBalance = curMonthInc - curMonthExp;
+  var yearExp = countedExpensesForAnalysis
     .filter(function (e) {
       return accountingPeriod.matches(e.date, String(curYear));
     })
     .reduce(function (a, e) {
       return a + e.amount;
     }, 0);
-  var yearInc = incomes
+  var yearInc = countedIncomes
     .filter(function (i) {
       return accountingPeriod.matches(i.date, String(curYear));
     })
@@ -20160,9 +23540,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }, 0);
   var last12Balance = useMemo(
     function () {
-      return balanceForMonths(expensesForAnalysis, incomes, accountingPeriod.lastKeys(12, now), 'reale', accountingPeriod.settings);
+      return balanceForMonths(countedExpensesForAnalysis, countedIncomes, accountingPeriod.lastKeys(12, now), 'reale', accountingPeriod.settings);
     },
-    [expensesForAnalysis, incomes, curMonthKey, accountingPeriod]
+    [countedExpensesForAnalysis, countedIncomes, curMonthKey, accountingPeriod]
   );
   var localizedMonthShorts = useMemo(
     function () {
@@ -20174,86 +23554,34 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
   var monthlyTotals = useMemo(
     function () {
-      return monthlyTotalsForYear(
-        expensesForAnalysis,
-        incomes,
+      var mode: "reale" | "rateizzato" = statsView === "reale" ? "reale" : "rateizzato";
+      var counted = monthlyTotalsForYear(
+        countedExpensesForAnalysis,
+        countedIncomes,
         curYear,
-        statsView === "reale" ? "reale" : "rateizzato",
+        mode,
         localizedMonthShorts,
         accountingPeriod.settings
       );
+      return counted;
     },
-    [expensesForAnalysis, incomes, curYear, statsView, localizedMonthShorts, accountingPeriod]
+    [countedExpensesForAnalysis, countedIncomes, curYear, statsView, localizedMonthShorts, accountingPeriod]
   );
-  var pendingCount = recurring.reduce(function (count, r) {
-    var generated = r.rtype === "expense" ? expenses : incomes;
-    return count + recurringOccurrencesInPeriod(r, curMonthKey, accountingPeriod.settings, generated).length;
-  }, 0);
+  // Navigation and unrelated controls do not change overdue occurrences.
+  var pendingCount = useMemo(function () {
+    return recurring.reduce(function (count, r) {
+      var generated = r.rtype === "expense" ? expenses : incomes;
+      return count + recurringDueOccurrences(
+        r,
+        accountingDate,
+        accountingPeriod.settings,
+        generated
+      ).length;
+    }, 0);
+  }, [recurring, expenses, incomes, accountingDate, accountingPeriod]);
 
   // compute triggered alerts
-  function computeTriggered() {
-    return alerts
-      .filter(function (al) {
-        var prefix = al.period === "annual" ? String(curYear) : curMonthKey;
-        var spent;
-        if (al.type === "cat")
-          spent = expensesForAnalysis
-            .filter(function (e) {
-              return e.catId === al.catId && accountingPeriod.matches(e.date, prefix);
-            })
-            .reduce(function (a, e) {
-              return a + e.amount;
-            }, 0);
-        else {
-          var gc = cats
-            .filter(function (c) {
-              return c.group === al.groupId;
-            })
-            .map(function (c) {
-              return c.id;
-            });
-          spent = expensesForAnalysis
-            .filter(function (e) {
-              return gc.includes(e.catId) && accountingPeriod.matches(e.date, prefix);
-            })
-            .reduce(function (a, e) {
-              return a + e.amount;
-            }, 0);
-        }
-        var triggered =
-          al.triggerMode === "immediate"
-            ? spent >= al.budget
-            : spent >= al.budget * (1 + (al.triggerPct || 0) / 100);
-        if (!triggered) return false;
-        al._spent = spent;
-        return true;
-      })
-      .map(function (al) {
-        var grps = expenseGroups || DEFAULT_EXPENSE_GROUPS;
-        var cat3 =
-          al.type === "cat"
-            ? cats.find(function (c) {
-                return c.id === al.catId;
-              })
-            : null;
-        var prefixKey = al.period === "annual" ? String(curYear) : curMonthKey;
-        return {
-          ...al,
-          _alertKey: String(al.id) + ":" + prefixKey,
-          spentFmt: fmt(al._spent),
-          budgetFmt: fmt(al.budget),
-          pct: al.budget > 0 ? Math.min(200, (al._spent / al.budget) * 100) : 0,
-        };
-      });
-  }
-  var allTriggeredAlertsData = useMemo(computeTriggered, [
-    alerts,
-    expensesForAnalysis,
-    cats,
-    curMonthKey,
-    curYear,
-    expenseGroups,
-  ]);
+  var allTriggeredAlertsData=useMemo(()=>triggeredSpendingAlerts({alerts,expenses:countedExpensesForAnalysis,categories:cats,periodKey:curMonthKey,accountingPeriod,format:fmt}),[alerts,countedExpensesForAnalysis,cats,curMonthKey,accountingPeriod,lang,currency]);
   function alertSeenKey(al) {
     return String((al && al._alertKey) || (al && al.id) || "");
   }
@@ -20300,42 +23628,18 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         } catch (e) {}
       }
     }
-    setAlertPopup(null);
+    setAlertPopup(current=>{const remaining=(current||[]).filter(row=>!keys.includes(alertSeenKey(row)));return remaining.length?remaining:null;});
   }
 
-  // ── REAL-TIME ALERT: only fire popup for newly triggered and not-yet-seen alerts ──
-  var prevTriggeredIdsRef = useRef([]);
-  useEffect(
-    function () {
-      if (!firestoreReady) return;
-      var currentIds = triggeredAlertsData.map(alertSeenKey);
-      var seen = new Set(
-        Array.isArray(shownAlertIds) ? shownAlertIds.map(String) : []
-      );
-      var newIds = currentIds.filter(function (id) {
-        return id && !seen.has(id) && !prevTriggeredIdsRef.current.includes(id);
-      });
-      if (newIds.length > 0) {
-        var newAlerts = triggeredAlertsData.filter(function (a) {
-          return newIds.includes(alertSeenKey(a));
-        });
-        setAlertPopup(newAlerts);
-      }
-      prevTriggeredIdsRef.current = currentIds;
-    },
-    [
-      firestoreReady,
-      JSON.stringify(triggeredAlertsData.map(alertSeenKey)),
-      JSON.stringify(shownAlertIds || []),
-    ]
-  );
-  useEffect(
-    function () {
-      if (tab === "alerts" && triggeredAlertsData.length > 0)
-        markAlertsSeen(triggeredAlertsData);
-    },
-    [tab, JSON.stringify(triggeredAlertsData.map(alertSeenKey))]
-  );
+  useEffect(function () {
+    if (!notificationShowsInApp(notifPrefs?.notificationChannels, "spending_alert")) setAlertPopup(null);
+  }, [notifPrefs?.notificationChannels?.spending_alert]);
+  useSpendingAlertDispatch({
+    ready:firestoreReady,
+    accountKey:userId,
+    rows:notificationShowsInApp(notifPrefs?.notificationChannels, "spending_alert") ? triggeredAlertsData : [],
+    onPopup:setAlertPopup,
+  });
 
   function sortHistoryItems(list) {
     return sortFinancialHistoryItems(
@@ -20353,7 +23657,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     function () {
       if (!showShareInHistory) return [];
       return (shareProjects || []).flatMap(function (project) {
-        return (project.activities || [])
+        return activeShareActivities(project)
           .filter(function (a) {
             return a.kind !== "settlement";
           })
@@ -20425,14 +23729,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
     if (!ids.length) return null;
     var sid = String(typeId || "");
-    return ids.includes("income:" + sid) || ids.includes(sid);
+    return ids.includes("income:" + sid);
   }
   var filteredExpenses = useMemo(
     function () {
-      var q = searchQuery.toLowerCase();
+      var q = String(searchQuery || "").trim().toLowerCase();
       var minAmt = filterAmtMin ? parseMoney(filterAmtMin) : null;
       var maxAmt = filterAmtMax ? parseMoney(filterAmtMax) : null;
-      var personalSource = filterAreaPersonal ? expenses : [];
+      var personalSource = filterAreaPersonal ? expensesForHistory : [];
       var shareSource =
         filterAreaShare && showShareInHistory ? shareHistoryExpenses : [];
       var source = personalSource.concat(shareSource);
@@ -20493,8 +23797,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           )
             return false;
           if (filterMethods && filterMethods.length && isShare) return false;
-          if (filterDateFrom && e.date < filterDateFrom) return false;
-          if (filterDateTo && e.date > filterDateTo) return false;
+          var day = String(e.date || "").slice(0, 10);
+          if (filterDateFrom && day < filterDateFrom) return false;
+          if (filterDateTo && day > filterDateTo) return false;
           if (minAmt !== null && e.amount < minAmt) return false;
           if (maxAmt !== null && e.amount > maxAmt) return false;
           return true;
@@ -20502,7 +23807,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       );
     },
     [
-      expenses,
+      expensesForHistory,
       shareHistoryExpenses,
       filterAreaPersonal,
       filterAreaShare,
@@ -20532,11 +23837,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   );
   var filteredIncomes = useMemo(
     function () {
-      var q = searchQuery.toLowerCase();
+      var q = String(searchQuery || "").trim().toLowerCase();
       var minAmt = filterAmtMin ? parseMoney(filterAmtMin) : null;
       var maxAmt = filterAmtMax ? parseMoney(filterAmtMax) : null;
       return sortHistoryItems(
         incomes.filter(function (i) {
+          if (!filterAreaPersonal || (filterGroup && filterGroup !== "all") || (filterCat && filterCat !== "all")) return false;
           var it = getIT(i.type);
           var txt = (
             (i.desc || "") +
@@ -20568,8 +23874,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             var selected = filterCatMatchesIncomeId(i.type);
             if (filterCatExclude ? selected : !selected) return false;
           }
-          if (filterDateFrom && i.date < filterDateFrom) return false;
-          if (filterDateTo && i.date > filterDateTo) return false;
+          var day = String(i.date || "").slice(0, 10);
+          if (filterDateFrom && day < filterDateFrom) return false;
+          if (filterDateTo && day > filterDateTo) return false;
           if (minAmt !== null && i.amount < minAmt) return false;
           if (maxAmt !== null && i.amount > maxAmt) return false;
           return true;
@@ -20578,6 +23885,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     },
     [
       incomes,
+      filterAreaPersonal,
+      filterGroup,
+      filterCat,
       filterYear,
       filterMonth,
       filterMonths,
@@ -20616,7 +23926,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   };
   useEffect(
     function () {
-      if (currentPlan === "free") {
+      if (currentPlan === "free" && !adsBlockedBySetup) {
         requestAdConsentIfNeeded();
       } else {
         try {
@@ -20625,22 +23935,22 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         } catch (e) {}
       }
     },
-    [currentPlan]
+    [currentPlan, adsBlockedBySetup]
   );
 
   useEffect(
     function () {
-      if (!nativeBannerSuppressed) return;
+      if (!nativeBannerSuppressed && !adsBlockedBySetup) return;
       try {
         var ads = nativePlugin("FainanceAds");
         if (ads && ads.hideBanner) ads.hideBanner({});
       } catch (e) {}
     },
-    [nativeBannerSuppressed]
+    [nativeBannerSuppressed, adsBlockedBySetup]
   );
 
   function shouldShowTopAdBox() {
-    if (nativeBannerSuppressed) return false;
+    if (adsBlockedBySetupRef.current || nativeBannerSuppressed || recurringScreenActive || editingItem || tab === "spese") return false;
     if (currentPlan !== "free") return false;
     if (!planLimits || !planLimits.ads) return false;
     if (!isMobile) return false;
@@ -20654,15 +23964,20 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // banner nativo a ogni giro. Con hook e valori calcolati qui, TopAdBox non ha piu'
   // hook propri e puo' essere invocata come funzione: nessun rimontaggio.
   var topAdVisible = shouldShowTopAdBox();
+  // Come le icone superiori, nascondi il riepilogo mentre si inserisce un movimento.
+  var mobileSummaryVisible = !!showAppSummaryHeader && tab !== "spese" && !appLocked && !!userId && accountUiReady;
+  var [summaryActionsHost, setSummaryActionsHost] = useState<HTMLElement | null>(null);
   var topAdNativeBanner = isNativeMobileApp();
   var topAdBoxRef = useRef(null);
-  var topAdSlotHeight = showAppSummaryHeader ? 68 : 74;
+  var topAdSlotHeight = mobileSummaryVisible ? 68 : 74;
   useEffect(
     function () {
       var ads = nativePlugin("FainanceAds");
       if (!topAdVisible || !topAdNativeBanner || !ads || !ads.showBanner) return;
       requestAdConsentIfNeeded();
+      var cancelled = false;
       function showAtMeasuredSlot() {
+        if (cancelled || adsBlockedBySetupRef.current) return;
         var top = 0;
         try {
           var el = topAdBoxRef.current;
@@ -20673,7 +23988,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             // che in alcune build vengono ignorate e fanno sparire l'annuncio.
             top = Math.max(
               0,
-              Math.round(r.top + Math.max(0, (r.height - 50) / 2) - 6)
+              Math.round(r.top + Math.max(0, (r.height - 50) / 2))
             );
           }
         } catch (e) {}
@@ -20688,12 +24003,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               y: top,
               top: top,
               placement: "inline-slot",
-              headerVisible: !!showAppSummaryHeader,
+              headerVisible: mobileSummaryVisible,
             })
             .catch(function (e) {
               console.warn("Banner AdMob non disponibile", e);
             });
         } catch (e) {}
+      }
+      var slotObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(showAtMeasuredSlot) : null;
+      if (slotObserver && topAdBoxRef.current) {
+        slotObserver.observe(topAdBoxRef.current);
+        if (topAdBoxRef.current.parentElement) slotObserver.observe(topAdBoxRef.current.parentElement);
       }
       var t1 = setTimeout(showAtMeasuredSlot, 120);
       var t2 = setTimeout(showAtMeasuredSlot, 520);
@@ -20707,9 +24027,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
       } catch (e) {}
       return function () {
+        cancelled = true;
         clearTimeout(t1);
         clearTimeout(t2);
         clearTimeout(t3);
+        if (slotObserver) slotObserver.disconnect();
         try {
           window.removeEventListener("resize", showAtMeasuredSlot);
         } catch (e) {}
@@ -20737,10 +24059,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     return (
       <div
         ref={topAdBoxRef}
+        data-fainance-ad-slot="true"
         style={{
           position: "relative",
           height: topAdSlotHeight,
-          margin: showAppSummaryHeader ? "8px 0 12px" : "16px 0 12px",
+          margin: mobileSummaryVisible ? "16px 0 12px" : "20px 0 12px",
           background: topAdNativeBanner
             ? dark
               ? "#171725"
@@ -21268,6 +24591,52 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         logoKind: "official",
         logoLabel: "fAI",
       },
+      toolsWidget: {
+        primaryCurrency: currency || "EUR",
+        secondaryCurrency: secondaryCurrency || (currency === "EUR" ? "USD" : "EUR"),
+        recentCurrencies: (financeEvolution && financeEvolution.tools && financeEvolution.tools.recentCurrencies) || [],
+        lastCurrencyPair: (financeEvolution && financeEvolution.tools && financeEvolution.tools.lastCurrencyPair) || null,
+        lastRate:
+          secondaryCurrency && Number(secRate) > 0
+            ? {
+                from: String(currency || "EUR"),
+                to: String(secondaryCurrency),
+                rate: Number(secRate),
+                createdAt:
+                  secRateCache &&
+                  String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+                  String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase()
+                    ? String(secRateCache.createdAt || new Date().toISOString())
+                    : new Date().toISOString(),
+              }
+            : null,
+        rateCache: ([
+          ...(secondaryCurrency && Number(secRate) > 0
+            ? [{
+                from: String(currency || "EUR"),
+                to: String(secondaryCurrency),
+                rate: Number(secRate),
+                createdAt:
+                  secRateCache &&
+                  String(secRateCache.from || "").toUpperCase() === String(currency || "").toUpperCase() &&
+                  String(secRateCache.to || "").toUpperCase() === String(secondaryCurrency || "").toUpperCase()
+                    ? String(secRateCache.createdAt || new Date().toISOString())
+                    : new Date().toISOString(),
+              }]
+            : []),
+          ...(((financeEvolution && financeEvolution.tools && financeEvolution.tools.rateCache) || []) as any[]),
+          ...(((financeEvolution && financeEvolution.tools && financeEvolution.tools.converter) || []) as any[]),
+        ]
+          .filter(function (row) { return row && row.from && row.to && Number(row.rate) > 0; })
+          .filter(function (row, index, rows) {
+            var key = String(row.from).toUpperCase() + ">" + String(row.to).toUpperCase();
+            return rows.findIndex(function (x) { return String(x.from).toUpperCase() + ">" + String(x.to).toUpperCase() === key; }) === index;
+          })
+          .slice(0, 60)
+          .map(function (row) { return { from: String(row.from), to: String(row.to), rate: Number(row.rate), createdAt: String(row.createdAt || "") }; })),
+        locale: lang || "it",
+        currencySymbol: sym || "€",
+      },
       shoppingListWidget: {
         enabled: isWidgetAllowed("shoppingList") && !!widgetShoppingListEnabled,
         title: L("Lista spesa"),
@@ -21454,6 +24823,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         window.Capacitor &&
         window.Capacitor.Plugins &&
         window.Capacitor.Plugins.WidgetBridge;
+      try {
+        const icons = JSON.parse(localStorage.getItem("fainance_custom_icons_v1_" + String(userId || "")) || "[]");
+        payload.canonicalCustomIcons = Object.fromEntries((Array.isArray(icons) ? icons : []).filter(row => row?.ownerUid === String(userId || "") && String(row.dataUrl || "").startsWith("data:image/")).map(row => ["fai-icon:" + encodeURIComponent(row.ownerUid) + ":" + encodeURIComponent(row.id), row.dataUrl]));
+      } catch { payload.canonicalCustomIcons = {}; }
       var payloadString = JSON.stringify(payload);
       try {
         if (bridge && bridge.setWidgetAvailability) {
@@ -21589,6 +24962,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var shoppingListString = JSON.stringify(payload.shoppingListWidget || {});
       var fidelityString = JSON.stringify(payload.fidelityWidget || {});
       var debtCreditsString = JSON.stringify(payload.debtCreditsWidget || {});
+      var toolsString = JSON.stringify(payload.toolsWidget || {});
       var afterNativeUpdate = function () {
         if (showMessage) setToast("Widget aggiornato");
       };
@@ -21687,6 +25061,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               key: "widget_debt_credits_settings",
               value: debtCreditsString,
             }),
+            prefs.set({ key: "widget_tools_settings", value: toolsString }),
             prefs.set({
               key: "widget_current_plan",
               value: String(
@@ -21786,6 +25161,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             "widget_debt_credits_settings",
             debtCreditsString
           );
+          localStorage.setItem("widget_tools_settings", toolsString);
           localStorage.setItem(
             "widget_current_plan",
             String(
@@ -21829,6 +25205,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             shoppingList: shoppingListString,
             fidelity: fidelityString,
             debtCredits: debtCreditsString,
+            tools: toolsString,
             currentPlan: String(
               payload.widget_current_plan ||
                 currentPlanRef.current ||
@@ -21916,6 +25293,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   key: "widget_debt_credits_settings",
                   value: debtCreditsString,
                 }),
+                prefs.set({ key: "widget_tools_settings", value: toolsString }),
               ]).catch(function () {});
             }
             afterNativeUpdate();
@@ -21934,6 +25312,33 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         });
     }
   }
+
+  // Keep the offline converter widget aligned with the latest rate stored by the app.
+  useEffect(
+    function () {
+      try {
+        if (!firestoreReady) return;
+        if (!(window && window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) return;
+        var timer = setTimeout(function () {
+          try { saveWidgetSettingsToNative(false); } catch (e) {}
+        }, 350);
+        return function () { clearTimeout(timer); };
+      } catch (e) {}
+    },
+    [
+      firestoreReady,
+      userId,
+      currency,
+      secondaryCurrency,
+      secRate,
+      secRateCache && secRateCache.createdAt,
+      lang,
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.converter) || []),
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.rateCache) || []),
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.recentCurrencies) || []),
+      JSON.stringify((financeEvolution && financeEvolution.tools && financeEvolution.tools.lastCurrencyPair) || null),
+    ]
+  );
 
   // WIDGET RESTORE 2.0.0 — one-time migration.
   // The native widget layouts/providers are already identical to the live 2.0.0 build.
@@ -22266,6 +25671,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       creditCards,
       goals,
       financeEvolution,
+      currency,
+      secondaryCurrency,
+      lang,
       shareProjects,
       shareSelectedProjectId,
       confirmButtonColor,
@@ -22378,7 +25786,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           <div
             style={{
               fontSize: 13,
-              color: dark ? "#BEB8FF" : "#534AB7",
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
               lineHeight: 1.55,
               fontWeight: 600,
             }}
@@ -22534,7 +25942,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           <div
             style={{
               fontSize: 13,
-              color: dark ? "#BEB8FF" : "#534AB7",
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
               lineHeight: 1.55,
               fontWeight: 600,
             }}
@@ -22927,7 +26335,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             borderRadius: 4,
             border: "2px solid " + (checked ? "#7F77DD" : borderC),
             background: checked ? "#7F77DD" : "transparent",
-            color: "#fff",
+            color: readableDarkText("#fff", dark, checked ? "#7F77DD" : "transparent"),
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -23021,7 +26429,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: "transparent",
                   border: "none",
                   padding: 0,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   textAlign: "left",
                   cursor: "pointer",
                   WebkitTapHighlightColor: "transparent",
@@ -23029,11 +26437,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }}
               >
                 {checkMark(termsChecked)}
-                <span style={{ fontSize: 13, color: textC, lineHeight: 1.45 }}>
+                <span style={{ fontSize: 13, color: readableDarkText(textC, dark, "transparent"), lineHeight: 1.45 }}>
                   {LT(
                     "Dichiaro di aver letto e accettato i Termini di utilizzo"
                   )}{" "}
-                  <span style={{ color: "#E24B4A" }}>*</span>
+                  <span style={{ color: readableDarkText("#E24B4A", dark, "transparent") }}>*</span>
                 </span>
               </button>
               <button
@@ -23044,7 +26452,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   background: "transparent",
                   border: "none",
-                  color: dark ? "#BEB8FF" : "#378ADD",
+                  color: readableDarkText(dark ? "#BEB8FF" : "#378ADD", dark, "transparent"),
                   padding: "8px 0 0 30px",
                   fontSize: 13,
                   fontWeight: 700,
@@ -23081,7 +26489,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: "transparent",
                   border: "none",
                   padding: 0,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   textAlign: "left",
                   cursor: "pointer",
                   WebkitTapHighlightColor: "transparent",
@@ -23089,11 +26497,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }}
               >
                 {checkMark(privacyChecked)}
-                <span style={{ fontSize: 13, color: textC, lineHeight: 1.45 }}>
+                <span style={{ fontSize: 13, color: readableDarkText(textC, dark, "transparent"), lineHeight: 1.45 }}>
                   {LT(
                     "Dichiaro di aver letto e accettato l’Informativa Privacy"
                   )}{" "}
-                  <span style={{ color: "#E24B4A" }}>*</span>
+                  <span style={{ color: readableDarkText("#E24B4A", dark, "transparent") }}>*</span>
                 </span>
               </button>
               <button
@@ -23104,7 +26512,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   background: "transparent",
                   border: "none",
-                  color: dark ? "#BEB8FF" : "#378ADD",
+                  color: readableDarkText(dark ? "#BEB8FF" : "#378ADD", dark, "transparent"),
                   padding: "8px 0 0 30px",
                   fontSize: 13,
                   fontWeight: 700,
@@ -23141,7 +26549,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: "transparent",
                   border: "none",
                   padding: 0,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   textAlign: "left",
                   cursor: "pointer",
                   WebkitTapHighlightColor: "transparent",
@@ -23149,7 +26557,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 }}
               >
                 {checkMark(metaChecked)}
-                <span style={{ fontSize: 13, color: textC, lineHeight: 1.45 }}>
+                <span style={{ fontSize: 13, color: readableDarkText(textC, dark, "transparent"), lineHeight: 1.45 }}>
                   <strong>{LT("Consenso facoltativo")}</strong>
                   <br />
                   {LT(
@@ -23202,7 +26610,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   var settingsSections = [
     {
       id: "profile",
-      icon: "👤",
+      icon: <PremiumProfileIcon dark={dark} />,
       label: translateUiRuntimeText("Profilo"),
       desc: translateUiRuntimeText("Dati personali, account, accesso"),
     },
@@ -23226,7 +26634,6 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       label: translateUiRuntimeText("Sezioni"),
       desc: translateUiRuntimeText("Entrate, uscite, patrimonio e storico"),
     },
-    {id:"automatic_rules",icon:"⚙️",label:rulesText(lang,"title"),desc:rulesText(lang,"intro")},
     {
       id: "notifications",
       icon: "🔔",
@@ -23283,13 +26690,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Home",
         spese: "Movimenti",
         history: "Storico",
+        calendar: "Calendario",
         stats: "Statistiche",
         appunti: "Appunti",
         voice: "Voce",
         share: "Share",
         debtCredits: "Debiti / Crediti",
         shopping: "Spesa",
-        consulenteAI: "Agente AI",
+        consulenteAI: "Agente",
         patrimonio: "Patrimonio",
         budget: "Budget",
         goals: "Obiettivi",
@@ -23301,13 +26709,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Home",
         spese: "Movements",
         history: "History",
+        calendar: "Calendar",
         stats: "Statistics",
         appunti: "Notes",
         voice: "Voice",
         share: "Share",
         debtCredits: "Debts / Credits",
         shopping: "Shopping",
-        consulenteAI: "AI Agent",
+        consulenteAI: "Agent",
         patrimonio: "Assets",
         budget: "Budget",
         goals: "Goals",
@@ -23319,13 +26728,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Inicio",
         spese: "Movimientos",
         history: "Historial",
+        calendar: "Calendario",
         stats: "Estadísticas",
         appunti: "Notas",
         voice: "Voz",
         share: "Share",
         debtCredits: "Deudas / Créditos",
         shopping: "Compra",
-        consulenteAI: "Agente IA",
+        consulenteAI: "Agente",
         patrimonio: "Patrimonio",
         budget: "Presupuesto",
         goals: "Objetivos",
@@ -23337,13 +26747,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Accueil",
         spese: "Mouvements",
         history: "Historique",
+        calendar: "Calendrier",
         stats: "Statistiques",
         appunti: "Notes",
         voice: "Voix",
         share: "Share",
         debtCredits: "Dettes / Créances",
         shopping: "Courses",
-        consulenteAI: "Agent IA",
+        consulenteAI: "Agent",
         patrimonio: "Patrimoine",
         budget: "Budget",
         goals: "Objectifs",
@@ -23355,13 +26766,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Startseite",
         spese: "Buchungen",
         history: "Verlauf",
+        calendar: "Kalender",
         stats: "Statistiken",
         appunti: "Notizen",
         voice: "Stimme",
         share: "Share",
         debtCredits: "Schulden / Forderungen",
         shopping: "Einkauf",
-        consulenteAI: "KI-Agent",
+        consulenteAI: "Agent",
         patrimonio: "Vermögen",
         budget: "Budget",
         goals: "Ziele",
@@ -23373,13 +26785,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Início",
         spese: "Movimentos",
         history: "Histórico",
+        calendar: "Calendário",
         stats: "Estatísticas",
         appunti: "Apontamentos",
         voice: "Voz",
         share: "Share",
         debtCredits: "Dívidas / Créditos",
         shopping: "Compras",
-        consulenteAI: "Agente de IA",
+        consulenteAI: "Agente",
         patrimonio: "Património",
         budget: "Orçamento",
         goals: "Objetivos",
@@ -23391,13 +26804,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Start",
         spese: "Ruchy",
         history: "Historia",
+        calendar: "Kalendarz",
         stats: "Statystyki",
         appunti: "Notatki",
         voice: "Głos",
         share: "Share",
         debtCredits: "Długi / Należności",
         shopping: "Zakupy",
-        consulenteAI: "Agent AI",
+        consulenteAI: "Agent",
         patrimonio: "Majątek",
         budget: "Budżet",
         goals: "Cele",
@@ -23409,13 +26823,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Home",
         spese: "Mutaties",
         history: "Geschiedenis",
+        calendar: "Kalender",
         stats: "Statistieken",
         appunti: "Notities",
         voice: "Stem",
         share: "Share",
         debtCredits: "Schulden / Tegoeden",
         shopping: "Boodschappen",
-        consulenteAI: "AI-agent",
+        consulenteAI: "Agent",
         patrimonio: "Vermogen",
         budget: "Budget",
         goals: "Doelen",
@@ -23427,13 +26842,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Acasă",
         spese: "Mișcări",
         history: "Istoric",
+        calendar: "Calendar",
         stats: "Statistici",
         appunti: "Notițe",
         voice: "Voce",
         share: "Share",
         debtCredits: "Datorii / Creanțe",
         shopping: "Cumpărături",
-        consulenteAI: "Agent AI",
+        consulenteAI: "Agent",
         patrimonio: "Patrimoniu",
         budget: "Buget",
         goals: "Obiective",
@@ -23445,13 +26861,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         home: "Αρχική",
         spese: "Κινήσεις",
         history: "Ιστορικό",
+        calendar: "Ημερολόγιο",
         stats: "Στατιστικά",
         appunti: "Σημειώσεις",
         voice: "Φωνή",
         share: "Share",
         debtCredits: "Χρέη / Πιστώσεις",
         shopping: "Αγορές",
-        consulenteAI: "Πράκτορας AI",
+        consulenteAI: "Πράκτορας",
         patrimonio: "Περιουσία",
         budget: "Προϋπολογισμός",
         goals: "Στόχοι",
@@ -23464,15 +26881,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
   function allNavDefs() {
     return {
-      tools:{id:"tools",icon:"🧰",label:toolsText(lang,"title")},
+      tools:{id:"tools",icon:"🧰",label:toolsText(lang,"title"),badge:pendingCount},
       home: { id: "home", icon: "🏠", label: sectionLabel("home") },
       spese: {
         id: "spese",
         icon: "💸",
         label: sectionLabel("spese"),
-        badge: pendingCount,
       },
       history: { id: "history", icon: "📋", label: sectionLabel("history") },
+      calendar: { id: "calendar", icon: "🗓️", label: sectionLabel("calendar") },
       stats: { id: "stats", icon: "📊", label: sectionLabel("stats") },
       appunti: { id: "appunti", icon: "📝", label: sectionLabel("appunti") },
       voice: { id: "voice", icon: "🎙️", label: sectionLabel("voice") },
@@ -23619,6 +27036,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     "consulenteAI",
     "patrimonio",
     "budget",
+    "calendar",
     "share",
     "debtCredits",
     "shopping",
@@ -23669,7 +27087,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       name: (name || "").trim() || "Progetto Share",
       description: (description || "").trim(),
       icon: icon || "🤝",
-      color: color || "#4F8FF7",
+      color: readableDarkText(color || "#4F8FF7", dark, "#35354a"),
       ownerUid: userId,
       ownerName: owner.name,
       ownerEmail: owner.email,
@@ -23694,12 +27112,95 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setShareProjects(function (list) {
       return [p].concat(list || []);
     });
+    noteGrowthCreations(String(userId||''),'shareProjects',[],[p]);
     syncShareProjectToCloud(p);
     setShareSelectedProjectId(p.id);
     setShareProjectTab("attivita");
     return p;
   }
-  function updateShareProject(pid, fn) {
+  function applyCommittedShareProject(uid, pid, committed, includeNew = false) {
+    if (!uid || String(userId || "") !== uid || fbAuth.currentUser?.uid !== uid) return;
+    if (shareCashReceipts.current.uid !== uid) shareCashReceipts.current = { uid, projects: new Map() };
+    shareCashReceipts.current.projects.set(String(pid), committed);
+    setShareCashCloud(current => current.uid !== uid ? current : {...current,
+      projects: includeNew
+        ? filterShareProjectsByTombstones(mergeShareProjectArrays(current.projects, [committed]), latestShareProjectTombstones())
+        : current.projects.map(p => String(p.id)===String(pid) ? mergeShareProjectDeep(p,committed) : p)});
+    setShareProjects(list => includeNew
+      ? filterShareProjectsByTombstones(mergeShareProjectArrays(list, [committed]), latestShareProjectTombstones())
+      : list.map(p => String(p.id) === String(pid) ? mergeShareProjectDeep(p, committed) : p));
+  }
+  function acceptMundelyShareProjectCommit(event) {
+    const uid = String(event?.detail?.uid || "");
+    const project = event?.detail?.project;
+    if (!useNativeShareCommit(fbDb.app.options.projectId) || !uid || uid !== String(userId || "") || fbAuth.currentUser?.uid !== uid) return;
+    if (!project || typeof project !== "object" || !String(project.id || "")) return;
+    if (String(project.ownerUid || "") !== uid && !(Array.isArray(project.memberUids) ? project.memberUids : []).map(String).includes(uid)) return;
+    const known = shareProjectsRef.current.some(p => String(p.id) === String(project.id));
+    const linked = project.sourceApp === "mundely" && project.sourceEnvironment === "test"
+      && String(project.id).startsWith("mundely_") && !!String(project.mundelyTripId || "");
+    if (!known && !linked) return;
+    applyCommittedShareProject(uid, project.id, project, linked);
+  }
+  async function updatePersistedShareActivity(pid, activityId, apply, cashMethod, create = false) {
+    const uid = String(userId || "");
+    if (!uid || fbAuth.currentUser?.uid !== uid) throw Error("SHARE_SESSION_CHANGED");
+    const ref = doc(fbDb, "shareProjects", String(pid));
+    function preparePatch(remote) {
+      const existing = (remote.activities || []).some(a => String(a.id) === String(activityId));
+      if ((remote.deletedActivityIds || []).map(String).includes(String(activityId)) || existing === create)
+        throw Error(create ? "SHARE_ACTIVITY_EXISTS" : "SHARE_ACTIVITY_MISSING");
+      const local = shareProjectsRef.current.find(p => String(p.id) === String(pid));
+      const now = Math.max(Date.now(), shareProjectStamp(remote) + 1, shareProjectStamp(local) + 1,
+        ...[...(remote.activities || []), ...(local?.activities || [])].map(a => syncRecordTime(a) + 1));
+      const next = apply(remote);
+      const activities = (next.activities || []).map(a => String(a.id) === String(activityId)
+        ? { ...a, syncUpdatedAtMs: now, updatedAt: new Date(now).toISOString() } : a);
+      return { activities, deletedActivityIds: next.deletedActivityIds || [],
+        updatedAt: new Date(now).toISOString(), updatedAtMs: now, shareRevision: now };
+    }
+    const privateMethod = cashMethod ? {
+      key: shareCashMovementKey(pid, activityId),
+      data: {projectId:String(pid),activityId:String(activityId),methodId:cashMethod.methodId,direction:cashMethod.direction},
+    } : null;
+    const committed = useNativeShareCommit(fbDb.app.options.projectId)
+      ? await commitNativeShareActivity({projectId:String(pid),activityId:String(activityId),uid,
+          token:await fbAuth.currentUser.getIdToken(),apply:preparePatch,privateMethod})
+      : await runTransaction(fbDb, async tx => {
+          const snapshot = await tx.get(ref);
+          if (!snapshot.exists()) throw Error("SHARE_PROJECT_MISSING");
+          const remote = { ...snapshot.data(), id: snapshot.id };
+          const patch = preparePatch(remote);
+          tx.update(ref, sanitizeShareCloudValue(patch));
+          if (privateMethod) tx.set(doc(fbDb,"users",uid,"shareCashMethods",privateMethod.key),privateMethod.data);
+          return { ...remote, ...patch };
+        });
+    if (fbAuth.currentUser?.uid !== uid) return;
+    applyCommittedShareProject(uid, pid, committed);
+    if (cashMethod) {
+      const key = shareCashMovementKey(pid, activityId);
+      if (shareCashMethodReceipts.current.uid !== uid) shareCashMethodReceipts.current = { uid, methods: new Map() };
+      const pending = shareCashMethodReceipts.current.methods;
+      const previous = pending.get(key)?.previous ?? shareCashAssignments?.[key];
+      pending.set(key, { previous, confirmed: cashMethod });
+      setShareCashSnapshot(current => current.uid !== uid ? current : ({ uid, assignments: {
+        ...current.assignments, [key]: cashMethod,
+      }}));
+    }
+    try {
+      if (useNativeShareCommit(fbDb.app.options.projectId)
+          && (committed.deletedActivityIds || []).map(String).includes(String(activityId))
+          && !(committed.activities || []).some(a => String(a.id) === String(activityId))) {
+        await syncMundelyShareDeletionToMundely(committed, String(activityId));
+      }
+    } finally {
+      // The Share commit is already durable even if the reverse request fails.
+      window.dispatchEvent(new CustomEvent("fainance:share-mutated"));
+    }
+  }
+
+  function updateShareProject(pid, fn, cashMethod?: { activityId: string; methodId: string; direction: string }, persistedActivityId?: string, create = false) {
+    if (persistedActivityId != null) return updatePersistedShareActivity(pid, persistedActivityId, fn, cashMethod, create);
     setShareProjects(function (list) {
       return (list || []).map(function (p) {
         if (String(p.id) !== String(pid)) return p;
@@ -23713,7 +27214,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           candidate = { ...candidate, categories: p.categories || [] };
         }
         var updated = { ...candidate, updatedAt: nowIso, updatedAtMs: Date.now() };
-        syncShareProjectToCloud(updated);
+        syncShareProjectToCloud(updated, cashMethod);
         return updated;
       });
     });
@@ -23728,7 +27229,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     var participantId = String(participant.id || "");
     var projectId = String(project.id || "");
     var projectName = String(project.name || "Progetto Share");
-    return (Array.isArray(project.activities) ? project.activities : [])
+    return activeShareActivities(project)
       .filter(function (activity) {
         return activity && activity.kind !== "settlement";
       })
@@ -24092,7 +27593,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 border: "1px solid #F2B8B5",
                 background: dark ? "#3A2426" : "#FFF2F1",
-                color: expenseColor,
+                color: readableDarkText(expenseColor, dark, dark ? "#3A2426" : "#FFF2F1"),
                 borderRadius: 13,
                 padding: "11px 9px",
                 fontSize: 12,
@@ -24112,7 +27613,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 border: 0,
                 background: confirmButtonColor,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, confirmButtonColor),
                 borderRadius: 13,
                 padding: "11px 9px",
                 fontSize: 12,
@@ -24138,6 +27639,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     if (tab === "home") return <HomePanel />;
     if (tab === "spese") return <SpesePanel />;
     if (tab === "history") return <HistoryPanel />;
+    if (tab === "calendar") return <FinancialCalendarPanel />;
     if (tab === "more") return <MorePanel />;
     if (tab === "share")
       return <StableNestedPanelHost key="share" render={SharePanel} />;
@@ -24199,7 +27701,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               : dark
               ? "#252535"
               : "#fff",
-            color: active ? confirmButtonColor : textC,
+            color: readableDarkText(active ? confirmButtonColor : textC, dark, active
+              ? confirmButtonColor + "22"
+              : dark
+              ? "#252535"
+              : "#fff"),
             borderRadius: btnRadius,
             padding: "9px 8px",
             fontSize: 12,
@@ -24279,7 +27785,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 background: dark ? "#342424" : "#fff0f0",
                 border: "1px solid " + (dark ? "#5a3333" : "#f3b6b6"),
-                color: dark ? "#ffd0d0" : "#8a2d2d",
+                color: readableDarkText(dark ? "#ffd0d0" : "#8a2d2d", dark, dark ? "#342424" : "#fff0f0"),
                 borderRadius: 12,
                 padding: "10px 12px",
                 fontSize: 12,
@@ -24354,7 +27860,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 style={{
                   background: "transparent",
                   border: "none",
-                  color: confirmButtonColor,
+                  color: readableDarkText(confirmButtonColor, dark, "transparent"),
                   fontSize: 12,
                   fontWeight: 900,
                   cursor: "pointer",
@@ -24495,11 +28001,40 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     ]
   );
 
+  useEffect(function () {
+    if (!userId) return;
+    var cancelled = false;
+    var fetchSavedChoices = function () {
+      loadNotificationChannels().then(function (remote) {
+        if (cancelled || !remote.updatedAtMs) return;
+        setNotifPrefs(function (previous) {
+          if (Number(previous?.notificationChannelsUpdatedAtMs || 0) >= remote.updatedAtMs) return previous;
+          return {
+            ...previous,
+            notificationChannels: remote.channels,
+            notificationChannelsUpdatedAtMs: remote.updatedAtMs,
+          };
+        });
+      }).catch(function () { /* Legacy deployments may not have the callable yet. */ });
+    };
+    fetchSavedChoices();
+    window.addEventListener("focus", fetchSavedChoices);
+    return function () { cancelled = true; window.removeEventListener("focus", fetchSavedChoices); };
+  }, [userId]);
+
   useEffect(
     function () {
       var alive = true;
       var cleanupPush = function () {};
       if (!userId) return function () {};
+
+      const onMediaDestination = function (event) {
+        const destination = event.detail && event.detail.destination;
+        if (typeof destination === "string" && Object.prototype.hasOwnProperty.call(INTERNAL_DESTINATIONS, destination)) {
+          setTab(destination); setMobileMenu(false);
+        }
+      };
+      window.addEventListener("fainance:notification-destination", onMediaDestination);
 
       syncNotificationProfile(String(userId), String(lang || "en")).catch(function (error) {
         try { console.warn("Notification profile sync failed", error); } catch (_logProfile) {}
@@ -24510,6 +28045,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         language: String(lang || "en"),
         onAction: function (data) {
           if (!alive || !data) return;
+          if (data.type === "admin_campaign") {
+            const media = readNotificationMedia(data.media);
+            if (media && media.destination) { setTab(media.destination); setMobileMenu(false); }
+            else window.dispatchEvent(new CustomEvent("fainance:open-notifications"));
+            return;
+          }
           if (data.projectId) setShareSelectedProjectId(String(data.projectId));
           if (data.type === "share_invite" || data.actionType === "open_share_invite") {
             setTab("share");
@@ -24537,6 +28078,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
       return function () {
         alive = false;
+        window.removeEventListener("fainance:notification-destination", onMediaDestination);
         try { cleanupPush(); } catch (_cleanupPush) {}
       };
     },
@@ -24548,23 +28090,23 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     t,
     lang,
     cats,
-    setCats,
+    setCats: value => setCats(value, true),
     methods,
-    setMethods,
+    setMethods: value => setMethods(value, true),
     methodGroups,
-    setMethodGroups,
+    setMethodGroups: value => setMethodGroups(value, true),
     translateUiRuntimeText,
     monthShortName,
     monthFullName,
     expenseGroups,
-    setExpenseGroups,
+    setExpenseGroups: value => setExpenseGroups(value, true),
     incomeGroups,
-    setIncomeGroups,
+    setIncomeGroups: value => setIncomeGroups(value, true),
     incomeTypes,
     customIncomeTypes,
-    setCustomIncomeTypes,
+    setCustomIncomeTypes: value => setCustomIncomeTypes(value, true),
     incomeTypeOverrides,
-    setIncomeTypeOverrides,
+    setIncomeTypeOverrides: value => setIncomeTypeOverrides(value, true),
     recurring,
     setRecurring,
     goals,
@@ -24578,6 +28120,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setIncomes,
     movementSyncV2Active,
     movementSyncV2Mode,
+    replaceAccountMovementsV2,
     sym,
     fmt,
     dark,
@@ -24614,17 +28157,36 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     incomeColor,
     isMobile,
     patrimonioAreas,
-    setPatrimonioAreas,
+    setPatrimonioAreas: userSynchronizedSetting(setPatrimonioAreas, "patrimonio_areas_v1", "patrimonio_catalog_v2"),
     patrimonioEntries,
-    setPatrimonioEntries,
-    patrimonioValues,
-    setPatrimonioValues,
+    setPatrimonioEntries: userSynchronizedSetting(setPatrimonioEntries, "patrimonio_entries_v1", "patrimonio_catalog_v2"),
+    patrimonioValues: patrimonioAutomatic.values,
+    patrimonioAutomatic,
+    shareCashMovements,
+    shareCashAssignments,
+    persistPatrimonyTransfer: function (next) {
+      if (!firestoreReady || applyingFirestoreRef.current) return false;
+      const oldValues = readUserLocalJson("patrimonio_values_v1", {});
+      const oldHistory = readUserLocalJson("patrimonio_history_v1", {});
+      const oldEntries = readUserLocalJson("patrimonio_entries_v1", patrimonioEntries);
+      setPatrimonioValues(next.patrimonioValues);
+      setPatrimonioHistory(next.patrimonioHistory);
+      setPatrimonioEntries(next.patrimonioEntries);
+      const saved = readUserLocalJson("patrimonio_entries_v1", []);
+      const revisions = rows => rows.flatMap(entry => entry.fundTransfersV1 || []);
+      if (syncJsonEqual(readUserLocalJson("patrimonio_values_v1", null), next.patrimonioValues) &&
+          syncJsonEqual(readUserLocalJson("patrimonio_history_v1", null), next.patrimonioHistory) &&
+          syncJsonEqual(revisions(saved), revisions(next.patrimonioEntries))) return true;
+      setPatrimonioValues(oldValues);setPatrimonioHistory(oldHistory);setPatrimonioEntries(oldEntries);
+      return false;
+    },
+    setPatrimonioValues: userSynchronizedSetting(setPatrimonioValues, "patrimonio_values_v1", "patrimonio_data_v2"),
     patrimonioMode,
-    setPatrimonioMode,
-    patrimonioHistory,
-    setPatrimonioHistory,
+    setPatrimonioMode: userSynchronizedSetting(setPatrimonioMode, "patrimonio_mode_v1", "patrimony_preferences_v2"),
+    patrimonioHistory: patrimonioAutomatic.history,
+    setPatrimonioHistory: userSynchronizedSetting(setPatrimonioHistory, "patrimonio_history_v1", "patrimonio_data_v2"),
     patrimonioNotes,
-    setPatrimonioNotes,
+    setPatrimonioNotes: userSynchronizedSetting(setPatrimonioNotes, "patrimonio_notes_v1", "patrimonio_data_v2"),
     historyFutureMode,
     setHistoryFutureMode,
     historySortDate,
@@ -24665,15 +28227,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     secRateLoading,
     currency,
     showSecInHistory,
-    setShowSecInHistory,
+    setShowSecInHistory: userSynchronizedSetting(setShowSecInHistory, "pref_sec_history", "display_preferences_v2"),
     showSecInStats,
-    setShowSecInStats,
+    setShowSecInStats: userSynchronizedSetting(setShowSecInStats, "pref_sec_stats", "display_preferences_v2"),
     showSecInBudget,
-    setShowSecInBudget,
+    setShowSecInBudget: userSynchronizedSetting(setShowSecInBudget, "pref_sec_budget", "display_preferences_v2"),
     showSecInPatrimonio,
-    setShowSecInPatrimonio,
+    setShowSecInPatrimonio: userSynchronizedSetting(setShowSecInPatrimonio, "pref_sec_patrimonio", "display_preferences_v2"),
     showPatrimonioDecimals,
-    setShowPatrimonioDecimals,
+    setShowPatrimonioDecimals: userSynchronizedSetting(setShowPatrimonioDecimals, "pref_patrimonio_decimals_v1", "display_preferences_v2"),
 
     currentPlan,
     setCurrentPlan,
@@ -24737,7 +28299,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     markAlertsSeen,
     // ── Statistiche ────────────────────────────────────────────────────────
     statsView,
-    setStatsView,
+    setStatsView: userSynchronizedSetting(setStatsView, "pref_statsview", "display_preferences_v2"),
     curYear,
     yearExp,
     yearInc,
@@ -24783,8 +28345,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     shareCategoryMappings,
     setShareCategoryMappings,
     shareDefaultCategoryId: effectiveShareDefaultCategoryId,
+    shareDefaultMethodId,
+    setShareDefaultMethodId: userSynchronizedSetting(setShareDefaultMethodIdRaw, "share_default_method_v1", "preference_storage_v2"),
     setShareDefaultCategoryId,
     expensesForAnalysis,
+    countedExpenses,
+    countedExpensesForAnalysis,
+    countedIncomes,
+    isExpenseExcludedFromTotals,
+    isIncomeExcludedFromTotals,
     shareSelectedProjectId,
     setShareSelectedProjectId,
     shareProjectTab,
@@ -24824,11 +28393,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     shareReceiptUploads,
     setShareReceiptUploads,
     confirmButtonColor,
-    setConfirmButtonColor,
+    setConfirmButtonColor: userSynchronizedSetting(setConfirmButtonColor, "pref_confirm_color", "display_preferences_v2"),
     secondaryButtonColor,
-    setSecondaryButtonColor,
+    setSecondaryButtonColor: userSynchronizedSetting(setSecondaryButtonColor, "pref_secondary_button_color_v1", "display_preferences_v2"),
     nativeBannerSuppressed,
     setNativeBannerSuppressed,
+    setRecurringScreenActive,
     // ── Firestore / auth ────────────────────────────────────────────────────
     firestoreReady,
     isOffline,
@@ -24847,13 +28417,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     requestShareProjectDeletion,
     deleteShareProject,
     // ── Valori calcolati ────────────────────────────────────────────────────
+    accountingDate,
     pendingCount,
     alertTriggered,
+    allTriggeredAlertsData,
+
     getCat,
     getMethod,
     getIT,
     curMonthExp,
     curMonthInc,
+    curMonthBalance,
     last12Balance,
     // ── AI ─────────────────────────────────────────────────────────────────
     aiTab,
@@ -24906,14 +28480,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     showAppSummaryHeader,
     setShowAppSummaryHeader,
     firstDayOfWeek,
-    setFirstDayOfWeek,
+    setFirstDayOfWeek: userSynchronizedSetting(setFirstDayOfWeek, "pref_first_day_week", "display_preferences_v2"),
     mobileNavOrder,
     setMobileNavOrder,
     mobileNavIconCount,
     setMobileNavIconCount,
     mobileMenuOrder,
     setMobileMenuOrder,
-    setDateFmt,
+    setDateFmt: userSynchronizedSetting(setDateFmt, "pref_datefmt", "display_preferences_v2"),
     setBalancePeriodMode,
     setFinancialMonthStartDay,
     // ── AI floating ────────────────────────────────────────────────────────
@@ -25005,9 +28579,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     widget3SelectedGoalId,
     setWidget3SelectedGoalId,
     bgTheme,
-    setBgTheme,
+    setBgTheme: userSynchronizedSetting(setBgTheme, "pref_bg", "display_preferences_v2"),
     btnStyle,
-    setBtnStyle,
+    setBtnStyle: userSynchronizedSetting(setBtnStyle, "pref_btn_style", "display_preferences_v2"),
     // ── Misc ────────────────────────────────────────────────────────────────
     shownAlertIds,
     setShownAlertIds,
@@ -25068,7 +28642,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     normalizeOrder,
     normalizePhoneForLookup,
     now,
-    onLogout,
+    onLogout: flushUserStateAndLogout,
     onProfileUpdate,
     openFainanceStoreUrl,
     openPlanInfo,
@@ -25087,10 +28661,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setAppUpdateManualStatus,
     setBiometricLockMessage,
     setBiometricLockTimeout,
-    setCurrency,
+    setCurrency: userSynchronizedSetting(setCurrency, "pref_cur", "display_preferences_v2"),
     setExpenseCatsFromSettings,
-    setExpenseColor,
-    setIncomeColor,
+    setExpenseColor: userSynchronizedSetting(setExpenseColor, "pref_exp_color", "display_preferences_v2"),
+    setIncomeColor: userSynchronizedSetting(setIncomeColor, "pref_inc_color", "display_preferences_v2"),
     setInitialSetupStatus,
     setInstalledAppInfo,
     setLang,
@@ -25099,7 +28673,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setMetaEventsConsent,
     setMobileAllNavOrder,
     setPlanBillingPeriod,
-    setSecondaryCurrency,
+    setSecondaryCurrency: userSynchronizedSetting(setSecondaryCurrency, "pref_sec_cur", "display_preferences_v2"),
     setSecurityPinDraft,
     setShoppingAreaColors,
     setShoppingDeletedRecordsRaw,
@@ -25162,9 +28736,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
 
   return (
     <AppCtx.Provider value={ctxValue}>
+      <AppViewport /><DarkTextDefaults dark={dark} background={bgColor} />
       <style>{"input:focus::placeholder,textarea:focus::placeholder{color:transparent!important;opacity:0!important;}"}</style>
-      {firestoreReady && !appLocked && (
+      {accountUiReady && !!userId && !appLocked && (
         <NotificationCenter
+          actionsHost={summaryActionsHost}
           userId={String(userId || "")}
           onProfile={function () {
             setTab("settings");
@@ -25212,11 +28788,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               setTab("share");
               setShareProjectTab("riassunto");
               loadShareCollaboration();
+            } else if (notification.type === "recurring_confirmation" || notification.actionType === "open_recurring") {
+              setTab("tools");
+              setMobileMenu(false);
+              window.setTimeout(function () {
+                window.dispatchEvent(new CustomEvent("fainance:open-tool", { detail: { page: "recurring" } }));
+              }, 0);
             }
           }}
         />
       )}
-      {!firestoreReady ? (
+      {!accountUiReady ? (
         <div
           style={{
             position: "fixed",
@@ -25237,7 +28819,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             Caricamento dati account...
           </div>
         </div>
-      ) : appLocked ? (
+      ) : appLocked || (biometricLockEnabled && !biometricInitialCheckRef.current &&
+          (localLockMethod !== "pin" || validateLocalPin(localLockPin))) ? (
         BiometricLockScreen()
       ) : isMobile ? (
         <div
@@ -25252,10 +28835,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             flexDirection: "column",
             background: bgColor,
             overflow: "hidden",
-            paddingTop:
-              fainanceNativePlatform() === "ios"
-                ? "max(env(safe-area-inset-top, 0px), 44px)"
-                : "env(safe-area-inset-top, 0px)",
+            paddingTop: "env(safe-area-inset-top, 0px)",
             paddingBottom: "env(safe-area-inset-bottom, 0px)",
             boxSizing: "border-box",
             ...({
@@ -25264,75 +28844,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } as any),
           }}
         >
-          {showAppSummaryHeader && (
-              <div
-                className="fainance-mobile-summary"
-                style={{
-                  background: headerBg,
-                  borderBottom: "1px solid " + borderC,
-                  padding: "9px clamp(10px,3.7vw,16px) 8px",
-                  flexShrink: 0,
-                }}
-              >
-                <div
-                  className="fainance-summary-values"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(3,minmax(0,1fr))",
-                    columnGap: "clamp(4px,2.3vw,10px)",
-                    width: "100%",
-                    boxSizing: "border-box",
-                    paddingRight: firestoreReady && !appLocked ? "clamp(82px,24vw,106px)" : 0,
-                  }}
-                >
-                  <div style={{ textAlign: "center", minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: subC }}>
-                      {translateUiRuntimeText("Uscite")}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 19,
-                        fontWeight: 600,
-                        color: expenseColor,
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {fmtHeader(curMonthExp)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "center", minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: subC }}>
-                      {translateUiRuntimeText("Saldo")}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 17,
-                        fontWeight: 600,
-                        color: BALANCE_COLOR,
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {fmtHeader(curMonthInc - curMonthExp)}
-                    </div>
-                  </div>
-                  <div style={{ textAlign: "center", minWidth: 0 }}>
-                    <div style={{ fontSize: 11, color: subC }}>
-                      {translateUiRuntimeText("Entrate")}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 19,
-                        fontWeight: 600,
-                        color: incomeColor,
-                        fontVariantNumeric: "tabular-nums",
-                      }}
-                    >
-                      {fmtHeader(curMonthInc)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          {mobileSummaryVisible && <AppSummaryHeader actionsRef={setSummaryActionsHost} background={headerBg} border={borderC} subtle={subC} values={[[translateUiRuntimeText("Uscite"),fmtHeader(curMonthExp),readableDarkText(expenseColor,dark,headerBg)],[translateUiRuntimeText("Saldo"),fmtHeader(curMonthBalance),readableDarkText(BALANCE_COLOR,dark,headerBg)],[translateUiRuntimeText("Entrate"),fmtHeader(curMonthInc),readableDarkText(incomeColor,dark,headerBg)]]} />}
           {TopAdBox()}
           <div
             className="fainance-mobile-content"
@@ -25372,6 +28884,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               return (
                 <button
                   key={item.id}
+                  aria-label={item.label}
+                  title={typeof item.label === "string" ? item.label : undefined}
                   onClick={function () {
                     if (item.id === "voice") {
                       openVoiceModal();
@@ -25381,11 +28895,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       setSettingsPage(null);
                       setMobileMenu(false);
                     } else if (item.id === "more") {
-                      setTab("more");
                       setMobileMenu(function (s) {
                         return !s;
                       });
-                      setSettingsPage(null);
                     } else {
                       setTab(item.id);
                       setMobileMenu(false);
@@ -25403,11 +28915,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     gap: 2,
                     cursor: "pointer",
                     color:
-                      tab === item.id ||
+                      readableDarkText(tab === item.id ||
                       (item.id === "more" && tab === "more") ||
                       (item.id === "voice" && voiceModal)
                         ? textC
-                        : subC,
+                        : subC, dark, "transparent"),
                     borderTop:
                       tab === item.id ||
                       (item.id === "more" && tab === "more") ||
@@ -25419,7 +28931,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   <span style={{ fontSize: 17, height: 32, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>{item.icon}</span>
                   <span
                     style={{
-                      fontSize: 9,
+                      fontSize: "clamp(8px,2.2vw,10px)",
+                      width: "100%",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
                       fontWeight:
                         tab === item.id ||
                         (item.id === "more" && tab === "more") ||
@@ -25439,11 +28955,14 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               style={{
                 position: "fixed",
                 inset: 0,
+                top: "var(--app-viewport-top,0px)",
+                bottom: "auto",
+                height: "var(--app-viewport-height,100dvh)",
                 background: "rgba(0,0,0,0.4)",
                 zIndex: 9998,
                 display: "flex",
                 alignItems: "flex-end",
-                paddingBottom: 0,
+                padding: "calc(env(safe-area-inset-top,0px) + 12px) 0 env(safe-area-inset-bottom,0px)",
                 boxSizing: "border-box",
               }}
               onClick={function () {
@@ -25455,7 +28974,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                   background: cardBg,
                   borderRadius: "20px 20px 0 0",
                   width: "100%",
-                  maxHeight: "72vh",
+                  maxHeight: "100%",
                   overflow: "hidden",
                   display: "flex",
                   flexDirection: "column",
@@ -25480,7 +28999,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     zIndex: 5,
                   }}
                 >
-                  <div style={{ fontSize: 16, fontWeight: 900, color: dark ? "#FFF7D8" : "#6B5900" }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: readableDarkText(dark ? "#FFF7D8" : "#6B5900", dark, dark ? "#4F482A" : "#FFF3C4") }}>
                     {translateUiRuntimeText("Altro")}
                   </div>
                   <button
@@ -25494,7 +29013,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                       borderRadius: 9,
                       border: "1px solid #FCA5A5",
                       background: "#FFF0F0",
-                      color: "#F87171",
+                      color: readableDarkText("#F87171", dark, "#FFF0F0"),
                       fontSize: 16,
                       fontWeight: 900,
                       cursor: "pointer",
@@ -25510,7 +29029,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                     overflowY: "auto",
                     WebkitOverflowScrolling: "touch",
                     overscrollBehavior: "contain",
-                    padding: "0 16px calc(104px + env(safe-area-inset-bottom, 0px))",
+                    padding: "0 16px 8px",
                     background: cardBg,
                   }}
                 >
@@ -25529,23 +29048,23 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                           display: "flex",
                           alignItems: "center",
                           gap: 14,
-                          padding: "12px 8px",
+                          padding: "clamp(7px,1.05dvh,12px) 8px",
                           border: "none",
                           background: "transparent",
                           borderBottom: "1px solid " + borderC,
                           fontSize: 15,
                           cursor: "pointer",
-                          color: textC,
+                          color: readableDarkText(textC, dark, "transparent"),
                         }}
                       >
-                        <span style={{ fontSize: 22 }}>{item.icon}</span>
+                        <span style={{ fontSize: 22, width: 32, height: 32, flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{item.icon}</span>
                         {item.label}
                         {item.badge > 0 && (
                           <span
                             style={{
                               marginLeft: "auto",
                               background: expenseColor,
-                              color: "#fff",
+                              color: readableDarkText("#fff", dark, expenseColor),
                               borderRadius: "50%",
                               width: 20,
                               height: 20,
@@ -25574,7 +29093,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                 right: 0,
                 zIndex: 9998,
                 background: "#E24B4A",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, "#E24B4A"),
                 textAlign: "center",
                 fontSize: 13,
                 fontWeight: 700,
@@ -25599,19 +29118,115 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               item={editingItem.item}
               isExp={editingItem.isExp}
               onSave={function (updated) {
-                if (editingItem.isExp) {
-                  setExpenses(
-                    expenses.map(function (e) {
-                      return e.id === updated.id ? updated : e;
-                    })
+                var originalEditingItem = editingItem.item || {};
+                function isSameEditedMovement(row) {
+                  if (!row) return false;
+                  if (
+                    row.id !== undefined &&
+                    row.id !== null &&
+                    updated.id !== undefined &&
+                    updated.id !== null &&
+                    String(row.id) === String(updated.id)
+                  )
+                    return true;
+                  var occurrenceId = String(
+                    updated.recurringOccurrenceId ||
+                      originalEditingItem.recurringOccurrenceId ||
+                      ""
                   );
+                  if (
+                    occurrenceId &&
+                    String(row.recurringOccurrenceId || "") === occurrenceId
+                  )
+                    return true;
+                  var recurringRuleId = String(
+                    updated.recurringRuleId ||
+                      originalEditingItem.recurringRuleId ||
+                      ""
+                  );
+                  var recurringOccurrenceDate = String(
+                    updated.recurringOccurrenceDate ||
+                      originalEditingItem.recurringOccurrenceDate ||
+                      ""
+                  );
+                  return !!(
+                    recurringRuleId &&
+                    recurringOccurrenceDate &&
+                    String(row.recurringRuleId || "") === recurringRuleId &&
+                    String(row.recurringOccurrenceDate || "") === recurringOccurrenceDate
+                  );
+                }
+                function editedRow(row) {
+                  var next = { ...row, ...updated, id: row.id, updatedAt: new Date().toISOString() };
+                  if (next.recurringOccurrenceId || next.recurringRuleId || String(next.source || "") === "recurring") {
+                    next.recurringOverride = true;
+                    next.recurringOverrideUpdatedAt = next.updatedAt;
+                  }
+                  // Never detach an edited occurrence from its recurring source.
+                  ["recurringOccurrenceId", "recurringRuleId", "recurringOccurrenceDate", "source", "createdAt"].forEach(function (key) {
+                    if ((next[key] === undefined || next[key] === null || next[key] === "") && row[key] !== undefined)
+                      next[key] = row[key];
+                  });
+                  if (editingItem.isExp && next.recurringRuleId) {
+                    var rule = (recurringRef.current || []).find(function (candidate) {
+                      return String(candidate && candidate.id) === String(next.recurringRuleId);
+                    });
+                    if (rule) {
+                      if (!validRecurringReference(next.catId) && validRecurringReference(rule.catId)) next.catId = rule.catId;
+                      if (!validRecurringReference(next.methodId) && validRecurringReference(rule.methodId)) next.methodId = rule.methodId;
+                    }
+                  }
+                  return next;
+                }
+                var current = editingItem.isExp
+                  ? (Array.isArray(expensesRef.current) ? expensesRef.current : [])
+                  : (Array.isArray(incomesRef.current) ? incomesRef.current : []);
+                var matchedIndex = current.findIndex(isSameEditedMovement);
+                if (matchedIndex < 0) {
+                  setToast({
+                    text: "Movimento non trovato. Riapri lo storico e riprova.",
+                    type: "warning",
+                    color: "#EF9F27",
+                    icon: "⚠️",
+                  });
+                  return;
+                }
+                var nextList = current.slice();
+                var proposedEdit = editedRow(current[matchedIndex]);
+                // Only rules explicitly opted in for edits are eligible. Values
+                // changed by the user in this edit are never overwritten.
+                var untouchedRuleFields = ['catId','type','methodId','desc','tags','note'].filter(function (field) {
+                  return JSON.stringify(proposedEdit[field]) === JSON.stringify(current[matchedIndex][field]);
+                });
+                if(['rateizzato','rate','rateDirection'].every(function(field){return JSON.stringify(proposedEdit[field])===JSON.stringify(current[matchedIndex][field]);}))untouchedRuleFields.push('installments');
+                var editRuleResult;
+                try {
+                  editRuleResult = evaluateAutomaticRules(
+                    financeEvolutionRef.current.rules,
+                    { ...proposedEdit, _ruleDefaultFields: untouchedRuleFields },
+                    editingItem.isExp ? 'expense' : 'income',
+                    String(proposedEdit.source || 'manual'),
+                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes, instalmentOptions:planLimits.instalmentOptions }
+                  );
+                } catch (e) {
+                  setToast({text:rulesText(lang,'error'),type:'error'});
+                  return;
+                }
+                nextList[matchedIndex] = editRuleResult.item;
+                // Legacy duplicates of the same recurring occurrence receive the same edit,
+                // so a stale duplicate cannot immediately reappear after synchronization.
+                if (nextList[matchedIndex].recurringOccurrenceId || nextList[matchedIndex].recurringRuleId) {
+                  nextList = nextList.map(function (row, index) {
+                    return index !== matchedIndex && isSameEditedMovement(row)
+                      ? { ...editedRow(row), ...Object.fromEntries(editRuleResult.changed.map(function (field) { return [field,editRuleResult.item[field]]; })) }
+                      : row;
+                  });
+                }
+                if (editingItem.isExp) {
+                  setExpenses(nextList);
                   setToast("Spesa aggiornata");
                 } else {
-                  setIncomes(
-                    incomes.map(function (i) {
-                      return i.id === updated.id ? updated : i;
-                    })
-                  );
+                  setIncomes(nextList);
                   setToast("Entrata aggiornata");
                 }
                 setEditingItem(null);
@@ -25637,61 +29252,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             } as any),
           }}
         >
-          {showAppSummaryHeader && (
-              <div
-                style={{
-                  background: headerBg,
-                  borderBottom: "1px solid " + borderC,
-                  padding: "10px 108px 10px 24px",
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{ display: "flex", gap: 24 }}>
-                  {[
-                    [
-                      translateUiRuntimeText("Uscite"),
-                      expenseColor,
-                      fmtHeader(curMonthExp),
-                    ],
-                    [
-                      translateUiRuntimeText("Saldo"),
-                      BALANCE_COLOR,
-                      fmtHeader(curMonthInc - curMonthExp),
-                    ],
-                    [
-                      translateUiRuntimeText("Entrate"),
-                      incomeColor,
-                      fmtHeader(curMonthInc),
-                    ],
-                  ].map(function (item) {
-                    return (
-                      <div key={item[0]} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 10, color: subC }}>
-                          {item[0]}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 16,
-                            fontWeight: 600,
-                            color: item[1],
-                          }}
-                        >
-                          {item[2]}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <span style={{ fontSize: 11, color: subC }}>
-                    {curYear}: {fmt(yearExp)} / {fmt(yearInc)}
-                  </span>
-                </div>
-              </div>
-            )}
+          {mobileSummaryVisible && <AppSummaryHeader actionsRef={setSummaryActionsHost} background={headerBg} border={borderC} subtle={subC} values={[[translateUiRuntimeText("Uscite"),fmtHeader(curMonthExp),readableDarkText(expenseColor,dark,headerBg)],[translateUiRuntimeText("Saldo"),fmtHeader(curMonthBalance),readableDarkText(BALANCE_COLOR,dark,headerBg)],[translateUiRuntimeText("Entrate"),fmtHeader(curMonthInc),readableDarkText(incomeColor,dark,headerBg)]]} />}
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
             <div
               style={{
@@ -25733,9 +29294,13 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                             : "#f0f0f0"
                           : "transparent",
                       color:
-                        tab === item.id || (item.id === "voice" && voiceModal)
+                        readableDarkText(tab === item.id || (item.id === "voice" && voiceModal)
                           ? textC
-                          : subC,
+                          : subC, dark, tab === item.id || (item.id === "voice" && voiceModal)
+                          ? dark
+                            ? "#2a2a3e"
+                            : "#f0f0f0"
+                          : "transparent"),
                       fontSize: 14,
                       cursor: "pointer",
                       fontWeight:
@@ -25754,7 +29319,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
                           position: "absolute",
                           right: 14,
                           background: expenseColor,
-                          color: "#fff",
+                          color: readableDarkText("#fff", dark, expenseColor),
                           borderRadius: "50%",
                           width: 18,
                           height: 18,
@@ -25814,19 +29379,115 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               item={editingItem.item}
               isExp={editingItem.isExp}
               onSave={function (updated) {
-                if (editingItem.isExp) {
-                  setExpenses(
-                    expenses.map(function (e) {
-                      return e.id === updated.id ? updated : e;
-                    })
+                var originalEditingItem = editingItem.item || {};
+                function isSameEditedMovement(row) {
+                  if (!row) return false;
+                  if (
+                    row.id !== undefined &&
+                    row.id !== null &&
+                    updated.id !== undefined &&
+                    updated.id !== null &&
+                    String(row.id) === String(updated.id)
+                  )
+                    return true;
+                  var occurrenceId = String(
+                    updated.recurringOccurrenceId ||
+                      originalEditingItem.recurringOccurrenceId ||
+                      ""
                   );
+                  if (
+                    occurrenceId &&
+                    String(row.recurringOccurrenceId || "") === occurrenceId
+                  )
+                    return true;
+                  var recurringRuleId = String(
+                    updated.recurringRuleId ||
+                      originalEditingItem.recurringRuleId ||
+                      ""
+                  );
+                  var recurringOccurrenceDate = String(
+                    updated.recurringOccurrenceDate ||
+                      originalEditingItem.recurringOccurrenceDate ||
+                      ""
+                  );
+                  return !!(
+                    recurringRuleId &&
+                    recurringOccurrenceDate &&
+                    String(row.recurringRuleId || "") === recurringRuleId &&
+                    String(row.recurringOccurrenceDate || "") === recurringOccurrenceDate
+                  );
+                }
+                function editedRow(row) {
+                  var next = { ...row, ...updated, id: row.id, updatedAt: new Date().toISOString() };
+                  if (next.recurringOccurrenceId || next.recurringRuleId || String(next.source || "") === "recurring") {
+                    next.recurringOverride = true;
+                    next.recurringOverrideUpdatedAt = next.updatedAt;
+                  }
+                  // Never detach an edited occurrence from its recurring source.
+                  ["recurringOccurrenceId", "recurringRuleId", "recurringOccurrenceDate", "source", "createdAt"].forEach(function (key) {
+                    if ((next[key] === undefined || next[key] === null || next[key] === "") && row[key] !== undefined)
+                      next[key] = row[key];
+                  });
+                  if (editingItem.isExp && next.recurringRuleId) {
+                    var rule = (recurringRef.current || []).find(function (candidate) {
+                      return String(candidate && candidate.id) === String(next.recurringRuleId);
+                    });
+                    if (rule) {
+                      if (!validRecurringReference(next.catId) && validRecurringReference(rule.catId)) next.catId = rule.catId;
+                      if (!validRecurringReference(next.methodId) && validRecurringReference(rule.methodId)) next.methodId = rule.methodId;
+                    }
+                  }
+                  return next;
+                }
+                var current = editingItem.isExp
+                  ? (Array.isArray(expensesRef.current) ? expensesRef.current : [])
+                  : (Array.isArray(incomesRef.current) ? incomesRef.current : []);
+                var matchedIndex = current.findIndex(isSameEditedMovement);
+                if (matchedIndex < 0) {
+                  setToast({
+                    text: "Movimento non trovato. Riapri lo storico e riprova.",
+                    type: "warning",
+                    color: "#EF9F27",
+                    icon: "⚠️",
+                  });
+                  return;
+                }
+                var nextList = current.slice();
+                var proposedEdit = editedRow(current[matchedIndex]);
+                // Only rules explicitly opted in for edits are eligible. Values
+                // changed by the user in this edit are never overwritten.
+                var untouchedRuleFields = ['catId','type','methodId','desc','tags','note'].filter(function (field) {
+                  return JSON.stringify(proposedEdit[field]) === JSON.stringify(current[matchedIndex][field]);
+                });
+                if(['rateizzato','rate','rateDirection'].every(function(field){return JSON.stringify(proposedEdit[field])===JSON.stringify(current[matchedIndex][field]);}))untouchedRuleFields.push('installments');
+                var editRuleResult;
+                try {
+                  editRuleResult = evaluateAutomaticRules(
+                    financeEvolutionRef.current.rules,
+                    { ...proposedEdit, _ruleDefaultFields: untouchedRuleFields },
+                    editingItem.isExp ? 'expense' : 'income',
+                    String(proposedEdit.source || 'manual'),
+                    { event:'edit', plan:currentPlan, cats, methods, incomeTypes, instalmentOptions:planLimits.instalmentOptions }
+                  );
+                } catch (e) {
+                  setToast({text:rulesText(lang,'error'),type:'error'});
+                  return;
+                }
+                nextList[matchedIndex] = editRuleResult.item;
+                // Legacy duplicates of the same recurring occurrence receive the same edit,
+                // so a stale duplicate cannot immediately reappear after synchronization.
+                if (nextList[matchedIndex].recurringOccurrenceId || nextList[matchedIndex].recurringRuleId) {
+                  nextList = nextList.map(function (row, index) {
+                    return index !== matchedIndex && isSameEditedMovement(row)
+                      ? { ...editedRow(row), ...Object.fromEntries(editRuleResult.changed.map(function (field) { return [field,editRuleResult.item[field]]; })) }
+                      : row;
+                  });
+                }
+                if (editingItem.isExp) {
+                  setExpenses(nextList);
                   setToast("Spesa aggiornata");
                 } else {
-                  setIncomes(
-                    incomes.map(function (i) {
-                      return i.id === updated.id ? updated : i;
-                    })
-                  );
+                  setIncomes(nextList);
                   setToast("Entrata aggiornata");
                 }
                 setEditingItem(null);
@@ -25841,8 +29502,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       {shareDeletionPrompt && ShareDeletionDecisionModal()}
       <GlobalToastHost />
       <GlobalNumericInputAssist />
-      {firestoreReady && firestoreHydratedRef.current && userId && !appLocked && termsAccepted && privacyAccepted &&
-        !initialSetupOpen && !onboardingGuideOpen && !financeEvolution.periodIntroductionSeen &&
+      {movementBulkBusy && <MovementBulkProgressOverlay dark={dark} L={L}
+        movementBulkCancelRef={movementBulkCancelRef} progressRef={movementBulkProgressRef} />}
+      {firestoreReady && firestoreHydratedRef.current && financeCloudReceipt?.uid === userId && userId && !appLocked && termsAccepted && privacyAccepted &&
+        !initialSetupOpen && !onboardingGuideOpen && !periodConfirmation &&
+        syncJsonEqual(financeCloudReceipt.value, financeEvolution) && !financeEvolution.periodIntroductionSeen &&
         <PeriodPreferences introduction />}
       {onboardingGuideOpen &&
         !appLocked &&

@@ -1,0 +1,41 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {createFinanceEvolution,migrateFinanceEvolution,mergeFinanceEvolution} from '../src/data/financeEvolution.js';
+import {evaluateAutomaticRules,validateAutomaticRule,ruleLimit} from '../src/finance/automaticRules.js';
+import {saveAutomaticRule,deleteAutomaticRule,reorderAutomaticRules} from '../src/finance/automaticRuleStore.js';
+import {loadTypeScript} from './loadTypeScript.mjs';
+const rule={id:'pool',kind:'automatic-v1',name:'Biliardo',enabled:true,revision:0,priority:0,trigger:'expense',match:'all',conditions:[{field:'description',operator:'contains',value:'biliardo'}],actions:[{field:'category',value:2},{field:'payment',value:3}],alert:{kind:'confirmation',text:'Confermi la spesa?'}};
+const input={id:1,desc:'Partita a BILIARDO',catId:1,methodId:1,methodName:'Old default',amount:17,_ruleDefaultFields:['catId','methodId']};
+const options={plan:'premium',cats:[{id:1},{id:2}],methods:[{id:1},{id:3}],incomeTypes:[{id:'salary'},{id:'gift'}]};
+let result=evaluateAutomaticRules([rule],input,'expense','manual',options);
+assert.equal(result.item.catId,2);assert.equal(result.item.methodId,3);assert(!('methodName' in result.item));assert(!('_ruleDefaultFields' in result.item));assert.equal(result.item.amount,17);assert.equal(input.catId,1);
+assert.equal(result.alerts.length,1);
+result=evaluateAutomaticRules([rule],{...input,_ruleDefaultFields:[]},'expense','manual',options);assert.equal(result.item.catId,1);assert.equal(result.item.methodId,1);assert.equal(result.alerts.length,1);
+const cascade={...rule,id:'cascade',priority:1,conditions:[{field:'category',operator:'equals',value:2}],actions:[{field:'description',value:'Changed'}],alert:null};
+result=evaluateAutomaticRules([rule,cascade],input,'expense','manual',options);assert.deepEqual(result.matched,['pool'],'Changes never trigger another rule');
+const conflict={...rule,id:'second',priority:1,actions:[{field:'category',value:1}],alert:null};
+assert.equal(evaluateAutomaticRules([conflict,rule],input,'expense','manual',options).item.catId,2,'Priority wins independently of array order');
+assert.equal(evaluateAutomaticRules([{...rule,enabled:false}],input,'expense','manual',options).matched.length,0);
+assert.equal(evaluateAutomaticRules([rule],input,'income','manual',options).matched.length,0);
+const numeric={...rule,conditions:[{field:'amount',operator:'greater',value:10},{field:'source',operator:'equals',value:'voice'}],match:'all'};
+assert.equal(evaluateAutomaticRules([numeric],input,'expense','manual',options).matched.length,0);
+assert.equal(evaluateAutomaticRules([{...numeric,match:'any'}],input,'expense','manual',options).matched.length,1);
+assert.equal(evaluateAutomaticRules([numeric],input,'expense','voice',options).matched.length,1);
+const income={...rule,trigger:'income',actions:[{field:'category',value:'gift'}]};
+assert.equal(evaluateAutomaticRules([income],{...input,type:'salary',_ruleDefaultFields:['type']},'income','assistant',options).item.type,'gift');
+assert.equal(evaluateAutomaticRules([rule],input,'expense','tool',{...options,cats:[]}).item.catId,1,'Deleted category is never assigned');
+for(const mutate of [r=>r.actions.push({field:'amount',value:0}),r=>r.conditions[0].operator='regex',r=>r.alert.kind='unknown',r=>r.priority=-1,r=>r.actions.push(r.actions[0]),r=>r.conditions=[]]){const bad=structuredClone(rule);mutate(bad);assert.throws(()=>validateAutomaticRule(bad));}
+let f=saveAutomaticRule(createFinanceEvolution(),rule,'free');
+assert.throws(()=>saveAutomaticRule(f,{...rule,id:'second'},'free'),/LIMIT/);
+f=saveAutomaticRule(f,{...conflict,id:'second'},'base');
+assert.throws(()=>saveAutomaticRule(f,{...rule,id:'third'},'base'),/LIMIT/);
+assert.throws(()=>saveAutomaticRule(f,{...rule,expectedRevision:7},'premium'),/CONFLICT/);
+const backup=JSON.parse(JSON.stringify(f));assert.deepEqual(migrateFinanceEvolution(backup),f);assert.deepEqual(mergeFinanceEvolution(f,backup),f);
+const ordered=reorderAutomaticRules(f,['second','pool'],JSON.stringify(f.rules));assert.equal(evaluateAutomaticRules(ordered.rules,input,'expense','manual',options).item.catId,1);
+assert.throws(()=>reorderAutomaticRules(ordered,['pool','second'],JSON.stringify(f.rules)),/CONFLICT/);
+assert.equal(deleteAutomaticRule(ordered,'pool',1).rules.length,1);
+assert.equal(ruleLimit('premium'),Infinity);assert.equal(ruleLimit('base'),2);assert.equal(ruleLimit('unknown'),1);
+const rows=loadTypeScript('src/i18n/automaticRulesTranslations.ts').automaticRulesRows;assert.equal(Object.keys(rows).length,10);for(const row of Object.values(rows)){assert.equal(row.length,rows.it.length);assert(row.every(v=>typeof v==='string'&&v.trim()));}
+const app=fs.readFileSync('src/app.tsx','utf8');for(const name of ['addExpenses','addIncomes']){const a=app.indexOf('function '+name+'('),b=app.indexOf('\n  function ',a+10),body=app.slice(a,b);assert(body.includes('prepareAutomaticMovements'));assert(body.indexOf('approveAutomaticAlerts')<body.indexOf('function save()'));}
+const widget=fs.readFileSync('src/widget.tsx','utf8');assert(widget.includes('if(onSave(item)===false)return;'),'Cancellation retains the manual draft');
+console.log('Automatic rules: explicit fields, defaults, priority, no cascade, all/any, voice/AI/tool, missing targets, limits, revisions, backup and translations passed');

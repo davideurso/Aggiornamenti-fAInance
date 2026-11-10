@@ -1,0 +1,77 @@
+import assert from 'node:assert/strict';
+import {createFinanceEvolution,migrateFinanceEvolution,mergeFinanceEvolution} from '../src/data/financeEvolution.js';
+import {createSavingsBucket} from '../src/finance/savingsBuckets.js';
+import {saveSavingsEntry,cancelSavingsEntry} from '../src/finance/savingsLedger.js';
+import {closurePreview,closeSavingsPeriod,coverSavingsDeficit,distributeSavings,deficitRemaining} from '../src/finance/savingsClosure.js';
+import {goalSavedAmount} from '../src/finance/savingsGoals.js';
+import {loadTypeScript} from './loadTypeScript.mjs';
+const now='2026-09-14T12:00:00.000Z';
+const base=()=>{let f=createFinanceEvolution();for(const id of ['a','b'])f=createSavingsBucket(f,{id,name:id,currency:'EUR'});return f;};
+const args={legacyPlan:{income:1000,items:[{catId:1,amount:500}],savingsPlannedAmounts:{a:300,b:200}},expenses:[{date:'2026-08-05',amount:600}],incomes:[{date:'2026-08-01',amount:1000}],periodKey:'2026-08',currency:'EUR',today:'2026-09-14'};
+function preview(f,input=args){return closurePreview(f,input.legacyPlan,input.expenses,input.incomes,input.periodKey,input.currency,input.today);}
+function close(f,input=args,amounts){const p=preview(f,input);return closeSavingsPeriod(f,{...input,expectedToken:p.token,allocations:amounts||p.proposal},now);}
+let f=base();f.savings.buckets[0].goalId='g';
+const goal={id:'g',saved:20,target:1000};
+f=saveSavingsEntry(f,{id:'manual',bucketId:'a',currency:'EUR',date:'2026-08-10',source:'planned',amountMinor:10000},'2026-08-10T12:00:00Z');
+assert.equal(preview(f).snapshot.availableMinor,30000,'400 real minus 100 already deposited');
+const p=preview(f);assert.deepEqual(p.proposal,{a:18000,b:12000});
+const closed=close(f,{...args,goals:[goal]});
+assert.deepEqual(closed.savings.buckets.map(b=>b.balanceMinor),[28000,12000]);
+assert.equal(goalSavedAmount(closed,goal,'EUR'),300,'Manual goal 20 plus original 100 plus closure 180');
+assert.equal(closed.savings.closures[0].realMinor,40000);
+assert.equal(closed.savings.closures[0].residualMinor,0);
+assert.throws(()=>closeSavingsPeriod(closed,{...args,expectedToken:p.token,allocations:p.proposal},now),/ALREADY_CLOSED/);
+assert.throws(()=>cancelSavingsEntry(closed,'manual',0,now),/CLOSED_SAVINGS_ENTRY/);
+assert.throws(()=>saveSavingsEntry(closed,{id:'late',bucketId:'a',currency:'EUR',date:'2026-08-20',source:'extra',amountMinor:100},now),/CLOSED_SAVINGS_ENTRY/);
+assert.deepEqual(migrateFinanceEvolution(JSON.parse(JSON.stringify(closed))),closed);
+assert.deepEqual(mergeFinanceEvolution(closed,closed),closed);
+assert.equal(closurePreview(closed,null,[],[],'2026-08','EUR','2026-09-14').existing.realMinor,40000,'Later transaction changes do not rewrite closure');
+assert.throws(()=>preview(base(),{...args,periodKey:'2026-09'}),/NOT_ENDED/);
+const changed=saveSavingsEntry(f,{id:'new',bucketId:'b',currency:'EUR',date:'2026-08-20',source:'extra',amountMinor:100},now);
+assert.throws(()=>closeSavingsPeriod(changed,{...args,expectedToken:p.token,allocations:p.proposal},now),/CONFLICT/);
+assert.throws(()=>closeSavingsPeriod(f,{...args,expectedToken:p.token,allocations:{a:30100}},now),/EXCEEDED/);
+assert.throws(()=>closeSavingsPeriod(f,{...args,expectedToken:p.token,allocations:{wrong:100}},now),/ALLOCATION/);
+const cents=close(base(),{...args,expenses:[{date:'2026-08-02',amount:599.57}]});
+assert.equal(cents.savings.closures[0].residualMinor,43,'Fractional euros are retained, not silently rounded into funds');
+const noBuckets=close(createFinanceEvolution());assert.equal(noBuckets.savings.closures[0].residualMinor,40000);
+assert.deepEqual(noBuckets.savings.entries,[]);
+const manualResidual=close(base(),args,{a:10000,b:0});assert.equal(manualResidual.savings.closures[0].residualMinor,30000);
+const financial={...base(),period:{mode:'financial',startDay:27}};
+const fp=preview(financial,{...args,expenses:[],incomes:[{date:'2026-08-27',amount:1000}],periodKey:'2026-08'});
+assert.equal(fp.snapshot.realMinor,0);assert.equal(fp.snapshot.start,'2026-07-27');
+assert.throws(()=>preview({...closed,period:financial.period}),/OVERLAP/);
+const negativeArgs={...args,expenses:[{date:'2026-08-02',amount:1120.35}]};
+let negative=base();negative.savings.buckets[0].balanceMinor=8000;negative.savings.buckets[1].balanceMinor=2000;
+negative=close(negative,negativeArgs);const original=structuredClone(negative.savings.closures);
+const d=negative.savings.deficits[0];assert.equal(d.originalMinor,12035);assert.equal(d.status,'uncovered');
+assert.throws(()=>coverSavingsDeficit(negative,{id:'bad',deficitId:d.id,expectedRemaining:12035,allocations:{a:8100}},now),/INSUFFICIENT/);
+let covered=coverSavingsDeficit(negative,{id:'pay1',deficitId:d.id,expectedRemaining:12035,allocations:{a:8000,b:2000}},now);
+assert.equal(covered.savings.deficits[0].status,'partial');assert.equal(deficitRemaining(covered.savings,d),2035);
+assert.deepEqual(covered.savings.buckets.map(b=>b.balanceMinor),[0,0]);
+assert.throws(()=>coverSavingsDeficit(covered,{id:'pay1',deficitId:d.id,expectedRemaining:2035,allocations:{a:1}},now),/DUPLICATE/);
+assert.throws(()=>coverSavingsDeficit(covered,{id:'pay2',deficitId:d.id,expectedRemaining:12035,allocations:{a:1}},now),/CONFLICT/);
+covered=saveSavingsEntry(covered,{id:'later',bucketId:'a',currency:'EUR',date:'2026-09-14',amountMinor:3000,source:'extra'},now);
+covered=coverSavingsDeficit(covered,{id:'pay2',deficitId:d.id,expectedRemaining:2035,allocations:{a:2035}},now);
+assert.equal(covered.savings.buckets[0].balanceMinor,965);assert.equal(covered.savings.deficits[0].status,'covered');
+assert.deepEqual(covered.savings.closures,original,'Covering a deficit never rewrites the negative saving');
+assert.throws(()=>cancelSavingsEntry(covered,'later',0,now),/BALANCE/,'Already spent funds cannot be cancelled into negative balances');
+assert.deepEqual(migrateFinanceEvolution(JSON.parse(JSON.stringify(covered))),covered);
+let goalFunds=base();goalFunds.savings.buckets[0].balanceMinor=5000;goalFunds.savings.buckets[0].goalId='original';
+goalFunds=saveSavingsEntry(goalFunds,{id:'gdeposit',bucketId:'a',currency:'EUR',date:'2026-07-10',source:'planned',amountMinor:10000},'2026-07-10T12:00:00Z');
+goalFunds=close(goalFunds,negativeArgs);
+goalFunds.savings.buckets[0].goalId='new-goal';
+const goalDeficit=goalFunds.savings.deficits[0];
+goalFunds=coverSavingsDeficit(goalFunds,{id:'gp1',deficitId:goalDeficit.id,expectedRemaining:12035,allocations:{a:4000}},now);
+assert.equal(goalSavedAmount(goalFunds,{id:'original',saved:0},'EUR'),100,'Unassigned funds used first');
+goalFunds=coverSavingsDeficit(goalFunds,{id:'gp2',deficitId:goalDeficit.id,expectedRemaining:8035,allocations:{a:8035}},now);
+assert.equal(goalSavedAmount(goalFunds,{id:'original',saved:0},'EUR'),29.65,'Original goal decreases when its funds cover a deficit');
+assert.equal(goalSavedAmount(goalFunds,{id:'new-goal',saved:0},'EUR'),0,'Relinking does not debit the new goal');
+assert.equal(goalFunds.savings.buckets[0].balanceMinor,2965);
+assert.throws(()=>cancelSavingsEntry(goalFunds,'gdeposit',0,now),/COVERAGE_GOALS|BALANCE/);
+for(const corrupt of [c=>c.savings.closures[0].realMinor++,c=>c.savings.deficits[0].status='partial',c=>c.savings.coverageEntries[0].amountMinor++,c=>c.savings.buckets[0].balanceMinor++,c=>c.savings.closures[0].counted.push({id:'missing'})]){const c=structuredClone(covered);corrupt(c);assert.throws(()=>migrateFinanceEvolution(c));}
+for(let n=0;n<1000;n++){const result=distributeSavings(n,[{id:'a',weight:3},{id:'b',weight:2},{id:'c',weight:0}]);assert.equal(Object.values(result).reduce((a,b)=>a+b,0),Math.floor(n/100)*100);assert(Object.values(result).every(x=>x>=0&&x%100===0));}
+const rows=loadTypeScript('src/i18n/savingsClosureTranslations.ts').closureTranslationRows;
+assert.equal(Object.keys(rows).length,10);for(const row of Object.values(rows)){assert.equal(row.length,22);assert(row.every(t=>typeof t==='string'&&t.trim()));}
+const help=loadTypeScript('src/i18n/savingsClosureTranslations.ts').closureHelpRows;
+assert.equal(Object.keys(help).length,10);for(const row of Object.values(help)){assert.equal(row.length,2);assert(row.every(t=>typeof t==='string'&&t.trim()));}
+console.log('Period closing: real minus deposits, whole-unit proposals, retained remainder, goals, no duplicates, closed ledger locks, overlap protection, partial/full coverage with cents, no overdraft, backup integrity and 10 languages passed');

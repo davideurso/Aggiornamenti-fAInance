@@ -18,6 +18,8 @@
 	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
@@ -42,7 +44,7 @@
 		</dict>
 	</array>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
-	<true/>
+	<false/>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-4502496181111632~7115058902</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -87,5 +89,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
 </dict>
 </plist>

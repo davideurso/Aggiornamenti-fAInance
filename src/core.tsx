@@ -1,3 +1,4 @@
+import { incomeReceiptExportName } from "./finance/incomeReceipt";
 // ═══════════════════════════════════════════════════════════════════════════════
 // CORE.TSX — Costanti, utilità, hook, contesto Firebase
 // Base di tutti gli altri moduli.
@@ -146,7 +147,7 @@ export function sameNamedItems(a,b){return JSON.stringify((a||[]).map(function(x
 
 export const DEFAULT_METHODS=[{id:1,name:"Conto corrente",icon:"🏦",color:"#378ADD",group:"conti_carte"},{id:2,name:"Carta di debito",icon:"💳",color:"#5DCAA5",group:"conti_carte"},{id:3,name:"Prepagata",icon:"💳",color:"#9F77DD",group:"conti_carte"},{id:8,name:"Carta di credito",icon:"💳",color:"#F2C94C",group:"conti_carte"},{id:4,name:"Contanti",icon:"💵",color:"#F0997B",group:"altri"},{id:5,name:"PayPal",icon:"💠",color:"#185FA5",group:"altri"},{id:6,name:"Buoni pasto",icon:"🍱",color:"#D3D1C7",group:"altri"},{id:7,name:"Altro",icon:"📦",color:"#B4B2A9",group:"altri"}];
 export const INCOME_TYPES=[{id:"salario",icon:"💼",color:"#5DCAA5",name:"Stipendio",group:"lavoro"},{id:"bonus",icon:"🎯",color:"#EF9F27",name:"Bonus",group:"lavoro"},{id:"dividendi",icon:"📈",color:"#378ADD",name:"Dividendi",group:"investimenti"},{id:"interessi",icon:"💰",color:"#FAC775",name:"Interessi",group:"investimenti"},{id:"regali",icon:"🎁",color:"#D4A8F0",name:"Regali",group:"extra_inc"},{id:"rimborsi",icon:"↩️",color:"#9FE1CB",name:"Rimborsi",group:"extra_inc"},{id:"extra",icon:"⭐",color:"#D4A8F0",name:"Entrate extra",group:"extra_inc"},{id:"altro_inc",icon:"📦",color:"#D3D1C7",name:"Altro",group:"extra_inc"}];
-export function getAllIncomeTypes(extra,overrides){
+export function getAllIncomeTypes(extra?: any,overrides?: any){
   var custom=Array.isArray(extra)?extra:null;
   if(!custom){
     try{
@@ -269,6 +270,22 @@ export function useStorage(key,dv){
   useEffect(function(){
     setV(current.current.value);
   },[key]);
+  // Le preferenze ripristinate dal cloud devono aggiornare anche gli hook gia'
+  // montati. Scrivere soltanto localStorage non basta: senza questo evento un
+  // reinstall/login manterrebbe in memoria i default fino al riavvio successivo.
+  useEffect(function(){
+    function onRestore(ev){
+      try{
+        var restoredKey=String((ev&&ev.detail&&ev.detail.key)||"");
+        if(restoredKey!==String(key))return;
+        var next=readFainanceStorageValue(key,dv);
+        current.current={key:key,value:next};
+        setV(next);
+      }catch(e){}
+    }
+    try{if(typeof window!=="undefined")window.addEventListener("fainance-storage-restore",onRestore);}catch(e){}
+    return function(){try{if(typeof window!=="undefined")window.removeEventListener("fainance-storage-restore",onRestore);}catch(e){}};
+  },[key]);
   var save=useCallback(function(val){
       // Persist at the call site: React can defer or replay state updaters.
       // A deferred cloud write must never become a new local edit or overwrite
@@ -330,7 +347,50 @@ export function parseMoney(value){
   var n=parseFloat(raw);
   return isNaN(n)?0:n;
 }
-export function fmtAmt(n,sym){return sym+"\u00A0"+Number(n).toFixed(2).replace(".",",");}
+export function numberLocale(lang){
+  var code=String(lang||"").trim().toLowerCase();
+  if(!code){
+    try{code=String(localStorage.getItem("pref_lang_v2")||"").trim().toLowerCase();}catch(e){}
+  }
+  var map={it:"it-IT",en:"en-US",es:"es-ES",fr:"fr-FR",de:"de-DE",pt:"pt-PT",pl:"pl-PL",nl:"nl-NL",ro:"ro-RO",el:"el-GR"};
+  var base=code.split(/[-_]/)[0];
+  return map[base]||code||"it-IT";
+}
+export function formatNumber(value,lang,options){
+  var n=Number(value);
+  if(!isFinite(n))n=0;
+  var opts=Object.assign({useGrouping:true},options||{});
+  try{return new Intl.NumberFormat(numberLocale(lang),opts).format(n);}catch(e){
+    var max=typeof opts.maximumFractionDigits==="number"?opts.maximumFractionDigits:2;
+    var min=typeof opts.minimumFractionDigits==="number"?opts.minimumFractionDigits:0;
+    var fixed=n.toFixed(Math.max(min,max));
+    var parts=fixed.split(".");
+    parts[0]=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,".");
+    if(max===0)return parts[0];
+    return parts[0]+","+(parts[1]||"").slice(0,max);
+  }
+}
+export function fmtAmt(n,sym,lang?: any){return String(sym||"")+"\u00A0"+formatNumber(n,lang,{minimumFractionDigits:2,maximumFractionDigits:2});}
+export function smallDecimalNode(value,lang,scale="0.70em") {
+  if (value == null || typeof value === "boolean") return value as any;
+  if (typeof value !== "string" && typeof value !== "number") return value as any;
+  var raw=String(value);
+  var decimal=",";
+  try{
+    var decimalPart=new Intl.NumberFormat(numberLocale(lang)).formatToParts(1.1).find(function(part){return part.type==="decimal";});
+    if(decimalPart&&decimalPart.value)decimal=decimalPart.value;
+  }catch(e){}
+  var escaped=decimal.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+  var splitRe=new RegExp("("+escaped+"\\d+)","g");
+  var exactRe=new RegExp("^"+escaped+"\\d+$");
+  var parts=raw.split(splitRe);
+  if(parts.length===1)return raw;
+  return <>{parts.map(function(part,index){
+    return exactRe.test(part)
+      ? <span key={index} className="fainance-small-decimals" style={{fontSize:scale,fontWeight:"inherit",verticalAlign:"baseline"}}>{part}</span>
+      : part;
+  })}</>;
+}
 export function rateMonth(item,mk){
   return itemAmountForMonth(item,mk);
 }
@@ -408,7 +468,8 @@ export function amountForBalancePeriodMonth(item,monthKey,viewMode,periodMode,st
   if(String(viewMode||"rateizzato")==="reale"||!item.rateizzato)return inside(itemDate)?amount:0;
   var rateCount=Math.max(0,Math.floor(Number(item.rate)||0));
   if(!rateCount||!itemDate)return 0;
-  var cents=Math.round(amount*100);
+  var scale=10**(Number.isInteger(item.minorUnitDigits)&&item.minorUnitDigits>=0&&item.minorUnitDigits<=4?item.minorUnitDigits:2);
+  var cents=Math.round(amount*scale);
   var base=Math.floor(cents/rateCount);
   var total=0;
   for(var i=0;i<rateCount;i++){
@@ -418,7 +479,7 @@ export function amountForBalancePeriodMonth(item,monthKey,viewMode,periodMode,st
     var installmentDate=new Date(targetMonth.getFullYear(),targetMonth.getMonth(),Math.min(itemDate.getDate(),last),12,0,0,0);
     if(!inside(installmentDate))continue;
     var share=i===rateCount-1?cents-base*(rateCount-1):base;
-    total+=share/100;
+    total+=share/scale;
   }
   return total;
 }
@@ -506,7 +567,7 @@ export function androidDownload(filename,blob,onDone){
   }
 }
 
-export function exportToCSV(expenses,incomes,cats,methods,dateFmt,cb,filename){var rows=[["Tipo","Data","Importo","Categoria","Metodo","Descrizione","Rateizzato","Rate"]];for(var i=0;i<expenses.length;i++){var e=expenses[i];var c=cats.find(function(x){return x.id===e.catId;})||{name:""};var m=methods.find(function(x){return x.id===e.methodId;})||{name:""};rows.push(["Uscita",fmtDate(e.date,dateFmt),e.amount,c.name,m.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);}for(var j=0;j<incomes.length;j++){var inc=incomes[j];var it=getAllIncomeTypes().find(function(x){return x.id===inc.type;})||{name:inc.type||""};rows.push(["Entrata",fmtDate(inc.date,dateFmt),inc.amount,it.name,"",inc.desc||"",inc.rateizzato?"SI":"NO",inc.rateizzato?inc.rate:""]);}var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c==null?"":c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");androidDownload(filename||"fainance.csv",new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}),cb);}
+export function exportToCSV(expenses,incomes,cats,methods,dateFmt,cb,filename){var rows=[["Tipo","Data","Importo","Categoria","Metodo","Descrizione","Rateizzato","Rate"]];for(var i=0;i<expenses.length;i++){var e=expenses[i];var c=cats.find(function(x){return x.id===e.catId;})||{name:""};var m=methods.find(function(x){return x.id===e.methodId;})||{name:""};rows.push(["Uscita",fmtDate(e.date,dateFmt),e.amount,c.name,m.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);}for(var j=0;j<incomes.length;j++){var inc=incomes[j];var it=getAllIncomeTypes().find(function(x){return x.id===inc.type;})||{name:inc.type||""};rows.push(["Entrata",fmtDate(inc.date,dateFmt),inc.amount,it.name,incomeReceiptExportName(inc,methods),inc.desc||"",inc.rateizzato?"SI":"NO",inc.rateizzato?inc.rate:""]);}var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c==null?"":c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");androidDownload(filename||"fainance.csv",new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}),cb);}
 export function exportToXLSX(expenses,incomes,cats,methods,dateFmt,cb,filename){
   function xmlText(value){
     var s=String(value==null?"":value);
@@ -547,11 +608,11 @@ export function exportToXLSX(expenses,incomes,cats,methods,dateFmt,cb,filename){
     var em=(methods||[]).find(function(x){return x.id===e.methodId;})||{name:""};
     eRows.push([fmtDate(e.date,dateFmt),Number(e.amount)||0,ec.name,em.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);
   }
-  var iRows=[["Data","Importo","Tipo","Descrizione","Rateizzato","Rate"]];
+  var iRows=[["Data","Importo","Tipo","Ricezione","Descrizione","Rateizzato","Rate"]];
   for(var ii=0;ii<(incomes||[]).length;ii++){
     var inc2=incomes[ii];
     var iit=getAllIncomeTypes().find(function(x){return x.id===inc2.type;})||{name:inc2.type||""};
-    iRows.push([fmtDate(inc2.date,dateFmt),Number(inc2.amount)||0,iit.name,inc2.desc||"",inc2.rateizzato?"SI":"NO",inc2.rateizzato?inc2.rate:""]);
+    iRows.push([fmtDate(inc2.date,dateFmt),Number(inc2.amount)||0,iit.name,incomeReceiptExportName(inc2,methods),inc2.desc||"",inc2.rateizzato?"SI":"NO",inc2.rateizzato?inc2.rate:""]);
   }
   var fname=String(filename||"fainance.xlsx").toLowerCase();
   var hasExpenses=(expenses||[]).length>0;

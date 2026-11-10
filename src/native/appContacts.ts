@@ -1,3 +1,4 @@
+import { canonicalizeOwnedDom } from "../icons/canonicalEmoji";
 import { L } from '../utils/translationFallback';
 
 // App contact picker extracted from app.tsx in Architecture Phase 11.
@@ -199,7 +200,7 @@ async function chooseFainanceContactFromList(cleaned:any[]){
         meta.style.overflow="hidden";
         meta.style.textOverflow="ellipsis";
         info.appendChild(name);if(meta.textContent)info.appendChild(meta);
-        row.appendChild(avatar);row.appendChild(info);list.appendChild(row);
+        row.appendChild(avatar);row.appendChild(info);canonicalizeOwnedDom(row);list.appendChild(row);
       });
     }
     function cleanup(value:any){

@@ -2,7 +2,17 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { fainanceBytesToBase64, fainanceBase64ToBytes } from '../utils/base64';
 
 const FAINANCE_SENSITIVE_STORAGE_PREFIX="fainance_sensitive_v2:";
-async function fainanceDeriveSensitiveKey(uid:string){
+// Keep only the current account's non-extractable key in memory. No persistence.
+let sensitiveKeyEntry: { uid: string; promise: Promise<CryptoKey> } | null = null;
+export function clearSensitiveKeyCache(){ sensitiveKeyEntry = null; }
+function fainanceDeriveSensitiveKey(uid:string): Promise<CryptoKey>{
+  if(sensitiveKeyEntry && sensitiveKeyEntry.uid===uid)return sensitiveKeyEntry.promise;
+  const entry={uid,promise:deriveSensitiveKeyUncached(uid)};
+  sensitiveKeyEntry=entry;
+  void entry.promise.catch(()=>{if(sensitiveKeyEntry===entry)sensitiveKeyEntry=null;});
+  return entry.promise;
+}
+async function deriveSensitiveKeyUncached(uid:string){
   if(!uid)throw new Error("Identificativo account mancante.");
   if(typeof crypto==="undefined"||!crypto.subtle)throw new Error("Cifratura non disponibile su questo dispositivo.");
   var enc=new TextEncoder();
@@ -39,6 +49,7 @@ function fainanceDispatchStorageWrite(key:string){
 }
 export function useFainanceSensitiveStorage(key:string,dv:any,uid:string){
   var [value,setValue]=useState(Array.isArray(dv)?dv:[]);var [ready,setReady]=useState(false);var writeRevision=useRef(0);
+  useEffect(function(){return clearSensitiveKeyCache;},[uid]);
   useEffect(function(){
     var cancelled=false;setReady(false);writeRevision.current++;
     (async function(){

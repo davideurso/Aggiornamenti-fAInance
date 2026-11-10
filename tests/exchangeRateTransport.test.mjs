@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {exchangeRateResponse} from '../src/finance/exchangeRateTransport.js';
+import {fetchToolRate} from '../src/finance/tools.js';
+let calls=[];
+const native={native:()=>true,get:async options=>{calls.push(options);return{status:200,data:{rates:{EUR:.92}}}},fetch:()=>{throw Error('web fetch must not run')}};
+assert.equal((await (await exchangeRateResponse('https://example.test',{},native)).json()).rates.EUR,.92);
+assert.equal(calls.length,1);assert.equal(calls[0].responseType,'json');
+let web=false;await exchangeRateResponse('https://example.test',{}, {native:()=>false,fetch:async()=>{web=true;return{ok:true}}});assert(web);
+const controller=new AbortController();controller.abort();await assert.rejects(()=>exchangeRateResponse('https://example.test',{signal:controller.signal},native),/ABORTED/);
+let attempt=0;assert.equal(await fetchToolRate('USD','EUR',async()=>{if(++attempt===1)throw Error('provider unavailable');return{ok:true,json:async()=>({rates:{EUR:.91}})}}),.91);assert.equal(attempt,2);
+await assert.rejects(()=>fetchToolRate('USD','EUR',async()=>({ok:true,json:async()=>({rates:{EUR:0}})})));
+console.log('OK native transport, browser transport, cancellation, provider fallback, invalid rates');

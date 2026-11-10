@@ -1,3 +1,30 @@
+import {recurringMissingFields} from './finance/recurringValidation.js';
+import {recurringValidationMessage} from './i18n/recurringValidation.js';
+import {mergePatrimony,patrimonyHasData} from './finance/patrimonyMerge.js';
+import {catalogRemapText} from './i18n/catalogRemapTranslations';
+import {CatalogDeleteDialog,catalogDestinationItems} from './settings/CatalogDeleteDialog';
+import {remapCatalogReferences,catalogReferences} from './finance/catalogRemap.js';
+import {emojiAsset} from './icons/canonicalEmoji';
+import {SettingsSegmented, secondarySettingsStyle, settingsActionStyle} from './ui/SettingsControls';
+import {catalogSettingsText} from './i18n/catalogSettingsTranslations';
+import { incomeReceiptFields, incomeReceiptLabel } from "./finance/incomeReceipt";
+import { PatrimonyLinksSettings } from './sections/PatrimonyLinksSettings';
+import { incomeReceiptText } from "./i18n/incomeReceiptTranslations";
+import { notificationTone, notificationAppearance } from './ui/notificationPresentation.js';
+import {spendingAlertSnapshot,suggestedAlertBudget} from './finance/spendingAlerts.js';
+import {PopupCloseButton} from './ui/PopupCloseButton';
+export {PopupCloseButton} from './ui/PopupCloseButton';
+import { financeMessage } from "./i18n/financeMessages";
+import { focusFainanceInput } from "./utils/appRuntime";
+import { findImportCurrencyColumn, convertImportedCurrencyRows, importedCurrencyFields, assertImportCurrencyContext } from "./data/importCurrency";
+import { fetchToolRate } from "./finance/tools";
+import { installMovementEntryFocus } from './ui/movementEntryFocus';
+import { useId } from 'react';
+import { openMovementDatePicker } from './ui/movementDatePicker';
+import { readableDarkText } from './ui/textContrast';
+import {calculatorInputPlaceholder} from './i18n/calculatorTranslations';
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from './analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from './analytics/useAnalyticsFlow';
 import { savingsGoalText } from './i18n/savingsGoalsTranslations';
 import { goalSavedAmount, goalSavingsMinor, linkSavingsGoal } from './finance/savingsGoals';
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -7,7 +34,7 @@ import { goalSavedAmount, goalSavingsMinor, linkSavingsGoal } from './finance/sa
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from "react";
-import { recurringOccurrencesInPeriod } from './finance/recurringOccurrences';
+import { recurringDueOccurrences } from './finance/recurringOccurrences';
 import { SavingsClosurePanel, SavingsDeficitsPanel } from './sections/SavingsClosurePanel';
 import { BudgetPeriodControls } from './sections/BudgetPeriodControls';
 import { SavingsBucketsPanel } from './sections/SavingsBucketsPanel';
@@ -43,6 +70,8 @@ import {
   sortedMethods,
   fmtDate,
   fmtAmt,
+  formatNumber,
+  smallDecimalNode,
   parseMoney,
   todayStr,
   dateOffset,
@@ -66,6 +95,7 @@ import { TRANSLATIONS, translateFainanceText } from "./traduzioni";
 import {
   FainanceIcon,
   customIconValue,
+  ensureCustomIconSelection,
   isCustomIconValue,
   useCustomIconLibrary,
 } from "./icons/customIconLibrary";
@@ -134,21 +164,6 @@ function startFainanceImportRestoreBridge() {
 }
 startFainanceImportRestoreBridge();
 
-function focusFainanceInput(ref: any, delay?: number) {
-  try {
-    setTimeout(
-      function () {
-        try {
-          var el = ref && ref.current ? ref.current : null;
-          if (!el || !el.focus) return;
-          el.focus({ preventScroll: true });
-          if (el.select) el.select();
-        } catch (e) {}
-      },
-      delay == null ? 90 : delay
-    );
-  } catch (e) {}
-}
 
 const GOOGLE_PICKER_CLIENT_ID =
   "739607555867-i5uhrj1d1vs0je81qtqkks4dn903mu.apps.googleusercontent.com";
@@ -227,7 +242,7 @@ function PL(value: any) {
 
 function effectiveExpenseGroups(groups: any) {
   var explicit = Array.isArray(groups) ? groups : null;
-  var base = explicit && explicit.length ? explicit : DEFAULT_EXPENSE_GROUPS;
+  var base = Array.isArray(explicit) ? explicit : DEFAULT_EXPENSE_GROUPS;
   var out = (base || []).filter(function (g: any) {
     return !!g && !g.deleted;
   });
@@ -250,7 +265,7 @@ function effectiveExpenseGroups(groups: any) {
 }
 function effectiveIncomeGroups(list: any) {
   var explicit = Array.isArray(list) ? list : null;
-  var base = explicit && explicit.length ? explicit : DEFAULT_INCOME_GROUPS;
+  var base = Array.isArray(explicit) ? explicit : DEFAULT_INCOME_GROUPS;
   var out = (base || []).filter(function (g: any) {
     return !!g && !g.deleted && !g.archived;
   });
@@ -329,7 +344,7 @@ export function DonutChart({ data, size }) {
           alignItems: "center",
           justifyContent: "center",
           fontSize: 11,
-          color: "#aaa",
+          color: readableDarkText("#aaa", dark, dark ? "#2a2a3e" : "#f0f0f0"),
         }}
       >
         vuoto
@@ -496,7 +511,7 @@ export function BarChart({ data, width, height }) {
     </svg>
   );
 }
-export function LineChart({ data, width, height, color, integer = false }) {
+export function LineChart({ data, width, height, color, integer = false, unsignedLabels = false }) {
   var ctx = useApp();
   var dark = ctx.dark,
     fmt = ctx.fmt;
@@ -528,6 +543,7 @@ export function LineChart({ data, width, height, color, integer = false }) {
     ch = height - pt - pb;
   function axisValue(v) {
     var n = integer ? Math.round(Number(v) || 0) : Number(v) || 0;
+    if (unsignedLabels) n = Math.abs(n);
     if (integer) {
       try {
         var sym = String(ctx.sym || "€");
@@ -601,7 +617,7 @@ export function LineChart({ data, width, height, color, integer = false }) {
                 y={Math.max(9, y + 3)}
                 textAnchor="start"
                 fontSize={8}
-                fill={tc}
+                fill={unsignedLabels && ticks[p === 0 ? 0 : p === 0.5 ? 1 : 2] < 0 ? (dark ? "#FF9AA3" : "#B63B45") : tc}
               >
                 {axisValue(ticks[p === 0 ? 0 : p === 0.5 ? 1 : 2])}
               </text>
@@ -650,7 +666,7 @@ export function LineChart({ data, width, height, color, integer = false }) {
 }
 
 // ── UI ATOMS ─────────────────────────────────────────────────────────────────
-export function Btn({ children, onClick, bg, color, style, disabled }) {
+export function Btn({ children, onClick, onPointerDown, bg, color, style, disabled }: { children?: any; onClick?: any; onPointerDown?: any; bg?: any; color?: any; style?: any; disabled?: any }) {
   var ctx = useApp();
   var btnRadius = ctx.btnRadius;
   var primary = ctx.confirmButtonColor || "#378ADD";
@@ -666,10 +682,11 @@ export function Btn({ children, onClick, bg, color, style, disabled }) {
     <button
       type="button"
       onClick={onClick}
+      onPointerDown={onPointerDown}
       disabled={disabled}
       style={{
         background: resolved,
-        color: color || "#fff",
+        color: readableDarkText(color || "#fff", (ctx as any).dark, resolved),
         border: "none",
         borderRadius: btnRadius,
         padding: "8px 16px",
@@ -705,10 +722,15 @@ export function Badge({ color, name, small }) {
     </span>
   );
 }
-export function Toggle({ label, checked, onChange, color }) {
-  var ctx = useApp();
+export function Toggle({ label, checked, onChange, color = undefined, labelFirst = false }) {
+  var ctx:any = useApp();
   var dark = ctx.dark;
   var c = color || ctx.secondaryButtonColor || "#5FAFE5";
+  var translateUiRuntimeText = ctx.translateUiRuntimeText;
+  var displayLabel =
+    typeof label === "string" && label
+      ? (translateUiRuntimeText ? translateUiRuntimeText(label) : label)
+      : label;
   return (
     <button
       type="button"
@@ -717,7 +739,10 @@ export function Toggle({ label, checked, onChange, color }) {
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: label ? "space-between" : "center",
+        justifyContent: displayLabel ? "space-between" : "center",
+        flexDirection: labelFirst ? "row-reverse" : "row",
+        width: labelFirst ? "100%" : undefined,
+        textAlign: "left",
         gap: 10,
         minWidth: 56,
         minHeight: 40,
@@ -755,15 +780,16 @@ export function Toggle({ label, checked, onChange, color }) {
           }}
         />
       </div>
-      {label && (
+      {displayLabel && (
         <span
           style={{
             fontSize: 13,
-            color: checked ? c : dark ? "#aaa" : "#888",
+            flex: labelFirst ? 1 : undefined,
+            color: labelFirst ? (ctx.textC || (dark ? "#eee" : "#333")) : readableDarkText(checked ? c : dark ? "#aaa" : "#888", dark, "transparent"),
             fontWeight: checked ? 500 : 400,
           }}
         >
-          {label}
+          {displayLabel}
         </span>
       )}
     </button>
@@ -789,6 +815,17 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
   var premium = !opts || opts.length === 0 || currentPlan === "premium";
   var dir = direction || "forward";
   var [infoOpen, setInfoOpen] = useState(false);
+  // FAINANCE_58_RATE_INFO_STYLE
+  function rateInfoLine(text) {
+    var value = String(text || "");
+    var colon = value.indexOf(":");
+    return (
+      <span>
+        {colon > 0 ? <strong>{value.slice(0, colon + 1)}</strong> : null}
+        {colon > 0 ? value.slice(colon + 1) : value}
+      </span>
+    );
+  }
   function setSafe(v) {
     var n = parseInt(v, 10);
     if (isNaN(n) || n < 1) n = 1;
@@ -804,7 +841,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
           <label
             style={{
               fontSize: 11,
-              color: dark ? "#aaa" : "#666",
+              color: readableDarkText(dark ? "#aaa" : "#666", dark, "#35354a"),
               display: "block",
               marginBottom: 4,
             }}
@@ -827,7 +864,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
               padding: "7px 10px",
               fontSize: 13,
               background: dark ? "#2a2a3e" : "#fff",
-              color: dark ? "#eee" : "#333",
+              color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
             }}
           />
         </div>
@@ -835,7 +872,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           {opts.map(function (n) {
             return (
-              <button
+              <button type="button"
                 key={n}
                 onClick={function () {
                   onChange(n);
@@ -847,7 +884,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
                     "1px solid " + (Number(value) === n ? "#7F77DD" : "#ddd"),
                   background: Number(value) === n ? "#EEEDFE" : "transparent",
                   color:
-                    Number(value) === n ? "#534AB7" : dark ? "#ddd" : "#666",
+                    readableDarkText(Number(value) === n ? "#534AB7" : dark ? "#ddd" : "#666", dark, Number(value) === n ? "#EEEDFE" : "transparent"),
                   fontSize: 13,
                   cursor: "pointer",
                 }}
@@ -873,7 +910,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
         ].map(function (o) {
           var active = dir === o.id;
           return (
-            <button
+            <button type="button"
               key={o.id}
               onClick={function () {
                 if (onDirectionChange) onDirectionChange(o.id);
@@ -884,7 +921,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
                 border:
                   "1px solid " + (active ? "#7F77DD" : dark ? "#444" : "#ddd"),
                 background: active ? "#EEEDFE" : "transparent",
-                color: active ? "#534AB7" : dark ? "#ddd" : "#666",
+                color: readableDarkText(active ? "#534AB7" : dark ? "#ddd" : "#666", dark, active ? "#EEEDFE" : "transparent"),
                 fontSize: 12,
                 fontWeight: active ? 700 : 500,
                 cursor: "pointer",
@@ -896,12 +933,28 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
         })}
         <FainanceInfoPopover
           label={L("Informazioni")}
-          body={L(
-            "Avanti: la rata parte dal mese selezionato e continua nei mesi successivi. Indietro: la rata parte dal mese selezionato e viene distribuita anche nei mesi precedenti."
-          )}
-          size={26}
-          popupOffsetY={34}
+          body={
+            <div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                <span style={{ lineHeight: 1.5 }}>•</span>
+                {rateInfoLine(
+                  L("Avanti: la rata parte dal mese selezionato e continua nei mesi successivi.")
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 5 }}>
+                <span style={{ lineHeight: 1.5 }}>•</span>
+                {rateInfoLine(
+                  L("Indietro: la rata parte dal mese selezionato e viene distribuita anche nei mesi precedenti.")
+                )}
+              </div>
+            </div>
+          }
+          size={19}
+          popupOffsetY={27}
           popupWidth={280}
+          popupAlign="right"
+          buttonStyle={{ fontSize: 10 }}
+          popupStyle={{ fontSize: 11, lineHeight: 1.5 }}
         />
       </div>
     </div>
@@ -941,98 +994,6 @@ function iconTextValue(v) {
   return isCustomIconValue(x) ? "▧" : x;
 }
 
-export function PopupCloseButton({ onClick, dark, label }) {
-  // Unica implementazione della X standard dei popup fAInance.
-  // Valori identici al popup Filtra/Storico: niente varianti locali.
-  // Ogni popup che usa questa X viene automaticamente mantenuto sotto i
-  // pulsanti Profilo/Notifiche, anche dopo resize/orientation change.
-  var buttonRef = useRef<any>(null);
-  useLayoutEffect(function () {
-    if (typeof window === "undefined" || !buttonRef.current) return;
-    var node: any = buttonRef.current.parentElement;
-    var overlay: any = null;
-    while (node && node !== document.body) {
-      try {
-        var css = window.getComputedStyle(node);
-        var rect = node.getBoundingClientRect();
-        if (
-          css.position === "fixed" &&
-          rect.width >= window.innerWidth * 0.7 &&
-          rect.height >= window.innerHeight * 0.55
-        ) {
-          overlay = node;
-          break;
-        }
-      } catch (_popupScanError) {}
-      node = node.parentElement;
-    }
-    if (!overlay) return;
-
-    function keepBelowHeader() {
-      try {
-        var computed = window.getComputedStyle(overlay);
-        var currentTop = Math.max(0, parseFloat(computed.paddingTop || "0") || 0);
-        overlay.setAttribute("data-fainance-popup-overlay", "true");
-        overlay.style.boxSizing = "border-box";
-        overlay.style.paddingTop =
-          "max(" +
-          currentTop +
-          "px, max(82px, calc(env(safe-area-inset-top, 0px) + 72px)))";
-        if (computed.display === "flex" && computed.alignItems !== "flex-end")
-          overlay.style.alignItems = "flex-start";
-        if (computed.overflowY === "visible") overlay.style.overflowY = "auto";
-        overlay.style.setProperty("-webkit-overflow-scrolling", "touch");
-      } catch (_popupSafeTopError) {}
-    }
-
-    keepBelowHeader();
-    var raf = window.requestAnimationFrame(keepBelowHeader);
-    window.addEventListener("resize", keepBelowHeader);
-    window.addEventListener("orientationchange", keepBelowHeader);
-    var vv: any = (window as any).visualViewport;
-    if (vv) {
-      vv.addEventListener("resize", keepBelowHeader);
-      vv.addEventListener("scroll", keepBelowHeader);
-    }
-    return function () {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener("resize", keepBelowHeader);
-      window.removeEventListener("orientationchange", keepBelowHeader);
-      if (vv) {
-        vv.removeEventListener("resize", keepBelowHeader);
-        vv.removeEventListener("scroll", keepBelowHeader);
-      }
-    };
-  }, []);
-  return (
-    <button
-      ref={buttonRef}
-      data-fainance-popup-close="true"
-      type="button"
-      onClick={onClick}
-      aria-label={label || "Chiudi"}
-      style={{
-        width: 28,
-        height: 28,
-        borderRadius: 9,
-        border: "1px solid #FCA5A5",
-        background: "#FFF0F0",
-        color: "#F87171",
-        fontSize: 14,
-        fontWeight: 950,
-        lineHeight: 1,
-        cursor: "pointer",
-        boxShadow: "0 3px 10px #F871712B",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0,
-      }}
-    >
-      ×
-    </button>
-  );
-}
 
 function fainancePopupSurfaceStyle(dark, variant) {
   if (variant === "info") {
@@ -1074,6 +1035,7 @@ export function FainanceInfoPopover({
   popupAlign,
   buttonStyle,
   popupStyle,
+  trigger,
 }: any) {
   var ctx = useApp();
   var dark = ctx.dark;
@@ -1206,6 +1168,7 @@ export function FainanceInfoPopover({
       ? createPortal(
           <div
             ref={popupRef}
+            onClick={event=>{if ((event.target as HTMLElement)?.closest?.("[data-fainance-popover-action]"))setOpen(false);}}
             role="dialog"
             aria-label={title || label || "Informazioni"}
             style={{
@@ -1221,7 +1184,7 @@ export function FainanceInfoPopover({
               padding: "11px 13px",
               fontSize: 12,
               lineHeight: 1.45,
-              color: theme.popupText,
+              color: readableDarkText(theme.popupText, dark, "#35354a"),
               zIndex: 2147483000,
               visibility: placement ? "visible" : "hidden",
               ...infoSurface,
@@ -1233,7 +1196,7 @@ export function FainanceInfoPopover({
                 style={{
                   fontSize: 13,
                   fontWeight: 900,
-                  color: theme.popupText,
+                  color: readableDarkText(theme.popupText, dark, "#35354a"),
                   marginBottom: popupBody ? 4 : 0,
                 }}
               >
@@ -1241,7 +1204,7 @@ export function FainanceInfoPopover({
               </div>
             )}
             {popupBody && (
-              <div style={{ color: theme.popupSubtle }}>{popupBody}</div>
+              <div style={{ color: readableDarkText(theme.popupSubtle, dark, "#35354a") }}>{popupBody}</div>
             )}
           </div>,
           document.body
@@ -1271,10 +1234,15 @@ export function FainanceInfoPopover({
           style={{
             width: buttonSize,
             height: buttonSize,
+            minWidth: buttonSize,
+            minHeight: buttonSize,
+            flex: "0 0 auto",
+            boxSizing: "border-box",
+            lineHeight: 1,
             borderRadius: "50%",
             border: "1px solid " + theme.buttonBorder,
             background: theme.buttonBg,
-            color: theme.buttonText,
+            color: readableDarkText(theme.buttonText, dark, theme.buttonBg),
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
@@ -1287,7 +1255,7 @@ export function FainanceInfoPopover({
             ...buttonStyle,
           }}
         >
-          i
+          {trigger ?? "i"}
         </button>
       </div>
       {popupNode}
@@ -1301,16 +1269,21 @@ export function FainancePickerModal({
   onClose,
   children,
   zIndex,
-}) {
+  footer,
+  tone,
+}: { open: any; title: any; onClose: any; children: any; zIndex?: any; footer?: any; tone?: "success" | "error" | "warning" | "info" }) {
   var ctx = useApp();
   var dark = ctx.dark;
   var textC = dark ? "#eee" : "#333";
   var borderC = dark ? "#444" : "#E4E6EC";
+  var semantic = tone ? notificationAppearance(tone) : null;
+  if (semantic) { textC = semantic.color; borderC = semantic.border; }
   if (!open) return null;
   var modalSurface = fainancePopupSurfaceStyle(dark, "modal");
-  return (
+  var modal = (
     <div
-      role="dialog"
+      role="dialog" data-fainance-tone={tone}
+      aria-label={typeof title === "string" ? title : undefined}
       aria-modal="true"
       onClick={function (e) {
         if (e.target === e.currentTarget) onClose();
@@ -1318,13 +1291,16 @@ export function FainancePickerModal({
       style={{
         position: "fixed",
         inset: 0,
+        top: "var(--app-viewport-top,0px)",
+        bottom: "auto",
+        height: "var(--app-viewport-height,100dvh)",
         zIndex: zIndex || 10150,
         background: "rgba(20,20,30,0.66)",
         backdropFilter: "blur(5px)",
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        padding: "max(82px,calc(env(safe-area-inset-top,0px) + 72px)) clamp(8px,2.5vw,16px) 16px",
+        padding: "calc(env(safe-area-inset-top,0px) + clamp(16px,5dvh,44px)) clamp(8px,2.5vw,16px) calc(env(safe-area-inset-bottom,0px) + 16px)",
         boxSizing: "border-box",
         overflowY: "auto",
         WebkitOverflowScrolling: "touch",
@@ -1336,11 +1312,12 @@ export function FainancePickerModal({
         }}
         style={{
           width: "min(620px,100%)",
-          maxHeight: "calc(100dvh - 98px)",
+          maxHeight: "calc(var(--app-viewport-height,100dvh) - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - clamp(16px,5dvh,44px) - 16px)",
           display: "flex",
           flexDirection: "column",
           overflow: "hidden",
           ...modalSurface,
+          ...(semantic ? {background:semantic.background,color:semantic.color,border:"1px solid "+semantic.border,borderRadius:16} : {}),
         }}
       >
         <div
@@ -1349,8 +1326,9 @@ export function FainancePickerModal({
             alignItems: "center",
             justifyContent: "space-between",
             gap: 10,
+            flexShrink: 0,
             padding: "14px clamp(12px,3.8vw,18px)",
-            background: dark ? "#2B2B40" : "#F7F8FC",
+            background: semantic ? semantic.background : dark ? "#2B2B40" : "#F7F8FC",
             borderBottom: "1px solid " + borderC,
           }}
         >
@@ -1378,15 +1356,19 @@ export function FainancePickerModal({
         <div
           style={{
             padding: "clamp(11px,3.6vw,18px)",
+            minHeight: 0,
+            flex: "1 1 auto",
             overflowY: "auto",
             WebkitOverflowScrolling: "touch",
           }}
         >
           {children}
         </div>
+        {footer && <div style={{flexShrink:0,padding:"12px clamp(11px,3.6vw,18px)",borderTop:"1px solid " + borderC}}>{footer}</div>}
       </div>
     </div>
   );
+  return typeof document !== "undefined" ? createPortal(modal, document.body) : modal;
 }
 
 export function calculateAmountExpression(raw: any) {
@@ -1702,14 +1684,14 @@ export function AmountCalculatorButton({
                 }
               }}
               inputMode="decimal"
-              placeholder={L("Inserisci un calcolo")}
+              placeholder={calculatorInputPlaceholder(ctx.lang||"it")}
               style={{
                 width: "100%",
                 boxSizing: "border-box",
                 border: "none",
                 outline: "none",
                 background: "transparent",
-                color: textC,
+                color: readableDarkText(textC, dark, "transparent"),
                 fontSize: 25,
                 fontWeight: 950,
                 textAlign: "right",
@@ -1719,7 +1701,7 @@ export function AmountCalculatorButton({
               <div
                 style={{
                   fontSize: 11,
-                  color: "#E24B4A",
+                  color: readableDarkText("#E24B4A", dark, dark ? "#1E1E30" : "#F8FAFF"),
                   fontWeight: 800,
                   textAlign: "right",
                   marginTop: 5,
@@ -1758,7 +1740,13 @@ export function AmountCalculatorButton({
                       : dark
                       ? "#2A2A3E"
                       : "#fff",
-                    color: operator ? primary : textC,
+                    color: readableDarkText(operator ? primary : textC, dark, operator
+                      ? dark
+                        ? primary + "33"
+                        : primary + "12"
+                      : dark
+                      ? "#2A2A3E"
+                      : "#fff"),
                     fontSize: 18,
                     fontWeight: 950,
                     cursor: "pointer",
@@ -1799,7 +1787,7 @@ export function AmountCalculatorButton({
                 border: "1px solid " + primary,
                 borderRadius: 12,
                 background: dark ? primary + "33" : primary + "12",
-                color: primary,
+                color: readableDarkText(primary, dark, dark ? primary + "33" : primary + "12"),
                 fontWeight: 950,
                 cursor: "pointer",
               }}
@@ -1814,7 +1802,7 @@ export function AmountCalculatorButton({
                 border: "none",
                 borderRadius: 12,
                 background: primary,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, primary),
                 fontWeight: 950,
                 cursor: "pointer",
               }}
@@ -1844,8 +1832,12 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
     isCustomIconValue(value) ? "custom" : "standard"
   );
   var customLibrary = useCustomIconLibrary();
+  var customSelectionRef = useRef(0);
+  var [customSelectionBusy, setCustomSelectionBusy] = useState(false);
+  useEffect(function () { return function () { customSelectionRef.current++; }; }, []);
   useEffect(
     function () {
+      if (!open) { customSelectionRef.current++; setCustomSelectionBusy(false); }
       if (open) {
         setSearch("");
         setTheme("all");
@@ -1948,7 +1940,11 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     ? "#35354D"
                     : "#fff"
                   : "transparent",
-              color: text,
+              color: readableDarkText(text, dark, source === "standard"
+                  ? dark
+                    ? "#35354D"
+                    : "#fff"
+                  : "transparent"),
               fontWeight: source === "standard" ? 900 : 700,
               cursor: "pointer",
             }}
@@ -1970,7 +1966,11 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     ? "#35354D"
                     : "#fff"
                   : "transparent",
-              color: text,
+              color: readableDarkText(text, dark, source === "custom"
+                  ? dark
+                    ? "#35354D"
+                    : "#fff"
+                  : "transparent"),
               fontWeight: source === "custom" ? 900 : 700,
               cursor: "pointer",
             }}
@@ -1986,7 +1986,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
               top: "50%",
               transform: "translateY(-50%)",
               fontSize: 17,
-              color: sub,
+              color: readableDarkText(sub, dark, "#35354a"),
               pointerEvents: "none",
             }}
           >
@@ -2007,7 +2007,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
               padding: "11px 12px 11px 40px",
               fontSize: 14,
               background: dark ? "#1E1E30" : "#fff",
-              color: text,
+              color: readableDarkText(text, dark, dark ? "#1E1E30" : "#fff"),
               outline: "none",
             }}
           />
@@ -2040,7 +2040,11 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                         : dark
                         ? "#29293D"
                         : "#fff",
-                      color: active ? "#fff" : text,
+                      color: readableDarkText(active ? "#fff" : text, dark, active
+                        ? secondary
+                        : dark
+                        ? "#29293D"
+                        : "#fff"),
                       borderRadius: 999,
                       padding: "8px 12px",
                       fontSize: 12,
@@ -2082,6 +2086,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                         key={item.id || icon}
                         title={item.label || icon}
                         onClick={function () {
+                          customSelectionRef.current++;
                           onChange(icon);
                           onClose();
                         }}
@@ -2117,7 +2122,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     textAlign: "center",
                     padding: "30px 12px",
                     fontSize: 13,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                   }}
                 >
                   {L2("Nessuna icona trovata")}
@@ -2131,7 +2136,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
             <div
               style={{
                 fontSize: 11,
-                color: sub,
+                color: readableDarkText(sub, dark, panel),
                 lineHeight: 1.45,
                 background: panel,
                 border: "1px solid " + border,
@@ -2151,13 +2156,13 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                 padding: 10,
               }}
             >
-              {customLibrary.loading ? (
+              {(customLibrary.loading || customSelectionBusy) ? (
                 <div
                   style={{
                     textAlign: "center",
                     padding: "28px 12px",
                     fontSize: 13,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                   }}
                 >
                   {L2("Caricamento icone...")}
@@ -2181,9 +2186,19 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                         type="button"
                         key={item.id}
                         title={item.label || L2("Icona personale")}
-                        onClick={function () {
-                          onChange(ref);
-                          onClose();
+                        disabled={customSelectionBusy}
+                        onClick={async function () {
+                          const request = ++customSelectionRef.current;
+                          setCustomSelectionBusy(true);
+                          try {
+                            await ensureCustomIconSelection(item);
+                            if (customSelectionRef.current !== request) return;
+                            onChange(ref);
+                            onClose();
+                          } catch (_) {
+                            const notify = (ctx as any).setToast;
+                            if (customSelectionRef.current === request && typeof notify === "function") notify({ text: financeMessage(lang, "sync"), type: "error" });
+                          } finally { if (customSelectionRef.current === request) setCustomSelectionBusy(false); }
                         }}
                         style={{
                           width: "100%",
@@ -2215,7 +2230,7 @@ function IconPickerModal({ open, value, onChange, onClose, accent }) {
                     textAlign: "center",
                     padding: "30px 12px",
                     fontSize: 13,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                   }}
                 >
                   {L2("Non hai ancora caricato icone personali.")}
@@ -2355,13 +2370,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
         setHue(hsv.h);
         setSaturation(hsv.s);
         setBrightness(hsv.v);
-        setMode(
-          (COLORS || []).slice(0, 10).some(function (c) {
-            return normalizeHtmlColor(c) === next;
-          })
-            ? "preset"
-            : "custom"
-        );
+        setMode("preset");
         dragRef.current = "";
       }
     },
@@ -2470,7 +2479,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                   : "3px solid transparent",
               background:
                 mode === "preset" ? (dark ? "#35354B" : "#fff") : "transparent",
-              color: mode === "preset" ? primary : text,
+              color: readableDarkText(mode === "preset" ? primary : text, dark, mode === "preset" ? (dark ? "#35354B" : "#fff") : "transparent"),
               padding: "12px 8px",
               fontSize: 14,
               fontWeight: mode === "preset" ? 900 : 750,
@@ -2492,7 +2501,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                   : "3px solid transparent",
               background:
                 mode === "custom" ? (dark ? "#35354B" : "#fff") : "transparent",
-              color: mode === "custom" ? primary : text,
+              color: readableDarkText(mode === "custom" ? primary : text, dark, mode === "custom" ? (dark ? "#35354B" : "#fff") : "transparent"),
               padding: "12px 8px",
               fontSize: 14,
               fontWeight: mode === "custom" ? 900 : 750,
@@ -2515,7 +2524,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
               style={{
                 fontSize: 12,
                 fontWeight: 900,
-                color: text,
+                color: readableDarkText(text, dark, panel),
                 marginBottom: 11,
               }}
             >
@@ -2528,7 +2537,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                 gap: 10,
               }}
             >
-              {COLORS.slice(0, 10).map(function (c) {
+              {COLORS.slice(0, 15).map(function (c) {
                 var active =
                   normalizeHtmlColor(value) === normalizeHtmlColor(c);
                 return (
@@ -2551,7 +2560,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "#fff",
+                      color: readableDarkText("#fff", dark, c),
                       fontSize: 18,
                       fontWeight: 950,
                       textShadow: "0 1px 4px rgba(0,0,0,.28)",
@@ -2577,7 +2586,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
               style={{
                 fontSize: 12,
                 fontWeight: 900,
-                color: text,
+                color: readableDarkText(text, dark, panel),
                 marginBottom: 11,
               }}
             >
@@ -2699,7 +2708,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                   style={{
                     fontSize: 11,
                     fontWeight: 800,
-                    color: sub,
+                    color: readableDarkText(sub, dark, panel),
                     display: "block",
                     marginBottom: 6,
                   }}
@@ -2724,7 +2733,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                     fontWeight: 850,
                     letterSpacing: 0.4,
                     background: dark ? "#29293D" : "#fff",
-                    color: text,
+                    color: readableDarkText(text, dark, dark ? "#29293D" : "#fff"),
                     outline: "none",
                   }}
                 />
@@ -2734,7 +2743,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
               <div
                 style={{
                   fontSize: 11,
-                  color: "#E24B4A",
+                  color: readableDarkText("#E24B4A", dark, panel),
                   fontWeight: 800,
                   marginTop: 7,
                 }}
@@ -2761,7 +2770,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                 borderRadius: ctx.btnRadius || 12,
                 padding: "12px 14px",
                 background: valid ? primary : "#A8A8A8",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, valid ? primary : "#A8A8A8"),
                 fontSize: 14,
                 fontWeight: 900,
                 cursor: valid ? "pointer" : "not-allowed",
@@ -2777,7 +2786,7 @@ function ColorPickerModal({ open, value, onChange, onClose }) {
                 borderRadius: ctx.btnRadius || 12,
                 padding: "12px 14px",
                 background: dark ? "#333348" : "#EFF0F4",
-                color: text,
+                color: readableDarkText(text, dark, dark ? "#333348" : "#EFF0F4"),
                 fontSize: 14,
                 fontWeight: 850,
                 cursor: "pointer",
@@ -2851,7 +2860,7 @@ export function AppIconSelector({
           <FainanceIcon value={selected} size={small ? 22 : 30} />
         </span>
         {!small && (
-          <span style={{ fontSize: 22, color: chevron, fontWeight: 850 }}>
+          <span style={{ fontSize: 22, color: readableDarkText(chevron, dark, panel), fontWeight: 850 }}>
             ›
           </span>
         )}
@@ -2875,7 +2884,7 @@ export function AppColorSelector({
   dark: darkProp,
   disabled,
   compact,
-}) {
+}: { value: any; onChange: any; dark?: any; disabled?: any; compact?: any }) {
   var ctx = useApp();
   var dark = darkProp == null ? ctx.dark : darkProp;
   var [open, setOpen] = useState(false);
@@ -2927,7 +2936,7 @@ export function AppColorSelector({
         {!small && (
           <>
             <span style={{ flex: 1 }} />
-            <span style={{ fontSize: 22, color: chevron, fontWeight: 850 }}>
+            <span style={{ fontSize: 22, color: readableDarkText(chevron, dark, panel), fontWeight: 850 }}>
               ›
             </span>
           </>
@@ -2945,14 +2954,14 @@ export function AppColorSelector({
   );
 }
 
-export function DatePickerField({ value, onChange }) {
-  var { t, btnRadius } = useApp();
+export function DatePickerField({ value, onChange, label, showShortcuts = true }: {value: string; onChange: (date: string) => void; label?: string; showShortcuts?: boolean}) {
+  var { t, btnRadius, dark, textC, borderC, inp } = useApp() as any;
   var td = todayStr(),
     y = dateOffset(1),
     tw = dateOffset(2);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {showShortcuts && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
         {[
           { l: t.today, v: td },
           { l: t.yesterday, v: y },
@@ -2969,7 +2978,7 @@ export function DatePickerField({ value, onChange }) {
                 borderRadius: btnRadius,
                 border: "1px solid " + (value === p.v ? "#333" : "#ddd"),
                 background: value === p.v ? "#333" : "transparent",
-                color: value === p.v ? "#fff" : "#666",
+                color: value === p.v ? "#fff" : (dark ? textC : "#666"),
                 fontSize: 13,
                 cursor: "pointer",
               }}
@@ -2978,17 +2987,22 @@ export function DatePickerField({ value, onChange }) {
             </button>
           );
         })}
-      </div>
+      </div>}
+      {label && <span style={{fontSize:12,color:textC}}>{label}</span>}
       <input
         type="date"
+        aria-label={label}
         value={value}
         onChange={function (e) {
           onChange(e.target.value);
         }}
         style={{
+          ...(dark ? inp : {}),
           width: "100%",
+          boxSizing: "border-box",
+          colorScheme: dark ? "dark" : "light",
           borderRadius: 8,
-          border: "1px solid #ddd",
+          border: "1px solid " + (dark ? borderC : "#ddd"),
           padding: "8px 10px",
           fontSize: 14,
         }}
@@ -2996,8 +3010,9 @@ export function DatePickerField({ value, onChange }) {
     </div>
   );
 }
-export function StatCard({ title, value, color, bg, sub, valueWeight }) {
-  var { dark } = useApp();
+export function StatCard({ title, value, color, bg, sub, valueWeight }: { title: any; value: any; color: any; bg: any; sub?: any; valueWeight?: any }) {
+  var statCtx:any = useApp();
+  var dark = statCtx.dark;
   var hasSub = !!sub;
   return (
     <div
@@ -3041,7 +3056,7 @@ export function StatCard({ title, value, color, bg, sub, valueWeight }) {
           wordBreak: "break-word",
         }}
       >
-        {value}
+        {smallDecimalNode(value, statCtx.lang)}
       </div>
       {sub && (
         <div
@@ -3056,7 +3071,7 @@ export function StatCard({ title, value, color, bg, sub, valueWeight }) {
             wordBreak: "break-word",
           }}
         >
-          {sub}
+          {smallDecimalNode(sub, statCtx.lang)}
         </div>
       )}
     </div>
@@ -3087,76 +3102,15 @@ export function Toast({ msg, onDone, color }) {
       return tr(part);
     })
     .join("\n");
-  var type = payload && payload.type ? String(payload.type) : "";
+  var type = notificationTone(payload, rawText);
   var lower = text.toLowerCase();
-  var isError =
-    type === "error" ||
-    lower.indexOf("errore") >= 0 ||
-    lower.indexOf("non valido") >= 0 ||
-    lower.indexOf("non supportato") >= 0 ||
-    lower.indexOf("non trovato") >= 0 ||
-    lower.indexOf("riprova") >= 0 ||
-    lower.indexOf("limite") >= 0 ||
-    lower.indexOf("raggiunto") >= 0 ||
-    lower.indexOf("non disponibile") >= 0 ||
-    lower.indexOf("non inclus") >= 0;
-  var isWarning =
-    type === "warning" ||
-    lower.indexOf("piano") >= 0 ||
-    lower.indexOf("cambia piano") >= 0 ||
-    lower.indexOf("passa al piano") >= 0 ||
-    lower.indexOf("upgrade") >= 0 ||
-    lower.indexOf("disponibile dal piano") >= 0;
-  // FIX 2.1.0 — Il successo ora va DICHIARATO, non dedotto per esclusione.
-  //
-  // Prima il colore e l'icona erano: errore -> rosso, avviso -> arancione, tutto il
-  // resto -> verde con la spunta. Qualunque messaggio negativo la cui formulazione non
-  // rientrava nell'elenco di parole chiave finiva verde e con l'icona di operazione
-  // completata: e' il caso di "Nessuna app disponibile per aprire questo documento",
-  // che non contiene "non disponibile".
-  //
-  // Peggio: le parole chiave sono italiane e vengono confrontate con il testo GIA'
-  // TRADOTTO. Per un utente in inglese o spagnolo nessuna corrispondeva, quindi ogni
-  // messaggio dell'app, errori compresi, veniva mostrato come successo.
-  //
-  // Ora il verde con la spunta richiede type "success" oppure una parola chiave
-  // positiva; il resto e' neutro (blu, icona informativa).
-  var isSuccess =
-    type === "success" ||
-    /(salvat|caricat|eliminat|aggiornat|creat|aggiunt|copiat|inviat|ripristinat|accettat|registrat|completat|pronto|attivat|disattivat|confermat)/i.test(
-      text
-    );
-  var isInfo = type === "info";
-  var bg =
-    color ||
-    payload.color ||
-    (isError
-      ? "#E24B4A"
-      : isWarning
-      ? "#EF9F27"
-      : isSuccess && !isInfo
-      ? "#1D9E75"
-      : "#378ADD");
-  var toastTextColor =
-    payload.textColor ||
-    (String(bg).toUpperCase() === "#FFF8E1" ||
-    String(bg).toUpperCase() === "#FDECEC" ||
-    String(bg).toUpperCase() === "#FFF0F0"
-      ? isError
-        ? "#E24B4A"
-        : "#856404"
-      : "#fff");
-  var icon =
-    payload.icon ||
-    (isError
-      ? "🚫"
-      : isWarning
-      ? "🔒"
-      : isSuccess && !isInfo
-      ? "✅"
-      : "ℹ️");
+  var isError = type === "error", isWarning = type === "warning", isSuccess = type === "success", isInfo = type === "info";
+  var appearance = notificationAppearance(type);
+  var bg = appearance.background;
+  var toastTextColor = appearance.color;
+  var icon = appearance.icon;
   var duration = Number(
-    payload.duration || (isError || isWarning ? 3600 : 2400)
+    payload.duration || (isError || isWarning ? 2500 : 1500)
   );
   function goInfo() {
     var actionTab = String((payload && payload.actionTab) || "settings");
@@ -3184,25 +3138,25 @@ export function Toast({ msg, onDone, color }) {
     },
     [payload.id, text, type, duration]
   );
-  return (
+  var content = (
     <div
+      role="alert" data-fainance-toast="true"
       style={{
-        position: "fixed",
-        top: payload.compact ? undefined : "clamp(240px,38vh,360px)",
-        bottom: payload.compact ? "calc(84px + env(safe-area-inset-bottom, 0px))" : undefined,
-        left: "50%",
-        transform: "translateX(-50%)",
+        position: "relative",
         background: bg,
         color: toastTextColor,
-        borderRadius: payload.compact ? 12 : 22,
+        borderRadius: 16,
         padding: payload.compact ? "12px 42px 12px 12px" : "16px 22px",
         fontSize: payload.compact ? 12 : 14,
         fontWeight: 800,
-        zIndex: 600,
+        zIndex: 1,
         boxShadow: "0 8px 40px rgba(0,0,0,0.28)",
         textAlign: "center",
-        minWidth: 240,
-        maxWidth: "88vw",
+        minWidth: "min(240px,100%)",
+        maxWidth: "min(420px,100%)",
+        maxHeight: "100%",
+        overflowY: "auto",
+        boxSizing: "border-box",
         lineHeight: 1.35,
         pointerEvents: "none",
       }}
@@ -3224,7 +3178,7 @@ export function Toast({ msg, onDone, color }) {
             background: lightActionSurface ? "#7F77DD" : "rgba(255,255,255,0.18)",
             border: lightActionSurface ? "1px solid #6B63C9" : "1px solid rgba(255,255,255,0.48)",
             borderRadius: 12,
-            color: "#fff",
+            color: readableDarkText("#fff", (ctx as any).dark, lightActionSurface ? "#7F77DD" : "rgba(255,255,255,0.18)"),
             padding: "8px 14px",
             fontSize: 13,
             fontWeight: 900,
@@ -3237,22 +3191,23 @@ export function Toast({ msg, onDone, color }) {
       )}
     </div>
   );
+  return typeof document !== "undefined" ? createPortal(<div data-fainance-toast-layer="true" style={{position:"fixed",inset:0,top:"var(--app-viewport-top,0px)",bottom:"auto",height:"var(--app-viewport-height,100dvh)",zIndex:2147483500,display:"flex",justifyContent:"center",alignItems:payload.compact?"flex-end":"center",padding:"calc(env(safe-area-inset-top,0px) + 16px) 16px calc(env(safe-area-inset-bottom,0px) + " + (payload.compact ? "84px" : "16px") + ")",boxSizing:"border-box",pointerEvents:"none"}}>{content}</div>,document.body) : content;
 }
 
 export function AlertPopup({ newAlerts, onClose }) {
-  var ctx = useApp();
+  var ctx:any = useApp();
   var { fmt } = ctx;
   function L(s) {
     return translateFainanceText(s, (ctx && ctx.lang) || "it");
   }
   if (!newAlerts || !newAlerts.length) return null;
-  return (
-    <div
+  return createPortal((
+    <div role="alertdialog" aria-modal="true" aria-label={L("Alert superato!")} data-spending-alert-popup="true"
       style={{
         position: "fixed",
         inset: 0,
         background: "rgba(0,0,0,0.55)",
-        zIndex: 500,
+        zIndex: 2147483400,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -3285,31 +3240,17 @@ export function AlertPopup({ newAlerts, onClose }) {
         >
           <span style={{ fontSize: 26 }}>🔔</span>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: readableDarkText("#fff", (ctx as any).dark, "#E24B4A") }}>
               {L("Alert superato!")}
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.85)" }}>
+            <div style={{ fontSize: 12, color: readableDarkText("rgba(255,255,255,0.85)", (ctx as any).dark, "#E24B4A") }}>
               {newAlerts.length === 1
                 ? L("1 nuova soglia superata")
                 : String(newAlerts.length) + " " + L("nuove soglie superate")}
             </div>
           </div>
-          <button
-            onClick={function () {
-              onClose(newAlerts);
-            }}
-            style={{
-              background: "rgba(255,255,255,0.2)",
-              border: "none",
-              borderRadius: 8,
-              color: "#fff",
-              fontSize: 18,
-              cursor: "pointer",
-              padding: "4px 10px",
-            }}
-          >
-            x
-          </button>
+          <PopupCloseButton onClick={()=>onClose(newAlerts)} dark={ctx.dark} label={L("Chiudi")} />
+
         </div>
         <div
           style={{ padding: "16px 20px", maxHeight: 340, overflowY: "auto" }}
@@ -3330,7 +3271,7 @@ export function AlertPopup({ newAlerts, onClose }) {
                   style={{
                     fontSize: 14,
                     fontWeight: 600,
-                    color: "#C03030",
+                    color: readableDarkText("#C03030", (ctx as any).dark, "#fff5f5"),
                     marginBottom: 4,
                     display: "flex",
                     alignItems: "center",
@@ -3349,7 +3290,7 @@ export function AlertPopup({ newAlerts, onClose }) {
                   <div
                     style={{
                       fontSize: 13,
-                      color: "#555",
+                      color: readableDarkText("#555", (ctx as any).dark, "#fff5f5"),
                       marginBottom: 6,
                       fontStyle: "italic",
                     }}
@@ -3365,11 +3306,11 @@ export function AlertPopup({ newAlerts, onClose }) {
                   }}
                 >
                   <span
-                    style={{ fontSize: 13, fontWeight: 600, color: "#E24B4A" }}
+                    style={{ fontSize: 13, fontWeight: 600, color: readableDarkText("#E24B4A", (ctx as any).dark, "#fff5f5") }}
                   >
                     {al.spentFmt}
                   </span>
-                  <span style={{ fontSize: 12, color: "#aaa" }}>
+                  <span style={{ fontSize: 12, color: readableDarkText("#aaa", (ctx as any).dark, "#fff5f5") }}>
                     {L("budget")} {al.budgetFmt}
                   </span>
                 </div>
@@ -3388,7 +3329,7 @@ export function AlertPopup({ newAlerts, onClose }) {
                 <div
                   style={{
                     fontSize: 11,
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", (ctx as any).dark, "#fff5f5"),
                     marginTop: 3,
                     textAlign: "right",
                   }}
@@ -3407,7 +3348,7 @@ export function AlertPopup({ newAlerts, onClose }) {
             style={{
               width: "100%",
               background: "#E24B4A",
-              color: "#fff",
+              color: readableDarkText("#fff", (ctx as any).dark, "#E24B4A"),
               border: "none",
               borderRadius: 10,
               padding: "11px",
@@ -3421,12 +3362,12 @@ export function AlertPopup({ newAlerts, onClose }) {
         </div>
       </div>
     </div>
-  );
+  ), document.body);
 }
 
 // ── FORMS ────────────────────────────────────────────────────────────────────
-export function MultiCurrencyField({ value, onChange, amount, compact, inline }: any) {
-  var ctx = useApp();
+export function MultiCurrencyField({ value, onChange, amount, compact, inline, inlineColor }: any) {
+  var ctx: any = useApp();
   var base = String(ctx.currency || "EUR").toUpperCase();
   var secondary = String(ctx.secondaryCurrency || "").toUpperCase();
   var plan = String(ctx.currentPlan || "free").toLowerCase();
@@ -3485,14 +3426,9 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
       return;
     }
     setLoading(true);
-    fetch("https://api.exchangerate-api.com/v4/latest/" + base)
-      .then(function (r) {
-        if (!r.ok) throw new Error("FX_HTTP_" + r.status);
-        return r.json();
-      })
-      .then(function (data) {
-        var units = Number(data && data.rates && data.rates[code]);
-        if (!units) throw new Error("FX_RATE_MISSING");
+    fetchToolRate(code, base)
+      .then(function (fx) {
+        var units = 1 / fx;
         var original = parseMoney(amount);
         onChange({
           currency: code,
@@ -3501,7 +3437,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
           baseAmount: Math.round((original / units) * 100) / 100,
           exchangeRate: 1 / units,
           exchangeRateDate: String(
-            data.date || new Date().toISOString().slice(0, 10)
+            new Date().toISOString().slice(0, 10)
           ),
           exchangeRateSource: "exchangerate-api.com",
         });
@@ -3545,10 +3481,12 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         border: inline ? "none" : "1px solid " + bc,
         borderRadius: inline ? 0 : 14,
         padding: inline ? 0 : compact ? 9 : 12,
+        width: inlineColor ? "100%" : undefined,
       }}
     >
       <button
         type="button"
+        aria-label={L("Valuta") + ": " + selected}
         onClick={function () {
           if (!basePlan) {
             if (ctx.setToast)
@@ -3564,14 +3502,15 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
           setOpen(true);
         }}
         style={{
-          width: inline ? "auto" : "100%",
+          width: inline && !inlineColor ? "auto" : "100%",
+          minHeight: inlineColor ? 42 : undefined,
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: inlineColor ? "center" : "space-between",
           gap: 10,
           border: "none",
           background: "transparent",
-          color: inline ? "#8FD3FF" : tc,
+          color: readableDarkText(inline ? (inlineColor || "#8FD3FF") : tc, dark, "transparent"),
           cursor: "pointer",
           padding: 0,
         }}
@@ -3579,7 +3518,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         {!inline && <span>
           <strong>{L("Cambia valuta")}</strong>
           <span
-            style={{ display: "block", fontSize: 11, color: sc, marginTop: 2 }}
+            style={{ display: "block", fontSize: 11, color: readableDarkText(sc, dark, "transparent"), marginTop: 2 }}
           >
             {info}
           </span>
@@ -3587,7 +3526,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         <span
           style={{
             fontWeight: 900,
-            color: inline ? "#8FD3FF" : ctx.secondaryButtonColor || "#5FAFE5",
+            color: readableDarkText(inline ? (inlineColor || "#8FD3FF") : (ctx as any).secondaryButtonColor || "#5FAFE5", dark, "transparent"),
             fontSize: inline ? 12 : undefined,
             letterSpacing: inline ? 0.6 : undefined,
           }}
@@ -3599,9 +3538,9 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
         <div style={{ fontSize: 11, color: sc, marginTop: 8 }}>
           {L("Equivalente nella valuta principale")}:{" "}
           <strong style={{ color: tc }}>
-            {Number(value.baseAmount).toFixed(2)} {base}
+            {smallDecimalNode(formatNumber(value.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {base}
           </strong>{" "}
-          · 1 {selected} = {Number(value.exchangeRate).toFixed(6)} {base}
+          · 1 {selected} = {smallDecimalNode(Number(value.exchangeRate).toFixed(6), ctx.lang)} {base}
         </div>
       )}
       {open && (
@@ -3626,8 +3565,9 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
               border: "1px solid " + bc,
               borderRadius: 22,
               padding: 16,
-              width: "100%",
-              maxWidth: 480,
+              maxWidth: 380,
+              boxSizing: "border-box",
+              width: "calc(100% - 24px)",
               maxHeight: "80vh",
               overflowY: "auto",
             }}
@@ -3648,22 +3588,7 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
                   {L("Il tasso viene salvato nella transazione")}
                 </div>
               </div>
-              <button
-                onClick={function () {
-                  setOpen(false);
-                }}
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 12,
-                  border: "1px solid #FFD0D0",
-                  background: "#FFF0F0",
-                  color: "#E24B4A",
-                  fontSize: 22,
-                }}
-              >
-                x
-              </button>
+              <PopupCloseButton onClick={function () { setOpen(false); }} dark={dark} label={L("Chiudi")} />
             </div>
             {full && (
               <input
@@ -3725,6 +3650,367 @@ export function MultiCurrencyField({ value, onChange, amount, compact, inline }:
       )}
     </div>
   );
+}
+
+export function MovementInstalmentSwitch({ checked, onChange, isMobile, activeColor }) {
+  var ctx: any = useApp();
+  var TL = function (text) { return translateFainanceText(text, ctx.lang || "it"); };
+    return (
+      <button
+        type="button"
+        aria-label={TL("Rateizza")}
+        aria-pressed={!!checked}
+        onClick={function () {
+          onChange();
+        }}
+        style={{
+          width: isMobile ? 34 : 42,
+          height: isMobile ? 19 : 23,
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,.45)",
+          background: checked
+            ? "rgba(255,255,255,.88)"
+            : "rgba(255,255,255,.24)",
+          padding: 2,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: checked ? "flex-end" : "flex-start",
+          transition: "all .18s ease",
+          boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
+        }}
+      >
+        <span
+          style={{
+            width: isMobile ? 15 : 19,
+            height: isMobile ? 15 : 19,
+            borderRadius: "50%",
+            background: checked ? activeColor : "#fff",
+            display: "block",
+            boxShadow: "0 2px 7px rgba(0,0,0,.20)",
+          }}
+        />
+      </button>
+    );
+  }
+
+
+export function MovementAmountPanel({ value, setValue, type, inputRef, fieldId, focused, setFocused, recurring = false }: any) {
+  var ctx: any = useApp();
+  var f = value, setF = setValue, amountInputRef = inputRef, entryFieldId = fieldId, amountFocused = focused, setAmountFocused = setFocused;
+  var dark = ctx.dark, isMobile = !!ctx.isMobile, t = ctx.t;
+  var btnC = type === "expense" ? ctx.expenseColor : ctx.incomeColor;
+  var amountGradient = type === "expense" ? "linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)" : "linear-gradient(135deg,#062F49 0%,#075C83 55%,#041F33 100%)";
+  var whiteSoft = "rgba(255,255,255,.70)";
+  var amountHasValue = !!String(f.amount || "").trim(), showAmountPlaceholder = !amountHasValue && !amountFocused;
+  function TL(text) { return translateFainanceText(text, ctx.lang || "it"); }
+  function toggleSwitch() { return <MovementInstalmentSwitch checked={!!f.rateizzato} onChange={function () { setF(function (p) { return { ...p, rateizzato: !p.rateizzato }; }); }} isMobile={isMobile} activeColor={btnC} />; }
+  return (
+      <div
+        className="fainance-entry-amount" data-recurring-amount-row={recurring ? true : undefined}
+        style={{
+          background: amountGradient,
+          borderRadius: 18,
+          padding: isMobile ? "16px clamp(9px,3.6vw,14px)" : "22px 26px",
+          display: "grid",
+          gridTemplateColumns: isMobile
+            ? "clamp(36px,11vw,44px) minmax(0,1fr) clamp(98px,29vw,108px)"
+            : "58px minmax(0,1fr) 128px",
+          gap: isMobile ? "clamp(3px,1.5vw,6px)" : 14,
+          alignItems: "center",
+          color: readableDarkText("#fff", dark, amountGradient),
+          boxShadow: dark
+            ? "0 12px 28px rgba(0,0,0,.20)"
+            : "0 14px 30px rgba(83,74,183,.22)",
+        }}
+      >
+        <AmountCalculatorButton
+          value={f.amount}
+          onApply={function (next) {
+            setF(function (p) {
+              return { ...p, amount: next };
+            });
+          }}
+          inverse
+          compact
+          iconOnly
+          iconSize={isMobile ? 34 : 46}
+        />
+        <div className="fainance-entry-amount-main" style={{ minWidth: 0, textAlign: "center" }}>
+          <label
+            htmlFor={entryFieldId + "-amount"}
+            style={{
+              display: "block",
+              fontSize: isMobile ? 12.6 : 14,
+              fontWeight: 850,
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+              color: readableDarkText(whiteSoft, dark, amountGradient),
+              marginBottom: 2,
+            }}
+          >
+            {t.amount}
+          </label>
+          <div
+            className="fainance-entry-amount-value"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: isMobile ? 6 : 9,
+              maxWidth: "100%",
+            }}
+          >
+            <div
+              style={{
+                position: "relative",
+                flex: "0 1 auto",
+                minWidth: 0,
+                maxWidth: "calc(100% - 48px)",
+              }}
+            >
+              {showAmountPlaceholder && (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
+                    fontWeight: 950,
+                    color: readableDarkText("#fff", dark, amountGradient),
+                    lineHeight: 1,
+                    pointerEvents: "none",
+                    textShadow: "0 2px 10px rgba(0,0,0,.12)",
+                  }}
+                >
+                  _,__
+                </div>
+              )}
+              <input
+                ref={amountInputRef}
+                id={entryFieldId + "-amount"}
+                autoFocus
+                type="text"
+                inputMode="decimal"
+                placeholder=""
+                value={f.amount}
+                onFocus={function () { setAmountFocused(true); }}
+                onBlur={function () { setAmountFocused(false); }}
+                onChange={function (e) {
+                  setF(function (p) {
+                    return { ...p, amount: e.target.value };
+                  });
+                }}
+                style={{
+                  width: amountHasValue
+                    ? Math.min(
+                        Math.max(String(f.amount || "").length + 0.5, 2),
+                        isMobile ? 7.5 : 10.5
+                      ) + "ch"
+                    : isMobile
+                    ? 70
+                    : 104,
+                  maxWidth: "100%",
+                  display: "block",
+                  margin: 0,
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  textAlign: "center",
+                  fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
+                  fontWeight: 950,
+                  color: readableDarkText("#fff", dark, "transparent"),
+                  WebkitTextFillColor: "#fff",
+                  outline: "none",
+                  lineHeight: 1,
+                  textShadow: "0 2px 10px rgba(0,0,0,.12)",
+                }}
+              />
+            </div>
+            <MultiCurrencyField
+              inline
+              compact
+              value={f}
+              amount={f.amount}
+              onChange={function (patch) {
+                setF(function (p) {
+                  return { ...p, ...patch };
+                });
+              }}
+            />
+          </div>
+          <div
+              style={{ visibility: showAmountPlaceholder ? "visible" : "hidden", minHeight: 18, lineHeight: "18px",
+                fontSize: isMobile ? 14.6 : 16,
+                color: readableDarkText(whiteSoft, dark, amountGradient),
+                fontWeight: 600,
+                marginTop: 4,
+              }}
+            >
+              {TL("Inserisci l'importo")}
+            </div>
+          {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
+            <div style={{ fontSize: isMobile ? 11.6 : 12, color: readableDarkText(whiteSoft, dark, amountGradient), marginTop: 3 }}>
+              ≈ {smallDecimalNode(formatNumber(f.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
+            </div>
+          )}
+        </div>
+        <div
+          className="fainance-entry-instalment"
+          style={{
+            height: "100%",
+            minHeight: isMobile ? 52 : 66,
+            borderLeft: "1px solid rgba(255,255,255,.32)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: isMobile ? 7 : 9,
+            paddingLeft: isMobile ? 12 : 16,
+          }}
+        >
+          <div
+            style={{
+              fontSize: isMobile ? "clamp(7.4px,2.35vw,8.6px)" : 10.5,
+              fontWeight: 950,
+              textTransform: "uppercase",
+              letterSpacing: 0.35,
+              color: readableDarkText("#fff", dark, amountGradient),
+              lineHeight: 0.95,
+              textAlign: "center",
+            }}
+          >
+            {t.instalment}
+          </div>
+          {toggleSwitch()}
+        </div>
+      </div>
+  );
+}
+
+export function MovementInstallmentsPanel({ value, setValue }: any) {
+  var ctx: any = useApp();
+  var f = value, setF = setValue, dark = ctx.dark, isMobile = !!ctx.isMobile, t = ctx.t;
+  var selectedCurrency = CURRENCIES.find(function (item) { return item.code === String(f.currency || ctx.currency); });
+  var sym = selectedCurrency ? selectedCurrency.symbol : ctx.sym;
+  return (<>
+      {f.rateizzato && (
+        <div data-movement-installments
+          style={{
+            background: dark ? "#24213a" : "#F0EDFF",
+            border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
+            borderRadius: 14,
+            padding: isMobile ? 10 : 13,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"),
+              marginBottom: 7,
+              fontWeight: 800,
+            }}
+          >
+            {t.instalmentIn} {f.rate} {t.months} -{" "}
+            {smallDecimalNode(fmtAmt(
+              parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
+              sym
+            ), ctx.lang)}{" "}
+            {t.perMonth}
+          </div>
+          <RatePicker
+            value={f.rate}
+            direction={f.rateDirection || "forward"}
+            onChange={function (n) {
+              setF(function (p) {
+                return { ...p, rate: n };
+              });
+            }}
+            onDirectionChange={function (d) {
+              setF(function (p) {
+                return { ...p, rateDirection: d };
+              });
+            }}
+          />
+        </div>
+      )}
+  </>);
+}
+
+export function MovementSelectionCard({value,onChange,options,labelText,selectionKey,fieldId,emptyLabel,missingLabel}:any) {
+  var ctx: any = useApp(), dark = ctx.dark, isMobile = !!ctx.isMobile;
+  var mainButtonC = ctx.confirmButtonColor || "#378ADD";
+  var t = TRANSLATIONS[ctx.lang || "it"] || TRANSLATIONS.it;
+  function TL(text) { return translateFainanceText(text, ctx.lang || "it"); }
+  var tc = dark ? "#eee" : "#333";
+  var sc = dark ? "#aaa" : "#777";
+  var borderC = dark ? "#444" : "#e8e8ee";
+  var panelBg = dark
+    ? "linear-gradient(160deg,#252535 0%,#1e1e30 100%)"
+    : "linear-gradient(160deg,#ffffff 0%,#faf9ff 100%)";
+  var fieldBg = dark ? "#1e1e30" : "#fff";
+  var inp = {
+    width: "100%",
+    borderRadius: 10,
+    border: "1px solid " + borderC,
+    padding: isMobile ? "6px 8px" : "10px 12px",
+    fontSize: 14,
+    background: fieldBg,
+    color: tc,
+    boxSizing: "border-box",
+    outline: "none",
+  };
+  var fieldCard = {
+    background: fieldBg,
+    border: "1px solid " + borderC,
+    borderRadius: 14,
+    padding: isMobile ? "7px 8px" : "11px 13px",
+    boxShadow: dark
+      ? "0 6px 16px rgba(0,0,0,.16)"
+      : "0 6px 18px rgba(31,60,120,.08), inset 0 1px 0 rgba(255,255,255,.86)",
+  };
+  var label = {
+    fontSize: isMobile ? 11.8 : 10,
+    color: sc,
+    display: "block",
+    marginBottom: 4,
+    fontWeight: 700,
+    textTransform: "uppercase",
+    letterSpacing: 0.35,
+  };
+  const selected = options.find(item=>String(item.id)===String(value)) || {name:value ? missingLabel || "" : emptyLabel || "",icon:"📦"};
+  return <div style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}>
+    <label htmlFor={fieldId} style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>{labelText}</label>
+    <div style={{position:"relative",minWidth:0}}>
+      <select data-movement-choice={selectionKey} id={fieldId} aria-label={labelText} value={value ?? ""} onChange={e=>onChange(e.target.value)} style={{...inp,opacity:0,padding:isMobile?"8px 3px 8px 2px":"9px 6px 9px 4px",paddingLeft:isMobile?2:4,paddingRight:isMobile?3:6,fontSize:isMobile?"clamp(13.2px,4.05vw,14.8px)":16,fontWeight:750,border:"none",background:"transparent",height:isMobile?39:44,appearance:"none",WebkitAppearance:"none"}}>
+        {emptyLabel && <option value="">{emptyLabel}</option>}
+        {!!value && missingLabel && !options.some(item=>String(item.id)===String(value)) && <option value={value}>{missingLabel}</option>}
+        {options.map(item=><option key={item.id} value={item.id} data-fainance-icon-ref={item.icon||"📁"}>{iconTextValue(item.icon)} {item.name}</option>)}
+      </select>
+      <span aria-hidden="true" data-entry-selection={selectionKey} style={{position:"absolute",inset:0,pointerEvents:"none",display:"grid",gridTemplateColumns:"22px minmax(0,1fr)",gap:4,alignItems:"center",fontSize:isMobile?"clamp(13.2px,4.05vw,14.8px)":16,fontWeight:750,color:tc}}><FainanceIcon value={selected.icon} size={20} style={{transform:"translateX(-3px)"}}/><span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selected.name}</span></span>
+      <span aria-hidden="true" data-entry-chevron={selectionKey} style={{position:"absolute",right:1,top:-12,pointerEvents:"none",color:readableDarkText(mainButtonC,dark,dark?"#181827":"#fff"),fontSize:21,fontWeight:950,lineHeight:1}}>▾</span>
+    </div>
+  </div>;
+}
+export function MovementSelectorGrid({children}:any) {
+  const ctx:any=useApp();return <div className="fainance-entry-fields" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:ctx.isMobile?"clamp(5px,2vw,8px)":12}}>{children}</div>;
+}
+export function MovementExpenseSelectors({value:f,setValue:setF,categories,methods,fieldId}:any) {
+  const ctx:any=useApp(),t=TRANSLATIONS[ctx.lang||"it"]||TRANSLATIONS.it;
+  function select(key,value){setF(p=>({...p,[key]:value,_ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!==key)}));}
+  return <MovementSelectorGrid>
+    <MovementSelectionCard labelText={t.category} fieldId={fieldId+"-category"} selectionKey="catId" value={f.catId} options={categories} onChange={v=>select("catId",v)}/>
+    <MovementSelectionCard labelText={translateFainanceText("Pagamento",ctx.lang||"it")} fieldId={fieldId+"-payment"} selectionKey="methodId" value={f.methodId} options={methods} onChange={v=>select("methodId",v)}/>
+  </MovementSelectorGrid>;
+}
+export function MovementIncomeSelectors({value:f,setValue:setF,incomeTypes,methods,fieldId}:any) {
+  const ctx:any=useApp(),t=TRANSLATIONS[ctx.lang||"it"]||TRANSLATIONS.it;
+  return <MovementSelectorGrid>
+    <MovementSelectionCard labelText={t.incomeType} fieldId={fieldId+"-income-type"} selectionKey="itype" value={f.itype} options={incomeTypes} onChange={v=>setF(p=>({...p,itype:v,_ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=="type")}))}/>
+    <MovementSelectionCard labelText={incomeReceiptText(ctx.lang,"label")} fieldId={fieldId+"-income-receipt"} selectionKey="receivedInMethodId" value={f.receivedInMethodId||""} options={methods} emptyLabel={incomeReceiptText(ctx.lang,"unspecified")} missingLabel={f.receivedInMethodName||incomeReceiptText(ctx.lang,"unavailable")} onChange={v=>setF(p=>({...p,...incomeReceiptFields({...p,receivedInMethodId:v},methods)}))}/>
+  </MovementSelectorGrid>;
 }
 
 export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) {
@@ -3799,6 +4085,8 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
     _ruleDefaultFields: ["type"],
     amount: "",
     itype: defaultIncomeType.id,
+    receivedInMethodId: "",
+    receivedInMethodName: "",
     desc: "",
     date: todayStr(),
     rateizzato: false,
@@ -3882,6 +4170,13 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
   var [dateTouched, setDateTouched] = useState(!!initialValue);
   var [amountFocused, setAmountFocused] = useState(false);
   var amountInputRef = useRef(null);
+  var entryFormRef = useRef(null);
+  var entrySpacerRef = useRef(null);
+  var entryFieldId = useId();
+  useEffect(function () {
+    if (!isMobile || ctx.tab !== 'spese') return;
+    return installMovementEntryFocus(entryFormRef.current, entrySpacerRef.current);
+  }, [isMobile, ctx.tab, type]);
   useEffect(
     function () {
       focusFainanceInput(amountInputRef, 120);
@@ -3977,6 +4272,12 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         f.exchangeRateDate || todayStr()
       ),
       exchangeRateSource: String(f.exchangeRateSource || "base"),
+      toolSource: String(f.toolSource || ""),
+      toolOriginalAmount: Number(f.converterOriginalAmount || 0) || null,
+      toolOriginalCurrency: String(f.converterOriginalCurrency || ""),
+      toolConvertedAmount: Number(f.converterResultAmount || 0) || null,
+      toolConvertedCurrency: String(f.converterResultCurrency || ""),
+      toolConversionRate: Number(f.converterRate || 0) || null,
       desc: f.desc,
       date: dateTouched ? f.date : todayStr(),
       rateizzato: f.rateizzato,
@@ -3988,6 +4289,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
       item.methodId = f.methodId;
     } else {
       item.type = f.itype;
+      Object.assign(item,incomeReceiptFields(f,methods));
     }
     if(onSave(item)===false)return;
     try {
@@ -4040,47 +4342,12 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
     };
   }
   function toggleSwitch() {
-    return (
-      <button
-        type="button"
-        aria-label={TL("Rateizza")}
-        onClick={function () {
-          setF(function (p) {
-            return { ...p, rateizzato: !p.rateizzato };
-          });
-        }}
-        style={{
-          width: isMobile ? 34 : 42,
-          height: isMobile ? 19 : 23,
-          borderRadius: 999,
-          border: "1px solid rgba(255,255,255,.45)",
-          background: f.rateizzato
-            ? "rgba(255,255,255,.88)"
-            : "rgba(255,255,255,.24)",
-          padding: 2,
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: f.rateizzato ? "flex-end" : "flex-start",
-          transition: "all .18s ease",
-          boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
-        }}
-      >
-        <span
-          style={{
-            width: isMobile ? 15 : 19,
-            height: isMobile ? 15 : 19,
-            borderRadius: "50%",
-            background: f.rateizzato ? btnC : "#fff",
-            display: "block",
-            boxShadow: "0 2px 7px rgba(0,0,0,.20)",
-          }}
-        />
-      </button>
-    );
+    return <MovementInstalmentSwitch checked={!!f.rateizzato} onChange={function () { setF(function (p) { return { ...p, rateizzato: !p.rateizzato }; }); }} isMobile={!!isMobile} activeColor={btnC} />;
   }
   return (
+    <>
     <div
+      ref={entryFormRef}
       className="fainance-entry-form"
       style={{
         background: dark ? "#181827" : "#fff",
@@ -4095,392 +4362,20 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         gap: isMobile ? 10 : 14,
       }}
     >
-      <div style={{ textAlign: "center", padding: "0 2px 2px" }}>
-        <div
-          style={{
-            fontSize: isMobile ? 18.6 : 22,
-            fontWeight: 950,
-            color: tc,
-            letterSpacing: 0.1,
-          }}
-        >
-          {type === "expense" ? TL("Nuova uscita") : TL("Nuova entrata")}
-        </div>
-      </div>
-      <div
-        className="fainance-entry-amount"
-        style={{
-          background: amountGradient,
-          borderRadius: 18,
-          padding: isMobile ? "16px clamp(9px,3.6vw,14px)" : "22px 26px",
-          display: "grid",
-          gridTemplateColumns: isMobile
-            ? "clamp(36px,11vw,44px) minmax(0,1fr) clamp(98px,29vw,108px)"
-            : "58px minmax(0,1fr) 128px",
-          gap: isMobile ? "clamp(3px,1.5vw,6px)" : 14,
-          alignItems: "center",
-          color: "#fff",
-          boxShadow: dark
-            ? "0 12px 28px rgba(0,0,0,.20)"
-            : "0 14px 30px rgba(83,74,183,.22)",
-        }}
-      >
-        <AmountCalculatorButton
-          value={f.amount}
-          onApply={function (next) {
-            setF(function (p) {
-              return { ...p, amount: next };
-            });
-          }}
-          inverse
-          compact
-          iconOnly
-          iconSize={isMobile ? 34 : 46}
-        />
-        <div className="fainance-entry-amount-main" style={{ minWidth: 0, textAlign: "center" }}>
-          <div
-            style={{
-              fontSize: isMobile ? 12.6 : 14,
-              fontWeight: 850,
-              textTransform: "uppercase",
-              letterSpacing: 0.8,
-              color: whiteSoft,
-              marginBottom: 2,
-            }}
-          >
-            {t.amount}
-          </div>
-          <div
-            className="fainance-entry-amount-value"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: isMobile ? 6 : 9,
-              maxWidth: "100%",
-            }}
-          >
-            <div
-              style={{
-                position: "relative",
-                flex: "0 1 auto",
-                minWidth: 0,
-                maxWidth: "calc(100% - 48px)",
-              }}
-            >
-              {showAmountPlaceholder && (
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
-                    fontWeight: 950,
-                    color: "#fff",
-                    lineHeight: 1,
-                    pointerEvents: "none",
-                    textShadow: "0 2px 10px rgba(0,0,0,.12)",
-                  }}
-                >
-                  _,__
-                </div>
-              )}
-              <input
-                ref={amountInputRef}
-                autoFocus
-                type="text"
-                inputMode="decimal"
-                placeholder=""
-                value={f.amount}
-                onFocus={function () { setAmountFocused(true); }}
-                onBlur={function () { setAmountFocused(false); }}
-                onChange={function (e) {
-                  setF(function (p) {
-                    return { ...p, amount: e.target.value };
-                  });
-                }}
-                style={{
-                  width: amountHasValue
-                    ? Math.min(
-                        Math.max(String(f.amount || "").length + 0.5, 2),
-                        isMobile ? 7.5 : 10.5
-                      ) + "ch"
-                    : isMobile
-                    ? 70
-                    : 104,
-                  maxWidth: "100%",
-                  display: "block",
-                  margin: 0,
-                  border: "none",
-                  background: "transparent",
-                  padding: 0,
-                  textAlign: "center",
-                  fontSize: isMobile ? "clamp(31.5px,10.4vw,37.5px)" : 52,
-                  fontWeight: 950,
-                  color: "#fff",
-                  WebkitTextFillColor: "#fff",
-                  outline: "none",
-                  lineHeight: 1,
-                  textShadow: "0 2px 10px rgba(0,0,0,.12)",
-                }}
-              />
-            </div>
-            <MultiCurrencyField
-              inline
-              compact
-              value={f}
-              amount={f.amount}
-              onChange={function (patch) {
-                setF(function (p) {
-                  return { ...p, ...patch };
-                });
-              }}
-            />
-          </div>
-          {showAmountPlaceholder && (
-            <div
-              style={{
-                fontSize: isMobile ? 14.6 : 16,
-                color: whiteSoft,
-                fontWeight: 600,
-                marginTop: 4,
-              }}
-            >
-              {TL("Inserisci l'importo")}
-            </div>
-          )}
-          {String(f.currency || ctx.currency) !== String(ctx.currency) && Number(f.baseAmount) > 0 && (
-            <div style={{ fontSize: isMobile ? 11.6 : 12, color: whiteSoft, marginTop: 3 }}>
-              ≈ {Number(f.baseAmount).toFixed(2)} {String(ctx.currency || "EUR")}
-            </div>
-          )}
-        </div>
-        <div
-          className="fainance-entry-instalment"
-          style={{
-            height: "100%",
-            minHeight: isMobile ? 52 : 66,
-            borderLeft: "1px solid rgba(255,255,255,.32)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: isMobile ? 3 : 6,
-            paddingLeft: isMobile ? 12 : 16,
-          }}
-        >
-          <div
-            style={{
-              fontSize: isMobile ? "clamp(7.4px,2.35vw,8.6px)" : 10.5,
-              fontWeight: 950,
-              textTransform: "uppercase",
-              letterSpacing: 0.35,
-              color: "#fff",
-              lineHeight: 0.95,
-              textAlign: "center",
-            }}
-          >
-            {t.instalment}
-          </div>
-          {toggleSwitch()}
-        </div>
-      </div>
-      {f.rateizzato && (
-        <div
-          style={{
-            background: dark ? "#24213a" : "#F0EDFF",
-            border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
-            borderRadius: 14,
-            padding: isMobile ? 10 : 13,
-          }}
-        >
-          <div
-            style={{
-              fontSize: 12,
-              color: dark ? "#BEB8FF" : "#534AB7",
-              marginBottom: 7,
-              fontWeight: 800,
-            }}
-          >
-            {t.instalmentIn} {f.rate} {t.months} -{" "}
-            {fmtAmt(
-              parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
-              sym
-            )}{" "}
-            {t.perMonth}
-          </div>
-          <RatePicker
-            value={f.rate}
-            direction={f.rateDirection || "forward"}
-            onChange={function (n) {
-              setF(function (p) {
-                return { ...p, rate: n };
-              });
-            }}
-            onDirectionChange={function (d) {
-              setF(function (p) {
-                return { ...p, rateDirection: d };
-              });
-            }}
-          />
-        </div>
-      )}
+      <MovementAmountPanel value={f} setValue={setF} type={type} inputRef={amountInputRef} fieldId={entryFieldId} focused={amountFocused} setFocused={setAmountFocused} />
+      <MovementInstallmentsPanel value={f} setValue={setF} />
       {type === "expense" ? (
-        <div
-          className="fainance-entry-fields"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: isMobile ? "clamp(5px,2vw,8px)" : 12,
-          }}
-        >
-          <div
-            style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
-          >
-            <label style={{ ...label, color: dark ? sc : "#343647" }}>
-              {t.category}
-            </label>
-            <div style={{ position: "relative", minWidth: 0 }}>
-              <select
-                value={f.catId}
-                onChange={function (e) {
-                  setF(function (p) {
-                    return { ...p, catId: e.target.value, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=='catId') };
-                  });
-                }}
-                style={{
-                  ...inp,
-                  padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
-                  paddingLeft: isMobile ? 2 : 4,
-                  paddingRight: isMobile ? 3 : 6,
-                  fontSize: isMobile ? "clamp(13.2px,4.05vw,14.8px)" : 16,
-                  fontWeight: 750,
-                  border: "none",
-                  background: "transparent",
-                  height: isMobile ? 39 : 44,
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                }}
-              >
-                {sCats.map(function (c) {
-                  return (
-                    <option key={c.id} value={c.id}>
-                      {iconTextValue(c.icon)} {c.name}
-                    </option>
-                  );
-                })}
-              </select>
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  right: 1,
-                  top: -12,
-                  pointerEvents: "none",
-                  color: mainButtonC,
-                  fontSize: 21,
-                  fontWeight: 950,
-                  lineHeight: 1,
-                }}
-              >
-                ▾
-              </span>
-            </div>
-          </div>
-          <div
-            style={{ ...fieldCard, padding: isMobile ? "4px clamp(5px,1.9vw,7px)" : "7px 10px" }}
-          >
-            <label style={{ ...label, color: dark ? sc : "#343647" }}>
-              {TL("Pagamento")}
-            </label>
-            <div style={{ position: "relative", minWidth: 0 }}>
-              <select
-                value={f.methodId}
-                onChange={function (e) {
-                  setF(function (p) {
-                    return { ...p, methodId: e.target.value, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=='methodId') };
-                  });
-                }}
-                style={{
-                  ...inp,
-                  padding: isMobile ? "8px 3px 8px 2px" : "9px 6px 9px 4px",
-                  paddingLeft: isMobile ? 2 : 4,
-                  paddingRight: isMobile ? 3 : 6,
-                  fontSize: isMobile ? "clamp(13.2px,4.05vw,14.8px)" : 16,
-                  fontWeight: 750,
-                  border: "none",
-                  background: "transparent",
-                  height: isMobile ? 39 : 44,
-                  appearance: "none",
-                  WebkitAppearance: "none",
-                }}
-              >
-                {sMethods.map(function (m) {
-                  return (
-                    <option key={m.id} value={m.id}>
-                      {iconTextValue(m.icon)} {m.name}
-                    </option>
-                  );
-                })}
-              </select>
-              <span
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  right: 1,
-                  top: -12,
-                  pointerEvents: "none",
-                  color: mainButtonC,
-                  fontSize: 21,
-                  fontWeight: 950,
-                  lineHeight: 1,
-                }}
-              >
-                ▾
-              </span>
-            </div>
-          </div>
-        </div>
+        <MovementExpenseSelectors value={f} setValue={setF} categories={sCats} methods={sMethods} fieldId={entryFieldId} />
       ) : (
-        <div style={fieldCard}>
-          <label style={{ ...label, color: dark ? sc : "#343647" }}>
-            {t.incomeType}
-          </label>
-          <select
-            value={f.itype}
-            onChange={function (e) {
-              setF(function (p) {
-                return { ...p, itype: e.target.value, _ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=='type') };
-              });
-            }}
-            style={{
-              ...inp,
-              padding: isMobile ? "10px 10px 10px 2px" : "11px 12px 11px 4px",
-              paddingLeft: isMobile ? 2 : 4,
-              fontSize: isMobile ? 13.7 : 16,
-              fontWeight: 750,
-              border: "none",
-              background: "transparent",
-              height: isMobile ? 48 : 52,
-            }}
-          >
-            {sIncomeTypes.map(function (it) {
-              return (
-                <option key={it.id} value={it.id}>
-                  {it.icon} {it.name}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+        <MovementIncomeSelectors value={f} setValue={setF} incomeTypes={sIncomeTypes} methods={sMethods} fieldId={entryFieldId} />
       )}
       <div style={{ ...fieldCard, padding: isMobile ? 8 : 11 }}>
-        <label style={{ ...label, color: dark ? sc : "#343647" }}>
+        <label style={{ ...label, color: readableDarkText(dark ? sc : "#343647", dark, dark ? "#181827" : "#fff") }}>
           {t.description}
         </label>
         <textarea
+          id={entryFieldId + "-description"}
+          data-entry-focus="true"
           placeholder={TL("Aggiungi una descrizione (opzionale)")}
           value={f.desc}
           onChange={function (e) {
@@ -4569,6 +4464,8 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
             <span style={{ pointerEvents: "none", fontSize: 17 }}>📅</span>
             <input
               type="date"
+              aria-label={t.date}
+              onClick={openMovementDatePicker}
               value={f.date}
               onChange={function (e) {
                 setDateTouched(true);
@@ -4579,6 +4476,11 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
               style={{
                 position: "absolute",
                 inset: 0,
+                width: "100%",
+                height: "100%",
+                margin: 0,
+                padding: 0,
+                border: 0,
                 opacity: 0,
                 cursor: "pointer",
               }}
@@ -4591,7 +4493,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         disabled={!expenseFormValid}
         style={{
           background: expenseFormValid ? mainButtonC : "#A8A8A8",
-          color: "#fff",
+          color: readableDarkText("#fff", dark, expenseFormValid ? mainButtonC : "#A8A8A8"),
           border: "none",
           borderRadius: btnRadius,
           padding: isMobile ? 15 : 17,
@@ -4609,6 +4511,8 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
         {type === "expense" ? TL("Salva Uscita") : TL("Salva Entrata")}
       </button>
     </div>
+    <div ref={entrySpacerRef} aria-hidden="true" style={{ height: 0, flexShrink: 0 }} />
+    </>
   );
 }
 
@@ -5907,7 +5811,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
         />
       </div>
       {cameraError ? (
-        <div style={{ color: "#FFD27A", fontWeight: 800, marginTop: 10 }}>
+        <div style={{ color: readableDarkText("#FFD27A", dark, "#05050a"), fontWeight: 800, marginTop: 10 }}>
           {cameraError}
         </div>
       ) : null}
@@ -5985,7 +5889,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
           fontSize: 18,
           fontWeight: 1000,
           background: expenseColor,
-          color: "#fff",
+          color: readableDarkText("#fff", dark, expenseColor),
         }}
       >
         📷 {L("Scatta foto")}
@@ -6179,7 +6083,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
           disabled={ocrLoading}
           style={{
             background: ocrLoading ? "#aaa" : expenseColor,
-            color: "#fff",
+            color: readableDarkText("#fff", dark, ocrLoading ? "#aaa" : expenseColor),
             border: "none",
             borderRadius: btnRadius,
             padding: "10px 14px",
@@ -6204,7 +6108,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
             borderRadius: 12,
             padding: "10px 12px",
             fontSize: 12,
-            color: dark ? "#ddd" : "#745400",
+            color: readableDarkText(dark ? "#ddd" : "#745400", dark, dark ? "#1e1e30" : "#fff8e1"),
             lineHeight: 1.45,
           }}
         >
@@ -6265,7 +6169,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
             >
               {sCats.map(function (c) {
                 return (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                     {iconTextValue(c.icon)} {c.name}
                   </option>
                 );
@@ -6287,7 +6191,7 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
             >
               {sMethods.map(function (m) {
                 return (
-                  <option key={m.id} value={m.id}>
+                  <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                     {iconTextValue(m.icon)} {m.name}
                   </option>
                 );
@@ -6317,7 +6221,9 @@ export function ReceiptScanPanel({ onSave, shareMode }) {
           background: receiptFormValid
             ? confirmButtonColor || "#378ADD"
             : "#A8A8A8",
-          color: "#fff",
+          color: readableDarkText("#fff", dark, receiptFormValid
+            ? confirmButtonColor || "#378ADD"
+            : "#A8A8A8"),
           border: "none",
           borderRadius: btnRadius,
           padding: isMobile ? 12 : 15,
@@ -6341,12 +6247,18 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
   var t = ctx.t,
     cats = effectiveExpenseCats(ctx.cats),
     methods = effectiveMethods(ctx.methods),
+    sym = ctx.sym,
     dark = ctx.dark,
     catOrder = ctx.catOrder,
     methodOrder = ctx.methodOrder,
     catSortMode = ctx.catSortMode,
     methodSortMode = ctx.methodSortMode,
     expenseGroups = effectiveExpenseGroups(ctx.expenseGroups),
+    expenseColor = ctx.expenseColor,
+    incomeColor = ctx.incomeColor,
+    confirmButtonColor = ctx.confirmButtonColor,
+    secondaryButtonColor = ctx.secondaryButtonColor,
+    btnRadius = ctx.btnRadius,
     isMobile = ctx.isMobile;
   var L =
     ctx.translateUiRuntimeText ||
@@ -6376,7 +6288,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
       ctx.incomeTypeOverrides,
     ]
   );
-  function blank() {
+  function blank(): { _id: number; _ruleDefaultFields: string[]; amount: string; catId: any; methodId: any; itype: any; receivedInMethodId: string; receivedInMethodName: string; desc: string; date: string; rateizzato: boolean; rate: number; rateDirection: string; currency: string; baseCurrency: string; exchangeRate: number; exchangeRateDate?: string; exchangeRateSource?: string } {
     var dc = sCats.find(function (c) {
       return String(c.id) === String(ctx.defaultExpenseCat || "");
     }) ||
@@ -6396,11 +6308,16 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
       catId: dc.id,
       methodId: dm.id,
       itype: di.id,
+      receivedInMethodId: "",
+      receivedInMethodName: "",
       desc: "",
       date: todayStr(),
       rateizzato: false,
       rate: 12,
       rateDirection: "forward",
+      currency: String(ctx.currency || "EUR"),
+      baseCurrency: String(ctx.currency || "EUR"),
+      exchangeRate: 1,
     };
   }
   var [rows, setRows] = useState([blank()]);
@@ -6423,7 +6340,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
         borderRadius: 12,
         padding: "10px 12px",
         fontSize: 12,
-        color: "#856404",
+        color: readableDarkText("#856404", dark, "#FFF8E1"),
         fontWeight: 700,
         lineHeight: 1.35,
       }}
@@ -6441,7 +6358,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
     minWidth: 0,
   };
@@ -6452,12 +6369,19 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     padding: "6px 8px",
     fontSize: 13,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
   };
   function upd(id, k, v) {
     setRows(function (r) {
       return r.map(function (x) {
         return x._id === id ? { ...x, [k]: v, _ruleDefaultFields:(x._ruleDefaultFields||[]).filter(field=>field!==(k==="itype"?"type":k)) } : x;
+      });
+    });
+  }
+  function updPatch(id, patch) {
+    setRows(function (list) {
+      return list.map(function (row) {
+        return row._id === id ? { ...row, ...(patch || {}) } : row;
       });
     });
   }
@@ -6483,13 +6407,24 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     if (!valid.length) return;
     var ok = onSave(
       valid.map(function (r) {
+        var rawAmount = parseMoney(r.amount);
+        var foreign = String(r.currency || ctx.currency) !== String(ctx.currency);
+        var baseAmount = foreign && Number(r.baseAmount) > 0 ? Number(r.baseAmount) : rawAmount;
         return {
           id: Date.now() + Math.random(),
           _ruleDefaultFields:r._ruleDefaultFields||[],
-          amount: parseFloat(r.amount),
+          amount: baseAmount,
+          originalAmount: foreign ? rawAmount : null,
+          currency: String(r.currency || ctx.currency || "EUR"),
+          baseCurrency: String(r.baseCurrency || ctx.currency || "EUR"),
+          baseAmount: baseAmount,
+          exchangeRate: Number(r.exchangeRate || 1),
+          exchangeRateDate: String(r.exchangeRateDate || todayStr()),
+          exchangeRateSource: String(r.exchangeRateSource || "base"),
           catId: Number(r.catId),
           methodId: Number(r.methodId),
           type: r.itype,
+          ...(type === "income" ? incomeReceiptFields(r,methods) : {}),
           desc: r.desc,
           date: r.date,
           rateizzato: r.rateizzato,
@@ -6502,585 +6437,303 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
   }
   var tc = dark ? "#aaa" : "#666";
 
-  // MOBILE: card layout per ogni riga, allineato al form singolo
+  // FAINANCE_58_BULK_MATCH_SINGLE
+  // MOBILE: ogni voce usa gli stessi componenti, proporzioni e spaziature del form singolo.
   if (isMobile) {
+    var btnC = type === "expense" ? expenseColor : incomeColor;
+    var mainButtonC = confirmButtonColor || "#378ADD";
+    var secondaryC = secondaryButtonColor || "#7F77DD";
+    var borderCMobile = dark ? "#444" : "#e8e8ee";
+    var scMobile = dark ? "#aaa" : "#777";
+    var tcMobile = dark ? "#eee" : "#333";
+    var fieldBgMobile = dark ? "#1e1e30" : "#fff";
+    var whiteSoftMobile = "rgba(255,255,255,.70)";
     var amountGradient =
       type === "expense"
         ? "linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)"
         : "linear-gradient(135deg,#062F49 0%,#075C83 55%,#041F33 100%)";
-    var fieldCard = {
-      background: dark ? "#1f1f31" : "#fff",
-      border: "1px solid " + (dark ? "#3d3d50" : "#ECE9F6"),
-      borderRadius: 16,
-      padding: 10,
-      boxShadow: dark ? "none" : "0 4px 12px rgba(83,74,183,0.05)",
+    var mobileInp = {
+      width: "100%",
+      borderRadius: 10,
+      border: "1px solid " + borderCMobile,
+      padding: "6px 8px",
+      fontSize: 14,
+      background: fieldBgMobile,
+      color: readableDarkText(tcMobile, dark, fieldBgMobile),
+      boxSizing: "border-box",
+      outline: "none",
+      minWidth: 0,
     };
-    function dateBtnStyle(active) {
+    var mobileFieldCard = {
+      background: fieldBgMobile,
+      border: "1px solid " + borderCMobile,
+      borderRadius: 14,
+      padding: "7px 8px",
+      boxShadow: dark
+        ? "0 6px 16px rgba(0,0,0,.16)"
+        : "0 6px 18px rgba(31,60,120,.08), inset 0 1px 0 rgba(255,255,255,.86)",
+    };
+    var mobileLabel = {
+      fontSize: 11.8,
+      color: readableDarkText(dark ? scMobile : "#343647", dark, "#35354a"),
+      display: "block",
+      marginBottom: 4,
+      fontWeight: 700,
+      textTransform: "uppercase",
+      letterSpacing: 0.35,
+    };
+    var mobileDateBtnBase = {
+      height: 38,
+      borderRadius: btnRadius,
+      border: "1px solid " + (dark ? "#3f3f52" : "#E4E2F2"),
+      background: dark ? "#252535" : "#fff",
+      color: tcMobile,
+      fontSize: 11.9,
+      fontWeight: 850,
+      cursor: "pointer",
+      boxShadow: dark ? "none" : "0 2px 8px rgba(0,0,0,.035)",
+      whiteSpace: "nowrap",
+    };
+    function mobileDateBtnStyle(active) {
       return {
-        height: 38,
-        borderRadius: 12,
-        border:
-          "1px solid " + (active ? "#7F77DD" : dark ? "#3f3f52" : "#E4E2F2"),
+        ...mobileDateBtnBase,
+        borderColor: active ? secondaryC : dark ? "#3f3f52" : "#E4E2F2",
         background: active
           ? dark
-            ? "#7F77DD44"
-            : "#7F77DD14"
+            ? secondaryC + "44"
+            : secondaryC + "14"
           : dark
           ? "#252535"
           : "#fff",
-        color: active ? "#7F77DD" : dark ? "#eee" : "#333",
-        fontSize: 11,
-        fontWeight: 850,
-        cursor: "pointer",
-        whiteSpace: "nowrap",
-        boxShadow: dark ? "none" : "0 2px 8px rgba(0,0,0,.035)",
+        color: active ? secondaryC : tcMobile,
       };
+    }
+    function bulkToggleSwitch(r) {
+      return <MovementInstalmentSwitch checked={!!r.rateizzato} onChange={function () { upd(r._id, "rateizzato", !r.rateizzato); }} isMobile={true} activeColor={btnC} />;
     }
     return (
       <div>
         {rows.map(function (r, idx) {
+          var amountHasValue = !!String(r.amount || "").trim();
+          var showAmountPlaceholder = !amountHasValue && bulkAmountFocusedId !== r._id;
           return (
             <div
               key={r._id}
+              className="fainance-entry-form fainance-bulk-entry-form"
               style={{
                 background: dark ? "#181827" : "#fff",
+                border: "1px solid " + borderCMobile,
                 borderRadius: 18,
-                border: "1px solid " + (dark ? "#3d3d50" : "#E6E2F7"),
                 padding: 10,
+                boxShadow: dark
+                  ? "0 14px 34px rgba(0,0,0,.20)"
+                  : "0 16px 38px rgba(83,74,183,.12)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
                 marginBottom: 12,
-                boxShadow: dark ? "none" : "0 8px 24px rgba(83,74,183,0.08)",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 10,
-                  padding: "2px 2px 0",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 14,
-                    fontWeight: 900,
-                    color: dark ? "#eee" : "#333",
-                  }}
-                >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 2px 2px" }}>
+                <div style={{ fontSize: 18.6, fontWeight: 950, color: readableDarkText(tcMobile, dark, dark ? "#181827" : "#fff"), letterSpacing: 0.1 }}>
                   {L("Voce")} {idx + 1}
-                </span>
+                </div>
                 {rows.length > 1 && (
                   <button
+                    type="button"
+                    aria-label={L("Elimina")}
                     onClick={function () {
-                      setRows(function (p) {
-                        return p.filter(function (x) {
-                          return x._id !== r._id;
-                        });
-                      });
+                      setRows(function (p) { return p.filter(function (x) { return x._id !== r._id; }); });
                     }}
                     style={{
-                      width: 28,
-                      height: 28,
+                      width: 32,
+                      height: 32,
                       borderRadius: 10,
-                      border: "1px solid " + (dark ? "#444" : "#E6E2F7"),
+                      border: "1px solid " + borderCMobile,
                       background: dark ? "#252535" : "#fff",
-                      cursor: "pointer",
-                      color: "#F87171",
+                      color: readableDarkText("#F87171", dark, dark ? "#252535" : "#fff"),
                       fontSize: 18,
-                      lineHeight: 1,
+                      fontWeight: 900,
+                      cursor: "pointer",
                     }}
                   >
                     ×
                   </button>
                 )}
               </div>
+
               <div
+                className="fainance-entry-amount"
                 style={{
                   background: amountGradient,
                   borderRadius: 18,
-                  padding: "14px 14px",
+                  padding: "16px clamp(9px,3.6vw,14px)",
                   display: "grid",
-                  gridTemplateColumns: "44px minmax(0,1fr) 58px",
-                  gap: 6,
+                  gridTemplateColumns: "clamp(36px,11vw,44px) minmax(0,1fr) clamp(98px,29vw,108px)",
+                  gap: "clamp(3px,1.5vw,6px)",
                   alignItems: "center",
-                  color: "#fff",
-                  boxShadow: dark ? "none" : "0 10px 24px rgba(83,74,183,.12)",
-                  marginBottom: 10,
+                  color: readableDarkText("#fff", dark, amountGradient),
+                  boxShadow: dark ? "0 12px 28px rgba(0,0,0,.20)" : "0 14px 30px rgba(83,74,183,.22)",
                 }}
               >
-                <div
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: "50%",
-                    background: "rgba(255,255,255,.96)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: type === "expense" ? "#E24B4A" : "#1D9E75",
-                    fontSize: 18,
-                    boxShadow: "0 6px 16px rgba(0,0,0,.12)",
-                  }}
-                >
-                  {type === "expense" ? "💳" : "💰"}
-                </div>
+                <AmountCalculatorButton
+                  value={r.amount}
+                  onApply={function (next) { upd(r._id, "amount", next); }}
+                  inverse
+                  compact
+                  iconOnly
+                  iconSize={34}
+                />
                 <div style={{ minWidth: 0, textAlign: "center" }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 850,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.8,
-                      color: "rgba(255,255,255,.70)",
-                      marginBottom: 2,
-                    }}
-                  >
+                  <div style={{ fontSize: 12.6, fontWeight: 850, textTransform: "uppercase", letterSpacing: 0.8, color: readableDarkText(whiteSoftMobile, dark, amountGradient), marginBottom: 2 }}>
                     {L("Importo")}
                   </div>
-                  <div style={{ position: "relative" }}>
-                    {!String(r.amount || "").trim() && bulkAmountFocusedId !== r._id && (
-                      <div
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, maxWidth: "100%" }}>
+                    <div style={{ position: "relative", flex: "0 1 auto", minWidth: 0, maxWidth: "calc(100% - 48px)" }}>
+                      {showAmountPlaceholder && (
+                        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "clamp(31.5px,10.4vw,37.5px)", fontWeight: 950, color: readableDarkText("#fff", dark, amountGradient), lineHeight: 1, pointerEvents: "none", textShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
+                          _,__
+                        </div>
+                      )}
+                      <input
+                        ref={idx === 0 ? firstAmountInputRef : null}
+                        autoFocus={idx === 0}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder=""
+                        value={r.amount}
+                        onFocus={function () { setBulkAmountFocusedId(r._id); }}
+                        onBlur={function () { setBulkAmountFocusedId(function (current) { return current === r._id ? null : current; }); }}
+                        onChange={function (e) { upd(r._id, "amount", e.target.value); }}
                         style={{
-                          position: "absolute",
-                          inset: 0,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "flex-start",
-                          fontSize: 34,
+                          width: amountHasValue ? Math.min(Math.max(String(r.amount || "").length + 0.5, 2), 7.5) + "ch" : 70,
+                          maxWidth: "100%",
+                          display: "block",
+                          margin: 0,
+                          border: "none",
+                          background: "transparent",
+                          padding: 0,
+                          textAlign: "center",
+                          fontSize: "clamp(31.5px,10.4vw,37.5px)",
                           fontWeight: 950,
-                          color: "#fff",
+                          color: readableDarkText("#fff", dark, "transparent"),
+                          WebkitTextFillColor: "#fff",
+                          outline: "none",
                           lineHeight: 1,
-                          pointerEvents: "none",
+                          textShadow: "0 2px 10px rgba(0,0,0,.12)",
                         }}
-                      >
-                        _,__
-                      </div>
-                    )}
-                    <input
-                      ref={idx === 0 ? firstAmountInputRef : null}
-                      autoFocus={idx === 0}
-                      type="text"
-                      inputMode="decimal"
-                      placeholder=""
-                      value={r.amount}
-                      onFocus={function () {
-                        setBulkAmountFocusedId(r._id);
-                      }}
-                      onBlur={function () {
-                        setBulkAmountFocusedId(function (current) {
-                          return current === r._id ? null : current;
-                        });
-                      }}
-                      onChange={function (e) {
-                        upd(r._id, "amount", e.target.value);
-                      }}
-                      style={{
-                        width: "100%",
-                        border: "none",
-                        background: "transparent",
-                        padding: 0,
-                        textAlign: "left",
-                        fontSize: 34,
-                        fontWeight: 950,
-                        color: "#fff",
-                        WebkitTextFillColor: "#fff",
-                        outline: "none",
-                        lineHeight: 1,
-                      }}
+                      />
+                    </div>
+                    <MultiCurrencyField
+                      inline
+                      compact
+                      value={r}
+                      amount={r.amount}
+                      onChange={function (patch) { updPatch(r._id, patch); }}
                     />
                   </div>
-                  {!String(r.amount || "").trim() && bulkAmountFocusedId !== r._id && (
-                    <div
-                      style={{
-                        fontSize: 13,
-                        color: "rgba(255,255,255,.70)",
-                        fontWeight: 600,
-                        marginTop: 4,
-                      }}
-                    >
+                  <div style={{ visibility: showAmountPlaceholder ? "visible" : "hidden", minHeight: 18, lineHeight: "18px", fontSize: 14.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), fontWeight: 600, marginTop: 4 }}>
                       {L("Inserisci l'importo")}
+                    </div>
+                  {String(r.currency || ctx.currency) !== String(ctx.currency) && Number(r.baseAmount) > 0 && (
+                    <div style={{ fontSize: 11.6, color: readableDarkText(whiteSoftMobile, dark, amountGradient), marginTop: 3 }}>
+                      ≈ {smallDecimalNode(formatNumber(r.baseAmount, ctx.lang, {minimumFractionDigits:2,maximumFractionDigits:2}), ctx.lang)} {String(ctx.currency || "EUR")}
                     </div>
                   )}
                 </div>
-                <div
-                  style={{
-                    height: "100%",
-                    minHeight: 52,
-                    borderLeft: "1px solid rgba(255,255,255,.32)",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 4,
-                    paddingLeft: 5,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 950,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.6,
-                      color: "#fff",
-                    }}
-                  >
+                <div style={{ height: "100%", minHeight: 52, borderLeft: "1px solid rgba(255,255,255,.32)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3, paddingLeft: 12 }}>
+                  <div style={{ fontSize: "clamp(7.4px,2.35vw,8.6px)", fontWeight: 950, textTransform: "uppercase", letterSpacing: 0.35, color: readableDarkText("#fff", dark, amountGradient), lineHeight: 0.95, textAlign: "center" }}>
                     {L("Rateizza")}
                   </div>
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "rateizzato", !r.rateizzato);
-                    }}
-                    style={{
-                      width: 34,
-                      height: 19,
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,.45)",
-                      background: r.rateizzato
-                        ? "rgba(255,255,255,.88)"
-                        : "rgba(255,255,255,.24)",
-                      padding: 2,
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: r.rateizzato ? "flex-end" : "flex-start",
-                      boxShadow: "inset 0 1px 2px rgba(0,0,0,.12)",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 15,
-                        height: 15,
-                        borderRadius: "50%",
-                        background: r.rateizzato
-                          ? type === "expense"
-                            ? "#E24B4A"
-                            : "#1D9E75"
-                          : "#fff",
-                        display: "block",
-                        boxShadow: "0 2px 7px rgba(0,0,0,.20)",
-                      }}
-                    />
-                  </button>
+                  {bulkToggleSwitch(r)}
                 </div>
               </div>
+
               {r.rateizzato && (
-                <div
-                  style={{
-                    background: dark ? "#24213a" : "#F0EDFF",
-                    border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"),
-                    borderRadius: 14,
-                    padding: 10,
-                    marginBottom: 10,
-                  }}
-                >
+                <div style={{ background: dark ? "#24213a" : "#F0EDFF", border: "1px solid " + (dark ? "#3d376a" : "#D8D2FF"), borderRadius: 14, padding: 10 }}>
+                  <div style={{ fontSize: 12, color: readableDarkText(dark ? "#BEB8FF" : "#534AB7", dark, dark ? "#24213a" : "#F0EDFF"), marginBottom: 7, fontWeight: 800 }}>
+                    {L("Rateizza")} · {r.rate} {L("mesi")}
+                  </div>
                   <RatePicker
                     value={r.rate}
                     direction={r.rateDirection || "forward"}
-                    onChange={function (n) {
-                      upd(r._id, "rate", n);
-                    }}
-                    onDirectionChange={function (d) {
-                      upd(r._id, "rateDirection", d);
-                    }}
+                    onChange={function (n) { upd(r._id, "rate", n); }}
+                    onDirectionChange={function (d) { upd(r._id, "rateDirection", d); }}
                   />
                 </div>
               )}
+
               {type === "expense" ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 8,
-                    marginBottom: 10,
-                  }}
-                >
-                  <div style={fieldCard}>
-                    <label
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: tc,
-                        display: "block",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {L("Categoria")}
-                    </label>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "clamp(5px,2vw,8px)" }}>
+                  <div style={{ ...mobileFieldCard, padding: "4px clamp(5px,1.9vw,7px)" }}>
+                    <label style={mobileLabel}>{L("Categoria")}</label>
                     <div style={{ position: "relative", minWidth: 0 }}>
                       <select
-                        value={r.catId}
-                        onChange={function (e) {
-                          upd(r._id, "catId", e.target.value);
-                        }}
-                        style={{
-                          ...inp,
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          padding: "10px 18px 10px 2px",
-                          paddingLeft: 2,
-                          fontSize: 13,
-                          fontWeight: 750,
-                          border: "none",
-                          background: "transparent",
-                          height: 48,
-                          textOverflow: "ellipsis",
-                        }}
+                        data-movement-choice="catId" value={r.catId}
+                        onChange={function (e) { upd(r._id, "catId", e.target.value); }}
+                        style={{ ...mobileInp, padding: "8px 3px 8px 2px", paddingLeft: 2, paddingRight: 3, fontSize: "clamp(13.2px,4.05vw,14.8px)", fontWeight: 750, border: "none", background: "transparent", height: 39, appearance: "none", WebkitAppearance: "none" }}
                       >
-                      {sCats.map(function (c) {
-                        return (
-                          <option key={c.id} value={c.id}>
-                            {iconTextValue(c.icon)} {c.name}
-                          </option>
-                        );
-                      })}
+                        {sCats.map(function (c) {
+                          return <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>{iconTextValue(c.icon)} {c.name}</option>;
+                        })}
                       </select>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          right: 1,
-                          top: -8,
-                          fontSize: 17,
-                          lineHeight: 1,
-                          color: "#7F77DD",
-                          fontWeight: 950,
-                          pointerEvents: "none",
-                        }}
-                      >
-                        ▾
-                      </span>
+                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"), fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
                     </div>
                   </div>
-                  <div style={fieldCard}>
-                    <label
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 800,
-                        color: tc,
-                        display: "block",
-                        marginBottom: 6,
-                      }}
-                    >
-                      {L("Metodo")}
-                    </label>
+                  <div style={{ ...mobileFieldCard, padding: "4px clamp(5px,1.9vw,7px)" }}>
+                    <label style={mobileLabel}>{L("Pagamento")}</label>
                     <div style={{ position: "relative", minWidth: 0 }}>
                       <select
-                        value={r.methodId}
-                        onChange={function (e) {
-                          upd(r._id, "methodId", e.target.value);
-                        }}
-                        style={{
-                          ...inp,
-                          appearance: "none",
-                          WebkitAppearance: "none",
-                          padding: "10px 18px 10px 2px",
-                          paddingLeft: 2,
-                          fontSize: 13,
-                          fontWeight: 750,
-                          border: "none",
-                          background: "transparent",
-                          height: 48,
-                          textOverflow: "ellipsis",
-                        }}
+                        data-movement-choice="methodId" value={r.methodId}
+                        onChange={function (e) { upd(r._id, "methodId", e.target.value); }}
+                        style={{ ...mobileInp, padding: "8px 3px 8px 2px", paddingLeft: 2, paddingRight: 3, fontSize: "clamp(13.2px,4.05vw,14.8px)", fontWeight: 750, border: "none", background: "transparent", height: 39, appearance: "none", WebkitAppearance: "none" }}
                       >
-                      {sMethods.map(function (m) {
-                        return (
-                          <option key={m.id} value={m.id}>
-                            {iconTextValue(m.icon)} {m.name}
-                          </option>
-                        );
-                      })}
+                        {sMethods.map(function (m) {
+                          return <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>{iconTextValue(m.icon)} {m.name}</option>;
+                        })}
                       </select>
-                      <span
-                        aria-hidden="true"
-                        style={{
-                          position: "absolute",
-                          right: 1,
-                          top: -8,
-                          fontSize: 17,
-                          lineHeight: 1,
-                          color: "#7F77DD",
-                          fontWeight: 950,
-                          pointerEvents: "none",
-                        }}
-                      >
-                        ▾
-                      </span>
+                      <span aria-hidden="true" style={{ position: "absolute", right: 1, top: -12, pointerEvents: "none", color: readableDarkText(mainButtonC, dark, dark ? "#181827" : "#fff"), fontSize: 21, fontWeight: 950, lineHeight: 1 }}>▾</span>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div style={{ ...fieldCard, marginBottom: 10 }}>
-                  <label
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 800,
-                      color: tc,
-                      display: "block",
-                      marginBottom: 6,
-                    }}
-                  >
-                    {L("Tipo")}
-                  </label>
-                  <select
-                    value={r.itype}
-                    onChange={function (e) {
-                      upd(r._id, "itype", e.target.value);
-                    }}
-                    style={{
-                      ...inp,
-                      padding: "10px 10px 10px 2px",
-                      paddingLeft: 2,
-                      fontSize: 13,
-                      fontWeight: 750,
-                      border: "none",
-                      background: "transparent",
-                      height: 48,
-                    }}
-                  >
-                    {sIncomeTypes.map(function (it) {
-                      return (
-                        <option key={it.id} value={it.id}>
-                          {it.icon} {it.name}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
+                <MovementIncomeSelectors value={r} setValue={update=>setRows(list=>list.map(row=>row._id===r._id?(typeof update==="function"?update(row):update):row))} incomeTypes={sIncomeTypes} methods={sMethods} fieldId={"bulk-income-"+r._id}/>
               )}
-              <div style={{ ...fieldCard, marginBottom: 10 }}>
-                <label
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: tc,
-                    display: "block",
-                    marginBottom: 6,
-                  }}
-                >
-                  {L("Descrizione")}
-                </label>
+
+              <div style={{ ...mobileFieldCard, padding: 8 }}>
+                <label style={mobileLabel}>{L("Descrizione")}</label>
                 <textarea
                   value={r.desc}
-                  onChange={function (e) {
-                    upd(r._id, "desc", e.target.value);
-                  }}
-                  style={{
-                    ...inp,
-                    minHeight: 72,
-                    height: 72,
-                    resize: "none",
-                    padding: "11px 12px",
-                    lineHeight: 1.25,
-                    fontFamily: "inherit",
-                  }}
-                  placeholder={L("Inserisci una descrizione...")}
+                  onChange={function (e) { upd(r._id, "desc", e.target.value); }}
+                  style={{ ...mobileInp, minHeight: 56, height: 56, resize: "none", padding: "7px 12px", lineHeight: 1.25, fontFamily: "inherit" }}
+                  placeholder={L("Aggiungi una descrizione (opzionale)")}
                 />
               </div>
-              <div style={fieldCard}>
-                <label
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    color: tc,
-                    display: "block",
-                    marginBottom: 8,
-                  }}
-                >
-                  {L("Data")}
-                </label>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: ".58fr .62fr 1.12fr 2.04fr",
-                    gap: 5,
-                    alignItems: "center",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "date", todayStr());
-                    }}
-                    style={dateBtnStyle(r.date === todayStr())}
-                  >
-                    {ctx.t.today}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "date", dateOffset(1));
-                    }}
-                    style={dateBtnStyle(r.date === dateOffset(1))}
-                  >
-                    {ctx.t.yesterday}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={function () {
-                      upd(r._id, "date", dateOffset(2));
-                    }}
-                    style={{
-                      ...dateBtnStyle(r.date === dateOffset(2)),
-                      fontSize: 9.5,
-                      lineHeight: 1.05,
-                      whiteSpace: "normal",
-                      padding: "0 2px",
-                      textAlign: "center",
-                    }}
-                  >
-                    {ctx.t.twoDaysAgo}
-                  </button>
-                  <label
-                    style={{
-                      ...dateBtnStyle(false),
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      position: "relative",
-                      overflow: "hidden",
-                      padding: "0 5px",
-                      gap: 4,
-                    }}
-                  >
-                    <span style={{ pointerEvents: "none", fontWeight: 850 }}>
-                      {fmtDate(r.date, ctx.dateFmt || "dd/mm/yyyy")}
-                    </span>
-                    <span style={{ pointerEvents: "none", fontSize: 17 }}>
-                      📅
-                    </span>
-                    <input
-                      type="date"
-                      value={r.date}
-                      onChange={function (e) {
-                        upd(r._id, "date", e.target.value);
-                      }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        opacity: 0,
-                        cursor: "pointer",
-                      }}
-                    />
+
+              <div style={{ ...mobileFieldCard, padding: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: ".58fr .62fr 1.12fr 2.04fr", gap: 5, alignItems: "center" }}>
+                  <button type="button" onClick={function () { upd(r._id, "date", todayStr()); }} style={mobileDateBtnStyle(r.date === todayStr())}>{ctx.t.today}</button>
+                  <button type="button" onClick={function () { upd(r._id, "date", dateOffset(1)); }} style={mobileDateBtnStyle(r.date === dateOffset(1))}>{ctx.t.yesterday}</button>
+                  <button type="button" onClick={function () { upd(r._id, "date", dateOffset(2)); }} style={{ ...mobileDateBtnStyle(r.date === dateOffset(2)), fontSize: 10.6, lineHeight: 1.05, whiteSpace: "normal", padding: "0 2px", textAlign: "center" }}>{ctx.t.twoDaysAgo}</button>
+                  <label style={{ ...mobileDateBtnStyle(false), display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: "0 5px", gap: 4 }}>
+                    <span style={{ pointerEvents: "none", fontWeight: 850 }}>{fmtDate(r.date, ctx.dateFmt || "dd/mm/yyyy")}</span>
+                    <span style={{ pointerEvents: "none", fontSize: 17 }}>📅</span>
+                    <input type="date" aria-label={ctx.t.date} onClick={openMovementDatePicker} value={r.date} onChange={function (e) { upd(r._id, "date", e.target.value); }} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", margin: 0, padding: 0, border: 0, opacity: 0, cursor: "pointer" }} />
                   </label>
                 </div>
               </div>
             </div>
           );
         })}
-        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: rowLimitReached ? "1fr" : "1fr 1fr", gap: 10, marginTop: 4 }}>
           {rowLimitReached ? (
             limitBox
           ) : (
             <Btn
-              onClick={function () {
-                setRows(function (p) {
-                  return rowLimitReached ? p : [...p, blank()];
-                });
-              }}
+              onClick={function () { setRows(function (p) { return rowLimitReached ? p : [...p, blank()]; }); }}
               bg={dark ? "#333" : "#f0f0f0"}
               color={dark ? "#eee" : "#444"}
+              style={{ width: "100%", padding: 13, fontWeight: 900 }}
             >
               {L(t.addRow)}
             </Btn>
@@ -7088,13 +6741,8 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
           <Btn
             onClick={saveAll}
             disabled={!bulkHasValidRows}
-            bg={
-              bulkHasValidRows
-                ? type === "expense"
-                  ? "#E24B4A"
-                  : "#1D9E75"
-                : "#A8A8A8"
-            }
+            bg={bulkHasValidRows ? mainButtonC : "#A8A8A8"}
+            style={{ width: "100%", padding: 13, fontWeight: 950 }}
           >
             {L(t.saveAll)} ({rows.length})
           </Btn>
@@ -7219,7 +6867,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                     <>
                       <td style={{ padding: 5 }}>
                         <select
-                          value={r.catId}
+                          data-movement-choice="catId" value={r.catId}
                           onChange={function (e) {
                             upd(r._id, "catId", e.target.value);
                           }}
@@ -7227,7 +6875,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         >
                           {sCats.map(function (c) {
                             return (
-                              <option key={c.id} value={c.id}>
+                              <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                                 {iconTextValue(c.icon)} {c.name}
                               </option>
                             );
@@ -7236,7 +6884,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                       </td>
                       <td style={{ padding: 5 }}>
                         <select
-                          value={r.methodId}
+                          data-movement-choice="methodId" value={r.methodId}
                           onChange={function (e) {
                             upd(r._id, "methodId", e.target.value);
                           }}
@@ -7244,7 +6892,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         >
                           {sMethods.map(function (m) {
                             return (
-                              <option key={m.id} value={m.id}>
+                              <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                                 {iconTextValue(m.icon)} {m.name}
                               </option>
                             );
@@ -7253,23 +6901,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                       </td>
                     </>
                   ) : (
-                    <td style={{ padding: 5 }}>
-                      <select
-                        value={r.itype}
-                        onChange={function (e) {
-                          upd(r._id, "itype", e.target.value);
-                        }}
-                        style={sinp}
-                      >
-                        {sIncomeTypes.map(function (it) {
-                          return (
-                            <option key={it.id} value={it.id}>
-                              {it.icon} {it.name}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </td>
+                    <td style={{padding:5,minWidth:300}}><MovementIncomeSelectors value={r} setValue={update=>setRows(list=>list.map(row=>row._id===r._id?(typeof update==="function"?update(row):update):row))} incomeTypes={sIncomeTypes} methods={sMethods} fieldId={"bulk-income-desktop-"+r._id}/></td>
                   )}
                   <td style={{ padding: 5 }}>
                     <input
@@ -7328,7 +6960,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
                         background: "none",
                         border: "none",
                         cursor: "pointer",
-                        color: "#aaa",
+                        color: readableDarkText("#aaa", dark, "none"),
                         fontSize: 15,
                       }}
                     >
@@ -7375,7 +7007,12 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
   );
 }
 export function RecurringManager() {
-  var ctx = useApp();
+  var ctx: any = useApp();
+  useLayoutEffect(function () {
+    if (!ctx.setRecurringScreenActive) return;
+    ctx.setRecurringScreenActive(true);
+    return function () { ctx.setRecurringScreenActive(false); };
+  }, [ctx.setRecurringScreenActive]);
   function L(v) {
     return translateFainanceText(v, ctx.lang || "it");
   }
@@ -7460,8 +7097,12 @@ export function RecurringManager() {
       incomeTypes[0] || { id: "salario" };
     return {
       name: "",
+      rateDirection: "forward",
       icon: "🔁",
       amount: "",
+      currency: String(ctx.currency || "EUR"),
+      baseCurrency: String(ctx.currency || "EUR"),
+      exchangeRate: 1,
       catId: dc.id,
       methodId: dm.id,
       rtype: "expense",
@@ -7473,10 +7114,14 @@ export function RecurringManager() {
       frequency: "monthly",
     };
   }
+  var [formStep, setFormStep] = useState(1);
+  var [amountFocused, setAmountFocused] = useState(false);
+  var entryFieldId = useId();
+  var isMobile = !!ctx.isMobile;
   var [showForm, setShowForm] = useState(false);
   var [editingId, setEditingId] = useState(null);
   var [deleteId, setDeleteId] = useState(null);
-  var [form, setForm] = useState(makeBlank());
+  var [form, setForm] = useState<any>(makeBlank());
   var [toast, setToast] = useState(null);
   var recurringAmountInputRef = useRef(null);
   useEffect(
@@ -7493,7 +7138,7 @@ export function RecurringManager() {
     padding: "10px 12px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var tc = dark ? "#eee" : "#333";
@@ -7529,7 +7174,12 @@ export function RecurringManager() {
     return n;
   }
   var recurringGeneratedMovements = ([] as any[]).concat(ctx.expenses || [], ctx.incomes || []);
-  var pending = recurring.flatMap(r => recurringOccurrencesInPeriod(r, curMonthKey, (ctx as any).accountingPeriod.settings, recurringGeneratedMovements));
+  var recurringToday = String((ctx as any).accountingDate || "").slice(0, 10);
+  var pending = recurring
+    .flatMap(r => recurringDueOccurrences(r, recurringToday, (ctx as any).accountingPeriod.settings, recurringGeneratedMovements))
+    .sort(function (a, b) {
+      return String(a._occurrenceDate || "").localeCompare(String(b._occurrenceDate || ""));
+    });
   if (ctx.planLimits && ctx.planLimits.recurringMovements === 0) {
     return (
       <div
@@ -7538,7 +7188,7 @@ export function RecurringManager() {
           border: "1px solid " + (dark ? "#6a5520" : "#FFD54F"),
           borderRadius: 14,
           padding: 16,
-          color: dark ? "#ffd58a" : "#856404",
+          color: readableDarkText(dark ? "#ffd58a" : "#856404", dark, dark ? "#342b16" : "#FFF8E1"),
           fontSize: 13,
           fontWeight: 800,
         }}
@@ -7547,7 +7197,7 @@ export function RecurringManager() {
       </div>
     );
   }
-  function showToast(msg, color) {
+  function showToast(msg, color?: any) {
     setToast({ msg: msg, color: color || "#1D9E75" });
   }
   function setField(k, v) {
@@ -7580,61 +7230,105 @@ export function RecurringManager() {
     if (day > 31) day = 31;
     var month = Number(form.annualMonth);
     if (isNaN(month) || month < 1 || month > 12) month = now.getMonth() + 1;
+    var selectedCategory = sCats.find(function (c) {
+      return String(c.id) === String(form.catId || "");
+    });
+    var selectedMethod = sMethods.find(function (m) {
+      return String(m.id) === String(form.methodId || "");
+    });
     return {
       ...form,
       id: editingId || Date.now(),
       icon: icon,
       name: String(form.name || "").trim(),
-      amount: parseMoney(form.amount),
-      catId: Number(form.catId),
-      methodId: Number(form.methodId),
+      amount: String(form.currency || ctx.currency) !== String(ctx.currency) ? Number(form.baseAmount) : parseMoney(form.amount),
+      originalAmount: String(form.currency || ctx.currency) !== String(ctx.currency) ? parseMoney(form.amount) : null,
+      baseAmount: String(form.currency || ctx.currency) !== String(ctx.currency) ? Number(form.baseAmount) : parseMoney(form.amount),
+      catId: form.rtype === "expense" ? form.catId : null,
+      methodId: form.rtype === "expense" ? form.methodId : null,
+      ...(form.rtype === "income" ? incomeReceiptFields(form,sMethods) : {}),
+      categoryNameSnapshot: selectedCategory ? String(selectedCategory.name || "") : String(form.categoryNameSnapshot || ""),
+      methodNameSnapshot: selectedMethod ? String(selectedMethod.name || "") : String(form.methodNameSnapshot || ""),
       dayOfMonth: day,
       annualMonth: month,
       rate: Number(form.rate || 12),
       rateizzato: !!form.rateizzato,
       frequency: form.frequency || "monthly",
+      effectiveFrom:
+        String(form.effectiveFrom || recurringToday || "").slice(0, 10) ||
+        [
+          String(new Date().getFullYear()).padStart(4, "0"),
+          String(new Date().getMonth() + 1).padStart(2, "0"),
+          String(new Date().getDate()).padStart(2, "0"),
+        ].join("-"),
     };
   }
   function startCreate() {
+    setFormStep(1);
     setEditingId(null);
     setForm(makeBlank());
     setShowForm(true);
     setDeleteId(null);
   }
   function startEdit(r) {
+    setFormStep(1);
     var base = makeBlank();
     var annualMonth = recurringMonth(r);
     var day = recurringDay(r);
+    var resolvedCategory = sCats.find(function (c) {
+      return String(c.id) === String(r.catId || "");
+    }) || sCats.find(function (c) {
+      return String(c.name || "").trim().toLowerCase() === String(r.categoryNameSnapshot || "").trim().toLowerCase();
+    });
+    var resolvedMethod = sMethods.find(function (m) {
+      return String(m.id) === String(r.methodId || "");
+    }) || sMethods.find(function (m) {
+      return String(m.name || "").trim().toLowerCase() === String(r.methodNameSnapshot || "").trim().toLowerCase();
+    });
     setEditingId(r.id);
     setForm({
       ...base,
       ...r,
+      ...(r.rtype === "expense"
+        ? {
+            catId: resolvedCategory ? resolvedCategory.id : base.catId,
+            methodId: resolvedMethod ? resolvedMethod.id : base.methodId,
+          }
+        : {}),
       icon: r.icon || autoIcon(r.name) || (r.rtype === "income" ? "💰" : "💸"),
       annualMonth: annualMonth,
       dayOfMonth: day,
-      amount: String(r.amount || ""),
+      amount: String(r.originalAmount != null && String(r.currency || ctx.currency) !== String(ctx.currency) ? r.originalAmount : (r.amount || "")),
     });
     setShowForm(false);
     setDeleteId(null);
   }
   function cancelForm() {
+    setFormStep(1);
     setShowForm(false);
     setEditingId(null);
     setForm(makeBlank());
   }
-  var recurringFormValid =
-    !!String(form.name || "").trim() &&
-    parseMoney(form.amount) > 0 &&
-    Number(form.dayOfMonth) >= 0 &&
-    Number(form.dayOfMonth) <= 31 &&
-    (form.frequency !== "annual" ||
-      (Number(form.annualMonth) >= 1 && Number(form.annualMonth) <= 12)) &&
-    (form.rtype === "income"
-      ? !!String(form.incomeType || "").trim()
-      : !!String(form.catId || "").trim() &&
-        !!String(form.methodId || "").trim());
+  var recurringErrors = recurringMissingFields(form, ctx.currency);
+  var recurringDetailsValid = !recurringErrors.some(key => !["day", "date", "installments"].includes(key));
+  var recurringFormValid = recurringErrors.length === 0;
+  function annualDateValue() {
+    if (form.dayOfMonth === "") return "";
+    var year = Number(String(form.effectiveFrom || recurringToday).slice(0, 4)) || now.getFullYear();
+    var month = Math.max(1, Math.min(12, Number(form.annualMonth) || 1));
+    var day = Math.max(1, Math.min(new Date(year, month, 0).getDate(), Number(form.dayOfMonth) || 1));
+    return [year, String(month).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
+  }
+  function setAnnualDate(value) {
+    if (!value) { setForm(previous => ({...previous, effectiveFrom: "", dayOfMonth: ""})); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
+    setForm(previous => ({ ...previous, effectiveFrom: value, annualMonth: Number(value.slice(5, 7)), dayOfMonth: Number(value.slice(8, 10)) }));
+  }
   function saveRecurring() {
-    if (!recurringFormValid) return;
+    if (!recurringFormValid) {
+      showToast({text: recurringValidationMessage(lang, recurringErrors), type: "error", duration: 6000});
+      return;
+    }
     if (
       !editingId &&
       ctx.canAddPlanItem &&
@@ -7686,7 +7380,7 @@ export function RecurringManager() {
           : x;
       });
     });
-    showToast("Ricorrente saltata per questo mese.", "#1D9E75");
+    showToast(L("Ricorrente saltata per questa occorrenza."), "#1D9E75");
   }
   function confirmOne(r) {
     if (confirmRecurring) confirmRecurring(r, r._occurrenceKey);
@@ -7721,15 +7415,23 @@ export function RecurringManager() {
       );
     return (
       sCats.find(function (x) {
-        return Number(x.id) === Number(r.catId);
-      }) || { icon: "📦", name: "Categoria" }
+        return String(x.id) === String(r.catId || "");
+      }) ||
+      sCats.find(function (x) {
+        return String(x.name || "").trim().toLowerCase() === String(r.categoryNameSnapshot || "").trim().toLowerCase();
+      }) ||
+      { icon: "📦", name: "Categoria" }
     );
   }
   function methodObj(r) {
     return (
       sMethods.find(function (x) {
-        return Number(x.id) === Number(r.methodId);
-      }) || null
+        return String(x.id) === String(r.methodId || "");
+      }) ||
+      sMethods.find(function (x) {
+        return String(x.name || "").trim().toLowerCase() === String(r.methodNameSnapshot || "").trim().toLowerCase();
+      }) ||
+      null
     );
   }
   function recIcon(r) {
@@ -7750,6 +7452,19 @@ export function RecurringManager() {
       L("Mensile") + " · " + L("giorno") + " " + (d === 0 ? L("ultimo") : d)
     );
   }
+  function occurrenceDateText(r) {
+    var raw = String(r && r._occurrenceDate || "").slice(0, 10);
+    if (!raw) return dateText(r);
+    try {
+      return new Intl.DateTimeFormat(String(ctx.lang || "it"), {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }).format(new Date(raw + "T12:00:00"));
+    } catch (_error) {
+      return raw;
+    }
+  }
   function chip(icon, text, bg, color) {
     return (
       <span
@@ -7762,7 +7477,7 @@ export function RecurringManager() {
           fontSize: 11,
           fontWeight: 800,
           background: bg,
-          color: color,
+          color: readableDarkText(color, dark, bg),
           whiteSpace: "nowrap",
           maxWidth: "100%",
         }}
@@ -7801,7 +7516,7 @@ export function RecurringManager() {
             border: "none",
             borderRadius: 10,
             background: form.rtype !== "income" ? "#E24B4A" : "transparent",
-            color: form.rtype !== "income" ? "#fff" : sc,
+            color: readableDarkText(form.rtype !== "income" ? "#fff" : sc, dark, form.rtype !== "income" ? "#E24B4A" : "transparent"),
             fontSize: 13,
             cursor: "pointer",
             fontWeight: form.rtype !== "income" ? 800 : 600,
@@ -7819,7 +7534,7 @@ export function RecurringManager() {
             border: "none",
             borderRadius: 10,
             background: form.rtype === "income" ? "#1D9E75" : "transparent",
-            color: form.rtype === "income" ? "#fff" : sc,
+            color: readableDarkText(form.rtype === "income" ? "#fff" : sc, dark, form.rtype === "income" ? "#1D9E75" : "transparent"),
             fontSize: 13,
             cursor: "pointer",
             fontWeight: form.rtype === "income" ? 800 : 600,
@@ -7831,113 +7546,40 @@ export function RecurringManager() {
     );
   }
   function formBox(inline) {
+    var amountGradient = form.rtype === "expense"
+      ? "linear-gradient(135deg,#5E230D 0%,#9A3F13 52%,#3E1608 100%)"
+      : "linear-gradient(135deg,#062F49 0%,#075C83 55%,#041F33 100%)";
+    var whiteSoft = "rgba(255,255,255,.70)";
+    var amountHasValue = !!String(form.amount || "").trim();
+    var showAmountPlaceholder = !amountHasValue && !amountFocused;
+  function toggleSwitch() {
+    return <MovementInstalmentSwitch checked={!!form.rateizzato} onChange={function () { setField("rateizzato", !form.rateizzato); }} isMobile={isMobile} activeColor={form.rtype === "expense" ? ctx.expenseColor : ctx.incomeColor} />;
+  }
     return (
-      <div
-        style={{
-          background: inline
-            ? dark
-              ? "#202033"
-              : "#FAFBFF"
-            : dark
-            ? "#1e1e30"
-            : "#f9f9ff",
-          borderRadius: 18,
-          border: "1.5px solid " + (editingId ? "#7F77DD" : borderC),
-          padding: 16,
-          boxShadow: dark ? "none" : "0 6px 20px rgba(127,119,221,0.08)",
-          marginTop: inline ? 12 : 0,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: 12,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 900, color: tc }}>
-              {editingId ? L("Modifica ricorrente") : L("Nuova ricorrente")}
-            </div>
-            <div style={{ fontSize: 12, color: sc }}>
-              {L("Non modifica le voci già presenti nello storico.")}
-            </div>
-          </div>
+      <div className="fainance-entry-form" data-recurring-form data-recurring-layout="single-page" style={{ background: dark ? "#1e1e30" : "#fff", borderRadius: 18, border: "1px solid " + borderC, padding: isMobile ? 12 : 18, marginTop: inline ? 12 : 0, minWidth: 0 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 16 }}>
+          <div><div style={{ fontSize: 18, fontWeight: 900, color: tc }}>{editingId ? L("Modifica ricorrente") : L("Nuova ricorrente")}</div>
+          <div style={{ fontSize: 11, color: sc, marginTop: 4 }}>{L("Non modifica le voci già presenti nello storico.")}</div></div>
           <PopupCloseButton onClick={cancelForm} dark={dark} label={L("Chiudi")} />
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "auto 1fr 1fr",
-              gap: 10,
-              alignItems: "end",
-            }}
-          >
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Icona")}
-              </label>
-              <EmojiPicker
-                value={form.icon || autoIcon(form.name) || "🔁"}
-                onChange={function (v) {
-                  setField("icon", v);
-                }}
-              />
-            </div>
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Nome")}
-              </label>
-              <input
-                value={form.name}
-                onChange={function (e) {
-                  setField("name", e.target.value);
-                }}
-                style={inp}
-              />
-            </div>
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Importo")}
-              </label>
-              <input
-                ref={recurringAmountInputRef}
-                autoFocus
-                type="text"
-                inputMode="decimal"
-                placeholder="_,__"
-                value={form.amount}
-                onChange={function (e) {
-                  setField("amount", e.target.value);
-                }}
-                style={inp}
-              />
-            </div>
+        <div data-recurring-details style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div data-recurring-identity-row style={{ display: "grid", gridTemplateColumns: "auto minmax(0,1fr)", gap: 12, alignItems: "center", border: "1px solid " + borderC, borderRadius: 16, padding: 12, background: dark ? "#252535" : "#F7F9FC" }}>
+            <div aria-label={L("Icona")} style={{ padding: 4, borderRadius: 12, background: dark ? "#1e1e30" : "#fff" }}><EmojiPicker value={form.icon || autoIcon(form.name) || "🔁"} onChange={function (v) { setField("icon", v); }} /></div>
+            <label style={{ fontSize: 11, color: sc, minWidth: 0 }}>{L("Nome")}
+              <input aria-label={L("Nome")} value={form.name} placeholder={L("Nome")} onChange={function (e) { setField("name", e.target.value); }} style={{ ...inp, minWidth: 0, boxSizing: "border-box" as const, height: 44, marginTop: 5, fontSize: 16, fontWeight: 700 }} />
+            </label>
           </div>
+          <MovementAmountPanel recurring value={form} setValue={setForm} type={form.rtype} inputRef={recurringAmountInputRef} fieldId={entryFieldId} focused={amountFocused} setFocused={setAmountFocused} />
+          <MovementInstallmentsPanel value={form} setValue={setForm} />
           {typeSegment()}
+          {form.rtype === "expense" ? (
+            <MovementExpenseSelectors value={form} setValue={setForm} categories={sCats} methods={sMethods} fieldId={entryFieldId} />
+          ) : (
+            <MovementIncomeSelectors value={{...form,itype:form.incomeType}} setValue={update=>setForm(previous=>{const next=typeof update==="function"?update({...previous,itype:previous.incomeType}):update;const {itype,...rest}=next;return {...rest,incomeType:itype};})} incomeTypes={incomeTypes} methods={sMethods} fieldId={entryFieldId}/>
+          )}
+        </div>
+        <div data-recurring-calendar style={{ display: "flex", marginTop: 16, flexDirection: "column", gap: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: tc }}>{L("Frequenza")}</div>
           <div
             style={{
               display: "flex",
@@ -7963,7 +7605,11 @@ export function RecurringManager() {
                     : dark
                     ? "#252535"
                     : "#fff",
-                color: form.frequency !== "annual" ? "#fff" : sc,
+                color: readableDarkText(form.frequency !== "annual" ? "#fff" : sc, dark, form.frequency !== "annual"
+                    ? secondaryButtonColor || "#7F77DD"
+                    : dark
+                    ? "#252535"
+                    : "#fff"),
                 fontSize: 13,
                 cursor: "pointer",
                 fontWeight: form.frequency !== "annual" ? 700 : 500,
@@ -7986,7 +7632,11 @@ export function RecurringManager() {
                     : dark
                     ? "#252535"
                     : "#fff",
-                color: form.frequency === "annual" ? "#fff" : sc,
+                color: readableDarkText(form.frequency === "annual" ? "#fff" : sc, dark, form.frequency === "annual"
+                    ? secondaryButtonColor || "#7F77DD"
+                    : dark
+                    ? "#252535"
+                    : "#fff"),
                 fontSize: 13,
                 cursor: "pointer",
                 fontWeight: form.frequency === "annual" ? 700 : 500,
@@ -7995,43 +7645,9 @@ export function RecurringManager() {
               {L("Annuale")}
             </button>
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                form.frequency === "annual" ? "1fr 1fr" : "1fr",
-              gap: 10,
-            }}
-          >
-            {form.frequency === "annual" && (
-              <div>
-                <label
-                  style={{
-                    fontSize: 11,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
-                  {L("Mese")}
-                </label>
-                <select
-                  value={form.annualMonth || 1}
-                  onChange={function (e) {
-                    setField("annualMonth", Number(e.target.value));
-                  }}
-                  style={inp}
-                >
-                  {MONTHS_FULL.map(function (m, i) {
-                    return (
-                      <option key={i + 1} value={i + 1}>
-                        {L(m)}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            )}
+          {form.frequency === "annual" ? (
+            <DatePickerField label={L("Data")} value={annualDateValue()} onChange={setAnnualDate} showShortcuts={false} />
+          ) : (
             <div>
               <div
                 style={{
@@ -8064,148 +7680,17 @@ export function RecurringManager() {
                 max={31}
                 value={form.dayOfMonth}
                 onChange={function (e) {
-                  setField("dayOfMonth", Number(e.target.value));
+                  setField("dayOfMonth", e.target.value);
                 }}
                 style={inp}
               />
-            </div>
-          </div>
-          {form.rtype === "expense" ? (
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 10,
-              }}
-            >
-              <div>
-                <label
-                  style={{
-                    fontSize: 11,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
-                  {L("Categoria")}
-                </label>
-                <select
-                  value={form.catId}
-                  onChange={function (e) {
-                    setField("catId", e.target.value);
-                  }}
-                  style={inp}
-                >
-                  {sCats.map(function (c) {
-                    return (
-                      <option key={c.id} value={c.id}>
-                        {iconTextValue(c.icon)} {c.name}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div>
-                <label
-                  style={{
-                    fontSize: 11,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
-                  {L("Metodo")}
-                </label>
-                <select
-                  value={form.methodId}
-                  onChange={function (e) {
-                    setField("methodId", e.target.value);
-                  }}
-                  style={inp}
-                >
-                  {sMethods.map(function (m) {
-                    return (
-                      <option key={m.id} value={m.id}>
-                        {iconTextValue(m.icon)} {m.name}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            </div>
-          ) : (
-            <div>
-              <label
-                style={{
-                  fontSize: 11,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Tipo entrata")}
-              </label>
-              <select
-                value={form.incomeType}
-                onChange={function (e) {
-                  setField("incomeType", e.target.value);
-                }}
-                style={inp}
-              >
-                {incomeTypes.map(function (it) {
-                  return (
-                    <option key={it.id} value={it.id}>
-                      {iconTextValue(it.icon)} {L(it.name)}
-                    </option>
-                  );
-                })}
-              </select>
             </div>
           )}
-          <div
-            style={{
-              background: dark ? "#252535" : "#fff",
-              border: "1px solid " + borderC,
-              borderRadius: 14,
-              padding: 12,
-            }}
-          >
-            <Toggle
-              label={L("Rateizza")}
-              checked={!!form.rateizzato}
-              onChange={function () {
-                setField("rateizzato", !form.rateizzato);
-              }}
-            />
-            {form.rateizzato && (
-              <RatePicker
-                value={form.rate || 12}
-                onChange={function (n) {
-                  setField("rate", n);
-                }}
-              />
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-            <Btn
-              onClick={saveRecurring}
-              disabled={!recurringFormValid}
-              bg={
-                recurringFormValid ? confirmButtonColor || "#378ADD" : "#A8A8A8"
-              }
-              style={{ flex: 1, padding: 12, fontWeight: 900 }}
-            >
-              {editingId ? L("Salva modifiche") : L("Crea ricorrente")}
-            </Btn>
-            <Btn
-              onClick={cancelForm}
-              bg={dark ? "#333" : "#f0f0f0"}
-              color={tc}
-              style={{ padding: "12px 16px" }}
-            >
-              {L("Annulla")}
-            </Btn>
-          </div>
+
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 16 }}>
+          <Btn onClick={saveRecurring} disabled={false} color="#fff" bg={recurringFormValid ? confirmButtonColor : "#A8A8A8"} style={{ flex: 1, minWidth: 120, padding: 12, fontWeight: 900 }}>{editingId ? L("Salva modifiche") : L("Crea ricorrente")}</Btn>
+          {<Btn onClick={cancelForm} disabled={false} bg={dark ? "#333" : "#f0f0f0"} color={tc} style={{ padding: "12px 14px" }}>{L("Annulla")}</Btn>}
         </div>
       </div>
     );
@@ -8268,11 +7753,11 @@ export function RecurringManager() {
                   style={{
                     fontSize: 20,
                     fontWeight: 950,
-                    color: r.rtype === "income" ? "#1D9E75" : "#E24B4A",
+                    color: readableDarkText(r.rtype === "income" ? "#1D9E75" : "#E24B4A", dark, cardBg),
                     marginTop: 2,
                   }}
                 >
-                  {fmtAmt(r.amount, sym)}
+                  {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
                 </div>
               </div>
               <span
@@ -8282,7 +7767,7 @@ export function RecurringManager() {
                   padding: "3px 9px",
                   fontWeight: 900,
                   background: r.rtype === "income" ? "#1D9E7522" : "#E24B4A22",
-                  color: r.rtype === "income" ? "#1D9E75" : "#E24B4A",
+                  color: readableDarkText(r.rtype === "income" ? "#1D9E75" : "#E24B4A", dark, r.rtype === "income" ? "#1D9E7522" : "#E24B4A22"),
                   whiteSpace: "nowrap",
                 }}
               >
@@ -8343,7 +7828,7 @@ export function RecurringManager() {
                 borderRadius: 10,
                 padding: "8px 10px",
                 cursor: "pointer",
-                color: dark ? "#BEB8FF" : "#378ADD",
+                color: readableDarkText(dark ? "#BEB8FF" : "#378ADD", dark, dark ? "#24213a" : "#EEF4FF"),
                 fontSize: 12,
                 fontWeight: 900,
               }}
@@ -8362,7 +7847,7 @@ export function RecurringManager() {
                 borderRadius: 10,
                 padding: "8px 10px",
                 cursor: "pointer",
-                color: "#E24B4A",
+                color: readableDarkText("#E24B4A", dark, dark ? "#3a1a1a" : "#FFF0F0"),
                 fontSize: 12,
                 fontWeight: 900,
               }}
@@ -8386,13 +7871,13 @@ export function RecurringManager() {
             }}
           >
             <div style={{ flex: 1, minWidth: 190 }}>
-              <div style={{ fontSize: 13, fontWeight: 900, color: "#E24B4A" }}>
+              <div style={{ fontSize: 13, fontWeight: 900, color: readableDarkText("#E24B4A", dark, dark ? "#3a1a1a" : "#fff0f0") }}>
                 {L("Eliminare questa ricorrente?")}
               </div>
               <div
                 style={{
                   fontSize: 12,
-                  color: dark ? "#f0bbbb" : "#8a4a4a",
+                  color: readableDarkText(dark ? "#f0bbbb" : "#8a4a4a", dark, dark ? "#3a1a1a" : "#fff0f0"),
                   marginTop: 2,
                 }}
               >
@@ -8482,21 +7967,17 @@ export function RecurringManager() {
             style={{
               fontSize: 13,
               fontWeight: 900,
-              color: dark ? "#ffd58a" : "#856404",
+              color: readableDarkText(dark ? "#ffd58a" : "#856404", dark, dark ? "#342b16" : "#FFF8E1"),
               marginBottom: 10,
             }}
           >
-            {L("Da confermare per")}{" "}
-            {ctx.monthFullName
-              ? ctx.monthFullName(Number(curMonthKey.slice(5))-1)
-              : L(MONTHS_FULL[Number(curMonthKey.slice(5))-1])}
-            :
+            {L("Da confermare")}:
           </div>
           {pending.map(function (r) {
             var cat = catObj(r);
             return (
               <div
-                key={String(r.id) + ':' + r._occurrenceKey}
+                key={String(r.id) + ':' + String(r._occurrenceDate || r._occurrenceKey)}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -8529,8 +8010,8 @@ export function RecurringManager() {
                     {r.name}
                   </div>
                   <div style={{ fontSize: 12, color: sc }}>
-                    {fmtAmt(r.amount, sym)} · {cat.icon} {L(cat.name)} ·{" "}
-                    {dateText(r)}
+                    {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)} · {cat.icon} {L(cat.name)} ·{" "}
+                    {occurrenceDateText(r)}
                   </div>
                 </div>
                 <Btn
@@ -8563,7 +8044,7 @@ export function RecurringManager() {
             borderRadius: 14,
             padding: "12px 16px",
             fontSize: 13,
-            color: "#1D9E75",
+            color: readableDarkText("#1D9E75", dark, dark ? "#153025" : "#e8f8f0"),
             fontWeight: 800,
           }}
         >
@@ -8576,7 +8057,7 @@ export function RecurringManager() {
           <div
             style={{
               fontSize: 13,
-              color: "#ccc",
+              color: readableDarkText("#ccc", dark, "#35354a"),
               textAlign: "center",
               padding: "24px 0",
             }}
@@ -8604,6 +8085,7 @@ export function GoalsPanel() {
     lang = ctx.lang;
   var [showAdd, setShowAdd] = useState(false);
   var [editingGoalId, setEditingGoalId] = useState(null);
+  useAnalyticsFlow(showAdd, "goal", "manual", editingGoalId ? "update" : "create");
   var [addAmt, setAddAmt] = useState({});
   var [linkEditingGoalId, setLinkEditingGoalId] = useState(null);
   var [linkBucketId, setLinkBucketId] = useState("");
@@ -8625,7 +8107,7 @@ export function GoalsPanel() {
     padding: "10px 12px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var lang = (ctx && ctx.lang) || "it";
@@ -8647,6 +8129,7 @@ export function GoalsPanel() {
     return !canAddPlanItem || canAddPlanItem("goals", (goals || []).length, 1);
   }
   function showGoalLimit() {
+    finishAnalyticsFlow("goal", "failed", { reason: "plan_limit" });
     if (setToast)
       setToast({
         text: "Hai raggiunto il limite di obiettivi del piano attuale.\nElimina un obiettivo oppure fai l’upgrade",
@@ -8664,7 +8147,8 @@ export function GoalsPanel() {
     Number(form.target) > 0 &&
     Number(form.saved || 0) >= 0;
   function addGoal() {
-    if (!goalFormValid) return;
+    startAnalyticsFlow("goal", { method: "manual", operation: editingGoalId ? "update" : "create" });
+    if (!goalFormValid) { finishAnalyticsFlow("goal", "failed", { reason: "validation" }); return; }
     if (editingGoalId) {
       setGoals(function (p) {
         return p.map(function (g) {
@@ -8680,6 +8164,7 @@ export function GoalsPanel() {
             : g;
         });
       });
+      finishAnalyticsFlow("goal", "completed", { operation: "update" });
       setEditingGoalId(null);
       setForm(blank);
       setShowAdd(false);
@@ -8702,6 +8187,7 @@ export function GoalsPanel() {
         },
       ];
     });
+    finishAnalyticsFlow("goal", "completed", { operation: "create" });
     setForm(blank);
     setShowAdd(false);
     if (setToast) setToast(L("Obiettivo creato correttamente"));
@@ -8718,6 +8204,7 @@ export function GoalsPanel() {
     setShowAdd(true);
   }
   function cancelGoalForm() {
+    finishAnalyticsFlow("goal", "cancelled", { reason: "user_cancel" });
     setEditingGoalId(null);
     setForm(blank);
     setShowAdd(false);
@@ -8823,7 +8310,7 @@ export function GoalsPanel() {
             <div
               style={{
                 fontSize: 12,
-                color: goalsAllowed() ? sc : dark ? "#ffd58a" : "#856404",
+                color: readableDarkText(goalsAllowed() ? sc : dark ? "#ffd58a" : "#856404", dark, "#35354a"),
                 marginTop: 2,
               }}
             >
@@ -9059,7 +8546,9 @@ export function GoalsPanel() {
                             form.period === "monthly"
                               ? secondaryButtonColor
                               : "transparent",
-                          color: form.period === "monthly" ? "#fff" : sc,
+                          color: readableDarkText(form.period === "monthly" ? "#fff" : sc, dark, form.period === "monthly"
+                              ? secondaryButtonColor
+                              : "transparent"),
                           fontWeight: form.period === "monthly" ? 850 : 650,
                           cursor: "pointer",
                           boxShadow:
@@ -9090,7 +8579,9 @@ export function GoalsPanel() {
                             form.period === "annual"
                               ? secondaryButtonColor
                               : "transparent",
-                          color: form.period === "annual" ? "#fff" : sc,
+                          color: readableDarkText(form.period === "annual" ? "#fff" : sc, dark, form.period === "annual"
+                              ? secondaryButtonColor
+                              : "transparent"),
                           fontWeight: form.period === "annual" ? 850 : 650,
                           cursor: "pointer",
                           boxShadow:
@@ -9221,7 +8712,7 @@ export function GoalsPanel() {
         <div
           style={{
             textAlign: "center",
-            color: "#ccc",
+            color: readableDarkText("#ccc", dark, "#35354a"),
             padding: "40px 0",
             fontSize: 14,
           }}
@@ -9253,7 +8744,7 @@ export function GoalsPanel() {
                 boxShadow: dark ? "none" : "0 4px 18px rgba(0,0,0,0.04)",
               }}
             >
-              {goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)>0 && <p style={{fontSize:12,color:sc,margin:'0 0 10px'}}>{savingsGoalText(lang,'budget')}: {fmtAmt(goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)/100,sym)}</p>}
+              {goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)>0 && <p style={{fontSize:12,color:sc,margin:'0 0 10px'}}>{savingsGoalText(lang,'budget')}: {smallDecimalNode(fmtAmt(goalSavingsMinor(ctx.financeEvolution,g,ctx.currency)/100,sym), ctx.lang)}</p>}
               <div
                 style={{
                   position: "absolute",
@@ -9337,7 +8828,7 @@ export function GoalsPanel() {
                       borderRadius: 10,
                       border: "1px solid " + borderC,
                       background: dark ? "#1e1e30" : "#f8f8f8",
-                      color: idx === 0 ? "#bbb" : tc,
+                      color: readableDarkText(idx === 0 ? "#bbb" : tc, dark, dark ? "#1e1e30" : "#f8f8f8"),
                       cursor: idx === 0 ? "default" : "pointer",
                     }}
                   >
@@ -9354,7 +8845,7 @@ export function GoalsPanel() {
                       borderRadius: 10,
                       border: "1px solid " + borderC,
                       background: dark ? "#1e1e30" : "#f8f8f8",
-                      color: idx === goals.length - 1 ? "#bbb" : tc,
+                      color: readableDarkText(idx === goals.length - 1 ? "#bbb" : tc, dark, dark ? "#1e1e30" : "#f8f8f8"),
                       cursor: idx === goals.length - 1 ? "default" : "pointer",
                     }}
                   >
@@ -9369,7 +8860,7 @@ export function GoalsPanel() {
                       background: "#EEF4FF",
                       border: "1px solid #BFD7FF",
                       cursor: "pointer",
-                      color: "#378ADD",
+                      color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                       fontSize: 14,
                       padding: "5px 8px",
                       borderRadius: 8,
@@ -9395,7 +8886,7 @@ export function GoalsPanel() {
                       background: "#FFF0F0",
                       border: "1px solid #FFD0D0",
                       cursor: "pointer",
-                      color: "#E24B4A",
+                      color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                       fontSize: 14,
                       padding: "5px 8px",
                       borderRadius: 8,
@@ -9447,7 +8938,7 @@ export function GoalsPanel() {
                           style={{
                             fontSize: 13,
                             fontWeight: 850,
-                            color: linkedBuckets.length ? tc : sc,
+                            color: readableDarkText(linkedBuckets.length ? tc : sc, dark, dark ? "#1E1E30" : "#F8FAFC"),
                             marginTop: 4,
                             overflowWrap: "anywhere",
                           }}
@@ -9463,7 +8954,7 @@ export function GoalsPanel() {
                             border: "1px solid " + (dark ? "#4B4A70" : "#D9D3FF"),
                             borderRadius: 9,
                             background: dark ? "#26253B" : "#F3F0FF",
-                            color: secondaryButtonColor,
+                            color: readableDarkText(secondaryButtonColor, dark, dark ? "#26253B" : "#F3F0FF"),
                             padding: "7px 9px",
                             fontSize: 11,
                             fontWeight: 850,
@@ -9484,7 +8975,7 @@ export function GoalsPanel() {
                         >
                           <option value="">{G("bucketNone")}</option>
                           {availableBuckets.map(function (bucket) {
-                            return <option key={bucket.id} value={String(bucket.id)}>{bucket.name}</option>;
+                            return <option key={bucket.id} value={String(bucket.id)} data-fainance-icon-ref={(bucket as any).icon || "\u{1F4C1}"}>{bucket.name}</option>;
                           })}
                         </select>
                         {!availableBuckets.length && (
@@ -9500,7 +8991,7 @@ export function GoalsPanel() {
                               border: "none",
                               borderRadius: 9,
                               background: secondaryButtonColor,
-                              color: "#fff",
+                              color: readableDarkText("#fff", dark, secondaryButtonColor),
                               padding: "8px 11px",
                               fontWeight: 850,
                               cursor: "pointer",
@@ -9524,7 +9015,7 @@ export function GoalsPanel() {
                             {L("Annulla")}
                           </button>
                         </div>
-                        {linkError && <div role="alert" style={{ fontSize: 11, color: "#E24B4A", marginTop: 7 }}>{linkError}</div>}
+                        {linkError && <div role="alert" style={{ fontSize: 11, color: readableDarkText("#E24B4A", dark, dark ? "#1E1E30" : "#F8FAFC"), marginTop: 7 }}>{linkError}</div>}
                       </div>
                     )}
                   </div>
@@ -9539,11 +9030,11 @@ export function GoalsPanel() {
                   marginBottom: 6,
                 }}
               >
-                <span style={{ fontSize: 18, fontWeight: 900, color: g.color }}>
-                  {fmtAmt(saved, sym)}
+                <span style={{ fontSize: 18, fontWeight: 900, color: readableDarkText(g.color, dark, cardBg) }}>
+                  {smallDecimalNode(fmtAmt(saved, sym), ctx.lang)}
                 </span>
                 <span style={{ fontSize: 14, color: sc }}>
-                  {L("di")} {fmtAmt(target, sym)}
+                  {L("di")} {smallDecimalNode(fmtAmt(target, sym), ctx.lang)}
                 </span>
               </div>
               <div
@@ -9574,7 +9065,7 @@ export function GoalsPanel() {
                 <span
                   style={{
                     fontSize: 12,
-                    color: done ? "#1D9E75" : sc,
+                    color: readableDarkText(done ? "#1D9E75" : sc, dark, cardBg),
                     fontWeight: 700,
                   }}
                 >
@@ -9582,7 +9073,7 @@ export function GoalsPanel() {
                 </span>
                 {!done && (
                   <span style={{ fontSize: 12, color: sc }}>
-                    {L("mancano")} {fmtAmt(Math.max(0, target - saved), sym)}
+                    {L("mancano")} {smallDecimalNode(fmtAmt(Math.max(0, target - saved), sym), ctx.lang)}
                   </span>
                 )}
               </div>
@@ -9628,7 +9119,7 @@ export function GoalsPanel() {
                       <span
                         style={{
                           fontSize: 18,
-                          color: g.color,
+                          color: readableDarkText(g.color, dark, dark ? "#252535" : "#fff"),
                           fontWeight: 900,
                         }}
                       >
@@ -9654,7 +9145,7 @@ export function GoalsPanel() {
                           padding: "13px 0",
                           fontSize: 16,
                           background: "transparent",
-                          color: tc,
+                          color: readableDarkText(tc, dark, "transparent"),
                           minWidth: 0,
                         }}
                       />
@@ -9671,7 +9162,7 @@ export function GoalsPanel() {
                         borderRadius: 12,
                         background:
                           Number(addAmt[g.id]) > 0 ? g.color : "#A8A8A8",
-                        color: "#fff",
+                        color: readableDarkText("#fff", dark, Number(addAmt[g.id]) > 0 ? g.color : "#A8A8A8"),
                         fontSize: 15,
                         fontWeight: 900,
                         cursor:
@@ -9696,6 +9187,48 @@ export function GoalsPanel() {
     </div>
   );
 }
+
+export function AlertCategoryPicker({ value, onChange, categories, groups, inputStyle }: any) {
+  const ctx: any = useApp();
+  const dark = !!ctx.dark;
+  const L = (s: string) => translateFainanceText(s, ctx.lang || "it");
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const selected = categories.find((c: any) => String(c.id) === String(value));
+  useEffect(function () {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement;
+    const first = rowsRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]') || rowsRef.current?.querySelector<HTMLButtonElement>('button');
+    first?.focus();
+    function closeOnEscape(event: KeyboardEvent) { if (event.key === "Escape") { event.stopPropagation(); setOpen(false); } }
+    document.addEventListener("keydown", closeOnEscape, true);
+    return function () { document.removeEventListener("keydown", closeOnEscape, true); previous?.focus(); };
+  }, [open]);
+  return <>
+    <button ref={triggerRef} type="button" aria-label={L("Categoria")} aria-haspopup="dialog" aria-expanded={open}
+      onClick={()=>setOpen(true)} style={{...inputStyle, borderRadius:12, padding:"11px 12px", display:"flex", alignItems:"center", gap:10, textAlign:"left", cursor:"pointer"}}>
+      <FainanceIcon value={selected?.icon || "\u{1F4C1}"} size={20}/>
+      <span>{selected ? L(selected.name) : L("Categoria")}</span>
+    </button>
+    <FainancePickerModal open={open} title={L("Categoria")} onClose={()=>setOpen(false)} zIndex={10200}>
+      <div ref={rowsRef}>
+        {groups.map((group: any) => <section key={group.id}>
+          <div style={{fontSize:11,fontWeight:800,color:dark?"#aaa":"#777",textTransform:"uppercase",letterSpacing:1,margin:"12px 0 6px"}}>{L(group.name)}</div>
+          {safeCatsForGroup(categories, groups, group).map((item: any) =>
+            <button key={item.id} type="button" aria-pressed={String(value)===String(item.id)}
+              onClick={()=>{onChange(String(item.id));setOpen(false);}}
+              style={{width:"100%",boxSizing:"border-box",background:dark?"#252535":"#fff",borderRadius:10,border:"1px solid "+(dark?"#444":"#eee"),padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:10,cursor:"pointer",textAlign:"left"}}>
+              <span style={{display:"inline-flex"}}><FainanceIcon value={item.icon || "\u{1F4C1}"} size={20}/></span>
+              <span style={{width:12,height:12,borderRadius:"50%",background:item.color,flexShrink:0}}/>
+              <span style={{flex:1,fontSize:14,color:dark?"#eee":"#333",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{L(item.name)}</span>
+            </button>)}
+        </section>)}
+      </div>
+    </FainancePickerModal>
+  </>;
+}
+
 export function AlertsPanel() {
   var ctx = useApp();
   const accountingPeriod = (ctx as any).accountingPeriod;
@@ -9704,7 +9237,7 @@ export function AlertsPanel() {
     alerts = ctx.alerts,
     setAlerts = ctx.setAlerts,
     cats = effectiveExpenseCats(ctx.cats),
-    expenses = ctx.expensesForAnalysis || ctx.expenses,
+    expenses = ctx.countedExpensesForAnalysis || ctx.expensesForAnalysis || ctx.expenses,
     sym = ctx.sym,
     dark = ctx.dark,
     curMonthKey = ctx.curMonthKey,
@@ -9729,6 +9262,7 @@ export function AlertsPanel() {
     catId: cats[0] ? cats[0].id : 1,
     groupId: groups[0] ? groups[0].id : "casa",
     budget: "",
+    _budgetAuto: true,
     triggerMode: "immediate",
     triggerPct: "",
     customText: "",
@@ -9744,7 +9278,7 @@ export function AlertsPanel() {
     padding: "8px 10px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
   var lang = (ctx && ctx.lang) || "it";
@@ -9758,71 +9292,23 @@ export function AlertsPanel() {
   var tc = dark ? "#eee" : "#333";
   var sc = dark ? "#aaa" : "#888";
   var borderC = dark ? "#444" : "#eee";
-  function getPrefilledBudget(catId, groupId, tp) {
-    if (!budgetPlan || !budgetPlan.items) return "";
-    if (tp === "cat") {
-      var item = budgetPlan.items.find(function (i) {
-        return i.catId === Number(catId);
-      });
-      return item && item.amount > 0 ? String(item.amount) : "";
-    }
-    var total = budgetPlan.items
-      .filter(function (i) {
-        var c = cats.find(function (c) {
-          return c.id === i.catId;
-        });
-        return c && c.group === groupId;
-      })
-      .reduce(function (a, i) {
-        return a + i.amount;
-      }, 0);
-    return total > 0 ? String(total) : "";
-  }
+  function getPrefilledBudget(catId,groupId,type,period=form.period){const value=suggestedAlertBudget({plan:budgetPlan,categories:cats,type,catId,groupId,period});return value===null?"":String(value);}
   function nowYear() {
     return new Date().getFullYear();
   }
-  function getSpent(al) {
-    var prefix = al.period === "annual" ? curMonthKey.slice(0,4) : curMonthKey;
-    if (al.type === "cat")
-      return expenses
-        .filter(function (e) {
-          return (
-            Number(e.catId) === Number(al.catId) && accountingPeriod.matches(e.date, prefix)
-          );
-        })
-        .reduce(function (a, e) {
-          return a + e.amount;
-        }, 0);
-    var gc = cats
-      .filter(function (c) {
-        return c.group === al.groupId;
-      })
-      .map(function (c) {
-        return c.id;
-      });
-    return expenses
-      .filter(function (e) {
-        return gc.includes(e.catId) && accountingPeriod.matches(e.date, prefix);
-      })
-      .reduce(function (a, e) {
-        return a + e.amount;
-      }, 0);
-  }
-  function isTriggered(al) {
-    var s = getSpent(al);
-    return al.triggerMode === "immediate"
-      ? s >= al.budget
-      : s >= al.budget * (1 + (al.triggerPct || 0) / 100);
-  }
+  function alertSnapshot(al){return spendingAlertSnapshot(al,{expenses,categories:cats,periodKey:curMonthKey,accountingPeriod,format:String});}
+  function getSpent(al){return alertSnapshot(al)._spent;}
+  function isTriggered(al){return alertSnapshot(al).triggered;}
   function getPct(al) {
     var s = getSpent(al);
     return al.budget > 0 ? Math.min(200, (s / al.budget) * 100) : 0;
   }
   function normalizeForm() {
+    const {_budgetAuto,...values}=form;
     return {
-      ...form,
+      ...values,
       icon: normalizeIconGlyph(form.icon) || "🔔",
-      catId: Number(form.catId),
+      catId: form.catId,
       budget: parseFloat(form.budget),
       triggerPct: parseFloat(form.triggerPct) || 0,
     };
@@ -9893,6 +9379,7 @@ export function AlertsPanel() {
       catId: al.catId || blank.catId,
       groupId: al.groupId || blank.groupId,
       budget: String(al.budget || ""),
+      _budgetAuto: false,
       triggerMode: al.triggerMode || "immediate",
       triggerPct: al.triggerPct || 0,
       customText: al.customText || "",
@@ -9906,23 +9393,17 @@ export function AlertsPanel() {
     setEditingId(null);
     setShowAdd(false);
   }
-  function handleTypeChange(nt) {
-    var nb = getPrefilledBudget(form.catId, form.groupId, nt);
-    setForm(function (p) {
-      return { ...p, type: nt, budget: nb || p.budget };
-    });
+  function handleTypeChange(type) {
+    setForm(p=>{const nb=getPrefilledBudget(p.catId,p.groupId,type,p.period);return {...p,type,budget:nb||p.budget,_budgetAuto:!!nb};});
   }
-  function handleCatChange(v) {
-    var nb = getPrefilledBudget(Number(v), form.groupId, "cat");
-    setForm(function (p) {
-      return { ...p, catId: Number(v), budget: nb || p.budget };
-    });
+  function handleCatChange(catId) {
+    setForm(p=>{const nb=getPrefilledBudget(catId,p.groupId,"cat",p.period);return {...p,catId,budget:nb||p.budget,_budgetAuto:!!nb};});
   }
-  function handleGroupChange(v) {
-    var nb = getPrefilledBudget(form.catId, v, "group");
-    setForm(function (p) {
-      return { ...p, groupId: v, budget: nb || p.budget };
-    });
+  function handleGroupChange(groupId) {
+    setForm(p=>{const nb=getPrefilledBudget(p.catId,groupId,"group",p.period);return {...p,groupId,budget:nb||p.budget,_budgetAuto:!!nb};});
+  }
+  function handlePeriodChange(period) {
+    setForm(p=>{const nb=getPrefilledBudget(p.catId,p.groupId,p.type,period);return {...p,period,budget:p._budgetAuto===false?p.budget:nb||p.budget};});
   }
   var triggered = alerts.filter(isTriggered).length;
   return (
@@ -9943,7 +9424,7 @@ export function AlertsPanel() {
             <span
               style={{
                 background: "#E24B4A",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, "#E24B4A"),
                 borderRadius: 20,
                 padding: "2px 8px",
                 fontSize: 12,
@@ -10157,7 +9638,7 @@ export function AlertsPanel() {
                       value={form.budget}
                       onChange={function (e) {
                         setForm(function (p) {
-                          return { ...p, budget: e.target.value };
+                          return { ...p, budget: e.target.value, _budgetAuto: false };
                         });
                       }}
                       style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
@@ -10188,9 +9669,7 @@ export function AlertsPanel() {
                     <button
                       type="button"
                       onClick={function () {
-                        setForm(function (p) {
-                          return { ...p, period: "monthly" };
-                        });
+                        handlePeriodChange("monthly");
                       }}
                       style={{
                         flex: 1,
@@ -10205,7 +9684,9 @@ export function AlertsPanel() {
                           form.period === "monthly"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.period === "monthly" ? "#fff" : sc,
+                        color: readableDarkText(form.period === "monthly" ? "#fff" : sc, dark, form.period === "monthly"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.period === "monthly" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10219,9 +9700,7 @@ export function AlertsPanel() {
                     <button
                       type="button"
                       onClick={function () {
-                        setForm(function (p) {
-                          return { ...p, period: "annual" };
-                        });
+                        handlePeriodChange("annual");
                       }}
                       style={{
                         flex: 1,
@@ -10236,7 +9715,9 @@ export function AlertsPanel() {
                           form.period === "annual"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.period === "annual" ? "#fff" : sc,
+                        color: readableDarkText(form.period === "annual" ? "#fff" : sc, dark, form.period === "annual"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.period === "annual" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10329,7 +9810,9 @@ export function AlertsPanel() {
                           form.type === "cat"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.type === "cat" ? "#fff" : sc,
+                        color: readableDarkText(form.type === "cat" ? "#fff" : sc, dark, form.type === "cat"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.type === "cat" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10358,7 +9841,9 @@ export function AlertsPanel() {
                           form.type === "group"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.type === "group" ? "#fff" : sc,
+                        color: readableDarkText(form.type === "group" ? "#fff" : sc, dark, form.type === "group"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.type === "group" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10384,29 +9869,7 @@ export function AlertsPanel() {
                     >
                       {L("Categoria")}
                     </label>
-                    <select
-                      value={form.catId}
-                      onChange={function (e) {
-                        handleCatChange(e.target.value);
-                      }}
-                      style={{ ...inp, borderRadius: 12, padding: "11px 12px" }}
-                    >
-                      {groups.map(function (g) {
-                        return (
-                          <optgroup key={g.id} label={g.name}>
-                            {safeCatsForGroup(cats, groups, g).map(function (
-                              c
-                            ) {
-                              return (
-                                <option key={c.id} value={c.id}>
-                                  {iconTextValue(c.icon)} {c.name}
-                                </option>
-                              );
-                            })}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
+                    <AlertCategoryPicker value={form.catId} onChange={handleCatChange} categories={cats} groups={groups} inputStyle={inp} />
                   </div>
                 ) : (
                   <div>
@@ -10430,7 +9893,7 @@ export function AlertsPanel() {
                     >
                       {groups.map(function (g) {
                         return (
-                          <option key={g.id} value={g.id}>
+                          <option key={g.id} value={g.id} data-fainance-icon-ref={(g as any).icon || "\u{1F4C1}"}>
                             {g.name}
                           </option>
                         );
@@ -10491,7 +9954,9 @@ export function AlertsPanel() {
                           form.triggerMode === "immediate"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.triggerMode === "immediate" ? "#fff" : sc,
+                        color: readableDarkText(form.triggerMode === "immediate" ? "#fff" : sc, dark, form.triggerMode === "immediate"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight:
                           form.triggerMode === "immediate" ? 850 : 650,
                         cursor: "pointer",
@@ -10523,7 +9988,9 @@ export function AlertsPanel() {
                           form.triggerMode === "pct"
                             ? secondaryButtonColor
                             : "transparent",
-                        color: form.triggerMode === "pct" ? "#fff" : sc,
+                        color: readableDarkText(form.triggerMode === "pct" ? "#fff" : sc, dark, form.triggerMode === "pct"
+                            ? secondaryButtonColor
+                            : "transparent"),
                         fontWeight: form.triggerMode === "pct" ? 850 : 650,
                         cursor: "pointer",
                         boxShadow:
@@ -10596,7 +10063,7 @@ export function AlertsPanel() {
         <div
           style={{
             textAlign: "center",
-            color: "#ccc",
+            color: readableDarkText("#ccc", dark, "#35354a"),
             padding: "40px 0",
             fontSize: 14,
           }}
@@ -10709,7 +10176,13 @@ export function AlertsPanel() {
                       style={{
                         fontSize: 15,
                         fontWeight: 850,
-                        color: trig ? "#E24B4A" : tc,
+                        color: readableDarkText(trig ? "#E24B4A" : tc, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff"),
                       }}
                     >
                       {al.name}
@@ -10718,7 +10191,7 @@ export function AlertsPanel() {
                       style={{
                         fontSize: 10,
                         background: al.period === "annual" ? "#EEF" : "#EFE",
-                        color: al.period === "annual" ? "#534AB7" : "#1D9E75",
+                        color: readableDarkText(al.period === "annual" ? "#534AB7" : "#1D9E75", dark, al.period === "annual" ? "#EEF" : "#EFE"),
                         borderRadius: 10,
                         padding: "2px 7px",
                         fontWeight: 750,
@@ -10734,7 +10207,13 @@ export function AlertsPanel() {
                     <div
                       style={{
                         fontSize: 12,
-                        color: trig ? "#E24B4A" : sc,
+                        color: readableDarkText(trig ? "#E24B4A" : sc, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff"),
                         marginTop: 5,
                         fontStyle: "italic",
                       }}
@@ -10755,7 +10234,7 @@ export function AlertsPanel() {
                     border: "1px solid #BFD7FF",
                     borderRadius: 9,
                     cursor: "pointer",
-                    color: "#378ADD",
+                    color: readableDarkText("#378ADD", dark, "#EEF4FF"),
                     fontSize: 14,
                     padding: "6px 9px",
                     fontWeight: 700,
@@ -10779,7 +10258,7 @@ export function AlertsPanel() {
                     border: "1px solid #FFD0D0",
                     borderRadius: 9,
                     cursor: "pointer",
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", dark, "#FFF0F0"),
                     fontSize: 14,
                     padding: "6px 9px",
                     fontWeight: 700,
@@ -10796,11 +10275,17 @@ export function AlertsPanel() {
                 marginBottom: 5,
               }}
             >
-              <span style={{ fontSize: 14, fontWeight: 800, color: barColor }}>
-                {fmtAmt(spent, sym)}
+              <span style={{ fontSize: 14, fontWeight: 800, color: readableDarkText(barColor, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff") }}>
+                {smallDecimalNode(fmtAmt(spent, sym), ctx.lang)}
               </span>
               <span style={{ fontSize: 12, color: sc }}>
-                {L("budget")} {fmtAmt(al.budget, sym)}
+                {L("budget")} {smallDecimalNode(fmtAmt(al.budget, sym), ctx.lang)}
               </span>
             </div>
             <div
@@ -10823,7 +10308,13 @@ export function AlertsPanel() {
             <div
               style={{
                 fontSize: 11,
-                color: barColor,
+                color: readableDarkText(barColor, dark, trig
+                ? dark
+                  ? "#3a1a1a"
+                  : "#fff5f5"
+                : dark
+                ? "#252535"
+                : "#fff"),
                 marginTop: 4,
                 textAlign: "right",
                 fontWeight: 750,
@@ -10845,8 +10336,8 @@ export function BudgetPlanPanel() {
   const accountingPeriod = (ctx as any).accountingPeriod;
   const rateMonth = (item, key) => accountingPeriod.amount(item, key);
   var cats = effectiveExpenseCats(ctx.cats),
-    incomes = ctx.incomes,
-    expenses = ctx.expensesForAnalysis || ctx.expenses,
+    incomes = ctx.countedIncomes || ctx.incomes,
+    expenses = ctx.countedExpensesForAnalysis || ctx.expensesForAnalysis || ctx.expenses,
     budgetPlan = ctx.budgetForPeriod(selectedPeriod),
     setBudgetPlan = plan => ctx.savePeriodBudget(selectedPeriod, plan, budgetScope),
     sym = ctx.sym,
@@ -10902,6 +10393,7 @@ export function BudgetPlanPanel() {
   var [savingToast, setSavingToast] = useState("");
   var [showInfoTooltip, setShowInfoTooltip] = useState(false);
   var [budgetPopup, setBudgetPopup] = useState(null);
+  useAnalyticsFlow(!!budgetPopup, "budget", "manual", "update");
 
   useEffect(
     function () {
@@ -11010,11 +10502,13 @@ export function BudgetPlanPanel() {
     setBudgetPopup(kind);
   }
   function closeBudgetPopup() {
+    finishAnalyticsFlow("budget", "cancelled", { reason: "user_cancel" });
     restoreSavedBudgetDraft();
     setShowInfoTooltip(false);
     setBudgetPopup(null);
   }
   function save() {
+    startAnalyticsFlow("budget", { method: "manual", operation: "update" });
     var savedPopup = budgetPopup;
     setBudgetPlan({
       ...budgetPlan,
@@ -11029,6 +10523,7 @@ export function BudgetPlanPanel() {
         };
       })),
     });
+    finishAnalyticsFlow("budget", "completed");
     setSavingToast(
       L(
         savedPopup === "income"
@@ -11046,7 +10541,7 @@ export function BudgetPlanPanel() {
     padding: isMobile ? "6px 6px" : "7px 10px",
     fontSize: isMobile ? 13.2 : 13,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
     minWidth: 0,
   };
@@ -11161,7 +10656,7 @@ export function BudgetPlanPanel() {
           onClick={openBudgetStatistics}
           style={{
             background: confirmButtonColor,
-            color: "#fff",
+            color: readableDarkText("#fff", dark, confirmButtonColor),
             border: "none",
             borderRadius: btnRadius,
             padding: "10px 14px",
@@ -11234,15 +10729,15 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "7px 0" }}>
               <span style={{ fontSize: 12, color: sc }}>{L("Totale allocato")}</span>
-              <strong style={{ fontSize: 15, color: "#E24B4A", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>− {fmtBudget(totalAlloc)}</strong>
+              <strong style={{ fontSize: 15, color: readableDarkText("#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtBudget(totalAlloc)}</strong>
             </div>
             <div style={{ height: 1, background: borderC, margin: "4px 0 9px" }} />
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 14 }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: "#1D9E75", fontWeight: 800 }}>{L("Risparmio pianif.")}</div>
+                <div style={{ fontSize: 12, color: readableDarkText("#1D9E75", dark, dark ? "#202030" : "#F7F8FC"), fontWeight: 800 }}>{L("Risparmio pianif.")}</div>
                 <div style={{ fontSize: 11, color: sc, marginTop: 3 }}>{Math.round(savingPct)}% {L("del reddito")}</div>
               </div>
-              <strong style={{ fontSize: isMobile ? 23 : 24, lineHeight: 1, color: "#1D9E75", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtBudget(savingPlanned)}</strong>
+              <strong style={{ fontSize: isMobile ? 23 : 24, lineHeight: 1, color: readableDarkText("#1D9E75", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{fmtBudget(savingPlanned)}</strong>
             </div>
           </div>
 
@@ -11256,12 +10751,12 @@ export function BudgetPlanPanel() {
           >
             <div style={{ background: dark ? "#202030" : "#F7F8FC", border: "1px solid " + borderC, borderRadius: 12, padding: "10px 11px", minWidth: 0 }}>
               <div style={{ fontSize: 11, color: sc, marginBottom: 4 }}>{L("Risparmio reale")}</div>
-              <strong style={{ display: "block", fontSize: 17, color: realSaving >= 0 ? "#1D9E75" : "#E24B4A", fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{fmtBudget(realSaving)}</strong>
+              <strong style={{ display: "block", fontSize: 17, color: readableDarkText(realSaving >= 0 ? "#1D9E75" : "#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{fmtBudget(realSaving)}</strong>
             </div>
             <div style={{ background: dark ? "#202030" : "#F7F8FC", border: "1px solid " + borderC, borderRadius: 12, padding: "10px 11px", minWidth: 0 }}>
               <div style={{ fontSize: 11, color: sc, marginBottom: 4 }}>{L("Rispetto al piano")}</div>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                <strong style={{ display: "block", fontSize: 17, color: savingDiff >= 0 ? "#1D9E75" : "#E24B4A", fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{savingDiff >= 0 ? "+" : ""}{fmtBudget(savingDiff)}</strong>
+                <strong style={{ display: "block", fontSize: 17, color: readableDarkText(savingDiff >= 0 ? "#1D9E75" : "#E24B4A", dark, dark ? "#202030" : "#F7F8FC"), fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>{savingDiff >= 0 ? "+" : ""}{fmtBudget(savingDiff)}</strong>
                 <span aria-hidden="true" style={{ fontSize: 16 }}>{savingDiff >= 0 ? "✅" : "⚠️"}</span>
               </div>
             </div>
@@ -11326,7 +10821,7 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ fontSize: 12, color: sc }}>
               {L("Reddito di rif.")}:{" "}
-              <strong style={{ color: "#1D9E75" }}>
+              <strong style={{ color: readableDarkText("#1D9E75", dark, cardBg) }}>
                 {fmtBudget(effectiveIncome)}
               </strong>
             </div>
@@ -11380,7 +10875,7 @@ export function BudgetPlanPanel() {
             </div>
             <div style={{ fontSize: 12, color: sc }}>
               {L("Totale allocato")}:{" "}
-              <strong style={{ color: barColor }}>{fmtBudget(totalAlloc)}</strong> ·{" "}
+              <strong style={{ color: readableDarkText(barColor, dark, cardBg) }}>{fmtBudget(totalAlloc)}</strong> ·{" "}
               {Math.round(pctBar)}%
             </div>
           </div>
@@ -11424,13 +10919,13 @@ export function BudgetPlanPanel() {
                 popupWidth={320}
               >
                 <div>
-                  <div style={{ color: dark ? "#F2DF9C" : "#6B5900" }}>
+                  <div style={{ color: readableDarkText(dark ? "#F2DF9C" : "#6B5900", dark, dark ? "#1A2A1E" : "#EDFAF3") }}>
                     {L("Media entrate mensili (ultimi 12 mesi)")}
                   </div>
                   <div
                     style={{
                       fontWeight: 900,
-                      color: "#1D9E75",
+                      color: readableDarkText("#1D9E75", dark, dark ? "#1A2A1E" : "#EDFAF3"),
                       fontSize: 18,
                       marginTop: 6,
                     }}
@@ -11440,7 +10935,7 @@ export function BudgetPlanPanel() {
                 </div>
               </FainanceInfoPopover>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 900, color: "#1D9E75" }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: readableDarkText("#1D9E75", dark, dark ? "#1A2A1E" : "#EDFAF3") }}>
               {fmtBudget(effectiveIncome)}
             </div>
           </div>
@@ -11510,7 +11005,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc, marginBottom: 3 }}>
                 {L("Totale allocato")}
               </div>
-              <div style={{ fontSize: 17, fontWeight: 850, color: barColor }}>
+              <div style={{ fontSize: 17, fontWeight: 850, color: readableDarkText(barColor, dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(totalAlloc)}
               </div>
             </div>
@@ -11524,7 +11019,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc, marginBottom: 3 }}>
                 {L("Disponibile")}
               </div>
-              <div style={{ fontSize: 17, fontWeight: 850, color: "#1D9E75" }}>
+              <div style={{ fontSize: 17, fontWeight: 850, color: readableDarkText("#1D9E75", dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(savingPlanned)}
               </div>
             </div>
@@ -11598,7 +11093,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc }}>
                 {L("Reddito di rif.")}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 850, color: "#1D9E75" }}>
+              <div style={{ fontSize: 16, fontWeight: 850, color: readableDarkText("#1D9E75", dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(effectiveIncome)}
               </div>
             </div>
@@ -11606,7 +11101,7 @@ export function BudgetPlanPanel() {
               <div style={{ fontSize: 11, color: sc }}>
                 {L("Totale allocato")}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 850, color: barColor }}>
+              <div style={{ fontSize: 16, fontWeight: 850, color: readableDarkText(barColor, dark, dark ? "#202033" : "#F7F8FC") }}>
                 {fmtBudget(totalAlloc)}
               </div>
             </div>
@@ -11671,7 +11166,7 @@ export function BudgetPlanPanel() {
                     style={{
                       fontSize: isMobile ? 12.5 : 11,
                       fontWeight: 700,
-                      color: "#aaa",
+                      color: readableDarkText("#aaa", dark, "#35354a"),
                       textTransform: "uppercase",
                       letterSpacing: 1,
                       marginBottom: 6,
@@ -11679,7 +11174,7 @@ export function BudgetPlanPanel() {
                       borderBottom: "1px solid " + borderC,
                     }}
                   >
-                    {g.name} — {fmtBudget(gt)}
+                    <span style={{display:"inline-flex",alignItems:"center",gap:6}}><FainanceIcon value={g.icon || "\u{1F4C1}"} size={18}/><span>{g.name} — {fmtBudget(gt)}</span></span>
                   </div>
                   {gc.map(function (c) {
                     var item = items.find(function (i) {
@@ -11706,7 +11201,7 @@ export function BudgetPlanPanel() {
                           }}
                         >
                           <span style={{ fontSize: 16, flexShrink: 0 }}>
-                            {c.icon}
+                            <FainanceIcon value={c.icon || "\u{1F3F7}"} size={18}/>
                           </span>
                           <span
                             style={{
@@ -11812,9 +11307,9 @@ export function SettingsList({
   allowArchive = true,
   usageScope = "",
 }) {
-  var ctx = useApp();
+  var ctx:any = useApp();
   function L(v) {
-    return translateFainanceText(v, (ctx && ctx.lang) || "it");
+    return catalogRemapText((ctx && ctx.lang)||"it",translateFainanceText(v, (ctx && ctx.lang) || "it"));
   }
   var t = ctx.t || {},
     dark = ctx.dark;
@@ -11836,12 +11331,18 @@ export function SettingsList({
   var [newColor, setNewColor] = useState(COLORS[0]);
   var [newGroup, setNewGroup] = useState(gl[0] ? gl[0].id : "");
   var [newIcon, setNewIcon] = useState("📦");
+  var [newExcludeFromTotals, setNewExcludeFromTotals] = useState(false);
   var [showCreate, setShowCreate] = useState(false);
+  var [saveError, setSaveError] = useState("");
+  var [pendingDelete,setPendingDelete] = useState<any>(null);
   var [editId, setEditId] = useState(null);
   var [editName, setEditName] = useState("");
   var [editColor, setEditColor] = useState("");
   var [editGroup, setEditGroup] = useState(gl[0] ? gl[0].id : "");
   var [editIcon, setEditIcon] = useState("📦");
+  var [editExcludeFromTotals, setEditExcludeFromTotals] = useState(false);
+  var supportsExcludeFromTotals =
+    usageScope === "expenseCategory" || usageScope === "incomeCategory";
   var inp = {
     width: "100%",
     borderRadius: 10,
@@ -11849,12 +11350,12 @@ export function SettingsList({
     padding: "10px 11px",
     fontSize: 14,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
     boxSizing: "border-box",
   };
-  var tc = dark ? "#eee" : "#333";
-  var sc = dark ? "#aaa" : "#888";
-  var borderC = dark ? "#444" : "#eee";
+  var tc = ctx.textC || (dark ? "#eee" : "#333");
+  var sc = ctx.subC || (dark ? "#aaa" : "#888");
+  var borderC = ctx.borderC || (dark ? "#444" : "#eee");
   var baseBlocked = ctx.currentPlan === "free";
   var setToast = ctx.setToast;
   var groupIds = (gl || []).map(function (g) {
@@ -11877,10 +11378,12 @@ export function SettingsList({
       });
   }
   function resetCreate() {
+    setSaveError("");
     setNewName("");
     setNewColor(COLORS[0]);
     setNewGroup(gl[0] ? gl[0].id : "");
     setNewIcon("📦");
+    setNewExcludeFromTotals(false);
     setShowCreate(false);
   }
   function closeEdit() {
@@ -11889,6 +11392,7 @@ export function SettingsList({
     setEditColor("");
     setEditGroup(gl[0] ? gl[0].id : "");
     setEditIcon("📦");
+    setEditExcludeFromTotals(false);
   }
   function add() {
     if (baseBlocked) {
@@ -11918,6 +11422,9 @@ export function SettingsList({
         createdAt: nowIso,
         updatedAt: nowIso,
         ...(showGroup ? { group: groupToSave } : {}),
+        ...(supportsExcludeFromTotals
+          ? { excludeFromTotals: !!newExcludeFromTotals }
+          : {}),
       },
     ]);
     resetCreate();
@@ -12087,7 +11594,7 @@ export function SettingsList({
       })
     );
   }
-  function hardDeleteFromSettings(id) {
+  function hardDeleteFromSettings(id, preserveLinks = false) {
     var nowIso = new Date().toISOString();
     var sid = String(id);
     setItems(
@@ -12119,7 +11626,7 @@ export function SettingsList({
           ctx.setDefaultExpenseCat
         )
           ctx.setDefaultExpenseCat("");
-        if (ctx.setBudgetPlan)
+        if (ctx.setBudgetPlan && !preserveLinks)
           ctx.setBudgetPlan(function (prev) {
             var bp = prev || {};
             return {
@@ -12163,6 +11670,21 @@ export function SettingsList({
       lockedWarn();
       return;
     }
+    if (ctx.firestoreReady===false) {if(setToast)setToast({text:L("Attendi il caricamento dei dati prima di modificare i collegamenti."),type:"warning"});return;}
+    if (["expenseCategory","incomeCategory","method","patrimonioEntry"].includes(usageScope)) {
+      const source=(items||[]).find(x=>String(x.id)===String(id));if(!source)return;
+      const used=usageScope==='patrimonioEntry'?patrimonyHasData(ctx,source):catalogReferences(ctx,usageScope,source).length>0;
+      if(used){setPendingDelete(source);return;}
+      if(usageScope==='method'){
+        // Removing an unused instrument also releases its balance ownership, preserving the current balance.
+        ctx.setPatrimonioEntries((ctx.patrimonioEntries||[]).map(e=>{
+          const link=e.balanceLink,last=link?.checkpoints?.at(-1);if(e.deleted||!last?.methodIds?.map(String).includes(String(id)))return e;
+          const remaining=last.methodIds.filter(mid=>String(mid)!==String(id));
+          return {...e,balanceLink:{...link,enabled:remaining.length?link.enabled:false,checkpoints:link.checkpoints.map(cp=>({...cp,methodIds:cp.methodIds.filter(mid=>String(mid)!==String(id))}))},updatedAt:new Date().toISOString()};
+        }));
+      }
+      hardDeleteFromSettings(id);if(setToast)setToast({text:L("Cancellazione completata"),type:"success"});return;
+    }
     if (itemIsUsed(id)) {
       if (setToast)
         setToast({
@@ -12187,6 +11709,36 @@ export function SettingsList({
         icon: "🗑️",
       });
   }
+  function confirmCatalogDelete(targetId) {
+    if(baseBlocked){lockedWarn();return;}
+    if(ctx.firestoreReady===false)throw Error(L("Attendi il caricamento dei dati prima di modificare i collegamenti."));
+    const source=(items||[]).find(x=>String(x.id)===String(pendingDelete?.id)&&!x.deleted);
+    if(!source)throw Error(L("La voce è cambiata. Chiudi e riprova."));
+    if(usageScope==='patrimonioEntry'){
+      const target=(items||[]).find(x=>String(x.id)===String(targetId)&&!x.deleted&&!x.deletedAt);
+      const changes=mergePatrimony(ctx,source,target);
+      for(const setter of ['setPatrimonioValues','setPatrimonioHistory','setPatrimonioNotes'])if(typeof ctx[setter]!=='function')throw Error(L("Impossibile aggiornare tutti i collegamenti. Nessuna cancellazione eseguita."));
+      for(const [key,setter] of [['patrimonioValues','setPatrimonioValues'],['patrimonioHistory','setPatrimonioHistory'],['patrimonioNotes','setPatrimonioNotes']])if(ctx[setter](changes[key])===false)throw Error(L('Modifica non salvata: memoria locale non disponibile. I dati precedenti sono conservati.'));
+      setItems(changes.patrimonioEntries.map(e=>({...e,group:e.areaId||e.group})));
+      setPendingDelete(null);if(setToast)setToast({text:L("Cancellazione completata"),type:'success'});return;
+    }
+    const available=catalogDestinationItems(ctx,usageScope,items||[]);
+    const target=available.find(x=>String(x.id)===String(targetId));
+    const refs=catalogReferences(ctx,usageScope,source);
+    if(!target&&refs.length)throw Error(L("Scegli la destinazione per i movimenti collegati."));
+    const changes=target?remapCatalogReferences(ctx,usageScope,source,target):{};
+    // Validate all required update paths before any setter or catalog tombstone.
+    const setters={expenses:'setExpenses',incomes:'setIncomes',recurring:'setRecurring',patrimonioEntries:'setPatrimonioEntries',alerts:'setAlerts',budgetPlan:'setBudgetPlan',legacyBudgetPlan:'setLegacyBudgetPlan',shareCategoryMappings:'setShareCategoryMappings',financeEvolution:'setFinanceEvolution'};
+    for(const[key,value]of Object.entries(changes))if(JSON.stringify(value)!==JSON.stringify(ctx[key])&&typeof ctx[setters[key]]!=='function')throw Error(L("Impossibile aggiornare tutti i collegamenti. Nessuna cancellazione eseguita."));
+    for(const[key,value]of Object.entries(changes))if(typeof ctx[setters[key]]==='function'&&JSON.stringify(value)!==JSON.stringify(ctx[key])){const saved=ctx[setters[key]](value);if(saved===false)throw Error(L('Modifica non salvata: memoria locale non disponibile. I dati precedenti sono conservati.'));}
+    hardDeleteFromSettings(source.id,true);
+    if(target){
+      const pairs=usageScope==='expenseCategory'?[['defaultExpenseCat','setDefaultExpenseCat'],['shareDefaultCategoryId','setShareDefaultCategoryId']]:usageScope==='incomeCategory'?[['defaultIncomeType','setDefaultIncomeType']]:[['defaultExpenseMethod','setDefaultExpenseMethod']];
+      for(const[key,setter]of pairs)if(String(ctx[key])===String(source.id)&&ctx[setter])ctx[setter](target.archived?"":String(target.id));
+      if(ctx.setFilterCats&&usageScope!=='method')ctx.setFilterCats(previous=>(previous||[]).map(x=>String(x)===String(source.id)?String(target.id):String(x)===(usageScope==='incomeCategory'?'income:':'expense:')+source.id?(usageScope==='incomeCategory'?'income:':'expense:')+target.id:x).filter((x,i,a)=>a.indexOf(x)===i));
+    }
+    setPendingDelete(null);if(setToast)setToast({text:L("Cancellazione completata"),type:'success'});
+  }
   function startEdit(item) {
     if (baseBlocked) {
       lockedWarn();
@@ -12197,6 +11749,7 @@ export function SettingsList({
     setEditColor(item.color || COLORS[0]);
     setEditGroup(item.group || (gl[0] ? gl[0].id : ""));
     setEditIcon(item.icon || "📦");
+    setEditExcludeFromTotals(!!item.excludeFromTotals);
   }
   function saveEdit() {
     if (baseBlocked) {
@@ -12215,6 +11768,9 @@ export function SettingsList({
               custom: true,
               updatedAt: new Date().toISOString(),
               ...(showGroup ? { group: editGroup } : {}),
+              ...(supportsExcludeFromTotals
+                ? { excludeFromTotals: !!editExcludeFromTotals }
+                : {}),
             }
           : i;
       })
@@ -12311,7 +11867,7 @@ export function SettingsList({
     if (/^Aggiungi\s+/i.test(s)) s = s.replace(/^Aggiungi\s+/i, "Nuova ");
     return s;
   }
-  var createLabel = createButtonLabel();
+  var createLabel = usageScope === "patrimonioEntry" ? "Nuova categoria" : createButtonLabel();
   function editDialogLabel() {
     if (/categoria/i.test(createLabel)) return "Modifica categoria";
     if (/metodo/i.test(createLabel)) return "Modifica pagamento";
@@ -12325,7 +11881,7 @@ export function SettingsList({
     if (/area/i.test(createLabel)) return "Nome area";
     return "Nome voce";
   }
-  function ModalShell({
+  function renderModalShell({
     title,
     onClose,
     icon,
@@ -12336,54 +11892,40 @@ export function SettingsList({
     setName,
     group,
     setGroup,
+    excludeFromTotals,
+    setExcludeFromTotals,
     onSave,
   }) {
     var valid = !baseBlocked && !!String(name || "").trim();
+    function submit() {
+      setSaveError("");
+      try {
+        if (onSave() === false) setSaveError(L("Salvataggio non riuscito. I dati inseriti sono conservati."));
+      } catch (error) {
+        var code = String(error && (typeof error.code === "string" ? error.code : error.message) || "");
+        if (!/^[A-Za-z0-9_./-]{1,80}$/.test(code)) code = String(error && error.name || "SAVE_FAILED");
+        setSaveError(L("Salvataggio non riuscito. I dati inseriti sono conservati.") + " (" + code + ")");
+      }
+    }
     return (
-      <div
-        style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0,0,0,0.58)",
-          zIndex: 980,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "7vh 16px 3vh",
-          boxSizing: "border-box",
-          overflowY: "auto",
-        }}
-        onMouseDown={function (e) {
-          if (e.target === e.currentTarget) onClose();
-        }}
-      >
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            maxWidth: 520,
-            background: dark ? "#252535" : "#fff",
-            borderRadius: 22,
-            border: "1px solid " + borderC,
-            boxShadow: "0 18px 65px rgba(0,0,0,0.38)",
-            padding: "20px 18px 18px",
-          }}
-        >
-          <div style={{ position: "absolute", right: 14, top: 14 }}>
-            <PopupCloseButton onClick={onClose} dark={dark} label={L("Chiudi")} />
-          </div>
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 950,
-              color: tc,
-              marginBottom: 16,
-              paddingRight: 44,
-            }}
-          >
-            {L(title)}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+      <FainancePickerModal open={true} title={L(title)} onClose={onClose} footer={<div>{saveError && <div role="alert" data-category-save-error="true" style={{marginBottom:10,padding:10,borderRadius:10,background:dark?"#10243A":"#FFFFFF",border:"1px solid " + (dark?"#FF9AA3":"#B63B45"),color:dark?"#FF9AA3":"#B63B45",whiteSpace:"pre-line",overflowWrap:"anywhere",fontSize:13}}>{saveError}</div>}<div style={{ display: "flex", gap: 9, marginTop: 0 }}>
+            <Btn
+              onClick={submit}
+              disabled={!valid}
+              bg={valid ? confirmButtonColor : "#A8A8A8"}
+              style={{flex:1,padding:12,fontWeight:950,...(usageScope === "patrimonioEntry" || usageScope === "patrimonioArea" ? {} : secondarySettingsStyle(ctx))}}
+            >
+              {L("Salva")}
+            </Btn>
+            <Btn
+              onClick={onClose}
+              bg={dark ? "#333" : "#f0f0f0"}
+              color={tc}
+              style={{...({ padding: "12px 16px", fontWeight: 900 }),...secondarySettingsStyle(ctx)}}
+            >
+              {L("Annulla")}
+            </Btn>
+          </div></div>}><div data-category-fields="true"><div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
             {showIcon ? (
               <div
                 style={{
@@ -12469,14 +12011,17 @@ export function SettingsList({
                 {L(nameFieldLabel())}
               </div>
               <input
-                autoFocus
+                autoFocus={editId === null}
                 value={name}
+                aria-label={L(nameFieldLabel())}
+                onInput={function (e) { setName(e.currentTarget.value); }}
+                onCompositionEnd={function (e) { setName(e.currentTarget.value); }}
                 disabled={baseBlocked}
                 onChange={function (e) {
                   setName(e.target.value);
                 }}
                 onKeyDown={function (e) {
-                  if (e.key === "Enter" && valid) onSave();
+                  if (e.key === "Enter" && valid) submit();
                 }}
                 placeholder={L(nameFieldLabel())}
                 style={inp}
@@ -12504,7 +12049,7 @@ export function SettingsList({
                 >
                   {gl.map(function (g2) {
                     return (
-                      <option key={g2.id} value={g2.id}>
+                      <option key={g2.id} value={g2.id} data-fainance-icon-ref={(g2 as any).icon || "\u{1F4C1}"}>
                         {L(g2.name)}
                       </option>
                     );
@@ -12512,27 +12057,43 @@ export function SettingsList({
                 </select>
               </div>
             )}
-          </div>
-          <div style={{ display: "flex", gap: 9, marginTop: 18 }}>
-            <Btn
-              onClick={onSave}
-              disabled={!valid}
-              bg={valid ? confirmButtonColor : "#A8A8A8"}
-              style={{ flex: 1, padding: 12, fontWeight: 950 }}
-            >
-              {L("Salva")}
-            </Btn>
-            <Btn
-              onClick={onClose}
-              bg={dark ? "#333" : "#f0f0f0"}
-              color={tc}
-              style={{ padding: "12px 16px", fontWeight: 900 }}
-            >
-              {L("Annulla")}
-            </Btn>
-          </div>
-        </div>
-      </div>
+            {supportsExcludeFromTotals && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 14,
+                  padding: "12px 13px",
+                  borderRadius: 12,
+                  border: "1px solid " + borderC,
+                  background: dark ? "#20202f" : "#f8f9fb",
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 850, color: tc }}>
+                    {L("Escludi dai calcoli")}
+                  </div>
+                  <div style={{ fontSize: 11, color: sc, lineHeight: 1.35, marginTop: 3 }}>
+                    {L(
+                      "I movimenti di questa categoria restano nello storico, ma non modificano saldo, entrate, uscite e statistiche."
+                    )}
+                  </div>
+                </div>
+                <Toggle
+                  label=""
+                  checked={!!excludeFromTotals}
+                  onChange={function () {
+                    if (baseBlocked) {
+                      lockedWarn();
+                      return;
+                    }
+                    setExcludeFromTotals(!excludeFromTotals);
+                  }}
+                />
+              </div>
+            )}
+          </div></div></FainancePickerModal>
     );
   }
   return (
@@ -12546,7 +12107,7 @@ export function SettingsList({
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
-                  color: "#aaa",
+                  color: readableDarkText("#aaa", dark, "#35354a"),
                   textTransform: "uppercase",
                   letterSpacing: 1,
                   margin: "12px 0 6px",
@@ -12573,7 +12134,7 @@ export function SettingsList({
                   >
                     {showIcon && (
                       <span style={{ display: "inline-flex" }}>
-                        <FainanceIcon value={item.icon || "📦"} size={20} />
+                        {emojiAsset(String(item.icon || (usageScope === "expenseCategory" ? DEFAULT_CATS.find(x=>String(x.id)===String(item.id))?.icon : "") || "📦")) ? <img alt="" aria-hidden="true" src={emojiAsset(String(item.icon || (usageScope === "expenseCategory" ? DEFAULT_CATS.find(x=>String(x.id)===String(item.id))?.icon : "") || "📦"))!} width={20} height={20} style={{display:"block",objectFit:"contain",flexShrink:0}}/> : <FainanceIcon value={item.icon || "📦"} size={20}/> }
                       </span>
                     )}
                     <div
@@ -12610,11 +12171,26 @@ export function SettingsList({
                         {L("Archiviato")}
                       </span>
                     )}
+                    {supportsExcludeFromTotals && item.excludeFromTotals && (
+                      <span
+                        style={{
+                          fontSize: 10,
+                          background: dark ? "#4a3a16" : "#FFF4D6",
+                          color: readableDarkText("#8A5A00", dark, dark ? "#4a3a16" : "#FFF4D6"),
+                          borderRadius: 10,
+                          padding: "1px 6px",
+                          fontWeight: 800,
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {L("Non conteggiata")}
+                      </span>
+                    )}
                     <button
                       onClick={function () {
                         startEdit(item);
                       }}
-                      style={{
+                      style={{...({
                         background: baseBlocked
                           ? dark
                             ? "#34343f"
@@ -12629,45 +12205,46 @@ export function SettingsList({
                             : "#BFD7FF"),
                         borderRadius: 8,
                         cursor: "pointer",
-                        color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD",
+                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD", dark, baseBlocked
+                          ? dark
+                            ? "#34343f"
+                            : "#E5E7EB"
+                          : "#EEF4FF"),
                         fontSize: 14,
                         padding: "5px 8px",
                         fontWeight: 700,
-                      }}
-                    >
-                      ✏️
-                    </button>
+                      }),...settingsActionStyle(ctx,'edit')}}
+                     aria-label={L('Modifica')}><FainanceIcon value={"✏️"} size={16}/></button>
                     <button
                       onClick={function () {
                         toggleArchive(item.id);
                       }}
                       title={item.archived ? L("Ripristina") : L("Archivia")}
-                      style={{
-                        background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "none",
-                        border: baseBlocked ? "1px solid " + (dark ? "#4B4B58" : "#D1D5DB") : "none",
+                      aria-label={item.archived ? L("Ripristina") : L("Archivia")}
+                      style={{...({
+                        background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : (dark ? "#302B48" : "#F0EDFF"),
+                        border: baseBlocked ? "1px solid " + (dark ? "#4B4B58" : "#D1D5DB") : ("1px solid " + (dark ? "#51476C" : "#D8D0F2")),
                         borderRadius: 8,
                         cursor: "pointer",
                         fontSize: 15,
-                        color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#bbb",
+                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : (dark ? "#CEC5F0" : "#6554A4"), dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "none"),
                         padding: "5px 8px",
-                      }}
-                    >
-                      {item.archived ? "📂" : "🗂"}
-                    </button>
+                        marginLeft: -5,
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      }),...settingsActionStyle(ctx,'archive')}}
+                    ><FainanceIcon value={item.archived ? "📂" : "🗂"} size={16}/></button>
                     <button
                       onClick={function () {
                         del(item.id);
                       }}
-                      style={{
+                      style={{...({
                         background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0",
                         border: "1px solid " + (baseBlocked ? (dark ? "#4B4B58" : "#D1D5DB") : "#FFD0D0"),
                         borderRadius: 8, cursor: "pointer",
-                        color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A",
-                        fontSize: 14, padding: "5px 8px", fontWeight: 700,
-                      }}
-                    >
-                      🗑️
-                    </button>
+                        color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0"),
+                        fontSize: 14, padding: "5px 8px", marginLeft: -5, fontWeight: 700,
+                      }),...settingsActionStyle(ctx,'delete')}}
+                     aria-label={L('Elimina')}><FainanceIcon value={"🗑️"} size={16}/></button>
                   </div>
                 </div>
               );
@@ -12684,11 +12261,11 @@ export function SettingsList({
           }
           setShowCreate(true);
         }}
-        style={{
+        style={{...({
           width: "100%",
           marginTop: 8,
           background: baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor,
-          color: "#fff",
+          color: readableDarkText("#fff", dark, baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor),
           border: "none",
           borderRadius: btnRadius,
           padding: "13px 16px",
@@ -12696,45 +12273,46 @@ export function SettingsList({
           fontSize: 15,
           fontWeight: 900,
           boxShadow: dark ? "none" : "0 6px 18px rgba(55,138,221,0.25)",
-        }}
+        }),...secondarySettingsStyle(ctx)}}
       >
         ＋ {L(createLabel)}
       </button>
-      {showCreate && (
-        <ModalShell
-          title={createLabel}
-          onClose={resetCreate}
-          icon={newIcon}
-          color={newColor}
-          setIcon={setNewIcon}
-          setColor={setNewColor}
-          name={newName}
-          setName={setNewName}
-          group={newGroup}
-          setGroup={setNewGroup}
-          onSave={add}
-        />
-      )}{" "}
-      {editId !== null && (
-        <ModalShell
-          title={editDialogLabel()}
-          onClose={closeEdit}
-          icon={editIcon}
-          color={editColor}
-          setIcon={setEditIcon}
-          setColor={setEditColor}
-          name={editName}
-          setName={setEditName}
-          group={editGroup}
-          setGroup={setEditGroup}
-          onSave={saveEdit}
-        />
-      )}
+      {pendingDelete&&<CatalogDeleteDialog source={pendingDelete} scope={usageScope} items={items||[]} onClose={()=>setPendingDelete(null)} onConfirm={confirmCatalogDelete}/>}
+      {showCreate && renderModalShell({
+        title: createLabel,
+        onClose: resetCreate,
+        icon: newIcon,
+        color: newColor,
+        setIcon: setNewIcon,
+        setColor: setNewColor,
+        name: newName,
+        setName: setNewName,
+        group: newGroup,
+        setGroup: setNewGroup,
+        excludeFromTotals: newExcludeFromTotals,
+        setExcludeFromTotals: setNewExcludeFromTotals,
+        onSave: add,
+      })}{" "}
+      {editId !== null && renderModalShell({
+        title: editDialogLabel(),
+        onClose: closeEdit,
+        icon: editIcon,
+        color: editColor,
+        setIcon: setEditIcon,
+        setColor: setEditColor,
+        name: editName,
+        setName: setEditName,
+        group: editGroup,
+        setGroup: setEditGroup,
+        excludeFromTotals: editExcludeFromTotals,
+        setExcludeFromTotals: setEditExcludeFromTotals,
+        onSave: saveEdit,
+      })}
     </div>
   );
 }
 export function AreasEditor({ onlyPatrimonio }) {
-  var ctx = useApp();
+  var ctx:any = useApp();
   function L(v) {
     return translateFainanceText(v, (ctx && ctx.lang) || "it");
   }
@@ -12750,10 +12328,10 @@ export function AreasEditor({ onlyPatrimonio }) {
   var [areaTab, setAreaTab] = useState(
     onlyPatrimonio ? "patrimonio" : "expense"
   );
-  var tc = dark ? "#eee" : "#333";
-  var sc = dark ? "#aaa" : "#888";
-  var borderC = dark ? "#444" : "#eee";
-  var cardBg = dark ? "#252535" : "#fff";
+  var tc = ctx.textC || (dark ? "#eee" : "#333");
+  var sc = ctx.subC || (dark ? "#aaa" : "#888");
+  var borderC = ctx.borderC || (dark ? "#444" : "#eee");
+  var cardBg = ctx.cardBg || (dark ? "#252535" : "#fff");
   var rawCurrent =
     areaTab === "expense"
       ? expenseGroups
@@ -12891,7 +12469,7 @@ export function AreasEditor({ onlyPatrimonio }) {
       ? "Pagamenti"
       : "Patrimonio";
   }
-  function AreaModal() {
+  function renderAreaModal() {
     if (!modalMode) return null;
     var valid = !baseBlocked && !!String(draftName || "").trim();
     return (
@@ -13015,7 +12593,7 @@ export function AreasEditor({ onlyPatrimonio }) {
                 {L("Nome area")}
               </div>
               <input
-                autoFocus
+                autoFocus={modalMode !== "edit"}
                 disabled={baseBlocked}
                 placeholder={L("Nome area")}
                 value={draftName}
@@ -13043,7 +12621,7 @@ export function AreasEditor({ onlyPatrimonio }) {
               onClick={saveModal}
               disabled={!valid}
               bg={valid ? confirmButtonColor : "#A8A8A8"}
-              style={{ flex: 1, padding: 12, fontWeight: 950 }}
+              style={{...({ flex: 1, padding: 12, fontWeight: 950 }),...secondarySettingsStyle(ctx)}}
             >
               {L("Salva")}
             </Btn>
@@ -13051,7 +12629,7 @@ export function AreasEditor({ onlyPatrimonio }) {
               onClick={closeModal}
               bg={dark ? "#333" : "#f0f0f0"}
               color={tc}
-              style={{ padding: "12px 16px", fontWeight: 900 }}
+              style={{...({ padding: "12px 16px", fontWeight: 900 }),...secondarySettingsStyle(ctx)}}
             >
               {L("Annulla")}
             </Btn>
@@ -13062,51 +12640,7 @@ export function AreasEditor({ onlyPatrimonio }) {
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div
-        style={{
-          display: "flex",
-          gap: 0,
-          background: dark ? "#252535" : "#f5f5f5",
-          borderRadius: 10,
-          padding: 3,
-          marginBottom: 4,
-          flexWrap: "wrap",
-        }}
-      >
-        {(onlyPatrimonio
-          ? [{ id: "patrimonio", label: "💎 Patrimonio" }]
-          : [
-              { id: "expense", label: "💸 Uscite" },
-              { id: "income", label: "💰 Entrate" },
-              { id: "method", label: "💳 Pagamenti" },
-            ]
-        ).map(function (tb) {
-          return (
-            <button
-              key={tb.id}
-              onClick={function () {
-                closeModal();
-                setAreaTab(tb.id);
-              }}
-              style={{
-                flex: 1,
-                padding: "8px",
-                border: "none",
-                borderRadius: 8,
-                background:
-                  areaTab === tb.id ? (dark ? "#444" : "#fff") : "transparent",
-                color: areaTab === tb.id ? tc : sc,
-                fontSize: 12,
-                cursor: "pointer",
-                fontWeight: areaTab === tb.id ? 600 : 400,
-                minWidth: 80,
-              }}
-            >
-              {L(tb.label)}
-            </button>
-          );
-        })}
-      </div>
+      <SettingsSegmented items={onlyPatrimonio?[{id:"patrimonio",label:"💎 Patrimonio"}]:[{id:"expense",label:"💸 Uscite"},{id:"income",label:"💰 Entrate"},{id:"method",label:"💳 Pagamenti"}]} value={areaTab} onChange={function(id){closeModal();setAreaTab(id);}}/>
       {(current || []).map(function (g) {
         return (
           <div
@@ -13150,7 +12684,7 @@ export function AreasEditor({ onlyPatrimonio }) {
               onClick={function () {
                 openEdit(g);
               }}
-              style={{
+              style={{...({
                 background: baseBlocked
                   ? dark
                     ? "#34343f"
@@ -13165,50 +12699,50 @@ export function AreasEditor({ onlyPatrimonio }) {
                     : "#BFD7FF"),
                 borderRadius: 8,
                 cursor: "pointer",
-                color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD",
+                color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#378ADD", dark, baseBlocked
+                  ? dark
+                    ? "#34343f"
+                    : "#E5E7EB"
+                  : "#EEF4FF"),
                 fontSize: 14,
                 padding: "5px 8px",
                 fontWeight: 700,
-              }}
-            >
-              ✏️
-            </button>
+              }),...settingsActionStyle(ctx,'edit')}}
+             aria-label={L('Modifica')}><FainanceIcon value={"✏️"} size={16}/></button>
             <button
               type="button"
               onClick={function () {
                 del(g.id);
               }}
-              style={{
+              style={{...({
                 background: baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0",
                 border: "1px solid " + (baseBlocked ? (dark ? "#4B4B58" : "#D1D5DB") : "#FFD0D0"),
                 borderRadius: 8, cursor: "pointer",
-                color: baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A",
-                fontSize: 14, padding: "5px 8px", fontWeight: 700,
-              }}
-            >
-              🗑️
-            </button>
+                color: readableDarkText(baseBlocked ? (dark ? "#8F8F9B" : "#9CA3AF") : "#E24B4A", dark, baseBlocked ? (dark ? "#34343f" : "#E5E7EB") : "#FFF0F0"),
+                fontSize: 14, padding: "5px 8px", marginLeft: -5, fontWeight: 700,
+              }),...settingsActionStyle(ctx,'delete')}}
+             aria-label={L('Elimina')}><FainanceIcon value={"🗑️"} size={16}/></button>
           </div>
         );
       })}
       <button
         type="button"
         onClick={openCreate}
-        style={{
+        style={{...({
           width: "100%",
           background: baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor,
-          color: "#fff",
+          color: readableDarkText("#fff", dark, baseBlocked ? (dark ? "#3A3A46" : "#E5E7EB") : confirmButtonColor),
           border: "none",
           borderRadius: btnRadius,
           padding: "13px 16px",
           fontSize: 15,
           fontWeight: 900,
           cursor: "pointer",
-        }}
+        }),...secondarySettingsStyle(ctx)}}
       >
         ＋ {L("Nuova area")}
       </button>
-      <AreaModal />
+      {renderAreaModal()}
     </div>
   );
 }
@@ -13220,11 +12754,11 @@ export function SortableRows({
   renderItem,
   emptyText,
 }) {
-  var ctx = useApp();
+  var ctx:any = useApp();
   var dark = ctx.dark;
-  var tc = dark ? "#eee" : "#333";
-  var sc = dark ? "#aaa" : "#888";
-  var borderC = dark ? "#444" : "#eee";
+  var tc = ctx.textC || (dark ? "#eee" : "#333");
+  var sc = ctx.subC || (dark ? "#aaa" : "#888");
+  var borderC = ctx.borderC || (dark ? "#444" : "#eee");
   var rowBg = dark ? "#1e1e30" : "#f9f9f9";
   function moveOne(i, dir) {
     var arr = (items || []).slice();
@@ -13249,7 +12783,7 @@ export function SortableRows({
           if (!disabled) fn();
         }}
         disabled={disabled}
-        style={{
+        style={{...({
           border: "1px solid " + borderC,
           borderRadius: 8,
           background: disabled
@@ -13267,7 +12801,7 @@ export function SortableRows({
           opacity: disabled ? 0.35 : 1,
           flexShrink: 0,
           fontWeight: 800,
-        }}
+        }),...secondarySettingsStyle(ctx)}}
       >
         {label}
       </button>
@@ -13323,8 +12857,8 @@ export function PatrimonioSettingsPanel({
   forcedSection,
   allowEditing = true,
   onLocked,
-} = {}) {
-  var ctx = useApp();
+}: { forcedSection?: string; allowEditing?: boolean; onLocked?: () => void } = {}) {
+  var ctx:any = useApp();
   function L(v) {
     return translateFainanceText(v, (ctx && ctx.lang) || "it");
   }
@@ -13359,70 +12893,12 @@ export function PatrimonioSettingsPanel({
     "list"
   );
   var showPatrimonioLocalReorder = true;
-  var tc = dark ? "#eee" : "#333";
-  var sc = dark ? "#aaa" : "#888";
-  var borderC = dark ? "#444" : "#eee";
-  var cardBg = dark ? "#252535" : "#fff";
+  var tc = ctx.textC || (dark ? "#eee" : "#333");
+  var sc = ctx.subC || (dark ? "#aaa" : "#888");
+  var borderC = ctx.borderC || (dark ? "#444" : "#eee");
+  var cardBg = ctx.cardBg || (dark ? "#252535" : "#fff");
   var softBg = dark ? "#1e1e30" : "#f9f9f9";
-  function LocalSegmented({ items, value, onChange }) {
-    return (
-      <div
-        style={{
-          display: "flex",
-          gap: 0,
-          background: dark ? "#252535" : "#f5f5f5",
-          borderRadius: 12,
-          padding: 3,
-          marginBottom: 12,
-        }}
-      >
-        {items.map(function (it) {
-          var active = value === it.id;
-          var disabled = !!it.disabled;
-          return (
-            <button
-              type="button"
-              key={it.id}
-              disabled={disabled}
-              onClick={function () {
-                if (disabled) {
-                  if (onLocked) onLocked();
-                  return;
-                }
-                onChange(it.id);
-              }}
-              style={{
-                flex: 1,
-                padding: "9px 10px",
-                border: "none",
-                borderRadius: 10,
-                background: active
-                  ? "linear-gradient(135deg,var(--fainance-primary,#378ADD),var(--fainance-secondary,#5FAFE5))"
-                  : "transparent",
-                color: active
-                  ? "#fff"
-                  : disabled
-                  ? dark
-                    ? "#666"
-                    : "#aaa"
-                  : sc,
-                fontSize: 13,
-                cursor: disabled ? "not-allowed" : "pointer",
-                fontWeight: active ? 800 : 400,
-                boxShadow: active
-                  ? "0 3px 10px rgba(127,119,221,0.25)"
-                  : "none",
-                opacity: disabled ? 0.6 : 1,
-              }}
-            >
-              {L(it.label)}
-              {disabled ? " 🔒" : ""}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
+  function LocalSegmented(props) { return <SettingsSegmented {...props} onLocked={onLocked}/>; }
   function sectionTitle(icon, title, desc) {
     return (
       <div style={{ marginBottom: 12 }}>
@@ -13445,7 +12921,7 @@ export function PatrimonioSettingsPanel({
         }}
         style={{
           fontSize: 12,
-          color: dark ? "#ffd58a" : "#856404",
+          color: readableDarkText(dark ? "#ffd58a" : "#856404", dark, dark ? "#342b16" : "#FFF8E1"),
           background: dark ? "#342b16" : "#FFF8E1",
           border: "1px solid " + (dark ? "#6a5520" : "#FFD54F"),
           borderRadius: 10,
@@ -13549,36 +13025,6 @@ export function PatrimonioSettingsPanel({
   }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {(!forcedSection || forcedSection === "display") && (
-        <div
-          style={{
-            background: cardBg,
-            borderRadius: 14,
-            border: "1px solid " + borderC,
-            padding: 20,
-          }}
-        >
-          {sectionTitle(
-            "👁️",
-            "Visualizzazione",
-            "Scegli come mostrare gli importi nella sezione Patrimonio e nelle relative statistiche."
-          )}
-          <Toggle
-            label={L("Visualizza decimali")}
-            checked={showPatrimonioDecimals}
-            onChange={function () {
-              if (setShowPatrimonioDecimals)
-                setShowPatrimonioDecimals(!showPatrimonioDecimals);
-            }}
-            color={ctx.confirmButtonColor || "#378ADD"}
-          />
-          <div style={{ fontSize: 11.5, color: sc, lineHeight: 1.4, marginTop: 7 }}>
-            {L(
-              "Se attiva, gli importi mostrano due decimali. I decimali vengono visualizzati con un carattere più piccolo rispetto alla parte intera."
-            )}
-          </div>
-        </div>
-      )}
       {(!forcedSection || forcedSection === "areas") && (
         <div
           style={{
@@ -13591,7 +13037,7 @@ export function PatrimonioSettingsPanel({
           {sectionTitle(
             "📂",
             "Aree",
-            "Stessa interfaccia delle altre liste: modifica, archivia, cancella e riordina."
+            catalogSettingsText(ctx.lang,"areasDesc")
           )}
           {showPatrimonioLocalReorder && (
             <LocalSegmented
@@ -13682,8 +13128,8 @@ export function PatrimonioSettingsPanel({
         >
           {sectionTitle(
             "💎",
-            "Voci",
-            "Stessa interfaccia delle altre liste: modifica, archivia, cancella, riordina e associazione area."
+            "Categorie",
+            catalogSettingsText(ctx.lang,"categoriesDesc")
           )}
           {showPatrimonioLocalReorder && (
             <LocalSegmented
@@ -13700,7 +13146,7 @@ export function PatrimonioSettingsPanel({
               <SettingsList
                 items={normalizedEntries()}
                 setItems={setEntryItems}
-                label="Aggiungi voce patrimonio"
+                label="Aggiungi categoria"
                 showIcon
                 showGroup
                 groupList={areas}
@@ -13766,7 +13212,7 @@ export function PatrimonioSettingsPanel({
           )}
         </div>
       )}
-      {(!forcedSection || forcedSection === "mode") && (
+      {(!forcedSection || forcedSection === "mode" || forcedSection === "display") && (
         <div
           style={{
             background: cardBg,
@@ -13775,94 +13221,11 @@ export function PatrimonioSettingsPanel({
             padding: 20,
           }}
         >
-          {sectionTitle(
-            "⚙️",
-            "Modalità",
-            "Come vengono aggiornati i valori del patrimonio."
-          )}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {[
-              {
-                id: "manuale",
-                label: "Manuale",
-                desc: "Inserisci i valori manualmente",
-              },
-              {
-                id: "semi",
-                label: "Semi-automatica ⚠️",
-                desc: "Beta: collega ai pagamenti",
-              },
-              {
-                id: "entrambe",
-                label: "Entrambe",
-                desc: "Usa sia il manuale che il semi-auto",
-              },
-            ].map(function (m) {
-              return (
-                <button
-                  key={m.id}
-                  onClick={function () {
-                    setPatrimonioMode(m.id);
-                  }}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: "12px 16px",
-                    border:
-                      "2px solid " +
-                      (patrimonioMode === m.id ? "#378ADD" : borderC),
-                    borderRadius: 12,
-                    background:
-                      patrimonioMode === m.id
-                        ? dark
-                          ? "#1a2535"
-                          : "#e8f4ff"
-                        : softBg,
-                    cursor: "pointer",
-                    textAlign: "left",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 18,
-                      height: 18,
-                      borderRadius: "50%",
-                      border:
-                        "2px solid " +
-                        (patrimonioMode === m.id ? "#378ADD" : "#ccc"),
-                      background:
-                        patrimonioMode === m.id ? "#378ADD" : "transparent",
-                      flexShrink: 0,
-                    }}
-                  />
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: tc }}>
-                      {L(m.label)}
-                    </div>
-                    <div style={{ fontSize: 11, color: sc }}>{L(m.desc)}</div>
-                  </div>
-                </button>
-              );
-            })}
+          <PatrimonyLinksSettings allowEditing={allowEditing} onLocked={onLocked}/> 
+          <div style={{borderTop:"1px solid "+borderC,marginTop:20,paddingTop:20}}>
+          <h3 style={{fontSize:14,fontWeight:700,margin:"0 0 12px",textAlign:"left"}}>{L("Visualizzazione")}</h3>
+          <Toggle label={L("Visualizza decimali")} labelFirst checked={showPatrimonioDecimals} onChange={()=>{if(setShowPatrimonioDecimals)setShowPatrimonioDecimals(!showPatrimonioDecimals);}} color={ctx.secondaryButtonColor || "#5FAFE5"}/>
           </div>
-          {patrimonioMode !== "manuale" && (
-            <div
-              style={{
-                marginTop: 12,
-                background: "#FFF8E1",
-                border: "1px solid #FFD54F",
-                borderRadius: 8,
-                padding: "10px 12px",
-              }}
-            >
-              <span style={{ fontSize: 12, color: "#856404" }}>
-                {L(
-                  "⚠️ La modalità semi-automatica è in beta. I valori potrebbero non essere precisi."
-                )}
-              </span>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -14167,6 +13530,7 @@ export function DeleteDataPanel() {
   var [selIds, setSelIds] = useState([]);
   var [sections, setSections] = useState([]);
   var [confirmDel, setConfirmDel] = useState(false);
+  var [deletingData, setDeletingData] = useState(false);
   var [showPreview, setShowPreview] = useState(false);
   var lang = ctx.lang || "it";
   var t = TRANSLATIONS[lang] || TRANSLATIONS.it;
@@ -14462,14 +13826,31 @@ export function DeleteDataPanel() {
       })
       .slice(0, 80);
   }
-  function doDelete() {
-    sectionOptions
-      .filter(function (s) {
-        return sections.includes(s.id);
-      })
-      .forEach(function (s) {
-        s.clear();
-      });
+  async function doDelete() {
+    if (deletingData) return;
+    const expense = sections.includes('expenses');
+    const income = sections.includes('incomes');
+    setDeletingData(true);
+    try {
+      if (expense || income) {
+        if (typeof ctx.replaceAccountMovementsV2 !== 'function') throw new Error('SYNC_V2_ONLINE_REQUIRED');
+        await ctx.replaceAccountMovementsV2({
+          ...(expense ? { expense: [] } : {}),
+          ...(income ? { income: [] } : {}),
+        });
+      }
+      sectionOptions
+        .filter(function (s) {
+          return sections.includes(s.id) && s.id !== 'expenses' && s.id !== 'incomes';
+        })
+        .forEach(function (s) { s.clear(); });
+    } catch (error) {
+      console.error('DeleteDataPanel failed', error);
+      alert(L('Operazione non completata. Alcune voci potrebbero essere già state aggiornate. Verifica i dati prima di riprovare.'));
+      setDeletingData(false);
+      return;
+    }
+    setDeletingData(false);
     setSections([]);
     setSelCats([]);
     setSelIncomeTypes([]);
@@ -14611,7 +13992,7 @@ export function DeleteDataPanel() {
                 border: "none",
                 borderRadius: 10,
                 background: movType === "expense" ? "#E24B4A" : "transparent",
-                color: movType === "expense" ? "#fff" : sc,
+                color: readableDarkText(movType === "expense" ? "#fff" : sc, dark, movType === "expense" ? "#E24B4A" : "transparent"),
                 fontSize: 13,
                 cursor: "pointer",
               }}
@@ -14629,7 +14010,7 @@ export function DeleteDataPanel() {
                 border: "none",
                 borderRadius: 10,
                 background: movType === "income" ? "#1D9E75" : "transparent",
-                color: movType === "income" ? "#fff" : sc,
+                color: readableDarkText(movType === "income" ? "#fff" : sc, dark, movType === "income" ? "#1D9E75" : "transparent"),
                 fontSize: 13,
                 cursor: "pointer",
               }}
@@ -14660,7 +14041,7 @@ export function DeleteDataPanel() {
                       "1px solid " + (mode === m.id ? "#E24B4A" : borderC),
                     borderRadius: 10,
                     background: mode === m.id ? "#fde8e8" : cardBg,
-                    color: mode === m.id ? "#E24B4A" : tc,
+                    color: readableDarkText(mode === m.id ? "#E24B4A" : tc, dark, mode === m.id ? "#fde8e8" : cardBg),
                     cursor: "pointer",
                     textAlign: "left",
                     fontSize: 13,
@@ -14690,7 +14071,7 @@ export function DeleteDataPanel() {
                         style={{
                           fontSize: 11,
                           fontWeight: 600,
-                          color: "#aaa",
+                          color: readableDarkText("#aaa", dark, "#35354a"),
                           textTransform: "uppercase",
                           letterSpacing: 1,
                           margin: "10px 0 6px",
@@ -14937,10 +14318,10 @@ export function DeleteDataPanel() {
                       style={{
                         fontSize: 13,
                         fontWeight: 500,
-                        color: movType === "expense" ? "#E24B4A" : "#1D9E75",
+                        color: readableDarkText(movType === "expense" ? "#E24B4A" : "#1D9E75", dark, "#35354a"),
                       }}
                     >
-                      {fmt(e.amount)}
+                      {smallDecimalNode(fmt(e.amount), ctx.lang)}
                     </div>
                   </div>
                 );
@@ -14975,19 +14356,20 @@ export function DeleteDataPanel() {
             style={{
               fontSize: 14,
               fontWeight: 600,
-              color: "#E24B4A",
+              color: readableDarkText("#E24B4A", dark, "#fff0f0"),
               marginBottom: 8,
             }}
           >
             Conferma eliminazione
           </div>
-          <div style={{ fontSize: 13, color: "#555", marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: readableDarkText("#555", dark, "#fff0f0"), marginBottom: 14 }}>
             Operazione non reversibile. Elementi interessati:{" "}
             <strong>{count}</strong>.
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <Btn
               onClick={doDelete}
+              disabled={deletingData}
               bg="#E24B4A"
               style={{ flex: 1, padding: 11, fontSize: 14, fontWeight: 600 }}
             >
@@ -15010,7 +14392,7 @@ export function DeleteDataPanel() {
         <div
           style={{
             fontSize: 13,
-            color: "#aaa",
+            color: readableDarkText("#aaa", dark, "#35354a"),
             textAlign: "center",
             padding: "8px 0",
           }}
@@ -15039,7 +14421,8 @@ export function EditModal({ item, isExp, onSave, onClose }) {
     incomeTypes = orderedIncomeTypesForContext(ctx),
     sym = ctx.sym,
     dark = ctx.dark,
-    btnRadius = ctx.btnRadius;
+    btnRadius = ctx.btnRadius,
+    confirmButtonColor = ctx.confirmButtonColor || "#378ADD";
   var groups = expenseGroups;
   var groupIds = (groups || []).map(function (g) {
     return String(g.id);
@@ -15053,8 +14436,20 @@ export function EditModal({ item, isExp, onSave, onClose }) {
       );
     });
   }
+  var recurringRuleForItem = (ctx.recurring || []).find(function (rule) {
+    return item && item.recurringRuleId && String(rule && rule.id) === String(item.recurringRuleId);
+  });
+  var fallbackEditCat =
+    (item && item.catId) ||
+    (recurringRuleForItem && recurringRuleForItem.catId) ||
+    (cats && cats[0] ? cats[0].id : "");
+  var fallbackEditMethod =
+    (item && item.methodId) ||
+    (recurringRuleForItem && recurringRuleForItem.methodId) ||
+    (methods && methods[0] ? methods[0].id : "");
   var [f, setF] = useState({
     ...item,
+    ...(isExp ? { catId: fallbackEditCat, methodId: fallbackEditMethod } : {}),
     amount: item.originalAmount || item.amount,
     currency: item.currency || ctx.currency,
     baseCurrency: item.baseCurrency || ctx.currency,
@@ -15064,19 +14459,29 @@ export function EditModal({ item, isExp, onSave, onClose }) {
   useEffect(function () {
     focusFainanceInput(editAmountInputRef, 120);
   }, []);
-  var inp = {
-    width: "100%",
-    borderRadius: 8,
-    border: "1px solid " + (dark ? "#444" : "#ddd"),
-    padding: "8px 10px",
-    fontSize: 14,
-    background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
-    boxSizing: "border-box",
-    minWidth: 0,
-  };
   var tc = dark ? "#eee" : "#333";
   var sc = dark ? "#aaa" : "#888";
+  var borderC = dark ? "#444" : "#e8e8ee";
+  var fieldBg = dark ? "#1e1e30" : "#fff";
+  var inp = {
+    width: "100%",
+    borderRadius: 10,
+    border: "1px solid " + borderC,
+    padding: "10px 12px",
+    fontSize: 14,
+    background: fieldBg,
+    color: readableDarkText(tc, dark, fieldBg),
+    boxSizing: "border-box",
+    minWidth: 0,
+    outline: "none",
+  };
+  var editLabel = {
+    fontSize: 12,
+    fontWeight: 850,
+    color: sc,
+    display: "block",
+    marginBottom: 6,
+  };
   function L(s) {
     return ctx.translateUiRuntimeText ? ctx.translateUiRuntimeText(s) : s;
   }
@@ -15116,63 +14521,51 @@ export function EditModal({ item, isExp, onSave, onClose }) {
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(0,0,0,0.5)",
-        zIndex: 400,
+        background: "rgba(0,0,0,0.58)",
+        zIndex: 980,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: "10vh 16px 2vh",
+        padding: "7vh 16px 3vh",
         boxSizing: "border-box",
         overflowY: "auto",
       }}
-      onClick={function (e) {
+      onMouseDown={function (e) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         style={{
-          background: dark ? "#1e1e30" : "#fff",
-          borderRadius: 16,
-          padding: 20,
+          position: "relative",
+          background: dark ? "#252535" : "#fff",
+          borderRadius: 22,
+          border: "1px solid " + borderC,
+          boxShadow: "0 18px 65px rgba(0,0,0,0.38)",
+          padding: "20px 18px 18px",
           width: "100%",
-          maxWidth: 440,
+          maxWidth: 520,
           maxHeight: "90vh",
           overflowY: "auto",
         }}
       >
+        <div style={{ position: "absolute", right: 14, top: 14 }}>
+          <PopupCloseButton onClick={onClose} dark={dark} label={L("Chiudi")} />
+        </div>
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
+            fontSize: 18,
+            fontWeight: 950,
+            color: tc,
             marginBottom: 16,
+            paddingRight: 44,
           }}
         >
-          <div style={{ fontSize: 15, fontWeight: 600, color: tc }}>
-            Modifica {isExp ? t.expenses : t.incomes}
-          </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 20,
-              cursor: "pointer",
-              color: "#aaa",
-            }}
-          >
-            x
-          </button>
+          {L("Modifica")} {isExp ? L("Uscita") : L("Entrata")}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
           <div>
             <label
-              style={{
-                fontSize: 12,
-                color: sc,
-                display: "block",
-                marginBottom: 4,
-              }}
+              style={editLabel}
             >
               {t.amount} ({sym})
             </label>
@@ -15188,7 +14581,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                   return { ...p, amount: e.target.value };
                 });
               }}
-              style={{ ...inp, fontSize: 20, fontWeight: 500 }}
+              style={{ ...inp, fontSize: 18, fontWeight: 850 }}
             />
             <div style={{ marginTop: 8 }}>
               <MultiCurrencyField
@@ -15203,12 +14596,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
           </div>
           <div>
             <label
-              style={{
-                fontSize: 12,
-                color: sc,
-                display: "block",
-                marginBottom: 4,
-              }}
+              style={editLabel}
             >
               {t.description}
             </label>
@@ -15232,18 +14620,11 @@ export function EditModal({ item, isExp, onSave, onClose }) {
               }}
             >
               <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
+                <label style={editLabel}>
                   {t.category}
                 </label>
                 <select
-                  value={f.catId}
+                  data-movement-choice="catId" value={f.catId}
                   onChange={function (e) {
                     setF(function (p) {
                       return { ...p, catId: e.target.value };
@@ -15253,7 +14634,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 >
                   {cats.map(function (c) {
                     return (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.id} value={c.id} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>
                         {iconTextValue(c.icon)} {c.name}
                       </option>
                     );
@@ -15261,18 +14642,11 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 </select>
               </div>
               <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    color: sc,
-                    display: "block",
-                    marginBottom: 4,
-                  }}
-                >
+                <label style={editLabel}>
                   {t.method}
                 </label>
                 <select
-                  value={f.methodId}
+                  data-movement-choice="methodId" value={f.methodId}
                   onChange={function (e) {
                     setF(function (p) {
                       return { ...p, methodId: e.target.value };
@@ -15282,7 +14656,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 >
                   {methods.map(function (m) {
                     return (
-                      <option key={m.id} value={m.id}>
+                      <option key={m.id} value={m.id} data-fainance-icon-ref={(m as any).icon || "\u{1F4C1}"}>
                         {m.archived ? "[Arch] " : ""}
                         {iconTextValue(m.icon)} {m.name}
                       </option>
@@ -15292,45 +14666,10 @@ export function EditModal({ item, isExp, onSave, onClose }) {
               </div>
             </div>
           )}
-          {!isExp && (
-            <div>
-              <label
-                style={{
-                  fontSize: 12,
-                  color: sc,
-                  display: "block",
-                  marginBottom: 4,
-                }}
-              >
-                {L("Categoria entrata")}
-              </label>
-              <select
-                value={f.type || ""}
-                onChange={function (e) {
-                  setF(function (p) {
-                    return { ...p, type: e.target.value };
-                  });
-                }}
-                style={inp}
-              >
-                {(incomeTypes || []).map(function (it) {
-                  return (
-                    <option key={it.id} value={it.id}>
-                      {iconTextValue(it.icon)} {L(it.name)}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
+          {!isExp && <MovementIncomeSelectors value={{...f,itype:f.type}} setValue={update=>setF(previous=>{const next=typeof update==="function"?update({...previous,itype:previous.type}):update;const {itype,...rest}=next;return {...rest,type:itype};})} incomeTypes={incomeTypes} methods={methods} fieldId={"edit-income-"+String(item.id)}/>}
           <div>
             <label
-              style={{
-                fontSize: 12,
-                color: sc,
-                display: "block",
-                marginBottom: 4,
-              }}
+              style={editLabel}
             >
               {t.date}
             </label>
@@ -15353,7 +14692,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 ? "#252535"
                 : "#f5f5f5",
               borderRadius: 12,
-              padding: 12,
+              padding: "12px 13px",
               border: f.rateizzato
                 ? "1px solid #AFA9EC"
                 : "1px solid " + (dark ? "#444" : "#eee"),
@@ -15371,13 +14710,19 @@ export function EditModal({ item, isExp, onSave, onClose }) {
             {f.rateizzato && (
               <div style={{ marginTop: 8 }}>
                 <div
-                  style={{ fontSize: 12, color: "#534AB7", marginBottom: 4 }}
+                  style={{ fontSize: 12, color: readableDarkText("#534AB7", dark, f.rateizzato
+                ? dark
+                  ? "#2a2a3e"
+                  : "#EEEDFE"
+                : dark
+                ? "#252535"
+                : "#f5f5f5"), marginBottom: 4 }}
                 >
                   {f.rate} {t.months} -{" "}
-                  {fmtAmt(
+                  {smallDecimalNode(fmtAmt(
                     parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
                     sym
-                  )}
+                  ), ctx.lang)}
                   {t.perMonth}
                 </div>
                 <RatePicker
@@ -15397,22 +14742,20 @@ export function EditModal({ item, isExp, onSave, onClose }) {
               </div>
             )}
           </div>
-          <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <div style={{ display: "flex", gap: 9, marginTop: 5 }}>
             <Btn
               onClick={save}
               disabled={!editMovementValid}
-              bg={
-                editMovementValid ? (isExp ? "#E24B4A" : "#1D9E75") : "#A8A8A8"
-              }
-              style={{ flex: 1, padding: 12, fontSize: 14, fontWeight: 600 }}
+              bg={editMovementValid ? confirmButtonColor : "#A8A8A8"}
+              style={{ flex: 1, padding: 12, fontSize: 14, fontWeight: 950 }}
             >
               {t.save}
             </Btn>
             <Btn
               onClick={onClose}
               bg={dark ? "#333" : "#f0f0f0"}
-              color={dark ? "#eee" : "#555"}
-              style={{ flex: 1, padding: 12, fontSize: 14 }}
+              color={tc}
+              style={{ padding: "12px 16px", fontSize: 14, fontWeight: 900 }}
             >
               {t.cancel}
             </Btn>
@@ -15457,6 +14800,7 @@ export function ImportData(props: any = {}) {
   var [map, setMap] = useState<any>({
     date: "",
     amount: "",
+    currency: "",
     desc: "",
     cat: "",
     method: "",
@@ -15467,11 +14811,23 @@ export function ImportData(props: any = {}) {
     patNote: "",
   });
   var [importDateFmt, setImportDateFmt] = useState("auto");
+  var previewBuildRef = useRef(0);
+  var [currencyLoading, setCurrencyLoading] = useState(false);
+  useEffect(function () {
+    previewBuildRef.current++;
+    setCurrencyLoading(false);
+    return function () { previewBuildRef.current++; };
+  }, [rows, map, importType, importDateFmt, (ctx as any).currency, (ctx as any).currentPlan, (ctx as any).secondaryCurrency]);
   var [preview, setPreview] = useState<any[]>([]);
-  var [msg, setMsg] = useState("");
+  var [msg, setMsgValue] = useState("");
+  var [msgTone, setMsgTone] = useState("warning");
+  function setMsg(value, tone = "warning") { setMsgValue(value); setMsgTone(tone); }
+  var importMessageStyle = notificationAppearance(msgTone);
   var [importSuccess, setImportSuccess] = useState<any>(null);
   var [importLoading, setImportLoading] = useState<any>(null);
   var [pendingDataImportMode, setPendingDataImportMode] = useState<any>(null);
+  var importApplyBusyRef = useRef(false);
+  var [importApplyBusy, setImportApplyBusy] = useState(false);
   var [unknowns, setUnknowns] = useState<any>({
     expenseCategory: [],
     paymentMethod: [],
@@ -15503,7 +14859,7 @@ export function ImportData(props: any = {}) {
           try { console.error("Restored native import error", err); } catch (_logRestore) {}
           writeFainanceNativeImportPending(null);
           setImportLoading(null);
-          setMsg(L("Errore durante la lettura del file."));
+          setMsg(L("Errore durante la lettura del file."), "error");
         });
       } catch (_invalidRestore) {
         try { localStorage.removeItem(FAINANCE_IMPORT_NATIVE_RESTORED_KEY); } catch (_removeInvalid) {}
@@ -15538,7 +14894,7 @@ export function ImportData(props: any = {}) {
     padding: "6px 10px",
     fontSize: 13,
     background: dark ? "#2a2a3e" : "#fff",
-    color: dark ? "#eee" : "#333",
+    color: readableDarkText(dark ? "#eee" : "#333", dark, dark ? "#2a2a3e" : "#fff"),
   };
   var tc = dark ? "#eee" : "#333";
   var sc = dark ? "#aaa" : "#888";
@@ -15569,6 +14925,8 @@ export function ImportData(props: any = {}) {
     });
   }
   function resetAll() {
+    previewBuildRef.current++;
+    setCurrencyLoading(false);
     setStep(0);
     setRows([]);
     setCols([]);
@@ -15584,6 +14942,7 @@ export function ImportData(props: any = {}) {
     setMap({
       date: "",
       amount: "",
+      currency: "",
       desc: "",
       cat: "",
       method: "",
@@ -15660,6 +15019,7 @@ export function ImportData(props: any = {}) {
     setMap({
       date: "",
       amount: "",
+      currency: findImportCurrencyColumn(header),
       desc: "",
       cat: "",
       method: "",
@@ -15815,7 +15175,7 @@ export function ImportData(props: any = {}) {
     var providedArrayBuffer: any = res.arrayBuffer || null;
     if (!providedArrayBuffer && !b64) {
       setImportLoading(null);
-      setMsg(L("Non riesco a leggere il file selezionato da Drive."));
+      setMsg(L("Non riesco a leggere il file selezionato da Drive."), "error");
       return;
     }
     setMsg("");
@@ -15840,11 +15200,7 @@ export function ImportData(props: any = {}) {
       !!res.isGoogleSheetNative;
     if (looksPdf) {
       setImportLoading(null);
-      setMsg(
-        L(
-          "Drive ha consegnato il Foglio Google come PDF, non come tabella. Riprova selezionando il Foglio Google dall’elenco Drive oppure esportalo come .xlsx/.csv."
-        )
-      );
+      setMsg(L("Drive ha consegnato il Foglio Google come PDF, non come tabella. Riprova selezionando il Foglio Google dall’elenco Drive oppure esportalo come .xlsx/.csv."), "error");
       return;
     }
     var decodedText = "";
@@ -15866,11 +15222,7 @@ export function ImportData(props: any = {}) {
       var parsedHtml = parseImportedHtmlTable(decodedText);
       if (!parsedHtml || parsedHtml.length < 2) {
         setImportLoading(null);
-        setMsg(
-          L(
-            "Il Foglio Google selezionato non ha fornito una tabella leggibile."
-          )
-        );
+        setMsg(L("Il Foglio Google selezionato non ha fornito una tabella leggibile."), "error");
         return;
       }
       applyImportedRows(parsedHtml, name);
@@ -15884,7 +15236,7 @@ export function ImportData(props: any = {}) {
       var parsed = parseImportedDelimitedText(decodedText || (providedArrayBuffer ? importArrayBufferToText(ab) : base64ToText(b64)));
       if (!parsed || parsed.length < 2) {
         setImportLoading(null);
-        setMsg(L("File CSV vuoto o non valido."));
+        setMsg(L("File CSV vuoto o non valido."), "error");
         return;
       }
       applyImportedRows(parsed, name);
@@ -15892,17 +15244,13 @@ export function ImportData(props: any = {}) {
     }
     if (!looksZip) {
       setImportLoading(null);
-      setMsg(L("Formato file non supportato. Usa un file .xlsx, .xls o .csv."));
+      setMsg(L("Formato file non supportato. Usa un file .xlsx, .xls o .csv."), "error");
       return;
     }
     var data = await parseXLSXBuffer(ab);
     if (data && data.__unsupported) {
       setImportLoading(null);
-      setMsg(
-        L(
-          "Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."
-        )
-      );
+      setMsg(L("Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."), "error");
       return;
     }
     if (!data || data.length < 2) {
@@ -16015,7 +15363,7 @@ export function ImportData(props: any = {}) {
         try { console.error("Native import file picker error", nativeErr); } catch (_logErr) {}
         writeFainanceNativeImportPending(null);
         setImportLoading(null);
-        setMsg(L("Errore durante la lettura del file."));
+        setMsg(L("Errore durante la lettura del file."), "error");
         return;
       } finally {
         setImportFilePickerActive(false);
@@ -16232,7 +15580,7 @@ export function ImportData(props: any = {}) {
       var parsed = parseImportedDelimitedText(txt);
       if (!parsed || parsed.length < 2) {
         setImportLoading(null);
-        setMsg(L("File CSV vuoto o non valido."));
+        setMsg(L("File CSV vuoto o non valido."), "error");
         return;
       }
       applyImportedRows(parsed, name);
@@ -16245,11 +15593,7 @@ export function ImportData(props: any = {}) {
       var data = await parseXLSXBuffer(ab);
       if (data && data.__unsupported) {
         setImportLoading(null);
-        setMsg(
-          L(
-            "Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."
-          )
-        );
+        setMsg(L("Formato Excel non supportato. Salva il file come .xlsx oppure CSV e riprova."), "error");
         return;
       }
       if (!data || data.length < 2) {
@@ -16261,7 +15605,7 @@ export function ImportData(props: any = {}) {
       return;
     }
     setImportLoading(null);
-    setMsg(L("Formato file non supportato. Usa un file .xlsx, .xls o .csv."));
+    setMsg(L("Formato file non supportato. Usa un file .xlsx, .xls o .csv."), "error");
   }
   async function importGoogleSheetById(
     fileId: string,
@@ -16718,7 +16062,7 @@ export function ImportData(props: any = {}) {
       jsonReader.onerror = function () {
         clearPickedFile();
         setImportLoading(null);
-        setMsg(L("Errore durante la lettura del file."));
+        setMsg(L("Errore durante la lettura del file."), "error");
       };
       jsonReader.onload = function (ev) {
         setImportProgress(file.name, "Analisi file", 90);
@@ -16731,7 +16075,7 @@ export function ImportData(props: any = {}) {
               var parsed = parseImportedDelimitedText(text);
               if (!parsed || parsed.length < 2) {
                 setImportLoading(null);
-                setMsg(L("File CSV vuoto o non valido."));
+                setMsg(L("File CSV vuoto o non valido."), "error");
                 return;
               }
               applyImportedRows(parsed, file.name);
@@ -16740,7 +16084,7 @@ export function ImportData(props: any = {}) {
               clearPickedFile();
               console.error("Backup JSON import error", err);
               setImportLoading(null);
-              setMsg(L("File JSON non valido"));
+              setMsg(L("File JSON non valido"), "error");
             });
           return;
         }
@@ -16748,7 +16092,7 @@ export function ImportData(props: any = {}) {
         var parsed = parseImportedDelimitedText(text);
         if (!parsed || parsed.length < 2) {
           setImportLoading(null);
-          setMsg(L("File CSV vuoto o non valido."));
+          setMsg(L("File CSV vuoto o non valido."), "error");
           return;
         }
         applyImportedRows(parsed, file.name);
@@ -16779,7 +16123,7 @@ export function ImportData(props: any = {}) {
       reader.onerror = function () {
         clearPickedFile();
         setImportLoading(null);
-        setMsg(L("Errore durante la lettura del file."));
+        setMsg(L("Errore durante la lettura del file."), "error");
       };
       reader.onload = function (ev) {
         clearPickedFile();
@@ -16815,7 +16159,7 @@ export function ImportData(props: any = {}) {
             })
             .catch(function () {
               setImportLoading(null);
-              setMsg(L("Errore durante l'analisi del file Excel."));
+              setMsg(L("Errore durante l'analisi del file Excel."), "error");
             });
         }, 0);
       };
@@ -16834,7 +16178,7 @@ export function ImportData(props: any = {}) {
       reader2.onerror = function () {
         clearPickedFile();
         setImportLoading(null);
-        setMsg(L("Errore durante la lettura del file."));
+        setMsg(L("Errore durante la lettura del file."), "error");
       };
       reader2.onload = function (ev) {
         setImportProgress(file.name, "Analisi file", 90);
@@ -16848,7 +16192,7 @@ export function ImportData(props: any = {}) {
               clearPickedFile();
               console.error("Backup JSON import error", err);
               setImportLoading(null);
-              setMsg(L("File JSON non valido"));
+              setMsg(L("File JSON non valido"), "error");
             });
           return;
         }
@@ -16856,7 +16200,7 @@ export function ImportData(props: any = {}) {
         var parsed = parseImportedDelimitedText(text);
         if (!parsed || parsed.length < 2) {
           setImportLoading(null);
-          setMsg(L("File CSV vuoto o non valido."));
+          setMsg(L("File CSV vuoto o non valido."), "error");
           return;
         }
         applyImportedRows(parsed, file.name);
@@ -16864,7 +16208,9 @@ export function ImportData(props: any = {}) {
       reader2.readAsText(file, "UTF-8");
     }
   }
-  function buildPreview() {
+  async function buildPreview() {
+    if (currencyLoading) return;
+    var request = ++previewBuildRef.current;
     if (importType === "patrimonio") {
       if (!map.monthKey || !map.entryId || !map.amount) {
         setMsg(L("Mappa almeno Data/Mese, Categoria/Voce e Importo"));
@@ -16879,12 +16225,14 @@ export function ImportData(props: any = {}) {
       dsi = cols.indexOf(map.desc),
       ci2 = cols.indexOf(map.cat),
       mi = cols.indexOf(map.method),
-      ri = cols.indexOf(map.rate || "");
+      ri = cols.indexOf(map.rate || ""),
+      currencyIndex = cols.indexOf(map.currency || "");
     var failCount = 0;
     var p = rows
       .map(function (r) {
         var rawA = r[ai] || "";
         var amt = parseImportMoney(rawA);
+        var rowCurrency = currencyIndex >= 0 ? r[currencyIndex] : "";
         var rateVal = 0;
         if (ri >= 0) {
           var rv = parseInt(r[ri]);
@@ -16904,6 +16252,7 @@ export function ImportData(props: any = {}) {
           if (methN && !mm) unknown.paymentMethod = methN;
           return {
             date: iso,
+            currency: rowCurrency,
             amount: isNaN(amt) ? 0 : Math.abs(amt),
             desc: dsi >= 0 ? String(r[dsi] || "") : "",
             catName: catN,
@@ -16924,11 +16273,17 @@ export function ImportData(props: any = {}) {
           var it = findByName(incomeTypes, typeN);
           var unknown2 = {};
           if (typeN && !it) unknown2.incomeType = typeN;
+          var receiptName = mi >= 0 ? String(r[mi] || "").trim() : "";
+          var receiptMethod = receiptName ? findByName(methods,receiptName) : null;
+          if(receiptName && !receiptMethod) unknown2.paymentMethod = receiptName;
           return {
             date: iso2,
+            currency: rowCurrency,
             amount: isNaN(amt) ? 0 : Math.abs(amt),
             desc: dsi >= 0 ? String(r[dsi] || "") : "",
             typeName: typeN,
+            receivedInMethodId: receiptMethod ? String(receiptMethod.id) : "",
+            receivedInMethodName: receiptName,
             itype: it ? it.id : "salario",
             rateizzato: rateVal > 0,
             rate: rateVal || 12,
@@ -16960,6 +16315,7 @@ export function ImportData(props: any = {}) {
           if (rawEntry && !pEntry) unknown3.patrimonioEntry = rawEntry;
           return {
             monthKey: mk,
+            currency: rowCurrency,
             entryId: pEntry
               ? pEntry.id
               : pEntries[0]
@@ -16981,6 +16337,15 @@ export function ImportData(props: any = {}) {
             : r.date && r.amount > 0)
         );
       });
+    setCurrencyLoading(true);
+    try {
+      p = await convertImportedCurrencyRows(p, String((ctx as any).currency || "EUR"), CURRENCIES, fetchToolRate, { plan: String((ctx as any).currentPlan || "free").toLowerCase(), secondary: String((ctx as any).secondaryCurrency || "") });
+      if (request !== previewBuildRef.current) return;
+    } catch (error) {
+      if (request !== previewBuildRef.current) return;
+      setMsg(L(error && error.message === "IMPORT_CURRENCY_INVALID" ? "Valuta non riconosciuta o ambigua. Usa un codice come EUR, USD o GBP." : error && error.message === "IMPORT_CURRENCY_PLAN" ? "La valuta del file non è disponibile nel tuo piano." : error && error.message === "IMPORT_CURRENCY_AMOUNT" ? "L’importo convertito è troppo piccolo per la valuta principale." : "Impossibile recuperare il tasso di cambio. Riprova."));
+      return;
+    } finally { if (request === previewBuildRef.current) setCurrencyLoading(false); }
     var u = collectUnknowns(p);
     if (failCount > 0)
       setMsg(
@@ -17117,7 +16482,7 @@ export function ImportData(props: any = {}) {
               "paymentMethod",
               r.unknowns.paymentMethod
             );
-            if (m) out.methodId = m.id;
+            if (m) { if(importType==="income")Object.assign(out,incomeReceiptFields({receivedInMethodId:m.id,receivedInMethodName:m.name},methods));else out.methodId=m.id; }
           }
           if (r.unknowns.incomeType) {
             var it = selectedReplacement("incomeType", r.unknowns.incomeType);
@@ -17134,9 +16499,11 @@ export function ImportData(props: any = {}) {
           if (r.unknowns.expenseCategory)
             out.catId =
               catMap[normName(r.unknowns.expenseCategory)] || out.catId;
-          if (r.unknowns.paymentMethod)
-            out.methodId =
-              methodMap[normName(r.unknowns.paymentMethod)] || out.methodId;
+          if (r.unknowns.paymentMethod) {
+            const receiptId=methodMap[normName(r.unknowns.paymentMethod)];
+            if(importType==="income")out.receivedInMethodId=receiptId||out.receivedInMethodId;
+            else out.methodId=receiptId||out.methodId;
+          }
           if (r.unknowns.incomeType)
             out.itype = incomeMap[normName(r.unknowns.incomeType)] || out.itype;
           if (r.unknowns.patrimonioEntry)
@@ -17153,6 +16520,7 @@ export function ImportData(props: any = {}) {
         return {
           id: Date.now() + Math.random(),
           amount: p.amount,
+          ...importedCurrencyFields(p),
           catId: p.catId,
           methodId: p.methodId,
           methodName: p.methodName,
@@ -17165,7 +16533,9 @@ export function ImportData(props: any = {}) {
       return {
         id: Date.now() + Math.random(),
         amount: p.amount,
+          ...importedCurrencyFields(p),
         type: p.itype,
+        ...incomeReceiptFields(p,methods),
         desc: p.desc,
         date: p.date,
         rateizzato: p.rateizzato,
@@ -17173,7 +16543,20 @@ export function ImportData(props: any = {}) {
       };
     });
   }
-  function executeDataImport(mode) {
+  function importCurrencyPreviewReady() {
+    try {
+      assertImportCurrencyContext(preview, String((ctx as any).currency || "EUR"), {plan:String((ctx as any).currentPlan || "free").toLowerCase(),secondary:String((ctx as any).secondaryCurrency || "")});
+      return true;
+    } catch(error) {
+      setPendingDataImportMode(null);
+      setStep(1);
+      setMsg(L(error && error.message === "IMPORT_CURRENCY_PLAN" ? "La valuta del file non è disponibile nel tuo piano." : "La valuta principale è cambiata. Genera di nuovo l’anteprima."));
+      return false;
+    }
+  }
+  async function executeDataImport(mode) {
+    if (!importCurrencyPreviewReady()) return;
+    if (importApplyBusyRef.current) return;
     var finalPreview = resolvePreviewRows();
     if (!finalPreview.length) {
       setPendingDataImportMode(null);
@@ -17182,13 +16565,29 @@ export function ImportData(props: any = {}) {
     }
     var replaceExisting = mode === "replace";
     var importedOk = true;
-    if (importType === "expense") {
+    if (replaceExisting && (importType === 'expense' || importType === 'income')) {
+      if (importApplyBusyRef.current) return;
+      importApplyBusyRef.current = true;
+      setImportApplyBusy(true);
+      try {
+        if (typeof ctx.replaceAccountMovementsV2 !== 'function') throw new Error('SYNC_V2_ONLINE_REQUIRED');
+        const importedRows = importedMovementRows(finalPreview);
+        const type = importType === 'expense' ? 'expense' : 'income';
+        await ctx.replaceAccountMovementsV2({ [type]: importedRows }, undefined, 'import');
+      } catch (error) {
+        console.error('Import replacement failed', error);
+        setMsg(L('Operazione non completata. Alcune voci potrebbero essere già state aggiornate. Verifica i dati prima di riprovare.'), "error");
+        setPendingDataImportMode(null);
+        return;
+      } finally {
+        importApplyBusyRef.current = false;
+        setImportApplyBusy(false);
+      }
+    } else if (importType === "expense") {
       var expenseRows = importedMovementRows(finalPreview);
-      if (replaceExisting && setExpenses) setExpenses([]);
       importedOk = addExpenses(expenseRows, "import");
     } else if (importType === "income") {
       var incomeRows = importedMovementRows(finalPreview);
-      if (replaceExisting && setIncomes) setIncomes([]);
       importedOk = addIncomes(incomeRows, "import");
     } else if (importType === "patrimonio") {
       var byMonth: any = {};
@@ -17309,6 +16708,7 @@ export function ImportData(props: any = {}) {
     resetAll();
   }
   function doImport() {
+    if (!importCurrencyPreviewReady()) return;
     var candidateRows =
       unknownDecision === "skip"
         ? preview.filter(function (r) {
@@ -17384,7 +16784,7 @@ export function ImportData(props: any = {}) {
                 >
                   {opts.map(function (o) {
                     return (
-                      <option key={String(o.id)} value={String(o.id)}>
+                      <option key={String(o.id)} value={String(o.id)} data-fainance-icon-ref={(o as any).icon || "\u{1F4C1}"}>
                         {o.icon ? o.icon + " " : ""}
                         {o.name}
                       </option>
@@ -17404,8 +16804,8 @@ export function ImportData(props: any = {}) {
     return (
       <div
         style={{
-          background: dark ? "#2a2414" : "#FFF8E1",
-          border: "1px solid " + (dark ? "#6a5520" : "#FFD54F"),
+          background: notificationAppearance("warning").background,
+          border: "1px solid " + notificationAppearance("warning").border,
           borderRadius: 12,
           padding: 14,
           marginBottom: 12,
@@ -17415,7 +16815,7 @@ export function ImportData(props: any = {}) {
           style={{
             fontSize: 14,
             fontWeight: 800,
-            color: dark ? "#FFD54F" : "#856404",
+            color: notificationAppearance("warning").color,
             marginBottom: 5,
           }}
         >
@@ -17424,7 +16824,7 @@ export function ImportData(props: any = {}) {
         <div
           style={{
             fontSize: 12,
-            color: dark ? "#f5d98a" : "#856404",
+            color: notificationAppearance("warning").color,
             lineHeight: 1.45,
             marginBottom: 12,
           }}
@@ -17467,7 +16867,11 @@ export function ImportData(props: any = {}) {
                     : dark
                     ? "#252535"
                     : "#fff",
-                  color: active ? "#fff" : tc,
+                  color: readableDarkText(active ? "#fff" : tc, dark, active
+                    ? (ctx as any).confirmButtonColor || "#7F77DD"
+                    : dark
+                    ? "#252535"
+                    : "#fff"),
                   border:
                     "1px solid " +
                     (active
@@ -17492,7 +16896,7 @@ export function ImportData(props: any = {}) {
           <div
             style={{
               fontSize: 12,
-              color: dark ? "#f5d98a" : "#856404",
+              color: notificationAppearance("warning").color,
               marginBottom: 8,
             }}
           >
@@ -17567,7 +16971,7 @@ export function ImportData(props: any = {}) {
             <div style={{ fontSize: 13, fontWeight: 800, color: tc }}>
               📥 {importLoading.stage || L("Caricamento file")}
             </div>
-            <div style={{ fontSize: 12, fontWeight: 900, color: tabColor }}>
+            <div style={{ fontSize: 12, fontWeight: 900, color: readableDarkText(tabColor, dark, dark ? "#202033" : "#EEF4FF") }}>
               {importLoading.pct || 0}%
             </div>
           </div>
@@ -17623,7 +17027,7 @@ export function ImportData(props: any = {}) {
             border: "none",
             borderRadius: 10,
             background: importType === "expense" ? "#E24B4A" : "transparent",
-            color: importType === "expense" ? "#fff" : sc,
+            color: readableDarkText(importType === "expense" ? "#fff" : sc, dark, importType === "expense" ? "#E24B4A" : "transparent"),
             fontSize: 14,
             cursor: "pointer",
             fontWeight: importType === "expense" ? 500 : 400,
@@ -17645,7 +17049,7 @@ export function ImportData(props: any = {}) {
             border: "none",
             borderRadius: 10,
             background: importType === "income" ? "#1D9E75" : "transparent",
-            color: importType === "income" ? "#fff" : sc,
+            color: readableDarkText(importType === "income" ? "#fff" : sc, dark, importType === "income" ? "#1D9E75" : "transparent"),
             fontSize: 14,
             cursor: "pointer",
             fontWeight: importType === "income" ? 500 : 400,
@@ -17667,7 +17071,7 @@ export function ImportData(props: any = {}) {
             border: "none",
             borderRadius: 10,
             background: importType === "patrimonio" ? "#7F77DD" : "transparent",
-            color: importType === "patrimonio" ? "#fff" : sc,
+            color: readableDarkText(importType === "patrimonio" ? "#fff" : sc, dark, importType === "patrimonio" ? "#7F77DD" : "transparent"),
             fontSize: 14,
             cursor: "pointer",
             fontWeight: importType === "patrimonio" ? 500 : 400,
@@ -17716,11 +17120,21 @@ export function ImportData(props: any = {}) {
               fontSize: 12,
               fontWeight: 700,
               color:
-                importType === "patrimonio"
+                readableDarkText(importType === "patrimonio"
                   ? "#534AB7"
                   : importType === "expense"
                   ? "#E24B4A"
-                  : "#1D9E75",
+                  : "#1D9E75", dark, importType === "patrimonio"
+                ? dark
+                  ? "#252535"
+                  : "#f0edff"
+                : importType === "expense"
+                ? dark
+                  ? "#2a1e1e"
+                  : "#fff5f5"
+                : dark
+                ? "#1e2a1e"
+                : "#f0faf5"),
               marginBottom: 6,
             }}
           >
@@ -17735,26 +17149,15 @@ export function ImportData(props: any = {}) {
             }}
           >
             {L(IMPORT_GUIDELINES[importType].body)}
+            <div style={{marginTop:6}}>{L("Valuta")}: EUR / USD / GBP</div>
           </div>
         </div>
       )}
-      {msg && (
-        <div
-          style={{
-            background: msg.startsWith("Import")
-              ? "#e8f8f0"
-              : msg.startsWith("⚠")
-              ? "#fff8e1"
-              : "#fff3cd",
-            borderRadius: 8,
-            padding: "10px 14px",
-            fontSize: 13,
-            color: msg.startsWith("Import") ? "#1D9E75" : "#856404",
-          }}
-        >
-          {msg}
-        </div>
-      )}
+      {msg && <div role={msgTone === "error" ? "alert" : "status"} data-fainance-notice={msgTone} style={{
+        background: importMessageStyle.background, color: importMessageStyle.color,
+        border: "1px solid " + importMessageStyle.border, borderRadius:16,
+        padding:"12px 16px",fontSize:13,lineHeight:1.45,whiteSpace:"pre-line"
+      }}>{msg}</div>}
       {step === 0 && (
         <div
           style={{
@@ -17841,7 +17244,7 @@ export function ImportData(props: any = {}) {
               style={{
                 fontSize: 12,
                 fontWeight: 600,
-                color: dark ? "#8bf" : "#1a5fa8",
+                color: readableDarkText(dark ? "#8bf" : "#1a5fa8", dark, dark ? "#1e1e30" : "#f0f8ff"),
                 display: "block",
                 marginBottom: 6,
               }}
@@ -17849,6 +17252,7 @@ export function ImportData(props: any = {}) {
               📅 {L("Formato delle date nel file")}
             </label>
             <select
+              disabled={currencyLoading}
               value={importDateFmt}
               onChange={function (e) {
                 setImportDateFmt(e.target.value);
@@ -17877,12 +17281,14 @@ export function ImportData(props: any = {}) {
                   ["monthKey", "Data / Mese *"],
                   ["entryId", "Categoria / Voce *"],
                   ["amount", "Importo / Valore *"],
+                  ["currency", "Valuta"],
                   ["patNote", "Note (opzionale)"],
                 ]
               : importType === "expense"
               ? [
                   ["date", "Data *"],
                   ["amount", "Importo *"],
+                  ["currency", "Valuta"],
                   ["desc", "Descrizione"],
                   ["cat", "Categoria"],
                   ["method", "Pagamento"],
@@ -17891,8 +17297,10 @@ export function ImportData(props: any = {}) {
               : [
                   ["date", "Data *"],
                   ["amount", "Importo *"],
+                  ["currency", "Valuta"],
                   ["desc", "Descrizione"],
                   ["cat", "Tipo entrata"],
+                  ["method", incomeReceiptText(ctx.lang,"label")],
                   ["rate", "Rate (mesi)"],
                 ]
             ).map(function (pair) {
@@ -17911,6 +17319,8 @@ export function ImportData(props: any = {}) {
                     {L(l)}
                   </label>
                   <select
+                    aria-label={L(l)}
+                    disabled={currencyLoading}
                     value={map[k] || ""}
                     onChange={function (e) {
                       var v = e.target.value;
@@ -17920,7 +17330,7 @@ export function ImportData(props: any = {}) {
                     }}
                     style={{ ...sinp, width: "100%" }}
                   >
-                    <option value="">{L("-- nessuna --")}</option>
+                    <option value="">{k === "currency" ? L("Valuta principale") + " (" + ((ctx as any).currency || "EUR") + ")" : L("-- nessuna --")}</option>
                     {cols.map(function (c, ci5) {
                       return (
                         <option key={ci5} value={c}>
@@ -17933,8 +17343,9 @@ export function ImportData(props: any = {}) {
               );
             })}
           </div>
+          <div role="note" style={{fontSize:12,color:(ctx as any).subC || tc,marginBottom:10,lineHeight:1.5}}>{L("Se la colonna Valuta non è selezionata, viene usata la valuta principale. Le altre valute sono convertite al cambio dell’anteprima.")}</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={buildPreview}>{L("Anteprima")}</Btn>
+            <Btn disabled={currencyLoading} onClick={buildPreview}>{currencyLoading ? L("Caricamento...") : L("Anteprima")}</Btn>
             <Btn
               onClick={function () {
                 setStep(0);
@@ -17981,8 +17392,8 @@ export function ImportData(props: any = {}) {
               >
                 <tr>
                   {(importType === "patrimonio"
-                    ? ["Mese", "Categoria", "Valore", "Note", "Stato"]
-                    : ["Data", "Importo", "Descrizione", "Cat/Tipo", "Stato"]
+                    ? ["Mese", "Categoria", "Valore", "Valuta", "Note", "Stato"]
+                    : ["Data", "Importo", "Valuta", "Descrizione", "Cat/Tipo", "Stato"]
                   ).map(function (h) {
                     return (
                       <th
@@ -18027,12 +17438,18 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: "#7F77DD",
+                              color: readableDarkText("#7F77DD", dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontWeight: 500,
                             }}
                           >
-                            {fmtAmt(r.amount, sym)}
+                            {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
+                            {r.originalAmount != null && <div style={{fontSize:10,color:(ctx as any).subC || tc,marginTop:3}}>{L("Valuta principale")}: {fmtAmt(r.amount, sym)}</div>}
                           </td>
+                          <td style={{padding:"6px 10px",color:tc}}>{r.currency}</td>
                           <td
                             style={{
                               padding: "6px 10px",
@@ -18049,7 +17466,11 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: warn ? "#EF9F27" : sc,
+                              color: readableDarkText(warn ? "#EF9F27" : sc, dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontSize: 11,
                             }}
                           >
@@ -18064,12 +17485,18 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: tabColor,
+                              color: readableDarkText(tabColor, dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontWeight: 500,
                             }}
                           >
-                            {fmtAmt(r.amount, sym)}
+                            {smallDecimalNode(fmtAmt(r.originalAmount != null ? r.originalAmount : r.amount, r.currency ? ((CURRENCIES.find(function(c){return c.code === r.currency;}) || {}).symbol || r.currency) : sym), ctx.lang)}
+                            {r.originalAmount != null && <div style={{fontSize:10,color:(ctx as any).subC || tc,marginTop:3}}>{L("Valuta principale")}: {fmtAmt(r.amount, sym)}</div>}
                           </td>
+                          <td style={{padding:"6px 10px",color:tc}}>{r.currency}</td>
                           <td style={{ padding: "6px 10px", color: tc }}>
                             {r.desc}
                           </td>
@@ -18087,7 +17514,11 @@ export function ImportData(props: any = {}) {
                           <td
                             style={{
                               padding: "6px 10px",
-                              color: warn ? "#EF9F27" : sc,
+                              color: readableDarkText(warn ? "#EF9F27" : sc, dark, warn
+                          ? dark
+                            ? "#2a2414"
+                            : "#fffaf0"
+                          : "transparent"),
                               fontSize: 11,
                             }}
                           >
@@ -18129,14 +17560,14 @@ export function ImportData(props: any = {}) {
       )}
       <FainancePickerModal
         open={!!pendingDataImportMode}
-        title={L("Come vuoi importare i dati?")}
+        title={L("Come vuoi importare i dati?")} tone="warning"
         onClose={function () {
-          setPendingDataImportMode(null);
+          if (!importApplyBusyRef.current) setPendingDataImportMode(null);
         }}
         zIndex={12150}
       >
         <div style={{ padding: 18, display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ fontSize: 13, lineHeight: 1.5, color: sc }}>
+          <div style={{ fontSize: 13, lineHeight: 1.5, color: "#3B3000" }}>
             {L(
               importType === "expense"
                 ? "Scegli se le Uscite importate devono sostituire quelle già presenti oppure essere aggiunte ai dati esistenti."
@@ -18150,12 +17581,13 @@ export function ImportData(props: any = {}) {
             onClick={function () {
               executeDataImport("merge");
             }}
+            disabled={importApplyBusy}
             style={{
               border: "none",
               borderRadius: 12,
               padding: "13px 14px",
               background: ctx.confirmButtonColor || "#1D9E75",
-              color: "#fff",
+              color: readableDarkText("#fff", dark, (ctx as any).confirmButtonColor || "#1D9E75"),
               fontSize: 13,
               fontWeight: 900,
               cursor: "pointer",
@@ -18168,12 +17600,13 @@ export function ImportData(props: any = {}) {
             onClick={function () {
               executeDataImport("replace");
             }}
+            disabled={importApplyBusy}
             style={{
               border: "1px solid #E24B4A",
               borderRadius: 12,
               padding: "13px 14px",
               background: dark ? "#3a2020" : "#FFF0F0",
-              color: "#E24B4A",
+              color: readableDarkText("#E24B4A", dark, dark ? "#3a2020" : "#FFF0F0"),
               fontSize: 13,
               fontWeight: 900,
               cursor: "pointer",
@@ -18206,7 +17639,7 @@ export function FAInanceLogo({ size, style }) {
     />
   );
 }
-export function AIGrilloIcon({ size, style, imgStyle }) {
+export function AIGrilloIcon({ size, style, imgStyle }: { size: any; style?: any; imgStyle?: any }) {
   size = size || 34;
   return (
     <span

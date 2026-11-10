@@ -1,0 +1,9 @@
+fAInance shared icon artwork
+Rasterized locally from the Samsung Galaxy A55 system emoji font, version 2.028, build 20251008_v17.
+SamsungColorEmoji.ttf and original Android fallback fonts: SIL Open Font License 1.1 (see LICENSE-GRAPHICS.txt).
+Copyright 2013 Google Inc. ; Modified and Additional Font Data by Samsung Electronics Co., Ltd. 2021
+Copyright 2022 Google Inc. (Android fallback fonts)
+
+
+Unicode parser @twemoji/parser 17.0.2 remains MIT; no Twemoji artwork is included.
+Legacy unused private-use E50A maps to Unicode U+1F3EC (department store).

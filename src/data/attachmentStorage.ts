@@ -33,6 +33,7 @@ import {
 } from "firebase/storage";
 import { fbAuth, firebaseApp } from "../firebase/client";
 import { firebaseConfig } from "../config/env";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
 
 export const FAINANCE_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 
@@ -423,8 +424,39 @@ export async function readAttachmentDataUrl(record: any): Promise<string> {
       "Serve una connessione per aprire questo allegato.",
     );
   }
+  const path = String(record.storagePath);
+  const user = fbAuth.currentUser;
+  const bucket = String(record.bucket || "");
+  if (
+    Capacitor.getPlatform() === "android" &&
+    firebaseConfig.projectId === "fainance-test-20260823195207" &&
+    user && path.startsWith("userDocuments/" + user.uid + "/") &&
+    [configuredBucket(), alternateBucket(configuredBucket())].filter(Boolean).includes(bucket)
+  ) {
+    const token = await user.getIdToken();
+    const response = await CapacitorHttp.get({
+      // Passing params separately makes Capacitor Android rebuild the URL
+      // from URI.getPath(), which decodes the escaped slashes in the object ID.
+      url: "https://firebasestorage.googleapis.com/v0/b/" + encodeURIComponent(bucket) + "/o/" + encodeURIComponent(path) + "?alt=media",
+      headers: { Authorization: "Firebase " + token },
+      responseType: "arraybuffer",
+      disableRedirects: true,
+      connectTimeout: 10000,
+      readTimeout: 15000,
+    });
+    if (response.status !== 200 || typeof response.data !== "string" || fbAuth.currentUser?.uid !== user.uid) {
+      throw new AttachmentStorageError("read-failed", "Lettura del file non riuscita.");
+    }
+    const bytes = response.data.replace(/\s/g, "");
+    if (!bytes || bytes.length > Math.ceil(FAINANCE_ATTACHMENT_MAX_BYTES / 3) * 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(bytes)) {
+      throw new AttachmentStorageError("read-failed", "Lettura del file non riuscita.");
+    }
+    const contentType = Object.entries(response.headers).find(([key]) => key.toLowerCase() === "content-type")?.[1];
+    const mime = String(contentType || record.type || "").split(";")[0].trim();
+    return "data:" + (/^[\w.+-]+\/[\w.+-]+$/.test(mime) ? mime : "application/octet-stream") + ";base64," + bytes;
+  }
   const blob = await withBuckets<Blob>(function (storage) {
-    return getBlob(ref(storage, String(record.storagePath)));
+    return getBlob(ref(storage, path), FAINANCE_ATTACHMENT_MAX_BYTES);
   });
   return await blobToDataUrl(blob);
 }

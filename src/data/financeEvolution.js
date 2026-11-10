@@ -72,7 +72,7 @@ export function migrateFinanceEvolution(input) {
   }
   validateSavingsLedger(value.savings);
   rows(value.rules, 'RULES');
-  value.rules.forEach(validateAutomaticRule);
+  value.rules.forEach(rule => validateAutomaticRule(rule,{allowLegacyConditions:true}));
   rows(value.advice, 'ADVICE');
   rows(value.tools.calculator, 'CALCULATOR');
   rows(value.tools.converter, 'CONVERTER');
@@ -111,6 +111,15 @@ export function mergeFinanceEvolution(current, incoming) {
 }
 
 export function selectFinanceEvolution(local, cloud, localTimestamp, cloudTimestamp, preferLocal = false) {
-  if (cloud === undefined || (local !== undefined && (preferLocal || Number(localTimestamp || 0) > Number(cloudTimestamp || 0)))) return migrateFinanceEvolution(local);
-  return migrateFinanceEvolution(cloud);
+  const left = migrateFinanceEvolution(local), right = migrateFinanceEvolution(cloud);
+  const chosen = cloud === undefined || (local !== undefined &&
+    (preferLocal || Number(localTimestamp || 0) > Number(cloudTimestamp || 0))) ? left : right;
+  // A newer default on a freshly opened browser is not an explicit period
+  // choice. Keep the confirmed choice from the other device, while preserving
+  // the timestamp winner for unrelated budget/savings/rules fields.
+  if ((left.periodIntroductionSeen === true) !== (right.periodIntroductionSeen === true)) {
+    const confirmed = left.periodIntroductionSeen === true ? left : right;
+    return migrateFinanceEvolution({ ...chosen, period: confirmed.period, periodIntroductionSeen: true });
+  }
+  return chosen;
 }

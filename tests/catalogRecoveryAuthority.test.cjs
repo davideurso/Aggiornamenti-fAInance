@@ -1,0 +1,26 @@
+const fs=require('fs'),path=require('path'),vm=require('vm'),assert=require('node:assert/strict');
+const canonical='C:/Users/Davide/Documents/Progetti/01 - fAInance/App',ts=require(canonical+'/node_modules/typescript');
+const arg=process.argv.indexOf('--source'),root=arg>=0?process.argv[arg+1]:canonical;
+const source=fs.readFileSync(root+'/src/app.tsx','utf8'),ast=ts.createSourceFile('app.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+function actual(name){let out;function visit(n){if(ts.isFunctionDeclaration(n)&&n.name?.text===name)out=n.getText(ast);ts.forEachChild(n,visit)}visit(ast);assert(out,name);return ts.transpileModule(out,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;}
+const context=vm.createContext({ensureArrayValue:(x,f)=>Array.isArray(x)?x:f,isRecoveredExpenseCategory:c=>!!c?.recovered,validRecurringReference:v=>v!==null&&v!==undefined&&String(v)!=='',syncJsonEqual:(a,b)=>JSON.stringify(a)===JSON.stringify(b),DEFAULT_CATS:[]});
+for(const name of ['restoreReferencedExpenseCategories','restoreReferencedPaymentMethods','repairRecoveredExpenseCategories'])vm.runInContext(actual(name),context);
+const clean=x=>JSON.parse(JSON.stringify(x));let cases=0;
+const live=[{id:'personal',name:'Salute',group:'vita'}],legacy={id:'5',name:'Salute',group:'vita',archived:false,deleted:false};
+const rule=[{id:'rule',rtype:'expense',catId:'5',methodId:'old-card'}];
+let r=context.restoreReferencedExpenseCategories(live,[[legacy]],[],rule);assert.equal(r.categories.find(c=>c.id==='5').archived,true,'A recurring reference must not reactivate a missing historical category');assert.equal(r.categories.find(c=>c.id==='5').deleted,true);assert.equal(r.categories.filter(c=>!c.archived&&!c.deleted).length,1);cases++;
+const deleted={...legacy,archived:true,deleted:true,recovered:true};r=context.restoreReferencedExpenseCategories([deleted],[[legacy]],[],rule);assert.equal(r.categories[0].deleted,true,'Explicit deletion wins over active legacy definition');cases++;
+r=context.restoreReferencedExpenseCategories(live,[[legacy]],[{catId:'5'}],[]);assert.equal(r.categories.find(c=>c.id==='5').archived,true);cases++;
+let again=context.restoreReferencedExpenseCategories(r.categories,[[legacy]],[{catId:'5'}],[]);assert.equal(again.repaired,false,'Repeated identical metadata recovery is a no-op');assert.deepEqual(clean(again.categories),clean(r.categories));cases++;
+const complete=[{...legacy,archived:true,deleted:true,recovered:true}];r=context.repairRecoveredExpenseCategories(complete,[[legacy]]);assert.equal(r.repaired,false,'Already complete recovered metadata must not report a repair');cases++;
+const method={id:'old-card',name:'Carta storica',archived:false,deleted:false};r=context.restoreReferencedPaymentMethods([],[[method]],[],rule);assert.equal(r.methods[0].archived,true);assert.equal(r.methods[0].deleted,true);cases++;
+r=context.restoreReferencedPaymentMethods([{...method,archived:true,deleted:true,recovered:true}],[[method]],[],rule);assert.equal(r.methods[0].deleted,true,'Rules cannot undo a method deletion');assert.equal(r.repaired,false);cases++;
+const before=JSON.stringify({live,legacy,rule});context.restoreReferencedExpenseCategories(live,[[legacy]],[],rule);assert.equal(JSON.stringify({live,legacy,rule}),before);cases++;
+const fresh={id:'new-user-category',name:'Investimenti',custom:true};r=context.restoreReferencedExpenseCategories([...live,fresh],[[legacy]],[],rule);assert.deepEqual(clean(r.categories.find(c=>c.id===fresh.id)),fresh);cases++;
+const runtime=fs.readFileSync(root+'/src/utils/appRuntime.ts','utf8');const runtimeAst=ts.createSourceFile('runtime.ts',runtime,ts.ScriptTarget.Latest,true);const focusNode=runtimeAst.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name.text==='focusFainanceInput');const code=ts.transpileModule(focusNode.getText(runtimeAst).replace('export ',''),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+let cb,focused=0;const target={isConnected:true,focus(){focused++},select(){}},body={tagName:'BODY'},doc={activeElement:body,querySelector:()=>null};const focus=new Function('document','setTimeout',code+';return focusFainanceInput;')(doc,fn=>cb=fn);
+focus({current:target});cb();assert.equal(focused,1);cases++;
+doc.activeElement=body;focus({current:target});doc.activeElement={tagName:'BUTTON'};cb();assert.equal(focused,1,'A later tap must survive delayed autofocus');cases++;
+doc.activeElement={tagName:'SELECT'};focus({current:target});cb();assert.equal(focused,1);cases++;
+doc.activeElement=body;doc.querySelector=()=>({contains:()=>false});focus({current:target});cb();assert.equal(focused,1,'A nested picker must keep focus');cases++;
+console.log('PASS '+cases+' catalog authority and delayed focus regressions');

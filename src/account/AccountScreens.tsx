@@ -1,3 +1,8 @@
+import {contactEndpoint} from '../integrations/contactEndpoint.js';
+import { readableDarkText } from '../ui/textContrast';
+import { PremiumProfileIcon } from '../ui/release215';
+import { startAnalyticsFlow, finishAnalyticsFlow, trackAnalyticsEvent, trackAnalyticsSection } from '../analytics/firebaseAnalytics';
+import { useAnalyticsFlow } from '../analytics/useAnalyticsFlow';
 import { useState, useEffect, useMemo } from "react";
 import { useApp, fbAuth, doc, setDoc, appBanner, fmtDate } from "../core";
 import { translateFainanceText } from "../traduzioni";
@@ -112,6 +117,8 @@ function fainanceV24VerificationNoticeIsError(value: any) {
 
 export function LoginScreen({ onLogin }) {
   var [mode, setMode] = useState("login");
+  useAnalyticsFlow(mode === "register", "registration", "email");
+  useEffect(() => { trackAnalyticsSection(mode === "register" ? "register" : "login"); }, [mode]);
   var [email, setEmail] = useState("");
   var [password, setPassword] = useState("");
   var [firstName, setFirstName] = useState("");
@@ -212,6 +219,7 @@ export function LoginScreen({ onLogin }) {
   };
 
   async function doLogin() {
+    startAnalyticsFlow("login", { method: "email" });
     setError("");
     setInfoText("");
     setVerificationEmail("");
@@ -229,6 +237,7 @@ export function LoginScreen({ onLogin }) {
           ? await accountRequiresEmailVerification(authUser)
           : false;
       if (requiresVerification) {
+        finishAnalyticsFlow("login", "failed", { reason: "verification_required" });
         writeTechnicalLog({
           category: "AUTH_FAILURE",
           operation: "email-password-login",
@@ -264,6 +273,7 @@ export function LoginScreen({ onLogin }) {
             String(email || "").indexOf("@") >= 0 ? "email" : "username",
         },
       }).catch(function () {});
+      finishAnalyticsFlow("login", "completed");
       onLogin(
         {
           id: authUser.uid,
@@ -273,6 +283,7 @@ export function LoginScreen({ onLogin }) {
         authUser
       );
     } catch (err: any) {
+      finishAnalyticsFlow("login", "failed", { reason: "service" });
       queuePreAuthTechnicalLog({
         category: "AUTH_FAILURE",
         operation: "email-or-username-login",
@@ -295,6 +306,7 @@ export function LoginScreen({ onLogin }) {
   }
 
   async function doRegister() {
+    startAnalyticsFlow("registration", { method: "email" });
     // FAINANCE_V71_POST_AUTH_RECOVERY
     var fainanceV71CreatedAuthUser:any=null;
     var fainanceV71VerificationSent=false;
@@ -313,13 +325,13 @@ export function LoginScreen({ onLogin }) {
     var cleanName = [cleanFirstName, cleanLastName].join(" ");
     var cleanEmail = String(email || "").trim().toLowerCase();
     var cleanUsername = normalizeUsername(username);
-    if (!cleanFirstName) { setError(L("Inserisci il tuo nome.")); return; }
-    if (!cleanLastName) { setError(L("Inserisci il tuo cognome.")); return; }
-    if (!cleanEmail.includes("@")) { setError(L("Email non valida.")); return; }
+    if (!cleanFirstName) { setError(L("Inserisci il tuo nome.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (!cleanLastName) { setError(L("Inserisci il tuo cognome.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (!cleanEmail.includes("@")) { setError(L("Email non valida.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
     var usernameValidation = cleanUsername ? validateUsername(cleanUsername) : "USERNAME_REQUIRED";
-    if (usernameValidation) { setError(usernameErrorText(usernameValidation)); return; }
-    if (password.length < 6) { setError(L("Password: minimo 6 caratteri.")); return; }
-    if (password !== confirmPwd) { setError(L("Le password non coincidono.")); return; }
+    if (usernameValidation) { setError(usernameErrorText(usernameValidation)); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (password.length < 6) { setError(L("Password: minimo 6 caratteri.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
+    if (password !== confirmPwd) { setError(L("Le password non coincidono.")); finishAnalyticsFlow("registration", "failed", { reason: "validation" }); return; }
     try { sessionStorage.setItem("fainance_registration_pending_email_v1", cleanEmail); } catch (_pendingRegistrationError) {}
     setLoading(true);
     try {
@@ -328,6 +340,8 @@ export function LoginScreen({ onLogin }) {
       try {
         authUser = await registerEmailAccount(cleanEmail, password);
       fainanceV71CreatedAuthUser=authUser;
+      trackAnalyticsEvent('fainance_account_created', { method: 'email' });
+      finishAnalyticsFlow("registration", "completed");
       try{
         await sendAccountEmailVerification(authUser,loginLang());
         fainanceV71VerificationSent=true;
@@ -350,6 +364,7 @@ export function LoginScreen({ onLogin }) {
           try {
             authUser = await signInWithEmailAccount(cleanEmail, password);
             repairingExisting = true;
+            finishAnalyticsFlow("registration", "cancelled", { reason: "validation" });
           } catch (_repairLoginError) {
             throw createErr;
           }
@@ -406,6 +421,7 @@ export function LoginScreen({ onLogin }) {
         setInfoText(L("Account creato. Ti abbiamo inviato un link di verifica via email prima del primo accesso."));
       }
     } catch (err: any) {
+      finishAnalyticsFlow("registration", "failed", { reason: "service" });
       try { sessionStorage.removeItem("fainance_registration_pending_email_v1"); } catch (_pendingRegistrationError) {}
       if (err && err.message && String(err.message).indexOf("USERNAME_") === 0) setError(usernameErrorText(String(err.message)));
       else if (err && (err.message === "REGISTRATION_ACCOUNT_EXISTS" || err.code === "auth/email-already-in-use")) setError(L("Email già registrata. Accedi con l’account esistente."));
@@ -461,6 +477,7 @@ export function LoginScreen({ onLogin }) {
   }
 
   async function doGoogle() {
+    startAnalyticsFlow("login", { method: "google" });
     setError("");
     setInfoText("");
     setLoading(true);
@@ -471,8 +488,10 @@ export function LoginScreen({ onLogin }) {
         category: "AUTH_SUCCESS",
         operation: "google-login",
       }).catch(function () {});
+      finishAnalyticsFlow("login", "completed");
       onLogin(fainanceBasicUserPayload(user), user);
     } catch (err: any) {
+      finishAnalyticsFlow("login", "failed", { reason: "service" });
       queuePreAuthTechnicalLog({
         category: "AUTH_FAILURE",
         operation: "google-login",
@@ -485,6 +504,7 @@ export function LoginScreen({ onLogin }) {
   }
 
   async function doApple() {
+    startAnalyticsFlow("login", { method: "apple" });
     setError("");
     setInfoText("");
     setLoading(true);
@@ -495,8 +515,10 @@ export function LoginScreen({ onLogin }) {
         category: "AUTH_SUCCESS",
         operation: "apple-login",
       }).catch(function () {});
+      finishAnalyticsFlow("login", "completed");
       onLogin(fainanceBasicUserPayload(user), user);
     } catch (err: any) {
+      finishAnalyticsFlow("login", "failed", { reason: "service" });
       queuePreAuthTechnicalLog({
         category: "AUTH_FAILURE",
         operation: "apple-login",
@@ -1243,7 +1265,7 @@ export function ContactForm({ currentUser }) {
         contactCtrl.abort();
       }, 15000);
       var response = await fetch(
-        "https://europe-west1-fainance-a7794.cloudfunctions.net/sendContactEmail",
+        contactEndpoint(fbAuth.app.options.projectId),
         {
           method: "POST",
           headers: {
@@ -1392,7 +1414,7 @@ export function ContactForm({ currentUser }) {
               borderRadius: 10,
               padding: "10px 12px",
               background: status.type === "ok" ? "#e8f8f0" : "#fff0f0",
-              color: status.type === "ok" ? "#1D9E75" : "#E24B4A",
+              color: readableDarkText(status.type === "ok" ? "#1D9E75" : "#E24B4A", dark, status.type === "ok" ? "#e8f8f0" : "#fff0f0"),
               border:
                 "1px solid " + (status.type === "ok" ? "#a8e6c8" : "#fcc"),
             }}
@@ -1601,7 +1623,7 @@ export function ChangePwdSection({
                     border: "none",
                     padding: "9px 11px",
                     fontSize: 12,
-                    color: textC,
+                    color: readableDarkText(textC, dark, "transparent"),
                     cursor: "pointer",
                   }}
                 >
@@ -1686,7 +1708,7 @@ export function ChangePwdSection({
           border: "1px solid " + secondaryC,
           borderRadius: btnRadius,
           cursor: "pointer",
-          color: dark ? "#E5ECFF" : secondaryC,
+          color: readableDarkText(dark ? "#E5ECFF" : secondaryC, dark, dark ? "#292940" : secondaryC + "18"),
           fontSize: 13,
           fontWeight: 800,
           padding: "10px 12px",
@@ -1754,7 +1776,7 @@ export function ChangePwdSection({
             <div
               style={{
                 fontSize: 12,
-                color: "#E24B4A",
+                color: readableDarkText("#E24B4A", dark, "#fff0f0"),
                 background: "#fff0f0",
                 borderRadius: 8,
                 padding: "8px 10px",
@@ -1768,7 +1790,7 @@ export function ChangePwdSection({
             disabled={loading}
             style={{
               background: primaryC,
-              color: "#fff",
+              color: readableDarkText("#fff", dark, primaryC),
               border: "none",
               borderRadius: btnRadius,
               padding: "10px",
@@ -1874,7 +1896,7 @@ export function AccountAccessSecurityCard({
         <div style={{ fontSize: 12, color: subC, lineHeight: 1.45, marginBottom: 12 }}>{T("Gestisci password ed email usate per accedere a fAInance.")}</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2,minmax(0,1fr))", gap: 10 }}>
           <button type="button" onClick={function(){ setEmailOpen(!emailOpen); setEmailError(""); setNewEmail(String(currentUser.email || "")); }} style={{
-            background: dark ? "#292940" : secondaryC + "18", color: dark ? "#E5ECFF" : secondaryC, border: "1px solid " + secondaryC,
+            background: dark ? "#292940" : secondaryC + "18", color: readableDarkText(dark ? "#E5ECFF" : secondaryC, dark, dark ? "#292940" : secondaryC + "18"), border: "1px solid " + secondaryC,
             borderRadius: btnRadius, padding: "10px 12px", fontSize: 13, fontWeight: 800, cursor: "pointer"
           }}>📧 {T("Cambia Email")}</button>
           <ChangePwdSection dark={dark} textC={textC} subC={subC} borderC={borderC} btnRadius={btnRadius} setToast={setToast} confirmButtonColor={primaryC} secondaryButtonColor={secondaryC} inActionGrid />
@@ -1883,9 +1905,9 @@ export function AccountAccessSecurityCard({
           <div style={{ fontSize: 14, fontWeight: 800, color: textC }}>{T("Aggiorna email di accesso")}</div>
           <input type="email" value={newEmail} onChange={function(e){ setNewEmail(e.target.value); }} placeholder="nome@email.com" style={inputStyle} />
           <div style={{ fontSize: 11, color: subC, lineHeight: 1.35 }}>{T("La nuova email diventerà l’indirizzo usato per accedere all’app.")}</div>
-          {emailError && <div style={{ fontSize: 12, color: "#E24B4A", background: dark ? "#3a1d1d" : "#fff0f0", borderRadius: 8, padding: "8px 10px" }}>{emailError}</div>}
+          {emailError && <div style={{ fontSize: 12, color: readableDarkText("#E24B4A", dark, dark ? "#3a1d1d" : "#fff0f0"), background: dark ? "#3a1d1d" : "#fff0f0", borderRadius: 8, padding: "8px 10px" }}>{emailError}</div>}
           <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={saveEmailChange} disabled={emailLoading} style={{ flex: 1, background: primaryC, color: "#fff", border: "none", borderRadius: btnRadius, padding: 10, fontSize: 13, fontWeight: 800, cursor: emailLoading ? "not-allowed" : "pointer", opacity: emailLoading ? .65 : 1 }}>{emailLoading ? T("Salvataggio...") : T("Salva")}</button>
+            <button type="button" onClick={saveEmailChange} disabled={emailLoading} style={{ flex: 1, background: primaryC, color: readableDarkText("#fff", dark, primaryC), border: "none", borderRadius: btnRadius, padding: 10, fontSize: 13, fontWeight: 800, cursor: emailLoading ? "not-allowed" : "pointer", opacity: emailLoading ? .65 : 1 }}>{emailLoading ? T("Salvataggio...") : T("Salva")}</button>
             <button type="button" onClick={function(){ setEmailOpen(false); setEmailError(""); }} disabled={emailLoading} style={{ background: dark ? "#333" : "#f0f0f0", color: textC, border: "none", borderRadius: btnRadius, padding: "10px 12px", cursor: "pointer" }}>{T("Annulla")}</button>
           </div>
         </div>}
@@ -2015,7 +2037,7 @@ export function ProfilePlacePromptField({
                   border: "none",
                   padding: "9px 11px",
                   fontSize: 12,
-                  color: textC,
+                  color: readableDarkText(textC, dark, "transparent"),
                   cursor: "pointer",
                 }}
               >
@@ -2089,7 +2111,7 @@ export function ProfileLocalPromptField({
       >
         <span
           style={{
-            color: value ? textC : subC,
+            color: readableDarkText(value ? textC : subC, dark, dark ? "#2a2a3e" : "#fff"),
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -2202,7 +2224,11 @@ export function ProfileLocalPromptField({
                         borderRadius: 10,
                         padding: "11px 12px",
                         fontSize: 14,
-                        color: value === x ? "#7F77DD" : textC,
+                        color: readableDarkText(value === x ? "#7F77DD" : textC, dark, value === x
+                            ? dark
+                              ? "#343050"
+                              : "#EEEDFE"
+                            : "transparent"),
                         cursor: "pointer",
                         fontWeight: value === x ? 700 : 500,
                       }}
@@ -2936,7 +2962,7 @@ export function ProfileCard({
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: textC }}>
-                  {PL("👤 Profilo")}
+                  <span style={{display:"inline-flex",alignItems:"center",gap:6}}><PremiumProfileIcon dark={dark} />{PL("Profilo")}</span>
                 </div>
                 <div
                   style={{
@@ -2980,12 +3006,12 @@ export function ProfileCard({
           >
             {[
               [
-                "👤",
+                <PremiumProfileIcon dark={dark} />,
                 d.firstName || splitDisplayName(d.name || "").firstName || "—",
                 PL("Nome"),
               ],
               [
-                "👤",
+                <PremiumProfileIcon dark={dark} />,
                 d.lastName || splitDisplayName(d.name || "").lastName || "—",
                 PL("Cognome"),
               ],
@@ -3155,7 +3181,7 @@ export function ProfileCard({
                 <div
                   style={{
                     fontSize: 12,
-                    color: "#E24B4A",
+                    color: readableDarkText("#E24B4A", dark, dark ? "#3a1d1d" : "#fff0f0"),
                     background: dark ? "#3a1d1d" : "#fff0f0",
                     borderRadius: 8,
                     padding: "8px 10px",
@@ -3192,7 +3218,7 @@ export function ProfileCard({
                   disabled={emailLoading}
                   style={{
                     background: dark ? "#333" : "#f0f0f0",
-                    color: dark ? "#eee" : "#555",
+                    color: readableDarkText(dark ? "#eee" : "#555", dark, dark ? "#333" : "#f0f0f0"),
                     border: "none",
                     borderRadius: btnRadius,
                     padding: "10px 12px",
@@ -3293,7 +3319,7 @@ export function ProfileCard({
             </div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 15, fontWeight: 900, color: textC }}>
-                {PL("👤 Profilo")}
+                <span style={{display:"inline-flex",alignItems:"center",gap:6}}><PremiumProfileIcon dark={dark} />{PL("Profilo")}</span>
               </div>
               <div
                 style={{
@@ -3447,7 +3473,7 @@ export function ProfileCard({
                   "2px solid " +
                   (pNewsletter ? primaryC : dark ? "#8693A8" : "#8A98AB"),
                 background: pNewsletter ? primaryC : dark ? "#232338" : "#fff",
-                color: "#fff",
+                color: readableDarkText("#fff", dark, pNewsletter ? primaryC : dark ? "#232338" : "#fff"),
                 fontSize: 18,
                 fontWeight: 950,
                 lineHeight: 1,
@@ -3763,7 +3789,7 @@ export function ProfileCard({
               style={{
                 flex: 1,
                 background: primaryC,
-                color: "#fff",
+                color: readableDarkText("#fff", dark, primaryC),
                 border: "none",
                 borderRadius: btnRadius,
                 padding: "11px",
@@ -3796,7 +3822,7 @@ export function ProfileCard({
               style={{
                 padding: "10px 14px",
                 background: dark ? "#333" : "#f0f0f0",
-                color: dark ? "#eee" : "#555",
+                color: readableDarkText(dark ? "#eee" : "#555", dark, dark ? "#333" : "#f0f0f0"),
                 border: "none",
                 borderRadius: btnRadius,
                 cursor: "pointer",
@@ -3868,7 +3894,7 @@ export function ProfileCard({
                       border: "none",
                       borderRadius: 10,
                       background: primaryC,
-                      color: "#fff",
+                      color: readableDarkText("#fff", dark, primaryC),
                       fontWeight: 900,
                       cursor:
                         !photoEditorCrop || photoBusy

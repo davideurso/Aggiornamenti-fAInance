@@ -68,7 +68,7 @@ export function StableCurrencyPicker({value,onChange,exclude,allowNone,dark,text
     <input ref={inputRef} autoComplete="off" inputMode="search" placeholder={Lc("Cerca valuta, es. euro, dollaro, yen...")} value={query} onChange={function(e){setQuery(e.currentTarget.value);}} onKeyDown={function(e){e.stopPropagation();}} style={fieldStyle}/>
     <select value={value||""} onChange={function(e){onChange(e.currentTarget.value);}} style={fieldStyle}>
       {allowNone&&<option value="">{Lc("Nessuna")}</option>}
-      {list.map(function(c){return <option key={c.code} value={c.code}>{c.symbol} {c.code} — {c.name}</option>;})}
+      {list.map(function(c){return <option key={c.code} value={c.code} data-fainance-icon-ref={(c as any).icon || "\u{1F4C1}"}>{c.symbol} {c.code} — {c.name}</option>;})}
     </select>
     <div style={{fontSize:11,color:subC}}>{list.length} {Lc("valute mostrate")}{normalized?Lc(" per la ricerca"):""}.</div>
   </div>;

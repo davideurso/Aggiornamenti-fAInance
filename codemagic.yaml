@@ -20,16 +20,16 @@ workflows:
         bundle_identifier: it.fainanceapp.app
 
       vars:
-        IOS_BUILD_NUMBER: "253"
-        FAINANCE_IOS_VERSION: "2.1.1"
+        FAINANCE_IOS_VERSION: "2.2.0"
+        IOS_BUILD_NUMBER: "272"
         BUNDLE_ID: "it.fainanceapp.app"
         WIDGET_BUNDLE_ID: "it.fainanceapp.app.widgets"
         APPLE_TEAM_ID: "SSV4P8694F"
         XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
-        APP_VERSION: "2.1.1"
+        APP_VERSION: "2.2.0"
         VITE_FIREBASE_API_KEY: "AIzaSyB6AQpz2MWphyc2RGmELZUfb2AUhzfi1To"
-        VITE_FIREBASE_AUTH_DOMAIN: "fainance-a7794.firebaseapp.com"
+        VITE_FIREBASE_AUTH_DOMAIN: "auth.fainanceapp.it"
         VITE_FIREBASE_PROJECT_ID: "fainance-a7794"
         VITE_FIREBASE_STORAGE_BUCKET: "fainance-a7794.firebasestorage.app"
         VITE_FIREBASE_MESSAGING_SENDER_ID: "739607555867"
@@ -38,12 +38,12 @@ workflows:
     scripts:
       - name: Install dependencies
         script: |
-          npm install
+          npm ci
 
-      - name: Install Capacitor iOS platform
+      - name: Verify frozen release source
         script: |
-          CAP_VERSION=$(node -p "const p=require('./package.json'); const v=(p.dependencies && p.dependencies['@capacitor/core']) || (p.devDependencies && p.devDependencies['@capacitor/core']) || 'latest'; console.log(v)")
-          npm install @capacitor/ios@$CAP_VERSION
+          test "$(git rev-parse HEAD)" = "$FAINANCE_EXPECTED_COMMIT" || exit 1
+          node tools/verify-testflight-source.mjs
 
       - name: Add iOS platform if missing
         script: |
@@ -53,8 +53,8 @@ workflows:
 
       - name: Build web app
         script: |
+          export NODE_OPTIONS="--max-old-space-size=6144"
           npm run build
-
       - name: Sync Capacitor iOS
         script: |
           npx cap sync ios
@@ -77,7 +77,7 @@ workflows:
         script: |
           cd ios/App
 
-          export IOS_BUILD_NUMBER="253"
+          export IOS_BUILD_NUMBER="272"
           case "$IOS_BUILD_NUMBER" in
             *[!0-9]*|"") IOS_BUILD_NUMBER="1" ;;
           esac
@@ -112,6 +112,11 @@ workflows:
 
           xcrun agvtool new-marketing-version "$APP_VERSION" || true
           xcrun agvtool new-version -all "$IOS_BUILD_NUMBER" || true
+
+          /usr/bin/plutil -lint App/Info.plist || exit 1
+          if [ -f "FainanceWidgets/Info.plist" ]; then
+            /usr/bin/plutil -lint FainanceWidgets/Info.plist || exit 1
+          fi
 
           cat App/Info.plist
 
@@ -296,8 +301,13 @@ workflows:
             -exportPath "$CM_BUILD_DIR/build/ios/ipa" \
             -exportOptionsPlist "$CM_BUILD_DIR/export_options.plist"
 
+      - name: Verify signed IPA before upload
+        script: |
+          python3 tools/verify-testflight-ipa.py build/ios/ipa/*.ipa
+
     artifacts:
       - build/ios/ipa/*.ipa
+      - testflight-verification.json
       - /tmp/xcodebuild_logs/*.log
       - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
 
