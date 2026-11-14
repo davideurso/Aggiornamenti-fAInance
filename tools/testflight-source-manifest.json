@@ -175,8 +175,8 @@
     },
     {
       "path": "ios/App/App/Info.plist",
-      "sha256": "f18436d9179906de8456ba51364b67e5e4fe464f9ecc61c533e8b454f513549a",
-      "normalizedSha256": "f18436d9179906de8456ba51364b67e5e4fe464f9ecc61c533e8b454f513549a"
+      "sha256": "b03409cd5c5afba7b715de142e5a748423c5070bc28c1c156f63e679c1d28140",
+      "normalizedSha256": "b03409cd5c5afba7b715de142e5a748423c5070bc28c1c156f63e679c1d28140"
     },
     {
       "path": "ios/App/CapApp-SPM/.gitignore",
