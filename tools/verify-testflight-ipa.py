@@ -4,7 +4,7 @@ with zipfile.ZipFile(ipa) as z:
     root=next(n.rsplit('/',1)[0]+'/' for n in z.namelist() if n.startswith('Payload/') and n.count('/')==2 and n.endswith('/Info.plist'))
     info=plistlib.loads(z.read(root+'Info.plist'))
     assert info['CFBundleIdentifier']=='it.fainanceapp.app'
-    assert info['CFBundleShortVersionString']=='2.2.0' and info['CFBundleVersion']=='272'
+    assert info['CFBundleShortVersionString']=='2.2.1' and info['CFBundleVersion']=='273'
     assert info['ITSAppUsesNonExemptEncryption'] is False
     google=plistlib.loads(z.read(root+'GoogleService-Info.plist'))
     assert google['PROJECT_ID']=='fainance-a7794'
@@ -13,7 +13,7 @@ with zipfile.ZipFile(ipa) as z:
     assert config['plugins']['FirebaseAuthentication']['authDomain']=='auth.fainanceapp.it'
     widget=next(n for n in z.namelist() if '.appex/Info.plist' in n)
     wi=plistlib.loads(z.read(widget))
-    assert wi['CFBundleIdentifier']=='it.fainanceapp.app.widgets' and wi['CFBundleVersion']=='272' and wi['CFBundleShortVersionString']=='2.2.0'
+    assert wi['CFBundleIdentifier']=='it.fainanceapp.app.widgets' and wi['CFBundleVersion']=='273' and wi['CFBundleShortVersionString']=='2.2.1'
     assets=0
     if pathlib.Path('dist').exists():
         for p in pathlib.Path('dist').rglob('*'):
@@ -30,6 +30,6 @@ with zipfile.ZipFile(ipa) as z:
             assert profile['Entitlements']['application-identifier']=='SSV4P8694F.it.fainanceapp.app'
             assert profile['Entitlements'].get('get-task-allow') is not True
             assert not profile.get('ProvisionedDevices') and not profile.get('ProvisionsAllDevices')
-report={'status':'IPA_VERIFIED','version':'2.2.0','build':272,'bundleId':info['CFBundleIdentifier'],'firebaseProject':google['PROJECT_ID'],'bytes':ipa.stat().st_size,'sha256':hashlib.sha256(ipa.read_bytes()).hexdigest(),'webAssetsVerified':assets,'signatureVerifiedOnMac':platform.system()=='Darwin'}
+report={'status':'IPA_VERIFIED','version':'2.2.1','build':273,'bundleId':info['CFBundleIdentifier'],'firebaseProject':google['PROJECT_ID'],'bytes':ipa.stat().st_size,'sha256':hashlib.sha256(ipa.read_bytes()).hexdigest(),'webAssetsVerified':assets,'signatureVerifiedOnMac':platform.system()=='Darwin'}
 pathlib.Path('testflight-verification.json').write_text(json.dumps(report,indent=2))
 print(json.dumps(report))

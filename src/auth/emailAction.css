@@ -1,0 +1,16 @@
+.fainance-email-action { background: #F7F9FC !important; color: #14263D; }
+.fainance-email-action > div { border: 1px solid #D8E1EA !important; border-radius: 20px !important; box-shadow: 0 12px 36px #052a5f12 !important; }
+.fainance-email-action > div > div:first-child { background: #fff !important; border-color: #D8E1EA !important; }
+.fainance-email-action h1 { color: #052A5F !important; font-size: clamp(24px, 5vw, 29px) !important; line-height: 1.25 !important; }
+.fainance-email-action button { background: #FAAE12 !important; color: #031A3D !important; border: 0 !important; box-shadow: none !important; border-radius: 12px !important; }
+.fainance-email-action button:focus-visible { outline: 3px solid #245B8E; outline-offset: 4px; }
+.fainance-email-action img { filter: none !important; }
+@media (prefers-color-scheme: dark) {
+  .fainance-email-action { background: #081522 !important; color: #F4F7FB; }
+  .fainance-email-action > div { background: #10243A !important; border-color: #29455F !important; }
+  .fainance-email-action h1 { color: #F4F7FB !important; }
+  .fainance-email-action p { color: #D8E1EA !important; }
+}
+@media (max-width: 380px) {
+  .fainance-email-action > div > div:last-child { padding: 24px 18px !important; }
+}

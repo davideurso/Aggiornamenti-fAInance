@@ -1,4 +1,5 @@
 import {recurringMissingFields} from './finance/recurringValidation.js';
+import {validInstallmentCount, validateInstallmentInput} from './finance/installmentInput.js';
 import {recurringValidationMessage} from './i18n/recurringValidation.js';
 import {mergePatrimony,patrimonyHasData} from './finance/patrimonyMerge.js';
 import {catalogRemapText} from './i18n/catalogRemapTranslations';
@@ -827,10 +828,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
     );
   }
   function setSafe(v) {
-    var n = parseInt(v, 10);
-    if (isNaN(n) || n < 1) n = 1;
-    if (n > 240) n = 240;
-    onChange(n);
+    onChange(v === "" ? "" : Number(v));
   }
   return (
     <div
@@ -852,7 +850,7 @@ export function RatePicker({ value, onChange, direction, onDirectionChange }) {
             type="number"
             min={1}
             max={240}
-            value={value || 1}
+            value={value ?? ""}
             onChange={function (e) {
               setSafe(e.target.value);
             }}
@@ -3915,7 +3913,7 @@ export function MovementInstallmentsPanel({ value, setValue }: any) {
           >
             {t.instalmentIn} {f.rate} {t.months} -{" "}
             {smallDecimalNode(fmtAmt(
-              parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
+              parseMoney(f.amount) && validInstallmentCount(f.rate) ? parseMoney(f.amount) / Number(f.rate) : 0,
               sym
             ), ctx.lang)}{" "}
             {t.perMonth}
@@ -4255,6 +4253,7 @@ export function ExpenseForm({ onSave, type, initialValue, draftNamespace }:any) 
       : !!String(f.itype || "").trim());
   function save() {
     if (!expenseFormValid) return;
+    if (!validateInstallmentInput(f, ctx)) return;
     var amount = parseMoney(f.amount);
     var foreign = String(f.currency || ctx.currency) !== String(ctx.currency);
     var item = {
@@ -6395,6 +6394,7 @@ export function BulkEntry({ onSave, type, maxRows, limitMessage }) {
     );
   });
   function saveAll() {
+    if (rows.some(function (r) { return !validateInstallmentInput(r, ctx); })) return;
     var valid = rows.filter(function (r) {
       return (
         parseMoney(r.amount) > 0 &&
@@ -14496,6 +14496,7 @@ export function EditModal({ item, isExp, onSave, onClose }) {
         ).trim());
   function save() {
     if (!editMovementValid) return;
+    if (!validateInstallmentInput(f, ctx)) return;
     var amount = parseMoney(f.amount);
     var foreign = String(f.currency || ctx.currency) !== String(ctx.currency);
     var payload = {
@@ -14720,13 +14721,13 @@ export function EditModal({ item, isExp, onSave, onClose }) {
                 >
                   {f.rate} {t.months} -{" "}
                   {smallDecimalNode(fmtAmt(
-                    parseMoney(f.amount) ? parseMoney(f.amount) / f.rate : 0,
+                    parseMoney(f.amount) && validInstallmentCount(f.rate) ? parseMoney(f.amount) / Number(f.rate) : 0,
                     sym
                   ), ctx.lang)}
                   {t.perMonth}
                 </div>
                 <RatePicker
-                  value={f.rate || 12}
+                  value={f.rate ?? 12}
                   direction={f.rateDirection || "forward"}
                   onChange={function (n) {
                     setF(function (p) {

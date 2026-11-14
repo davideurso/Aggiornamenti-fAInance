@@ -219,6 +219,8 @@
 .fainance-tools .tool-main-navigation .tool-main-tabs{margin:0;padding:0;border:0;background:transparent;box-shadow:none;}
 .fainance-tools .tool-main-tabs-utilities{grid-template-columns:repeat(2,minmax(0,1fr));}
 .fainance-tools .tool-main-tabs-simulators{grid-template-columns:repeat(3,minmax(0,1fr));}
+.fainance-tools .tool-form-grid.tool-paired-fields{grid-template-columns:repeat(2,minmax(0,1fr));}
+.fainance-tools .tool-inflation-fields>.tool-field:first-child{grid-column:1 / -1;}
 .fainance-tools .tool-main-tabs-automations{grid-template-columns:repeat(2,minmax(0,1fr));}
 .fainance-tools .tool-main-navigation .tool-main-tabs button{grid-column:auto!important;min-height:44px;border-radius:13px;}
 
@@ -269,6 +271,18 @@
 }
 .fainance-tools .tool-result-panel>.tool-section-kicker{color:var(--tool-link,var(--tool-primary));margin-bottom:2px;}
 .fainance-tools .tool-result-panel .tool-result-hero{margin-top:10px;}
+
+.fainance-tools .tool-what-if .tool-simulator-title{margin-bottom:0;}
+.fainance-tools .tool-what-if .tool-what-if-fields{grid-template-columns:repeat(2,minmax(0,1fr));}
+.fainance-tools .tool-what-if .tool-field{min-width:0;}
+.fainance-tools .tool-what-if .tool-field-label{min-height:30px;}
+.fainance-tools .tool-what-if .tool-field-label button{flex-shrink:0;}
+.fainance-tools .tool-what-if .tool-field input{min-width:0;}
+.fainance-tools .tool-what-if .tool-action-row{margin-top:12px;}
+.fainance-tools .tool-what-if .tool-form-grid{margin-top:12px;}
+.fainance-tools .tool-what-if .tool-result-panel>.tool-section-kicker{margin-top:12px;}
+.fainance-tools .tool-what-if-result-anchor{min-height:var(--app-viewport-height,100dvh);}
+.fainance-tools .tool-what-if-result-anchor .tool-question{margin-top:12px;}
 
 .fainance-tools .tool-quick-scenarios{
   margin-top:14px;

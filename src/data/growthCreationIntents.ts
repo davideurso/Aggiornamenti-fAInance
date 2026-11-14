@@ -1,8 +1,8 @@
 import {firebaseApp,fbAuth} from '../firebase/client';
 type Family='goals'|'rules'|'budgetVersions'|'budgetOverrides'|'alerts'|'shareProjects';
 type Intent={family:Family;entityId:string;nonce:string};
-const enabled=()=>firebaseApp.options.projectId==='fainance-test-20260823195207';
-const key=(uid:string)=>'user_'+uid+'_growth_creation_pending_test_v1';
+const enabled=()=>['fainance-test-20260823195207','fainance-a7794'].includes(String(firebaseApp.options.projectId));
+const key=(uid:string)=>'user_'+uid+(firebaseApp.options.projectId==='fainance-a7794'?'_growth_creation_pending_production_v1':'_growth_creation_pending_test_v1');
 const families:Family[]=['goals','rules','budgetVersions','budgetOverrides','alerts','shareProjects'];
 const failed=new Set<string>();
 const failureKey=(uid:string)=>key(uid)+'_incomplete';

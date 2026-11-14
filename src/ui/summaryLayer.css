@@ -21,3 +21,8 @@ body:has([data-fainance-overlay="true"]) [data-app-summary] { visibility: hidden
   height: var(--app-viewport-height,100dvh) !important;
   min-height: 0 !important;
 }
+html[data-app-keyboard] .fainance-mobile-nav {
+  position: absolute;
+  top: 100%;
+  visibility: hidden;
+}

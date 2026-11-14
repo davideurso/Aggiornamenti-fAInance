@@ -1,3 +1,4 @@
+import { VerifyEmailPending } from './auth/VerifyEmailPending';
 import { commitNativeShareActivity, useNativeShareCommit } from './firebase/shareActivityCommit';
 import { syncMundelyShareDeletionToMundely } from './integrations/mundelyBridge';
 import {mergeSensitiveRecords} from './integrations/chatgptSensitiveMerge.js';
@@ -5,9 +6,10 @@ import {preferLocalAIConsent,pendingChatgptLanguage} from './integrations/chatgp
 import {resolveChatgptTestRoute} from './integrations/chatgptTestRoutes.js';
 import {appEnvironment as chatgptAppEnvironment,firebaseConfig as chatgptFirebaseConfig} from './config/env';
 import {trackAccountWrite,skipTestAccountEcho} from './data/accountSnapshotEcho';
-import {noteGrowthCreations} from './data/growthCreationIntents';
+import {noteGrowthCreations,pendingGrowthCreations,acknowledgeGrowthCreations} from './data/growthCreationIntents';
 import { notifyGrowthSourceCommitted } from "./data/growthMetricsCommit";
 import { growthLocalCounts } from "./data/growthLocalCounts";
+import { prepareGrowthInventory, trackGrowthFinanceChanges, commitAccountWithGrowth, type GrowthMovementEvidence } from "./data/growthLocalInventory";
 import { civilToday, derivePatrimony } from './finance/patrimonyAutoBalance.js';
 import { activeShareActivities, shareCashMovementKey, shareCashMovementsForUser, shareProjectsForRead } from './finance/shareCashMovements.js';
 import { incomeReceiptFields } from "./finance/incomeReceipt";
@@ -604,6 +606,7 @@ function AdminOnlyApp({ session, onLogout }: { session: AdminSession; onLogout: 
 }
 
 function AppWithLogin() {
+  const [verificationPendingUser, setVerificationPendingUser] = useState<any>(null);
   var [fbUser, setFbUser] = useState(undefined); // undefined=loading, null=not logged in
   var [userData, setUserData] = useState(null);
   var [adminSession, setAdminSession] = useState<AdminSession | null | undefined>(undefined);
@@ -701,6 +704,19 @@ function AppWithLogin() {
       return;
     }
 
+    if (chatgptAppEnvironment === 'test' && user && !user.emailVerified && user.providerData?.some((provider: any) => provider.providerId === 'password')) {
+      let registering = false;
+      try { registering = sessionStorage.getItem('fainance_registration_pending_email_v1') === String(user.email || '').trim().toLowerCase(); } catch {}
+      const verificationRequired = registering || await accountRequiresEmailVerification(user).catch(() => true);
+      if (currentAuthUser()?.uid !== user.uid) return;
+      if (verificationRequired) {
+        setAdminSession(null); setFbUser(null); setUserData(null);
+        if (!registering) setVerificationPendingUser(user);
+        return;
+      }
+    }
+    setVerificationPendingUser(null);
+
     // Resolve the Firebase custom claim before loading the normal fAInance account.
     // Administrative accounts are routed to the dedicated Admin shell and never
     // initialize the financial UI or read userData/{uid}.
@@ -731,6 +747,7 @@ function AppWithLogin() {
         if (user && user.uid) {
           void finishAuthUser(user);
         } else {
+          setVerificationPendingUser(null);
           setAdminSession(null);
           setFbUser(null);
           setUserData(null);
@@ -752,7 +769,7 @@ function AppWithLogin() {
   async function forceLogout() {
     try {
       var uid = fbUser && fbUser.uid ? fbUser.uid : "";
-      if (uid) await closeCurrentDeviceSession(uid).catch(function () {});
+      if (uid) void closeCurrentDeviceSession(uid).catch(function () {});
       await signOutAccount();
     } finally {
       setAdminSession(null);
@@ -788,6 +805,10 @@ function AppWithLogin() {
       });
     }, (error) => console.warn("Profile photo synchronization failed", error.code));
   }, [photoProfileUid, adminSession?.isAdmin]);
+
+  if (verificationPendingUser && chatgptAppEnvironment === 'test') return <VerifyEmailPending user={verificationPendingUser} onVerified={() => {
+    if (currentAuthUser()?.uid === verificationPendingUser.uid && verificationPendingUser.emailVerified) void finishAuthUser(verificationPendingUser);
+  }} />;
 
   if (fbUser === undefined)
     return (
@@ -2822,6 +2843,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   // the engine has passed isolated tests and a separate migration is added.
   var movementSyncV2InitiallyActive = isMovementSyncV2LocallyActive(userId);
   var movementSyncV2ActiveRef = useRef(movementSyncV2InitiallyActive);
+  var growthMovementEvidenceRef = useRef<GrowthMovementEvidence | null>(null);
   var movementBulkInProgressRef = useRef(false);
   var movementBulkCancelRef = useRef(null);
   var [movementBulkBusy, setMovementBulkBusy] = useState(false);
@@ -4932,7 +4954,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   function setFinanceEvolution(nextValue) {
     const next = migrateFinanceEvolution(typeof nextValue === 'function' ? nextValue(financeEvolutionRef.current) : nextValue);
     const now = Date.now();
-    const nextWithRuleSync = migrateFinanceEvolution(trackAutomaticRuleLocalChange(financeEvolutionRef.current, next, now));
+    const nextWithRuleSync = migrateFinanceEvolution(trackGrowthFinanceChanges(financeEvolutionRef.current, trackAutomaticRuleLocalChange(financeEvolutionRef.current, next, now), now));
     const changed = !syncJsonEqual(nextWithRuleSync, financeEvolutionRef.current);
     // Preserve the previous durable and in-memory document when storage rejects
     // an edit. This setter is also called by React effects and timed maintenance.
@@ -7509,11 +7531,15 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       // Bulk transactions read/guard each document and finish with a full
       // server verification. Suspend the expensive realtime collection target
       // until that refresh completes; normal offline writes remain unchanged.
+      growthMovementEvidenceRef.current = null;
       if (!movementSyncV2Active || !userId) return;
       if (movementBulkBusy) return;
       return watchMovementSyncV2(
         userId,
-        function (records) {
+        function (records, meta) {
+          growthMovementEvidenceRef.current = { uid: String(userId),
+            confirmed: !meta.fromCache && !meta.hasPendingWrites,
+            rows: records.map(({kind, recordId, deleted, updatedAtMs, deletedAtMs}) => ({kind, recordId, deleted, updatedAtMs, deletedAtMs})) };
           if (movementBulkInProgressRef.current) {
             movementBulkLatestSnapshotRef.current = records;
             movementBulkSnapshotSequenceRef.current += 1;
@@ -7531,6 +7557,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
           setIncomes(state.incomes, true);
         },
         function (error) {
+          growthMovementEvidenceRef.current = null;
           console.error("Movement Sync V2 listener failed", error);
         }
       );
@@ -11436,8 +11463,17 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     );
     write.updatedAtMs = Number(candidate.updatedAtMs || Date.now());
     assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
-    if (transaction) transaction.set(docRef, write, { merge: true });
-    else await setDoc(docRef, write, { merge: true });
+    const inventory = await prepareGrowthInventory({ ...candidate,
+      expenses: movementSyncV2ActiveRef.current ? expenses : candidate.expenses,
+      incomes: movementSyncV2ActiveRef.current ? incomes : candidate.incomes,
+    }, { projectId: String(fbDb.app.options.projectId || ""), owner: String(docRef.id),
+      hydrated: firestoreHydratedRef.current && !applyingFirestoreRef.current,
+      movementReady: !movementSyncV2MigrationRunningRef.current && !movementBulkInProgressRef.current,
+      movementV2: movementSyncV2ActiveRef.current, movementEvidence: growthMovementEvidenceRef.current,
+      creationIntents: pendingGrowthCreations(String(docRef.id)) });
+    assertFinanceWriteReady(financeSchemaCompatibleRef.current, userStateAuthorityV6ValidatedUidRef.current, String(userId || ""));
+    await commitAccountWithGrowth(fbDb, docRef, write, inventory, transaction, { doc, setDoc, writeBatch });
+    if(!transaction&&fbDb.app.options.projectId==='fainance-a7794')acknowledgeGrowthCreations(String(docRef.id),(inventory?.creationReceipts||[]).map(r=>r.nonce));
     return write;
     }
     var write: any;
@@ -12730,60 +12766,9 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   }
 
   async function flushUserStateAndLogout() {
-    // V6 writes an ordinary private backup using the already-established
-    // backup schema, then verifies that exact document from the server.
-    if (!navigator.onLine) {
-      setToast({
-        text: "Per uscire dall'account serve una connessione: prima devo confermare le tue impostazioni nel cloud.",
-        type: "error",
-        color: "#E24B4A",
-        icon: "☁️",
-      });
-      return false;
-    }
-
-    await new Promise(function (resolve) {
-      setTimeout(resolve, 80);
-    });
-
-    var confirmed: any = false;
-    try {
-      // Bound the logout UI wait, not the underlying durable write. No logout
-      // or second backup is allowed while the original ACK remains pending.
-      confirmed = await fainancePromiseTimeout(saveUserStateAuthorityV6Direct("logout", true), 15000, "USER_STATE_SYNC_PENDING");
-    } catch (error) {
-      setToast({ text: L("Sincronizzazione ancora in corso. Attendi la conferma prima di uscire."), type: "warning", color: "#EF9F27", icon: "☁️" });
-      return false;
-    }
-
-    if (!confirmed) {
-      var detail = "";
-      try {
-        detail = String(
-          localStorage.getItem(
-            userKey("user_state_authority_v6_last_error")
-          ) || ""
-        );
-      } catch (e) {}
-      setToast({
-        text:
-          "Impossibile confermare le impostazioni nel cloud V6" +
-          (detail ? " (" + detail + ")" : "") +
-          ". Logout annullato.",
-        type: "error",
-        color: "#E24B4A",
-        icon: "☁️",
-      });
-      return false;
-    }
-
-    // Align the main account snapshot too, but V6 is already durably confirmed
-    // in the private backup document before logout can continue.
-    markPendingAccountSync(true);
-    try {
-      await saveToFirestore();
-    } catch (e) {}
-
+    // Local account data and pending markers remain available to the same UID.
+    // Neither cloud acknowledgements nor recovery storage may veto logout.
+    try { void persistCompleteAccountRecoverySnapshot("logout").catch(function () {}); } catch (e) {}
     return Promise.resolve(onLogout && onLogout());
   }
 
@@ -17279,7 +17264,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.2.0";
+  var FAINANCE_CURRENT_VERSION = "2.2.1";
   var FAINANCE_CURRENT_VERSION_CODE = 239;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
@@ -24829,7 +24814,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       } catch { payload.canonicalCustomIcons = {}; }
       var payloadString = JSON.stringify(payload);
       try {
-        if (bridge && bridge.setWidgetAvailability) {
+        if (bridge && !bridge.saveAndUpdateWidgets && bridge.setWidgetAvailability) {
           bridge
             .setWidgetAvailability({
               currentPlan: String(
@@ -24845,7 +24830,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
             })
             .catch(function () {});
         }
-        if (bridge && bridge.setAvailableWidgets) {
+        else if (bridge && !bridge.saveAndUpdateWidgets && bridge.setAvailableWidgets) {
           bridge
             .setAvailableWidgets({
               types: payload.widget_available_types || [],
@@ -25197,6 +25182,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       if (bridge && bridge.saveAndUpdateWidgets) {
         bridge
           .saveAndUpdateWidgets({
+            forceRefresh: !!showMessage,
             settings: payloadString,
             quickAdd: quickString,
             note: noteString,
@@ -27649,7 +27635,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       );
     if (tab === "shopping")
       return <StableNestedPanelHost key="shopping" render={ShoppingPanel} />;
-    if (tab === "tools") return <ToolsPanel key={userId}/>;
+    if (tab === "tools") return <ToolsPanel key={userId} renderAnomalies={onBack => <ConsulenteAIPanel onBackFromAnomalies={onBack} />}/>;
     if (tab === "stats") return <StatsPanel />;
     if (tab === "consulenteAI") return <ConsulenteAIPanel />;
     if (tab === "budget") return <BudgetPlanPanel />;

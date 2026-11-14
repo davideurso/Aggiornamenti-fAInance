@@ -12,19 +12,19 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.4.1"),
-        .package(name: "AparajitaCapacitorBiometricAuth", path: "../../../node_modules/@aparajita/capacitor-biometric-auth"),
-        .package(name: "CapacitorCommunityFileOpener", path: "../../../node_modules/@capacitor-community/file-opener"),
-        .package(name: "CapacitorCommunityFirebaseAnalytics", path: "../../../node_modules/@capacitor-community/firebase-analytics"),
-        .package(name: "CapacitorFirebaseAuthentication", path: "../../../node_modules/@capacitor-firebase/authentication"),
-        .package(name: "CapacitorApp", path: "../../../node_modules/@capacitor/app"),
-        .package(name: "CapacitorCamera", path: "../../../node_modules/@capacitor/camera"),
-        .package(name: "CapacitorFilesystem", path: "../../../node_modules/@capacitor/filesystem"),
-        .package(name: "CapacitorPreferences", path: "../../../node_modules/@capacitor/preferences"),
-        .package(name: "CapacitorPushNotifications", path: "../../../node_modules/@capacitor/push-notifications"),
-        .package(name: "CapacitorShare", path: "../../../node_modules/@capacitor/share"),
-        .package(name: "CapawesomeCapacitorFilePicker", path: "../../../node_modules/@capawesome/capacitor-file-picker"),
-        .package(name: "CapgoCapacitorContacts", path: "../../../node_modules/@capgo/capacitor-contacts"),
-        .package(name: "CapgoCapacitorSpeechRecognition", path: "../../../node_modules/@capgo/capacitor-speech-recognition")
+        .package(name: "AparajitaCapacitorBiometricAuth", path: "..\..\..\node_modules\@aparajita\capacitor-biometric-auth"),
+        .package(name: "CapacitorCommunityFileOpener", path: "..\..\..\node_modules\@capacitor-community\file-opener"),
+        .package(name: "CapacitorCommunityFirebaseAnalytics", path: "..\..\..\node_modules\@capacitor-community\firebase-analytics"),
+        .package(name: "CapacitorFirebaseAuthentication", path: "..\..\..\node_modules\@capacitor-firebase\authentication"),
+        .package(name: "CapacitorApp", path: "..\..\..\node_modules\@capacitor\app"),
+        .package(name: "CapacitorCamera", path: "..\..\..\node_modules\@capacitor\camera"),
+        .package(name: "CapacitorFilesystem", path: "..\..\..\node_modules\@capacitor\filesystem"),
+        .package(name: "CapacitorPreferences", path: "..\..\..\node_modules\@capacitor\preferences"),
+        .package(name: "CapacitorPushNotifications", path: "..\..\..\node_modules\@capacitor\push-notifications"),
+        .package(name: "CapacitorShare", path: "..\..\..\node_modules\@capacitor\share"),
+        .package(name: "CapawesomeCapacitorFilePicker", path: "..\..\..\node_modules\@capawesome\capacitor-file-picker"),
+        .package(name: "CapgoCapacitorContacts", path: "..\..\..\node_modules\@capgo\capacitor-contacts"),
+        .package(name: "CapgoCapacitorSpeechRecognition", path: "..\..\..\node_modules\@capgo\capacitor-speech-recognition")
     ],
     targets: [
         .target(

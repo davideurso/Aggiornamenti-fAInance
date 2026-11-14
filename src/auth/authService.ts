@@ -1,9 +1,10 @@
+import { getFunctions, httpsCallable } from "firebase/functions";
+import { appEnvironment } from "../config/env";
 import type { User } from "firebase/auth";
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInWithEmailAndPassword,
-  sendEmailVerification,
   signOut,
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -117,8 +118,16 @@ export async function sendAccountEmailVerification(user: User, languageCode?: st
     // best effort
   }
 
-  // FAINANCE_V95_FIREBASE_STANDARD_VERIFICATION
-  await sendEmailVerification(user);
+  const expectedProject = appEnvironment === 'test' ? 'fainance-test-20260823195207' : 'fainance-a7794';
+  if (fbAuth.app.options.projectId !== expectedProject) throw new Error('VERIFICATION_PROJECT_MISMATCH');
+  const sender = appEnvironment === 'test' ? 'sendFainanceTestVerificationEmail' : 'sendFainanceVerificationEmail';
+  try {
+    await httpsCallable(getFunctions(fbAuth.app, 'europe-west1'), sender)({ language: languageCode || fbAuth.languageCode || 'it' });
+    try { sessionStorage.setItem('fainance_verification_sent_' + user.uid, '1'); } catch {}
+  } catch (error: any) {
+    if (error?.code === 'functions/resource-exhausted') error.code = 'auth/too-many-requests';
+    throw error;
+  }
 }
 
 export async function reloadAccountUser(user: User): Promise<User> {
@@ -138,7 +147,8 @@ export function watchAuthState(
 }
 
 export async function signOutAccount(): Promise<void> {
-  try {
+  // Web auth controls access to the app. Native cleanup must not hold it open.
+  const nativeCleanup = async () => {
     if (typeof window !== "undefined") {
       const capacitor = (window as any).Capacitor;
       if (capacitor?.isNativePlatform?.()) {
@@ -152,7 +162,7 @@ export async function signOutAccount(): Promise<void> {
         }
       }
     }
-  } finally {
-    await signOut(fbAuth).catch(() => undefined);
-  }
+  };
+  void nativeCleanup().catch(() => undefined);
+  await signOut(fbAuth);
 }

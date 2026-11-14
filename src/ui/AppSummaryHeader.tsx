@@ -4,21 +4,57 @@ import './summaryLayer.css';
 
 export function AppViewport() {
   useLayoutEffect(() => {
+    const root = document.documentElement;
+    let restingHeight = 0;
+    let viewportWidth = 0;
+    let frame = 0;
+    let appliedHeight = -1;
+    let appliedTop = -1;
+    const editable = 'textarea:not([readonly]), input:not([readonly]):is(:not([type]), [type="text"], [type="number"], [type="search"], [type="email"], [type="url"], [type="tel"], [type="password"]), [contenteditable]:not([contenteditable="false"])';
     const update = () => {
       const vv = window.visualViewport;
-      document.documentElement.style.setProperty('--app-viewport-height', (vv?.height || window.innerHeight) + 'px');
-      document.documentElement.style.setProperty('--app-viewport-top', (vv?.offsetTop || 0) + 'px');
+      const height = vv?.height || window.innerHeight;
+      const width = window.innerWidth;
+      const editing = document.activeElement?.matches(editable);
+      if (width !== viewportWidth) {
+        viewportWidth = width;
+        restingHeight = 0;
+      }
+      const keyboard = Math.abs((vv?.scale ?? 1) - 1) < 0.01 &&
+        (editing || root.hasAttribute('data-app-keyboard')) && restingHeight - height > 120;
+      if (!keyboard && (!editing || !restingHeight || height > restingHeight)) restingHeight = height;
+      if (root.hasAttribute('data-app-keyboard') !== keyboard) root.toggleAttribute('data-app-keyboard', keyboard);
+      if (height !== appliedHeight) {
+        appliedHeight = height;
+        root.style.setProperty('--app-viewport-height', height + 'px');
+      }
+      const top = vv?.offsetTop || 0;
+      if (top !== appliedTop) {
+        appliedTop = top;
+        root.style.setProperty('--app-viewport-top', top + 'px');
+      }
+    };
+    const afterFocus = (event: FocusEvent) => {
+      if (!(event.target instanceof Element && event.target.matches(editable)) && !root.hasAttribute('data-app-keyboard')) return;
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(update);
     };
     update();
     window.addEventListener('resize', update);
     window.visualViewport?.addEventListener('resize', update);
     window.visualViewport?.addEventListener('scroll', update);
+    document.addEventListener('focusin', afterFocus);
+    document.addEventListener('focusout', afterFocus);
     return () => {
+      window.cancelAnimationFrame(frame);
       window.removeEventListener('resize', update);
       window.visualViewport?.removeEventListener('resize', update);
       window.visualViewport?.removeEventListener('scroll', update);
-      document.documentElement.style.removeProperty('--app-viewport-height');
-      document.documentElement.style.removeProperty('--app-viewport-top');
+      document.removeEventListener('focusin', afterFocus);
+      document.removeEventListener('focusout', afterFocus);
+      root.removeAttribute('data-app-keyboard');
+      root.style.removeProperty('--app-viewport-height');
+      root.style.removeProperty('--app-viewport-top');
     };
   }, []);
   return null;

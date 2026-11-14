@@ -6,6 +6,7 @@ import GoogleMobileAds
 @objc(FainanceAdsPlugin)
 public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate {
     private var bannerView: GADBannerView?
+    private var bannerTopConstraint: NSLayoutConstraint?
     private var rewardedAd: GADRewardedAd?
     private var rewardedCall: CAPPluginCall?
     private var rewardedEarned = false
@@ -32,15 +33,26 @@ public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate {
                 call.reject("Root view controller not available")
                 return
             }
+            let cssTop = call.getDouble("topMarginCssPx") ?? 0
+            let webView = self.bridge?.webView
+            let webOrigin = webView.map { $0.convert($0.bounds, to: root.view).minY } ?? 0
+            let top = max(0, webOrigin + CGFloat(cssTop) * (webView?.scrollView.zoomScale ?? 1))
+            if let existing = self.bannerView, existing.adUnitID == adUnitId {
+                self.bannerTopConstraint?.constant = top
+                call.resolve(["success": true])
+                return
+            }
             self.hideBannerView()
             let banner = GADBannerView(adSize: GADAdSizeBanner)
             banner.adUnitID = adUnitId
             banner.rootViewController = root
             banner.translatesAutoresizingMaskIntoConstraints = false
             root.view.addSubview(banner)
+            let topConstraint = banner.topAnchor.constraint(equalTo: root.view.topAnchor, constant: top)
+            self.bannerTopConstraint = topConstraint
             NSLayoutConstraint.activate([
                 banner.centerXAnchor.constraint(equalTo: root.view.centerXAnchor),
-                banner.bottomAnchor.constraint(equalTo: root.view.safeAreaLayoutGuide.bottomAnchor)
+                topConstraint
             ])
             banner.load(GADRequest())
             self.bannerView = banner
@@ -103,6 +115,8 @@ public class FainanceAdsPlugin: CAPPlugin, GADFullScreenContentDelegate {
     }
 
     private func hideBannerView() {
+        bannerTopConstraint?.isActive = false
+        bannerTopConstraint = nil
         bannerView?.removeFromSuperview()
         bannerView = nil
     }

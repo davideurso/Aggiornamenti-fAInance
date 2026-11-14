@@ -105,6 +105,8 @@ export function calculateInflationPower({amount,inflationRate,years}){
   return {amount:currentAmount,inflationRate:inflation,years:horizon,factor,futureNeeded,futureBuyingPower,purchasingLoss};
 }
 
+const applyMonthlySavings=(balance,monthly,rate)=>balance*(1+rate)+monthly;
+
 export function calculateSavingsHorizon({goal,current=0,monthlySavings,annualRate=0,maxMonths=1200}){
   const goalValue=finiteNumber(goal,'GOAL',{min:0.01});
   const currentValue=finiteNumber(current,'CURRENT',{min:0});
@@ -115,13 +117,23 @@ export function calculateSavingsHorizon({goal,current=0,monthlySavings,annualRat
   const monthlyRate=annual/100/12;
   let balance=currentValue,months=0;
   while(balance<goalValue&&months<limit){
-    balance=balance*(1+monthlyRate)+monthly;
+    balance=applyMonthlySavings(balance,monthly,monthlyRate);
     months++;
   }
   if(balance<goalValue)throw new Error('GOAL_TOO_FAR');
   const totalContributions=currentValue+monthly*months;
   const projectedGrowth=Math.max(0,balance-totalContributions);
   return {goal:goalValue,current:currentValue,monthlySavings:monthly,annualRate:annual,months,projectedBalance:balance,totalContributions,projectedGrowth};
+}
+
+export function projectMonthlySavings({monthlySavings,months,annualRate=0}){
+  const monthly=finiteNumber(monthlySavings,'MONTHLY_SAVINGS',{min:0});
+  const count=finiteNumber(months,'MONTHS',{min:0,max:1200});
+  if(!Number.isInteger(count))throw new Error('INVALID_MONTHS');
+  const rate=finiteNumber(annualRate,'RATE',{min:0,max:100})/100/12;
+  let balance=0;
+  for(let month=0;month<count;month++)balance=applyMonthlySavings(balance,monthly,rate);
+  return balance;
 }
 
 export function calculatePurchaseInstallmentPlan({goal,current=0,monthlySavings,purchaseAmount,installmentMonths=12,annualRate=0,maxMonths=1200}){

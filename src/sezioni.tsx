@@ -1,3 +1,4 @@
+import {withAiRequestIdentity} from "./analytics/aiRequestIdentity";
 import { patrimonyTransferHistory, revisePatrimonyTransfer } from './finance/patrimonyTransfers.js';
 import { cashFlowText, transferText } from './i18n/cashFlowTranslations';
 import { PatrimonyTransferDialog, PatrimonyTransferWorklet } from './sections/PatrimonyTransferDialog';
@@ -9693,7 +9694,7 @@ export function HistoryPanel() {
   );
 }
 
-export function ConsulenteAIPanel() {
+export function ConsulenteAIPanel({ onBackFromAnomalies }: { onBackFromAnomalies?: () => void } = {}) {
   // ── Destructure completo dal context ─────────────────────────────────────
   var _c: any = useApp();
   const accountingPeriod = _c.accountingPeriod;
@@ -11260,7 +11261,7 @@ export function ConsulenteAIPanel() {
     return req;
   }
   async function callFinanceAgent(q, preparedRequest?: any) {
-    var req = preparedRequest || buildAIRequest(q);
+    var req = withAiRequestIdentity(preparedRequest || buildAIRequest(q));
     var token = "";
     try {
       if (fbAuth.currentUser) token = await fbAuth.currentUser.getIdToken();
@@ -11298,7 +11299,7 @@ export function ConsulenteAIPanel() {
           method: "POST",
           headers: aiHeaders,
           body: JSON.stringify(
-            buildFinanceAdviceTranslationPayload(answer, req.language)
+            withAiRequestIdentity(buildFinanceAdviceTranslationPayload(answer, req.language), req.growthRequestId)
           ),
         });
         var td = await tRes.json();
@@ -11527,13 +11528,13 @@ export function ConsulenteAIPanel() {
       ? L("analisi media: spese + aree, senza descrizioni")
       : L("analisi limitata: solo riepilogo delle spese");
   var chatMenuText = assistantChatMenuText(lang || "it");
-  if (aiTab === "anomalie") {
+  if (onBackFromAnomalies || aiTab === "anomalie") {
     return <AnomaliesPanel
       anomalies={visibleDetectedAnomalies}
       language={lang || "it"}
       fmt={fmt}
       dark={!!dark}
-      onBack={function () { setAiAdviceFilter("all"); setAiTab("consigli"); }}
+      onBack={onBackFromAnomalies || function () { setAiAdviceFilter("all"); setAiTab("consigli"); }}
       getTransactions={function (signal) {
         return anomalyTransactionsFor(signal);
       }}
@@ -14526,6 +14527,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
   function cleanSpeechText(text){return assistantSpeechText(text);}
   async function authenticatedAiFetch(endpoint:any, options:any){
     var base:any={...(options||{})};
+    if(endpoint===AI_AGENT_ENDPOINT&&typeof base.body==="string"){try{base.body=JSON.stringify(withAiRequestIdentity(JSON.parse(base.body)));}catch{}}
     if(typeof fbAuth.authStateReady==="function")await fbAuth.authStateReady();
     var expectedUid=String(c.userId||fbAuth.currentUser?.uid||"");
     if(!fbAuth.currentUser||!expectedUid||String(fbAuth.currentUser.uid)!==expectedUid)throw Object.assign(new Error("Authentication required"),{httpStatus:401});
@@ -15586,7 +15588,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       var token="";if(fbAuth.currentUser)token=await fbAuth.currentUser.getIdToken();
       if(!isCurrentAssistantTurn(turn))return;
       var headers:any={"Content-Type":"application/json"};if(token)headers.Authorization="Bearer "+token;
-      var assistantRequest=buildAssistantRequestPayload({question:contextualizeFollowUp(q,aiChatRef.current),languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(q),chatHistory:assistantHistory(aiChatRef.current,16)});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=assistantRequest.payload;requestPayload.instruction=String(requestPayload.instruction||"")+" Use recent chat history to maintain coherent follow-ups; a failed/noisy speech transcription never cancels a prior topic or authorization gate. Do not restart with generic greetings when the user asks to continue. Never execute an unconfirmed action. Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
+      var assistantRequest=buildAssistantRequestPayload({question:contextualizeFollowUp(q,aiChatRef.current),languageResolution:providedResolution||undefined,languageState:assistantLanguageStateRef.current,fallbackLanguage:lastAssistantUserLanguageRef.current||String(lang||"it"),interfaceLanguage:lang||"it",aiDataAccess:aiDataAccess||"summary",financeContext:buildContext(q),chatHistory:assistantHistory(aiChatRef.current,16)});var assistantLang=assistantRequest.language;lastAssistantUserLanguageRef.current=assistantLang;if(assistantRequest.languageState)assistantLanguageStateRef.current=assistantRequest.languageState;var requestPayload:any=withAiRequestIdentity(assistantRequest.payload);requestPayload.instruction=String(requestPayload.instruction||"")+" Use recent chat history to maintain coherent follow-ups; a failed/noisy speech transcription never cancels a prior topic or authorization gate. Do not restart with generic greetings when the user asks to continue. Never execute an unconfirmed action. Shopping-list rule: when adding products, use only financeContext.catalogs.shoppingUnits. Never invent or create a measurement unit as a side effect of adding products; if the requested unit is unavailable, use the product’s configured unit or financeContext.defaults.shoppingUnit. Create a new measurement unit only when the user explicitly asks to create one.";var verifiedHelpAnswer=getFainanceHelpAnswer(q,assistantLang);if(verifiedHelpAnswer){finishAnalyticsFlow("ai_request", "completed");appendMessage("assistant",verifiedHelpAnswer);speak(verifiedHelpAnswer,true);return;}
       var attachment=activeAttachmentRef.current;
       if(attachment){
         if(attachment.isImage){requestPayload.imageDataUrl=attachment.dataUrl;requestPayload.imageName=attachment.name||"allegato.jpg";}
@@ -15598,7 +15600,7 @@ function VoiceAssistantModal({ onQuick, embedded }: any) {
       if(!isCurrentAssistantTurn(turn))return;
       if(!res.ok){var assistantHttpError:any=new Error((data&&data.error)||("Il servizio AI ha restituito l’errore "+res.status+"."));assistantHttpError.httpStatus=res.status;throw assistantHttpError;}
       var answer=String((data&&data.answer)||"").trim()||assistantRuntimeText(assistantLang,"noAnswer");
-      if(assistantAnswerNeedsTranslation(answer,assistantLang)){try{var translateResponse=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(buildAssistantTranslationPayload(answer,assistantLang))});var translateData:any=await translateResponse.json();var corrected=String((translateData&&translateData.answer)||"").trim();if(corrected)answer=corrected;}catch(e){}}answer=stripPreparationAnnouncements(compactAssistantAnswer(answer,assistantLang))||assistantRuntimeText(assistantLang,"noValidAction");
+      if(assistantAnswerNeedsTranslation(answer,assistantLang)){try{var translateResponse=await authenticatedAiFetch(AI_AGENT_ENDPOINT,{method:"POST",headers:headers,signal:ctrl.signal,body:JSON.stringify(withAiRequestIdentity(buildAssistantTranslationPayload(answer,assistantLang),requestPayload.growthRequestId))});var translateData:any=await translateResponse.json();var corrected=String((translateData&&translateData.answer)||"").trim();if(corrected)answer=corrected;}catch(e){}}answer=stripPreparationAnnouncements(compactAssistantAnswer(answer,assistantLang))||assistantRuntimeText(assistantLang,"noValidAction");
       if(!isCurrentAssistantTurn(turn))return;
       var actions=realtimeActionsFrom(data&&data.actions).filter(function(a){return a&&a.action&&a.action!=="none";}),openActions=actions.filter(function(a){return a.action==="open_section";}),writeActions=actions.filter(function(a){return a.action!=="open_section";});
       finishAnalyticsFlow("ai_request", "completed");

@@ -7,8 +7,9 @@ import {
 } from "firebase/auth";
 import { fbAuth } from "../firebase/client";
 import { appEnvironment } from "../config/env";
-import officialLogo from "../../assets/Logo 512.png";
-import splashBanner from "../../assets/splash.png";
+import officialLogo from "../../assets/verification-brand.png";
+import "./emailAction.css";
+
 
 type ActionState =
   | "loading"
@@ -206,7 +207,7 @@ export function EmailActionScreen() {
     : { icon: "!", title: T.invalidTitle, body: T.invalidBody, tone: "#D97706", success: false };
 
   return (
-    <div
+    <div className="fainance-email-action"
       style={{
         minHeight: "100dvh",
         background:
@@ -241,20 +242,6 @@ export function EmailActionScreen() {
             overflow: "hidden",
           }}
         >
-          <img
-            src={splashBanner}
-            alt=""
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              opacity: .28,
-              filter: "saturate(.85)",
-            }}
-          />
           <div
             style={{
               position: "relative",
@@ -271,37 +258,13 @@ export function EmailActionScreen() {
               src={officialLogo}
               alt="fAInance"
               style={{
-                width: 76,
-                height: 76,
+                width: 260,
+                maxWidth: "100%",
+                height: "auto",
                 objectFit: "contain",
                 filter: "drop-shadow(0 8px 16px rgba(24,61,116,.12))",
               }}
             />
-            <div style={{ marginLeft: 14 }}>
-              <div
-                style={{
-                  fontSize: 22,
-                  fontWeight: 900,
-                  color: "#17386B",
-                  letterSpacing: "-.45px",
-                }}
-              >
-                fAInance
-              </div>
-              <div
-                style={{
-                  marginTop: 3,
-                  fontSize: 10,
-                  lineHeight: 1.25,
-                  fontWeight: 850,
-                  letterSpacing: ".7px",
-                  textTransform: "uppercase",
-                  color: "#B78513",
-                }}
-              >
-                Smart finance, powered by AI
-              </div>
-            </div>
             {isTest && (
               <div
                 style={{
@@ -491,7 +454,7 @@ export function EmailActionScreen() {
             {content.body}
           </p>
 
-          {email && !verificationFlow && (
+          {email && (
             <div
               style={{
                 margin: "20px auto 0",
