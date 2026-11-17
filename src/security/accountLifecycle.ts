@@ -120,6 +120,12 @@ export async function finalizeDueAccountDeletion(user: User): Promise<boolean> {
     phoneLookupRef ? getDoc(phoneLookupRef).catch(() => null) : Promise.resolve(null),
   ]);
 
+  const shareCashMethods = await getDocs(collection(fbDb, "users", uid, "shareCashMethods"));
+  for (let i = 0; i < shareCashMethods.docs.length; i += 400) {
+    const cleanup = writeBatch(fbDb);
+    shareCashMethods.docs.slice(i, i + 400).forEach(row => cleanup.delete(row.ref));
+    await cleanup.commit();
+  }
   const batch = writeBatch(fbDb);
   batch.delete(doc(fbDb, "userData", uid));
   batch.delete(doc(fbDb, "accountDeletionRequests", uid));

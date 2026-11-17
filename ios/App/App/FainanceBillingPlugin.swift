@@ -21,7 +21,7 @@ public class FainanceBillingPlugin: CAPPlugin {
         if #available(iOS 15.0, *) {
             Task {
                 do {
-                    let response = try await purchaseProduct(productId: productId)
+                    let response = try await purchaseProduct(productId: productId, accountToken: call.getString("appleAccountToken"))
                     await MainActor.run { call.resolve(response) }
                 } catch {
                     await MainActor.run { call.reject(error.localizedDescription) }
@@ -49,13 +49,17 @@ public class FainanceBillingPlugin: CAPPlugin {
     }
 
     @available(iOS 15.0, *)
-    private func purchaseProduct(productId: String) async throws -> [String: Any] {
+    private func purchaseProduct(productId: String, accountToken: String?) async throws -> [String: Any] {
         let products = try await Product.products(for: [productId])
         guard let product = products.first else {
             return ["success": false, "message": "Product not found"]
         }
 
-        let result = try await product.purchase()
+        var options: Set<Product.PurchaseOption> = []
+        if let token = accountToken, let uuid = UUID(uuidString: token) {
+            options.insert(.appAccountToken(uuid))
+        }
+        let result = try await product.purchase(options: options)
         switch result {
         case .success(let verification):
             let transaction = try checkVerified(verification)
@@ -64,6 +68,7 @@ public class FainanceBillingPlugin: CAPPlugin {
             return [
                 "success": true,
                 "productId": transaction.productID,
+                "signedTransaction": verification.jwsRepresentation,
                 "plan": mapped?.plan ?? "premium",
                 "billingPeriod": mapped?.period ?? "monthly"
             ]
@@ -82,6 +87,7 @@ public class FainanceBillingPlugin: CAPPlugin {
         var bestPeriod: String? = nil
         var bestRank = -1
         var bestProductId: String? = nil
+        var bestSignedTransaction: String? = nil
 
         for await result in Transaction.currentEntitlements {
             let transaction = try checkVerified(result)
@@ -92,6 +98,7 @@ public class FainanceBillingPlugin: CAPPlugin {
                 bestPlan = mapped.plan
                 bestPeriod = mapped.period
                 bestProductId = transaction.productID
+                bestSignedTransaction = result.jwsRepresentation
             }
         }
 
@@ -100,7 +107,8 @@ public class FainanceBillingPlugin: CAPPlugin {
                 "success": true,
                 "plan": plan,
                 "billingPeriod": bestPeriod ?? "monthly",
-                "productId": bestProductId ?? ""
+                "productId": bestProductId ?? "",
+                "signedTransaction": bestSignedTransaction ?? ""
             ]
         }
         return ["success": false]

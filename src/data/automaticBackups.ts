@@ -1,7 +1,9 @@
-import { collection, deleteDoc, doc, getDocFromServer, getDocs, getDocsFromServer, limit, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
+import {createSingleFlightWriter} from './singleFlightWrite.js';
+import { collection, doc, getDocFromServer, getDocs, getDocsFromServer, limit, orderBy, query, serverTimestamp, setDoc, writeBatch } from "firebase/firestore";
 import { fbDb } from "../firebase/client";
 import { fainanceCompressAccountDataV5, fainanceExpandAccountCloudDataV5 } from "./accountCloudCodec";
 import { writeTechnicalLog } from "../observability/technicalLogs";
+import { readWithDeadline } from "../utils/readDeadline";
 
 const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const MAX_BACKUPS = 12;
@@ -26,10 +28,21 @@ async function pruneOldBackups(uid: string): Promise<void> {
   const regularRows = rows.filter((row) => String((row.data() || {}).reason || "") !== USER_STATE_AUTHORITY_V6_REASON);
   const toDelete = authorityRows.slice(2).concat(regularRows.slice(MAX_BACKUPS));
   if (!toDelete.length) return;
-  await Promise.all(toDelete.flatMap((row) => [
-    deleteDoc(row.ref).catch(() => undefined),
-    deleteDoc(doc(fbDb, "accountBackupMetadata", row.id)).catch(() => undefined),
-  ]));
+  // Keep the existing retention policy, deleting segmented payloads atomically
+  // with their parent so automatic pruning cannot leave private orphan data.
+  for (const row of toDelete) {
+    const batch = writeBatch(fbDb);
+    const data = row.data();
+    if (data.encoding === 'gzip-base64-json-chunks-v1') {
+      if (data.uid !== uid || !Number.isInteger(data.chunkCount) || data.chunkCount < 2 || data.chunkCount > 6) {
+        throw new Error('INVALID_BACKUP');
+      }
+      for (let i = 0; i < data.chunkCount; i++) batch.delete(doc(fbDb, 'users', uid, 'backups', row.id + '_part_' + i));
+    }
+    batch.delete(row.ref);
+    batch.delete(doc(fbDb, "accountBackupMetadata", row.id));
+    await batch.commit();
+  }
 }
 
 export async function createAutomaticAccountBackup(input: AutomaticBackupInput): Promise<boolean> {
@@ -135,7 +148,12 @@ async function decodeBackupSnapshot(row: any): Promise<any | null> {
   }
 }
 
-export async function saveUserStateAuthorityBackupV6(
+const saveAuthorityOnce = createSingleFlightWriter();
+export function saveUserStateAuthorityBackupV6(input: UserStateAuthorityBackupV6Input): Promise<{ id: string; authority: any; createdAtMs: number }> {
+  return saveAuthorityOnce(String(input.uid || ''), () => saveUserStateAuthorityBackupV6Payload(input));
+}
+
+async function saveUserStateAuthorityBackupV6Payload(
   input: UserStateAuthorityBackupV6Input
 ): Promise<{ id: string; authority: any; createdAtMs: number }> {
   const uid = String(input.uid || "");
@@ -184,7 +202,7 @@ export async function saveUserStateAuthorityBackupV6(
 
   // Metadata is useful for diagnostics/admin but must never make the user-state
   // write fail after the private payload has already been acknowledged.
-  await setDoc(metadataRef, {
+  void setDoc(metadataRef, {
     id,
     uid,
     reason,
@@ -217,10 +235,34 @@ export async function readUserStateAuthorityBackupV6ById(
 
 export async function readLatestUserStateAuthorityBackupV6(
   uid: string,
-  preferServer = true
+  preferServer = true,
+  readAuthorityOnly = false
 ): Promise<{ id: string; authority: any; createdAtMs: number } | null> {
   const safeUid = String(uid || "");
   if (!safeUid) return null;
+  async function findAuthority(rows: any[]) {
+    for (const row of rows) {
+      const data: any = row.data ? row.data() : {};
+      if (String(data.reason || "") !== USER_STATE_AUTHORITY_V6_REASON) continue;
+      const authority = await decodeBackupSnapshot(data);
+      if (authority) return { id: String(row.id || data.id || ""), authority, createdAtMs: Number(data.createdAtMs || 0) };
+    }
+    return null;
+  }
+  if (preferServer && readAuthorityOnly) {
+    try {
+      const lite = await import("firebase/firestore/lite");
+      const db = lite.getFirestore(fbDb.app);
+      const backups = lite.collection(db, "users", safeUid, "backups");
+      const result = await readWithDeadline(
+        lite.getDocs(lite.query(backups, lite.where("reason", "==", USER_STATE_AUTHORITY_V6_REASON))), 4000
+      );
+      const latest = await findAuthority([...result.docs].sort((a, b) => Number(b.data().createdAtMs || 0) - Number(a.data().createdAtMs || 0)));
+      if (latest) return latest;
+    } catch {
+      // Fall back to the established lookup if the filtered server read fails.
+    }
+  }
   const q = query(
     collection(fbDb, "users", safeUid, "backups"),
     orderBy("createdAtMs", "desc"),
@@ -234,16 +276,5 @@ export async function readLatestUserStateAuthorityBackupV6(
     snap = await getDocs(q);
   }
 
-  for (const row of snap.docs || []) {
-    const data: any = row.data ? row.data() : {};
-    if (String(data.reason || "") !== USER_STATE_AUTHORITY_V6_REASON) continue;
-    const authority = await decodeBackupSnapshot(data);
-    if (!authority) continue;
-    return {
-      id: String(row.id || data.id || ""),
-      authority,
-      createdAtMs: Number(data.createdAtMs || 0),
-    };
-  }
-  return null;
+  return findAuthority(snap.docs || []);
 }

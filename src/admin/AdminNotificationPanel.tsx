@@ -2,6 +2,7 @@ import { NotificationMediaEditor, type NotificationMedia } from "../notification
 import { normalizeNotificationMedia } from "../../functions/notificationMedia.mjs";
 import { readableDarkText } from '../ui/textContrast';
 import { useMemo, useState } from "react";
+import { notificationChannelText } from "../notifications/notificationChannelTranslations.mjs";
 import { getApp } from "firebase/app";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useApp } from "../core";
@@ -128,7 +129,8 @@ export function AdminNotificationPanel({ session, users = [] }: { session: Admin
       const delivered = Number(data.successCount || 0);
       const failed = Number(data.failureCount || 0);
       const devices = Number(data.targetedDevices || 0);
-      setStatus(`${L("Invio completato")}: ${delivered}/${devices}${failed ? ` · ${L("fallite")}: ${failed}` : ""}`);
+      const inApp = Number(data.inAppCount || 0);
+      setStatus(`${L("Invio completato")} · ${notificationChannelText(ctx.lang || "it", "centerTitle")}: ${inApp} · Push: ${delivered}/${devices}${failed ? ` · ${L("fallite")}: ${failed}` : ""}`);
     } catch (error: any) {
       const message = String(error && (error.message || error.code) ? error.message || error.code : error || "");
       setStatus(L("Invio della notifica non riuscito.") + (message ? " " + message : ""));

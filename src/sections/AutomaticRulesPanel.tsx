@@ -15,9 +15,11 @@ import {parseRuleLogic,legacyRuleLogicTokens,suggestedNextLogicTokens,formatRule
 import {translateFainanceText} from '../traduzioni';
 import {ruleFields,operatorsFor,ruleLimit,MAX_RULE_CONDITIONS,evaluateAutomaticRules,validateAutomaticRule,automaticRuleForEditor,automaticRuleCategoryConflict,categoryScopeFromConditions} from '../finance/automaticRules';
 import {saveAutomaticRule,deleteAutomaticRule,reorderAutomaticRules} from '../finance/automaticRuleStore';
+import {RatePicker} from '../widget';
+import {installmentRuleText} from '../i18n/installmentRuleTranslations';
 import './automaticRules.css';
 
-const editableActions=['category','payment','description','tags','note','alert'];
+const editableActions=['category','payment','description','tags','note','installments','alert'];
 export function AutomaticRulesPanel(){
   const ctx:any=useApp();
   const [draft,setDraft]=useState<any>(null),[error,setError]=useState(false),[test,setTest]=useState<any>(null),[result,setResult]=useState<any>(null),[editorTab,setEditorTab]=useState<'when'|'if'|'then'>('when'),[probeOnly,setProbeOnly]=useState(false);
@@ -43,6 +45,8 @@ export function AutomaticRulesPanel(){
   const B=(key:string)=>ruleBuilderText(ctx.lang||'it',key);
   const A=(key:string)=>directRuleAiText(ctx.lang||'it',key);
   const F=(key:string)=>ruleFormulaText(ctx.lang||'it',key);
+  const I=(key:string)=>installmentRuleText(ctx.lang||'it',key);
+  const actionValue=(a:any,direction?:string)=>a.field==='installments'?String(a.value)+' '+I('months')+' · '+I(a.direction==='backward'?'backward':'forward'):a.field==='alert'?a.text:choices(a.field,direction)?.find((v:any)=>String(v.id)===String(a.value))?.name||a.value;
   const L=(s:string)=>rulesExtraText(ctx.lang||'it',s)??translateFainanceText(s,ctx.lang||'it');
   const U=(key:'createRule'|'ruleSingular'|'whenSubtitle'|'ifSubtitle'|'thenSubtitle'|'messagePlaceholder'|'testRule')=>rulesUiText(ctx.lang||'it',key);
   const directionOptions=[{id:'expense',label:T('expense')},{id:'income',label:T('income')}];
@@ -97,7 +101,7 @@ export function AutomaticRulesPanel(){
     setDraft({...draft,conditions,logicTokens:conditions.length===1?['1']:[],conditionGroups:[]});
     setLogicChanged(true);setLogicStep('conditions');setLimitWarning(false);setResult(null);
   };
-  const ruleExplanation=(rule:any)=>`${T('when')}: ${scopeText(rule)}. ${T('if')}: ${conditionExpression(rule)}. ${T('then')}: ${automaticRuleForEditor(rule).actions.map((a:any)=>`${actionName(a)}: ${a.field==='alert'?a.text:choices(a.field,rule.categoryFilter?.direction||rule.trigger)?.find((v:any)=>String(v.id)===String(a.value))?.name||a.value}`).join('; ')}.`;
+  const ruleExplanation=(rule:any)=>`${T('when')}: ${scopeText(rule)}. ${T('if')}: ${conditionExpression(rule)}. ${T('then')}: ${automaticRuleForEditor(rule).actions.map((a:any)=>`${actionName(a)}: ${actionValue(a,rule.categoryFilter?.direction||rule.trigger)}`).join('; ')}.`;
   const describe=(c,direction)=>`${T(c.field)} ${T(c.operator)||R(c.operator)} ${c.operator==='between'?String(c.value).split('|').join(' – '):choices(c.field,direction)?.find(v=>String(v.id)===String(c.value))?.name||c.value}`;
   const scopeText=r=>`${T(r.trigger)} · ${r.categoryFilter?choices('category',r.categoryFilter.direction)?.find(c=>String(c.id)===String(r.categoryFilter.value))?.name||r.categoryFilter.value:E('allCategories')}`;
   const patchCondition=(i,patch)=>{setDraft({...draft,conditions:draft.conditions.map((c,j)=>i===j?{...c,...patch}:c)});setResult(null);};
@@ -227,7 +231,7 @@ export function AutomaticRulesPanel(){
     return()=>window.removeEventListener('fainance:review-ai-rule',openAiProposal);
   },[]);
   const patchAction=(i,patch)=>{setDraft({...draft,actions:draft.actions.map((a,j)=>i===j?{...a,...patch}:a)});setResult(null);};
-  const actionName=a=>a.field==='alert'?E(a.kind==='confirmation'?'confirmationAction':'informationAction'):(T(a.field)||R(a.field));
+  const actionName=a=>a.field==='installments'?I('title'):a.field==='alert'?E(a.kind==='confirmation'?'confirmationAction':'informationAction'):(T(a.field)||R(a.field));
   function runHistoryTest(){
     // Read-only simulation. Existing values are marked as replaceable *only*
     // within this preview; neither local storage nor Firebase is modified.
@@ -240,14 +244,14 @@ export function AutomaticRulesPanel(){
     const pool=[...existing,previewRule].sort((a:any,b:any)=>a.priority-b.priority||a.id.localeCompare(b.id));
     try{
       validateAutomaticRule(previewRule,{allowLegacyConditions:true});
-      const simulations=history.map(({item,direction}:any)=>evaluateAutomaticRules(pool,{...item,_ruleDefaultFields:['catId','type','methodId','desc','tags','note']},direction,item.source||'manual',{plan:ctx.currentPlan,cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes}));
+      const simulations=history.map(({item,direction}:any)=>evaluateAutomaticRules(pool,{...item,_ruleDefaultFields:['catId','type','methodId','desc','tags','note']},direction,item.source||'manual',{plan:ctx.currentPlan,cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes,instalmentOptions:ctx.planLimits?.instalmentOptions}));
       const conflicts=simulations.flatMap((result:any)=>result.conflicts||[]).filter((v:any,i:number,a:any[])=>a.findIndex(x=>x.field===v.field&&x.firstRule===v.firstRule&&x.secondRule===v.secondRule)===i);
       setHistoryTest({total:history.length,matched:simulations.filter((r:any)=>r.matched.includes(draft.id)).length,conflicts});setError(false);
     }catch(e:any){setSaveErrorCode(e?.message||'');setError(true);setHistoryTest(null);}
   }
   function showTest(){setTest({desc:'',amount:'',direction:draft.categoryFilter?.direction||(draft.trigger==='income'?'income':'expense'),source:'manual',transactionType:'single',category:draft.categoryFilter?.value||'',payment:'',defaults:true});setResult(null);}
   const probeLabel=U('testRule');
-  function runTest(){setSaveErrorCode('');try{validateAutomaticRule(draft,{allowLegacyConditions:true});if(!String(test.amount).trim()||!Number.isFinite(Number(test.amount))||Number(test.amount)<0)throw new Error('INVALID_AMOUNT');setResult(evaluateAutomaticRules([{...draft,enabled:true}],{desc:test.desc,amount:Number(test.amount),catId:test.category,type:test.category,methodId:test.payment,rateizzato:test.transactionType==='installment',receipt:test.transactionType==='receipt',_ruleDefaultFields:test.defaults?['catId','type','methodId']:[]},test.direction,test.source,{plan:'premium',cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes}));setError(false);}catch{setError(true);}}
+  function runTest(){setSaveErrorCode('');try{validateAutomaticRule(draft,{allowLegacyConditions:true});if(!String(test.amount).trim()||!Number.isFinite(Number(test.amount))||Number(test.amount)<0)throw new Error('INVALID_AMOUNT');setResult(evaluateAutomaticRules([{...draft,enabled:true}],{desc:test.desc,amount:Number(test.amount),catId:test.category,type:test.category,methodId:test.payment,rateizzato:test.transactionType==='installment',receipt:test.transactionType==='receipt',_ruleDefaultFields:test.defaults?['catId','type','methodId']:[]},test.direction,test.source,{plan:'premium',cats:ctx.cats,methods:ctx.methods,incomeTypes:ctx.incomeTypes,instalmentOptions:ctx.planLimits?.instalmentOptions}));setError(false);}catch{setError(true);}}
   function closeEditor(){setLogicStep('conditions');setLogicChanged(false);setAiReview(false);setLimitWarning(false);setHistoryTest(null);setSaveErrorCode('');setDraft(null);setEditorTab('when');setProbeOnly(false);setError(false);setTest(null);setResult(null);}
   function saveDraft(e){
     e.preventDefault();
@@ -273,7 +277,7 @@ export function AutomaticRulesPanel(){
           <div className="rule-flow-label">{T('if')}</div>
           <p className="rule-expression">{conditionExpression(r)}</p>
           <div className="rule-flow-label">↓ {T('then')}</div>
-          <div className="rule-chips">{automaticRuleForEditor(r).actions.map(a=><span className="rule-chip rule-action-chip" key={a.field}>{a.field==='payment'?'💳':a.field==='alert'?'🔔':'✦'} {actionName(a)}: {a.field==='alert'?a.text:choices(a.field,r.categoryFilter?.direction||r.trigger)?.find(v=>String(v.id)===String(a.value))?.name||a.value}</span>)}</div>
+          <div className="rule-chips">{automaticRuleForEditor(r).actions.map(a=><span className="rule-chip rule-action-chip" key={a.field}>{a.field==='payment'?'💳':a.field==='alert'?'🔔':'✦'} {actionName(a)}: {actionValue(a,r.categoryFilter?.direction||r.trigger)}</span>)}</div>
         </div>
         <details className="rule-explanation"><summary>{R('explainRule')}</summary><p>{ruleExplanation(r)}</p></details>
         <div className="rule-actions-block">
@@ -300,7 +304,7 @@ export function AutomaticRulesPanel(){
       {!probeOnly&&draft.expectedRevision===undefined&&<button type="button" className="rule-secondary rule-ai-rephrase" onClick={()=>{setAiError('');setAiPromptOpen(true);}}>✨ {aiReview?A('rephrase'):A('create')}</button>}
       {!probeOnly&&<div className="rule-editor-tabs"><button type="button" className={"rule-editor-tab"+(editorTab==='when'?' active':'')} onClick={()=>setEditorTab('when')}><span aria-hidden="true">📅</span><b>{T('when')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='if'?' active':'')} onClick={()=>setEditorTab('if')}><span aria-hidden="true">🔎</span><b>{T('if')}</b></button><button type="button" className={"rule-editor-tab"+(editorTab==='then'?' active':'')} onClick={()=>setEditorTab('then')}><span aria-hidden="true">⚡</span><b>{T('then')}</b></button></div>}
       <div className="rule-editor-body">
-      {error&&<p role="alert" className="rule-notice">{saveErrorCode==='INVALID_RULE_FORMULA'?F('confirmLogic'):saveErrorCode==='RULE_CONDITION_LIMIT'?R('legacyConditionLimit'):saveErrorCode?assistantRuleError(ctx.lang||'it',saveErrorCode):T('error')}</p>}
+      {error&&<p role="alert" className="rule-notice">{saveErrorCode==='INVALID_RULE_INSTALLMENTS'?I('invalid'):saveErrorCode==='INVALID_RULE_FORMULA'?F('confirmLogic'):saveErrorCode==='RULE_CONDITION_LIMIT'?R('legacyConditionLimit'):saveErrorCode?assistantRuleError(ctx.lang||'it',saveErrorCode):T('error')}</p>}
       {!probeOnly&&conflictNotice(draft)}
       {!probeOnly&&editorTab==='when'&&<section className="rule-card" aria-label={T('when')}>
         <div className="rule-name-card"><label>{L('Nome')}<input required maxLength={120} value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label></div>
@@ -351,19 +355,19 @@ export function AutomaticRulesPanel(){
       </section>}
       {!probeOnly&&editorTab==='then'&&<section className="rule-card" aria-label={T('then')}>
         <div className="rule-grid">{draft.actions.map((a,i)=><fieldset key={i} className="rule-row"><legend>{T('then')} {i+1}</legend>
-          <select aria-label={T('then')+' '+(i+1)} value={a.field==='alert'?a.kind:a.field} onChange={e=>{const field=['information','confirmation'].includes(e.target.value)?'alert':e.target.value;setDraft({...draft,actions:draft.actions.map((v,j)=>j===i?(field==='alert'?{field,kind:e.target.value,text:v.text||''}:{field,value:''}):v)});setResult(null);}}>
-            {['category','payment','description','tags','note','information','confirmation'].map(f=><option key={f} value={f} disabled={draft.actions.some((other,j)=>j!==i&&other.field===(['information','confirmation'].includes(f)?'alert':f))}>{f==='information'?E('informationAction'):f==='confirmation'?E('confirmationAction'):(T(f)||R(f))}</option>)}
+          <select aria-label={T('then')+' '+(i+1)} value={a.field==='alert'?a.kind:a.field} onChange={e=>{const field=['information','confirmation'].includes(e.target.value)?'alert':e.target.value;setDraft({...draft,actions:draft.actions.map((v,j)=>j===i?(field==='alert'?{field,kind:e.target.value,text:v.text||''}:field==='installments'?{field,value:12,direction:'forward'}:{field,value:''}):v)});setResult(null);}}>
+            {['category','payment','description','tags','note','installments','information','confirmation'].map(f=><option key={f} value={f} disabled={draft.actions.some((other,j)=>j!==i&&other.field===(['information','confirmation'].includes(f)?'alert':f))}>{f==='installments'?I('title'):f==='information'?E('informationAction'):f==='confirmation'?E('confirmationAction'):(T(f)||R(f))}</option>)}
           </select>
-          {a.field==='alert'?<label>{E('message')}<textarea required maxLength={1000} placeholder={U('messagePlaceholder')} value={a.text} onChange={e=>patchAction(i,{text:e.target.value})}/></label>:valueInput(a.field,a.value,value=>patchAction(i,{value}),draft.categoryFilter?.direction||draft.trigger)}
+          {a.field==='installments'?<div className="rule-installments"><RatePicker value={a.value} direction={a.direction} onChange={value=>patchAction(i,{value})} onDirectionChange={direction=>patchAction(i,{direction})}/><p className="rule-caption">{I('hint')}</p></div>:a.field==='alert'?<label>{E('message')}<textarea required maxLength={1000} placeholder={U('messagePlaceholder')} value={a.text} onChange={e=>patchAction(i,{text:e.target.value})}/></label>:valueInput(a.field,a.value,value=>patchAction(i,{value}),draft.categoryFilter?.direction||draft.trigger)}
           <button type="button" className="rule-remove" onClick={()=>{setDraft({...draft,actions:draft.actions.filter((_,j)=>j!==i)});setResult(null);}}>{L('Elimina')}</button>
         </fieldset>)}
-        <button type="button" className="rule-secondary" disabled={editableActions.every(f=>draft.actions.some(a=>a.field===f))} onClick={()=>{const field=editableActions.find(f=>!draft.actions.some(a=>a.field===f));setDraft({...draft,actions:[...draft.actions,field==='alert'?{field,kind:'confirmation',text:''}:{field,value:''}]});setResult(null);}}>＋ {T('action')}</button></div>
+        <button type="button" className="rule-secondary" disabled={editableActions.every(f=>draft.actions.some(a=>a.field===f))} onClick={()=>{const field=editableActions.find(f=>!draft.actions.some(a=>a.field===f));setDraft({...draft,actions:[...draft.actions,field==='alert'?{field,kind:'confirmation',text:''}:field==='installments'?{field,value:12,direction:'forward'}:{field,value:''}]});setResult(null);}}>＋ {T('action')}</button></div>
       </section>}
       {(probeOnly||editorTab==='then')&&test&&<fieldset className="rule-card rule-grid rule-test-card"><legend>{T('probe')}</legend><p className="rule-caption">{T('testHint')}</p>
         {['description','amount','direction','source','transactionType','category','payment'].filter(f=>test.direction!=='income'||f!=='payment').map(field=><label key={field}>{T(field)}{valueInput(field,test[field==='description'?'desc':field],value=>{setTest({...test,[field==='description'?'desc':field]:value,...(field==='direction'?{category:'',payment:''}:{})});setResult(null);},test.direction)}</label>)}
         <label className="rule-check"><input type="checkbox" checked={test.defaults} onChange={e=>{setTest({...test,defaults:e.target.checked});setResult(null);}}/><span>{T('defaultFields')}</span></label>
         <button type="button" className="rule-secondary" onClick={runTest}>{probeLabel}</button>
-        {result&&<output className={'rule-result '+(result.matched.length?'rule-result-success':'rule-result-failure')}><div className="rule-flow-label">{D('result')}</div><strong>{T(result.matched.length?'matched':'unmatched')}</strong><p>{T('category')}: {choices('category',test.direction)?.find(c=>String(c.id)===String(test.direction==='income'?result.item.type:result.item.catId))?.name||'—'}</p>{test.direction!=='income'&&<p>{T('payment')}: {choices('payment')?.find(c=>String(c.id)===String(result.item.methodId))?.name||'—'}</p>}<p>{T('description')}: {result.item.desc}</p>{result.changed.map(field=><p key={field}>✓ {T(field==='methodId'?'payment':field==='catId'||field==='type'?'category':field==='desc'?'description':field)||R(field)}: {D('applied')}</p>)}{result.skipped?.map((item,i)=><p key={i}>{T(item.field==='methodId'?'payment':item.field==='catId'||item.field==='type'?'category':item.field==='desc'?'description':item.field)||R(item.field)}: {D(item.reason)}</p>)}{result.alerts.map(a=><p key={a.ruleId}>{actionName({field:'alert',...a})}: {a.text}</p>)}{result.conflicts?.map((c,i)=><p key={i} role="alert">⚠️ {R('ruleConflict')}: {c.firstRule} / {c.secondRule} · {R('ruleWins')}: {c.firstRule}</p>)}</output>}
+        {result&&<output className={'rule-result '+(result.matched.length?'rule-result-success':'rule-result-failure')}><div className="rule-flow-label">{D('result')}</div><strong>{T(result.matched.length?'matched':'unmatched')}</strong><p>{T('category')}: {choices('category',test.direction)?.find(c=>String(c.id)===String(test.direction==='income'?result.item.type:result.item.catId))?.name||'—'}</p>{test.direction!=='income'&&<p>{T('payment')}: {choices('payment')?.find(c=>String(c.id)===String(result.item.methodId))?.name||'—'}</p>}<p>{T('description')}: {result.item.desc}</p>{result.item.rateizzato&&<p data-rule-installment-result>{I('title')}: {result.item.rate||'—'} {I('months')} · {I(result.item.rateDirection==='backward'?'backward':'forward')}</p>}{result.changed.filter(field=>!['rate','rateDirection'].includes(field)).map(field=><p key={field}>✓ {field==='rateizzato'?I('title'):T(field==='methodId'?'payment':field==='catId'||field==='type'?'category':field==='desc'?'description':field)||R(field)}: {D('applied')}</p>)}{result.skipped?.map((item,i)=><p key={i}>{item.field==='installments'?I('title'):T(item.field==='methodId'?'payment':item.field==='catId'||item.field==='type'?'category':item.field==='desc'?'description':item.field)||R(item.field)}: {item.reason==='plan'?I('plan'):D(item.reason)}</p>)}{result.alerts.map(a=><p key={a.ruleId}>{actionName({field:'alert',...a})}: {a.text}</p>)}{result.conflicts?.map((c,i)=><p key={i} role="alert">⚠️ {R('ruleConflict')}: {c.firstRule} / {c.secondRule} · {R('ruleWins')}: {c.firstRule}</p>)}</output>}
       </fieldset>}
       {(probeOnly||editorTab==='then')&&<div className="rule-card rule-history-test"><button type="button" className="rule-secondary" onClick={runHistoryTest}>{R('recentTest')}</button><p className="rule-caption">{R('recentTestIntro')}</p>
         {historyTest&&<output className="rule-result">{historyTest.total?<><p>{R('testedMovements')}: {historyTest.total}</p><p>{R('recentMatches')}: {historyTest.matched}</p><p>{R('recentConflicts')}: {historyTest.conflicts.length}</p>{historyTest.conflicts.map((c,i)=><p key={i}>⚠️ {c.firstRule} / {c.secondRule} · {R('ruleWins')}: {c.firstRule}</p>)}</>:<p>{R('noRecentMovements')}</p>}</output>}

@@ -23,7 +23,7 @@
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
-	<false></false>
+	<true/>
 	<key>IS_APPINVITE_ENABLED</key>
 	<true></true>
 	<key>IS_GCM_ENABLED</key>
@@ -32,5 +32,8 @@
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
 	<string>1:739607555867:ios:16c4ae555c4a56cfcd6dbe</string>
+
+	<key>IS_ANALYTICS_ENABLED</key>
+	<true/>
 </dict>
 </plist>

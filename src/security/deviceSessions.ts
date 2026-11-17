@@ -148,8 +148,8 @@ export function startCurrentDeviceSession(uid: string, onRevoked: () => void, ap
 export async function closeCurrentDeviceSession(uid: string): Promise<void> {
   if (!uid) return;
   const id = currentFainanceDeviceId();
-  await setDoc(deviceRef(uid, id), { active: false, signedOutAt: nowIso(), updatedAt: nowIso() }, { merge: true }).catch(() => undefined);
   try { localStorage.removeItem(DEVICE_ID_KEY); } catch (_error) {}
+  await setDoc(deviceRef(uid, id), { active: false, signedOutAt: nowIso(), updatedAt: nowIso() }, { merge: true }).catch(() => undefined);
 }
 
 export async function listDeviceSessions(uid: string): Promise<FainanceDeviceSession[]> {

@@ -1,6 +1,9 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, runTransaction, setDoc, type DocumentReference } from "firebase/firestore";
 import { appEnvironment, firebaseConfig, functionsRegion } from "../config/env";
 import { fbAuth, fbDb } from "../firebase/client";
+import { createSingleFlightWriter } from "../data/singleFlightWrite.js";
+import { useNativeShareCommit, readNativeShareProject, updateNativeShareProject, readNativeShareOwnerProfile, upsertNativeShareProject } from "../firebase/shareActivityCommit";
+import { CapacitorHttp } from "@capacitor/core";
 
 const MUNDELY_TEST_PROJECT_ID = "tripai-test-ccb16";
 const FAINANCE_TEST_PROJECT_ID = "fainance-test-20260823195207";
@@ -48,6 +51,7 @@ export interface MundelyExpenseSync {
   origin?: string;
   bridgeOrigin?: string;
   sourceShareActivityId?: number;
+  sourceUpdatedAt?: string;
   date: string;
   time: string;
   deleted: boolean;
@@ -89,16 +93,25 @@ async function bridgeRequest(body: Record<string, unknown>): Promise<BridgePullR
   const currentUser = fbAuth.currentUser;
   if (!currentUser) throw new Error("FAINANCE_AUTH_REQUIRED");
   const token = await currentUser.getIdToken();
-  const response = await fetch(bridgeUrl(), {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({ ...body, bridgeVersion: BRIDGE_VERSION }),
-  });
-  const payload = (await response.json().catch(() => ({}))) as BridgePullResponse;
-  if (!response.ok || payload.ok !== true) throw new Error(String(payload.error || "MUNDELY_BRIDGE_UNAVAILABLE"));
+  if (fbAuth.currentUser?.uid !== currentUser.uid) throw new Error("MUNDELY_BRIDGE_SESSION_CHANGED");
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  const requestBody = { ...body, bridgeVersion: BRIDGE_VERSION };
+  let payload: BridgePullResponse;
+  let responseOk: boolean;
+  if (useNativeShareCommit(firebaseConfig.projectId)) {
+    const response = await CapacitorHttp.post({
+      url: bridgeUrl(), headers, data: requestBody, responseType: "json", connectTimeout: 6000, readTimeout: body.action === "convertCurrency" ? 15000 : 8000,
+    }).catch(() => { throw nativeBridgeRetryableError("MUNDELY_BRIDGE_REQUEST_UNCONFIRMED"); });
+    if (fbAuth.currentUser?.uid !== currentUser.uid) throw new Error("MUNDELY_BRIDGE_SESSION_CHANGED");
+    if (response.status === 429 || response.status >= 500) throw nativeBridgeRetryableError("MUNDELY_BRIDGE_UNAVAILABLE");
+    payload = response.data && typeof response.data === "object" ? response.data as BridgePullResponse : { ok: false };
+    responseOk = response.status >= 200 && response.status < 300;
+  } else {
+    const response = await fetch(bridgeUrl(), { method: "POST", headers, body: JSON.stringify(requestBody) });
+    payload = (await response.json().catch(() => ({}))) as BridgePullResponse;
+    responseOk = response.ok;
+  }
+  if (!responseOk || payload.ok !== true) throw new Error(String(payload.error || "MUNDELY_BRIDGE_UNAVAILABLE"));
   if (payload.environment !== "test" || payload.targetProjectId !== FAINANCE_TEST_PROJECT_ID || Number(payload.bridgeVersion || 0) < BRIDGE_VERSION) {
     throw new Error("MUNDELY_BRIDGE_ENVIRONMENT_MISMATCH");
   }
@@ -155,6 +168,53 @@ function clean(value: unknown): string {
 function currentUserName(profile: Record<string, unknown> | null): string {
   const profileName = clean(profile?.name) || [clean(profile?.firstName), clean(profile?.lastName)].filter(Boolean).join(" ");
   return profileName || clean(fbAuth.currentUser?.displayName) || "Io";
+}
+
+function nativeBridgeRetryableError(code: string) {
+  const error = new Error(code) as Error & { nativeShareRetryable?: boolean };
+  error.nativeShareRetryable = true;
+  return error;
+}
+
+function notifyNativeShareProjectCommitted(uid: string, project: Record<string, unknown> | null) {
+  if (!project || !bridgeSessionIsCurrent(uid) || typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("fainance:share-project-committed", { detail: { uid, project } }));
+}
+
+async function nativeBridgeProjectContext(projectId: string) {
+  const user = fbAuth.currentUser;
+  if (!user) throw new Error("FAINANCE_AUTH_REQUIRED");
+  const uid = user.uid;
+  const assertSession = () => {
+    if (!bridgeSessionIsCurrent(uid)) throw new Error("MUNDELY_BRIDGE_SESSION_CHANGED");
+  };
+  const token = await user.getIdToken();
+  assertSession();
+  return { firebaseProjectId: firebaseConfig.projectId, projectId, uid, token, assertSession };
+}
+
+async function readBridgeShareProject(projectRef: DocumentReference) {
+  if (!useNativeShareCommit(firebaseConfig.projectId)) return getDoc(projectRef);
+  const project = await readNativeShareProject(await nativeBridgeProjectContext(projectRef.id));
+  return { exists: () => project !== null, data: () => project };
+}
+
+async function updateBridgeShareProject(
+  projectRef: DocumentReference,
+  apply: (project: Record<string, unknown> | null) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void,
+): Promise<void> {
+  if (useNativeShareCommit(firebaseConfig.projectId)) {
+    const context = await nativeBridgeProjectContext(projectRef.id);
+    const committed = await updateNativeShareProject({ ...context, apply });
+    context.assertSession();
+    notifyNativeShareProjectCommitted(context.uid, committed);
+    return;
+  }
+  await runTransaction(fbDb, async transaction => {
+    const snapshot = await transaction.get(projectRef);
+    const patch = await apply(snapshot.exists() ? snapshot.data() as Record<string, unknown> : null);
+    if (patch) transaction.update(projectRef, patch);
+  });
 }
 
 function canonicalMundelyCategoryKey(value: unknown): string {
@@ -223,8 +283,11 @@ async function upsertShareProjectFromMundely(sync: MundelyTripSync): Promise<str
   const projectId = clean(sync.targetShareProjectId);
   if (!projectId || !clean(sync.tripId) || !clean(sync.name)) throw new Error("MUNDELY_SYNC_PAYLOAD_INVALID");
 
-  const userProfileSnap = await getDoc(doc(fbDb, "users", user.uid)).catch(() => null);
-  const userProfile = userProfileSnap && userProfileSnap.exists() ? (userProfileSnap.data() as Record<string, unknown>) : null;
+  const nativeContext = useNativeShareCommit(firebaseConfig.projectId) ? await nativeBridgeProjectContext(projectId) : null;
+  const userProfileSnap = nativeContext ? null : await getDoc(doc(fbDb, "users", user.uid)).catch(() => null);
+  const userProfile = nativeContext
+    ? await readNativeShareOwnerProfile(nativeContext).catch(() => null)
+    : userProfileSnap && userProfileSnap.exists() ? (userProfileSnap.data() as Record<string, unknown>) : null;
   const ownerName = currentUserName(userProfile);
   const ownerEmail = clean(userProfile?.email || user.email).toLowerCase();
   const nowIso = new Date().toISOString();
@@ -260,7 +323,11 @@ async function upsertShareProjectFromMundely(sync: MundelyTripSync): Promise<str
   };
 
   if (sync.syncMode === "update") {
-    await setDoc(projectRef, basePatch, { merge: true });
+    if (nativeContext) {
+      const committed = await upsertNativeShareProject({ ...nativeContext, create: basePatch, update: basePatch });
+      nativeContext.assertSession();
+      notifyNativeShareProjectCommitted(user.uid, committed);
+    } else await setDoc(projectRef, basePatch, { merge: true });
     return projectRef.id;
   }
 
@@ -274,7 +341,7 @@ async function upsertShareProjectFromMundely(sync: MundelyTripSync): Promise<str
     role: "owner",
     status: "active",
   };
-  await setDoc(projectRef, {
+  const newProject = {
     ...basePatch,
     icon: "✈️",
     color: "#4F8FF7",
@@ -290,18 +357,30 @@ async function upsertShareProjectFromMundely(sync: MundelyTripSync): Promise<str
     }],
     activities: [],
     createdAt: nowIso,
-  }, { merge: false });
+  };
+  if (nativeContext) {
+    const committed = await upsertNativeShareProject({ ...nativeContext, create: newProject, update: basePatch });
+    nativeContext.assertSession();
+    notifyNativeShareProjectCommitted(user.uid, committed);
+  } else await setDoc(projectRef, newProject, { merge: false });
   return projectRef.id;
 }
 
 export async function syncMundelyTripsToShare(items: MundelyTripSync[]): Promise<void> {
   if (!bridgeAvailable() || !fbAuth.currentUser || !Array.isArray(items) || items.length === 0) return;
+  const uid = fbAuth.currentUser.uid;
   for (const sync of items) {
+    if (!bridgeSessionIsCurrent(uid)) return;
     const projectId = clean(sync.targetShareProjectId);
     try {
       const resolvedProjectId = await upsertShareProjectFromMundely(sync);
+      if (!bridgeSessionIsCurrent(uid)) return;
       await acknowledgeMundelyTrip(sync.id, "completed", resolvedProjectId);
     } catch (error) {
+      if (!bridgeSessionIsCurrent(uid)) return;
+      // Uncertain native requests retain the queued item. A later pull re-reads
+      // its stable ID before trying again; never convert an unknown ACK to error.
+      if ((error as { nativeShareRetryable?: boolean })?.nativeShareRetryable) continue;
       const code = clean((error as { code?: string; message?: string })?.code || (error as Error)?.message || "MUNDELY_SYNC_FAILED").slice(0, 120);
       await acknowledgeMundelyTrip(sync.id, "error", projectId, code).catch(() => undefined);
     }
@@ -431,7 +510,7 @@ function rebalanceShareAmounts(rawShares: unknown, nextBaseAmount: number): Reco
   return result;
 }
 
-async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<void> {
+async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<"applied" | "deferred"> {
   const user = fbAuth.currentUser;
   if (!user) throw new Error("FAINANCE_AUTH_REQUIRED");
   const projectId = clean(sync.targetShareProjectId);
@@ -439,21 +518,53 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
   if (!projectId || !clean(sync.expenseId) || !activityKey) throw new Error("MUNDELY_EXPENSE_PAYLOAD_INVALID");
 
   const projectRef = doc(fbDb, "shareProjects", projectId);
-  const snapshot = await getDoc(projectRef);
-  if (!snapshot.exists()) throw new Error("MUNDELY_SHARE_PROJECT_NOT_READY");
-  const project = snapshot.data() as Record<string, unknown>;
+  let deferred = false;
+  await updateBridgeShareProject(projectRef, async project => {
+  deferred = false;
+  if (!project) throw new Error("MUNDELY_SHARE_PROJECT_NOT_READY");
   if (clean(project.ownerUid) !== user.uid && !((project.memberUids as unknown[]) || []).map(String).includes(user.uid)) {
     throw new Error("MUNDELY_SHARE_PROJECT_ACCESS_DENIED");
   }
 
   const activities = normalizeShareActivities(Array.isArray(project.activities) ? project.activities as unknown[] : []);
   const existing = activities.find((item) => shareActivityKey(item?.id) === activityKey || clean(item?.mundelyExpenseId) === clean(sync.expenseId));
+  const shareEditedAtMs = Date.parse(clean(existing?.mundelyShareEditedAt));
+  const sourceUpdatedAtMs = Date.parse(clean(sync.sourceUpdatedAt));
+  if (
+    !sync.deleted
+    && existing
+    && Number.isFinite(shareEditedAtMs)
+    && shareEditedAtMs > 0
+    && Number.isFinite(sourceUpdatedAtMs)
+    && sourceUpdatedAtMs <= shareEditedAtMs
+  ) {
+    deferred = true;
+    return;
+  }
   const filtered = activities.filter((item) => shareActivityKey(item?.id) !== activityKey && clean(item?.mundelyExpenseId) !== clean(sync.expenseId));
   const deletedActivityIds = new Set(
     (Array.isArray(project.deletedActivityIds) ? project.deletedActivityIds : []).map(shareActivityKey).filter(Boolean)
   );
+  if (!sync.deleted && (deletedActivityIds.has(activityKey) || deletedActivityIds.has(shareActivityKey(existing?.id)))) return;
+  if (!sync.deleted && clean(sync.origin) === "fainance" && sync.syncMode !== "update") {
+    // This is an acknowledgement of an outgoing Share movement. The echo can
+    // be older than a subsequent edit or deletion on the source device.
+    if (!existing) return;
+    const link = {
+      mundelyTripId: clean(sync.tripId),
+      mundelyExpenseId: clean(sync.expenseId),
+      bridgeOrigin: "fainance",
+      sourceShareActivityKey: activityKey,
+    };
+    if (Object.entries(link).every(([key, value]) => existing[key] === value)) return;
+    return {
+      activities: activities.map(row => row === existing ? { ...row, ...link } : row),
+      updatedAt: new Date().toISOString(),
+      updatedAtMs: Date.now(),
+      shareRevision: Date.now(),
+    };
+  }
   if (sync.deleted) deletedActivityIds.add(activityKey);
-  else deletedActivityIds.delete(activityKey);
   const categories = Array.isArray(project.categories) ? [...project.categories] as Array<Record<string, unknown>> : [];
   let nextCategories = categories;
 
@@ -533,26 +644,46 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
       bridgeOrigin: clean(sync.origin) === "fainance" ? "fainance" : clean(sync.bridgeOrigin),
       sourceShareActivityKey: activityKey,
       sourceShareActivityId: /^\d+$/.test(activityKey) ? Number(activityKey) : undefined,
+      mundelySourceUpdatedAt: clean(sync.sourceUpdatedAt),
+      mundelyShareEditedAt: null,
     });
   }
 
-  await setDoc(projectRef, {
+  return {
     activities: filtered,
     categories: nextCategories,
     deletedActivityIds: [...deletedActivityIds],
     updatedAt: new Date().toISOString(),
     updatedAtMs: Date.now(),
     shareRevision: Date.now(),
-  }, { merge: true });
+  };
+  });
+  return deferred ? "deferred" : "applied";
+}
+
+async function updateBridgeProjectIfUnchanged(projectRef: DocumentReference, observed: Record<string, unknown>, patch: Record<string, unknown>) {
+  await updateBridgeShareProject(projectRef, current => {
+    if (!current || ["updatedAtMs", "shareRevision", "activities", "deletedActivityIds", "categories"]
+      .some(key => JSON.stringify(current[key]) !== JSON.stringify(observed[key]))) return;
+    return patch;
+  });
 }
 
 export async function syncMundelyExpensesToShare(items: MundelyExpenseSync[]): Promise<void> {
   if (!bridgeAvailable() || !fbAuth.currentUser || !Array.isArray(items) || items.length === 0) return;
+  const uid = fbAuth.currentUser.uid;
   for (const sync of items) {
+    if (!bridgeSessionIsCurrent(uid)) return;
     try {
-      await upsertShareExpenseFromMundely(sync);
+      const outcome = await upsertShareExpenseFromMundely(sync);
+      if (outcome === "deferred") continue;
+      if (!bridgeSessionIsCurrent(uid)) return;
       await acknowledgeMundelyExpense(sync.id, "completed");
     } catch (error) {
+      if (!bridgeSessionIsCurrent(uid)) return;
+      // Uncertain native requests retain the queued item. A later pull re-reads
+      // its stable ID before trying again; never convert an unknown ACK to error.
+      if ((error as { nativeShareRetryable?: boolean })?.nativeShareRetryable) continue;
       const code = clean((error as { code?: string; message?: string })?.code || (error as Error)?.message || "MUNDELY_EXPENSE_SYNC_FAILED").slice(0, 120);
       await acknowledgeMundelyExpense(sync.id, "error", code).catch(() => undefined);
     }
@@ -566,7 +697,7 @@ export async function syncMundelyCategoryCatalogToShare(items: MundelyLinkedTrip
     const projectId = clean(linked.targetShareProjectId);
     if (!projectId) continue;
     const projectRef = doc(fbDb, "shareProjects", projectId);
-    const snapshot = await getDoc(projectRef).catch(() => null);
+    const snapshot = await readBridgeShareProject(projectRef).catch(() => null);
     if (!snapshot || !snapshot.exists()) continue;
     const project = snapshot.data() as Record<string, unknown>;
     if (clean(project.ownerUid) !== user.uid && !((project.memberUids as unknown[]) || []).map(String).includes(user.uid)) continue;
@@ -625,48 +756,86 @@ export async function syncMundelyCategoryCatalogToShare(items: MundelyLinkedTrip
     const activitiesChanged = nextActivities.length !== rawActivities.length;
     const categoriesChanged = existingSig !== nextSig;
     if (categoriesChanged || activitiesChanged || removedKeys.size > 0) {
-      await setDoc(projectRef, {
+      await updateBridgeProjectIfUnchanged(projectRef, project, {
         categories: nextCategories,
         activities: nextActivities,
         deletedActivityIds: [...deletedIds],
         updatedAt: nowIso,
         updatedAtMs: Date.now(),
         shareRevision: Date.now()
-      }, { merge: true });
+      });
     }
   }
 }
 
-export async function reconcileFainanceShareExpensesToMundely(items: MundelyLinkedTrip[]): Promise<void> {
-  const user = fbAuth.currentUser;
-  if (!bridgeAvailable() || !user || !Array.isArray(items) || items.length === 0) return;
+const mundelyShareReconcileQueues = new Map<string, Promise<void>>();
 
-  for (const linked of items) {
+function assertMundelyShareReconcileSession(uid: string) {
+  if (!bridgeSessionIsCurrent(uid)) throw new Error("MUNDELY_BRIDGE_SESSION_CHANGED");
+}
+
+// Reverse reads and requests for one project stay in order. A confirmed deletion
+// can bypass unrelated trips without racing an older snapshot of its own trip.
+function queueMundelyShareReconcile(uid: string, linked: MundelyLinkedTrip, requiredDeletionKey = ""): Promise<void> {
+  const target = { mundelyUid: clean(linked.mundelyUid), tripId: clean(linked.tripId),
+    targetShareProjectId: clean(linked.targetShareProjectId) };
+  const key = JSON.stringify([uid, target.targetShareProjectId]);
+  const previous = mundelyShareReconcileQueues.get(key) || Promise.resolve();
+  const operation = previous.catch(() => undefined).then(async () => {
+    assertMundelyShareReconcileSession(uid);
+    await reconcileFainanceShareProjectToMundely(uid, target, requiredDeletionKey);
+  });
+  mundelyShareReconcileQueues.set(key, operation);
+  const release = () => {
+    if (mundelyShareReconcileQueues.get(key) === operation) mundelyShareReconcileQueues.delete(key);
+  };
+  operation.then(release, release);
+  return operation;
+}
+
+async function reconcileFainanceShareProjectToMundely(uid: string, linked: MundelyLinkedTrip, requiredDeletionKey: string): Promise<void> {
     const projectId = clean(linked.targetShareProjectId);
     const tripId = clean(linked.tripId);
     const mundelyUid = clean(linked.mundelyUid);
-    if (!projectId || !tripId || !mundelyUid) continue;
+    if (!projectId || !tripId || !mundelyUid) return;
 
     const projectRef = doc(fbDb, "shareProjects", projectId);
-    const projectSnap = await getDoc(projectRef).catch(() => null);
-    if (!projectSnap || !projectSnap.exists()) continue;
+    const projectSnap = await readBridgeShareProject(projectRef).catch(error => {
+      if (requiredDeletionKey) throw error;
+      return null;
+    });
+    assertMundelyShareReconcileSession(uid);
+    if (!projectSnap || !projectSnap.exists()) {
+      if (requiredDeletionKey) throw new Error("SHARE_PROJECT_MISSING");
+      return;
+    }
     const project = projectSnap.data() as Record<string, unknown>;
-    if (clean(project.ownerUid) !== user.uid && !((project.memberUids as unknown[]) || []).map(String).includes(user.uid)) continue;
+    if (clean(project.ownerUid) !== uid && !((project.memberUids as unknown[]) || []).map(String).includes(uid)) {
+      if (requiredDeletionKey) throw new Error("SHARE_PROJECT_ACCESS_DENIED");
+      return;
+    }
+    if (requiredDeletionKey && (project.sourceApp !== "mundely" || project.sourceEnvironment !== "test"
+        || clean(project.mundelyUid) !== mundelyUid || clean(project.mundelyTripId) !== tripId)) {
+      throw new Error("MUNDELY_SHARE_PROJECT_LINK_MISMATCH");
+    }
 
     const deletedActivityKeys = new Set(
       (Array.isArray(project.deletedActivityIds) ? project.deletedActivityIds : []).map(shareActivityKey).filter(Boolean)
     );
+    if (requiredDeletionKey && !deletedActivityKeys.has(requiredDeletionKey)) {
+      throw new Error("MUNDELY_SHARE_DELETE_NOT_CONFIRMED");
+    }
     const rawActivities = Array.isArray(project.activities) ? project.activities as unknown[] : [];
     const normalizedActivities = normalizeShareActivities(rawActivities);
     const activities = normalizedActivities.filter((item) => !deletedActivityKeys.has(shareActivityKey(item?.id)));
     if (activities.length !== rawActivities.length) {
-      await setDoc(projectRef, {
+      await updateBridgeProjectIfUnchanged(projectRef, project, {
         activities,
         deletedActivityIds: [...deletedActivityKeys],
         updatedAt: new Date().toISOString(),
         updatedAtMs: Date.now(),
         shareRevision: Date.now()
-      }, { merge: true });
+      });
     }
 
     const categories = Array.isArray(project.categories) ? project.categories as Array<Record<string, unknown>> : [];
@@ -690,10 +859,12 @@ export async function reconcileFainanceShareExpensesToMundely(items: MundelyLink
           currency: clean(item?.currency || item?.originalCurrency || item?.mundelyCurrency || "EUR"),
           date: clean(item?.date),
           time: clean(item?.time),
+          updatedAt: clean(item?.mundelyShareEditedAt || item?.updatedAt),
         };
       })
       .filter((item) => item.activityKey && item.amount > 0);
 
+    assertMundelyShareReconcileSession(uid);
     const result = await bridgeRequest({
       action: "reconcileShareExpenses",
       mundelyUid,
@@ -703,31 +874,137 @@ export async function reconcileFainanceShareExpensesToMundely(items: MundelyLink
       expenses,
     });
 
+    assertMundelyShareReconcileSession(uid);
     const removeKeys = new Set((Array.isArray(result.removeShareActivityKeys) ? result.removeShareActivityKeys : []).map(clean).filter(Boolean));
     if (removeKeys.size) {
       const cleaned = activities.filter((item) => !removeKeys.has(shareActivityKey(item?.id)));
-      for (const key of removeKeys) deletedActivityKeys.add(key);
-      if (cleaned.length !== activities.length || removeKeys.size) {
-        await setDoc(projectRef, {
+      let newDeletion = false;
+      for (const key of removeKeys) {
+        if (!deletedActivityKeys.has(key)) newDeletion = true;
+        deletedActivityKeys.add(key);
+      }
+      if (cleaned.length !== activities.length || newDeletion) {
+        await updateBridgeProjectIfUnchanged(projectRef, project, {
           activities: cleaned,
           deletedActivityIds: [...deletedActivityKeys],
           updatedAt: new Date().toISOString(),
           updatedAtMs: Date.now(),
           shareRevision: Date.now()
-        }, { merge: true });
+        });
       }
     }
+}
+
+export async function reconcileFainanceShareExpensesToMundely(items: MundelyLinkedTrip[]): Promise<void> {
+  const user = fbAuth.currentUser;
+  if (!bridgeAvailable() || !user || !Array.isArray(items) || items.length === 0) return;
+  for (const linked of items) {
+    if (!clean(linked.targetShareProjectId) || !clean(linked.tripId) || !clean(linked.mundelyUid)) continue;
+    await queueMundelyShareReconcile(user.uid, linked);
   }
 }
 
+// Called only after Share has confirmed its native deletion. Keep ordinary
+// projects and other platforms unchanged; the server rechecks the live link.
+export async function syncMundelyShareDeletionToMundely(project: Record<string, unknown>, activityId: string): Promise<void> {
+  const user = fbAuth.currentUser;
+  if (!bridgeAvailable() || !useNativeShareCommit(firebaseConfig.projectId) || !user || !project) return;
+  const projectId = clean(project.id), tripId = clean(project.mundelyTripId), mundelyUid = clean(project.mundelyUid);
+  const key = shareActivityKey(activityId);
+  if (project.sourceApp !== "mundely" || project.sourceEnvironment !== "test"
+      || !projectId.startsWith("mundely_") || !tripId || !mundelyUid || !key) return;
+  if (clean(project.ownerUid) !== user.uid && !(Array.isArray(project.memberUids) ? project.memberUids : []).map(String).includes(user.uid)) return;
+  if (!(Array.isArray(project.deletedActivityIds) ? project.deletedActivityIds : []).map(shareActivityKey).includes(key)
+      || (Array.isArray(project.activities) ? project.activities : []).some(item => shareActivityKey(item?.id) === key)) return;
+  await queueMundelyShareReconcile(user.uid, { mundelyUid, tripId, targetShareProjectId: projectId }, key);
+}
 
-export async function syncMundelyBridgeNow(): Promise<void> {
-  if (!bridgeAvailable() || !fbAuth.currentUser) return;
+
+type MundelyBridgeSnapshot = Awaited<ReturnType<typeof pullMundelyBridge>>;
+type MundelyBridgePullObserver = (payload: MundelyBridgeSnapshot) => void;
+type MundelyBridgeFlight = {
+  requested: boolean;
+  promise: Promise<MundelyBridgeSnapshot>;
+  observers: Set<MundelyBridgePullObserver>;
+  lastPull: MundelyBridgeSnapshot | null;
+};
+const runMundelyBridgeCycle = createSingleFlightWriter();
+const mundelyBridgeFlights = new Map<string, MundelyBridgeFlight>();
+
+function emptyMundelyBridgeSnapshot(): MundelyBridgeSnapshot {
+  return { linkRequests: [], tripSyncs: [], expenseSyncs: [], linkedTrips: [] };
+}
+
+function bridgeSessionIsCurrent(uid: string): boolean {
+  return bridgeAvailable() && fbAuth.currentUser?.uid === uid;
+}
+
+async function syncMundelyBridgeCycle(uid: string, onPull: MundelyBridgePullObserver): Promise<MundelyBridgeSnapshot> {
+  if (!bridgeSessionIsCurrent(uid)) return emptyMundelyBridgeSnapshot();
   const payload = await pullMundelyBridge();
+  if (!bridgeSessionIsCurrent(uid)) return emptyMundelyBridgeSnapshot();
+  onPull(payload);
+  if (!bridgeSessionIsCurrent(uid)) return emptyMundelyBridgeSnapshot();
   await syncMundelyTripsToShare(payload.tripSyncs);
+  if (!bridgeSessionIsCurrent(uid)) return emptyMundelyBridgeSnapshot();
   await syncMundelyCategoryCatalogToShare(payload.linkedTrips);
+  if (!bridgeSessionIsCurrent(uid)) return emptyMundelyBridgeSnapshot();
   await syncMundelyExpensesToShare(payload.expenseSyncs);
+  if (!bridgeSessionIsCurrent(uid)) return emptyMundelyBridgeSnapshot();
   await reconcileFainanceShareExpensesToMundely(payload.linkedTrips);
+  return bridgeSessionIsCurrent(uid) ? payload : emptyMundelyBridgeSnapshot();
+}
+
+export function syncMundelyBridgeNow(onPull?: MundelyBridgePullObserver): Promise<MundelyBridgeSnapshot> {
+  const uid = clean(fbAuth.currentUser?.uid);
+  if (!bridgeAvailable() || !uid) {
+    const payload = emptyMundelyBridgeSnapshot();
+    onPull?.(payload);
+    return Promise.resolve(payload);
+  }
+  const existing = mundelyBridgeFlights.get(uid);
+  if (existing) {
+    existing.requested = true;
+    if (onPull) {
+      existing.observers.add(onPull);
+      if (existing.lastPull) onPull(existing.lastPull);
+    }
+    return existing.promise;
+  }
+
+  const flight: MundelyBridgeFlight = {
+    requested: false,
+    promise: Promise.resolve(emptyMundelyBridgeSnapshot()),
+    observers: new Set(onPull ? [onPull] : []),
+    lastPull: null,
+  };
+  mundelyBridgeFlights.set(uid, flight);
+  flight.promise = Promise.resolve().then(async () => {
+    let payload = emptyMundelyBridgeSnapshot();
+    let failed = false;
+    let failure: unknown;
+    try {
+      do {
+        // Requests arriving during this cycle coalesce into one fresh pull.
+        flight.requested = false;
+        try {
+          payload = await runMundelyBridgeCycle(uid, () => syncMundelyBridgeCycle(uid, pulled => {
+            flight.lastPull = pulled;
+            for (const observer of [...flight.observers]) observer(pulled);
+          }));
+          failed = false;
+        } catch (error) {
+          failed = true;
+          failure = error;
+        }
+      } while (flight.requested && bridgeSessionIsCurrent(uid));
+      if (failed) throw failure;
+      return bridgeSessionIsCurrent(uid) ? payload : emptyMundelyBridgeSnapshot();
+    } finally {
+      if (mundelyBridgeFlights.get(uid) === flight) mundelyBridgeFlights.delete(uid);
+    }
+  });
+  return flight.promise;
 }
 
 export function isMundelyBridgeEnabled(): boolean {

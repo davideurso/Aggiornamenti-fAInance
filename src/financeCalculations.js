@@ -16,6 +16,7 @@ export function parseMoneyValue(value){
 export function itemAmountForMonth(item, monthKey, settings){
   if(!item||!monthKey)return 0;
   var amount=Number(item.amount||0);
+  var scale=10**(Number.isInteger(item.minorUnitDigits)&&item.minorUnitDigits>=0&&item.minorUnitDigits<=4?item.minorUnitDigits:2);
   if(!item.rateizzato)return dateInPeriod(item.date,monthKey,settings)?amount:0;
   var rate=Number(item.rate||0);
   if(!Number.isSafeInteger(rate)||rate<1)return 0;
@@ -25,12 +26,12 @@ export function itemAmountForMonth(item, monthKey, settings){
       const monthNumber = value => Number(value.slice(0,4))*12+Number(value.slice(5,7))-1;
       const first = monthNumber(target.start)-monthNumber(String(item.date));
       const last = monthNumber(target.end)-monthNumber(String(item.date));
-      const cents = Math.round(amount*100), base = Math.floor(cents/rate);
+      const cents = Math.round(amount*scale), base = Math.floor(cents/rate);
       let result = 0;
       for(let offset=first;offset<=last;offset++) {
         const index=item.rateDirection==='backward'?-offset:offset;
         if(index<0||index>=rate)continue;
-        if(dateInPeriod(installmentDate(item.date,offset),monthKey,settings)) result+=(index===rate-1?cents-base*(rate-1):base)/100;
+        if(dateInPeriod(installmentDate(item.date,offset),monthKey,settings)) result+=(index===rate-1?cents-base*(rate-1):base)/scale;
       }
       return result;
     } catch { return 0; }
@@ -49,10 +50,10 @@ export function itemAmountForMonth(item, monthKey, settings){
   var index=item.rateDirection==="backward"?-forwardIndex:forwardIndex;
   if(index<0||index>=rate)return 0;
   // FIX 2.0.3 — resto sull'ultima rata: prima 100 EUR su 3 mesi dava 33,33 x 3 = 99,99.
-  var cents=Math.round(amount*100);
+  var cents=Math.round(amount*scale);
   var base=Math.floor(cents/rate);
   var share=index===rate-1?cents-base*(rate-1):base;
-  return share/100;
+  return share/scale;
 }
 
 export function totalForMonth(items, monthKey, mode, settings){

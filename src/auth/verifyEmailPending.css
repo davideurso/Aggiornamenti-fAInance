@@ -1,0 +1,23 @@
+.fainance-verification-pending { min-height:100dvh; display:grid; place-items:center; padding:24px 16px; box-sizing:border-box; font-family:system-ui,sans-serif; }
+.fainance-verification-pending .verification-card { width:100%; max-width:390px; overflow:hidden; text-align:center; position:relative; background:#fff; }
+.fainance-verification-pending .verification-card::before { content:""; position:absolute; top:0; left:14px; right:14px; height:4px; background:#FAAE12; border-radius:0 0 6px 6px; }
+.fainance-verification-pending .verification-brand { padding:28px 24px 18px; }
+.fainance-verification-pending .verification-brand img { width:190px; max-width:90%; height:auto; }
+.fainance-verification-pending .verification-content { padding:0 24px 26px; }
+.verification-envelope { width:72px; height:72px; border-radius:50%; background:#FFF6DE; color:#052A5F; display:grid; place-items:center; position:relative; margin:0 auto 18px; }
+.verification-envelope svg { width:42px; height:36px; }
+.verification-envelope span { position:absolute; bottom:9px; right:5px; width:24px; height:24px; border-radius:50%; background:#FAAE12; color:#052A5F; border:3px solid white; font-size:16px; font-weight:800; line-height:24px; }
+.fainance-verification-pending h1 { font-size:23px !important; line-height:1.25 !important; font-weight:750; margin:0; }
+.verification-title-accent { width:54px; height:3px; border-radius:4px; background:#FAAE12; margin:14px auto 18px; }
+.fainance-verification-pending h2 { font-size:18px; line-height:1.4; color:#052A5F; font-weight:650; margin:0 0 18px; }
+.fainance-verification-pending .verification-instructions { font-size:14px; line-height:1.6; margin:0 0 20px; }
+.fainance-verification-pending .verification-recipient { padding:13px 12px; border-left:4px solid #FAAE12; border-radius:12px; background:#FFF6DE; color:#052A5F; font-size:14px; font-weight:650; overflow-wrap:anywhere; margin:0 0 18px; }
+.fainance-verification-pending .verification-return { font-size:13px; line-height:1.6; color:#52647A; margin:0 auto 22px; max-width:270px; }
+.verification-actions { display:flex; flex-direction:column; gap:10px; }
+.fainance-verification-pending .verification-actions button { width:100%; min-height:44px; padding:10px 16px; font-size:15px; font-weight:650; cursor:pointer; }
+.fainance-verification-pending button.verification-exit { background:transparent !important; color:#052A5F !important; border:1px solid #FAAE12 !important; }
+@media(prefers-color-scheme:dark) {
+  .fainance-verification-pending h2 { color:#F4F7FB; }
+  .fainance-verification-pending .verification-recipient { background:#302B1D; color:#FFE2A0; }
+  .fainance-verification-pending button.verification-exit { color:#F4F7FB !important; }
+}

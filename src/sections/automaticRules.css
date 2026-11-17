@@ -572,3 +572,6 @@
 .fainance-rules .rule-ai-rephrase { display:block; width:calc(100% - 32px); margin:0 16px 10px; min-height:36px; padding:6px 12px; background:var(--rule-soft); border:1px solid var(--rule-border); border-radius:12px; color:var(--rule-link); font-size:13px; font-weight:700; }
 .fainance-rules .rule-ai-rephrase:focus-visible { outline:2px solid var(--rule-primary); outline-offset:2px; }
 .fainance-rules[data-dark=true] .rule-ai-rephrase { background:var(--rule-soft); color:var(--rule-text); }
+
+/* The shared movement picker occupies a full row inside the action editor. */
+.fainance-rules .rule-installments{grid-column:1/-1;min-width:0;width:100%}

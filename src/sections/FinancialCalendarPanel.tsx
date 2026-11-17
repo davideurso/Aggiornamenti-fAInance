@@ -517,7 +517,7 @@ export function FinancialCalendarPanel() {
       </div>
       <div className="fc-day-balance fc-cumulative">
         <span>{forecastWords(c.lang || 'it')[11]}</span>
-        <strong className={cumulativeChange < 0 ? 'fc-negative' : 'fc-balance'}>{cumulativeChange < 0 ? '−' : ''}{money(cumulativeChange)}</strong>
+        <strong className={cumulativeChange < 0 ? 'fc-negative' : 'fc-balance'}>{money(cumulativeChange)}</strong>
       </div>
       <div className="fc-day-flows" role="group" aria-label={words.dailyNet}>
         <span><i className="fc-dot-in" aria-hidden="true" />{words.dailyIncome} <strong className="fc-positive">{money(day.income)}</strong></span>

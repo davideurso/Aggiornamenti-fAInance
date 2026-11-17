@@ -1,3 +1,4 @@
+import { notifyGrowthSourceCommitted } from "./growthMetricsCommit";
 import { readWithDeadline } from "../utils/readDeadline";
 import {
   collection,
@@ -145,6 +146,48 @@ function markerState(snapshot: any): string {
   return String(data.state || "");
 }
 
+// A09.04 Test only: the legacy cloud can retain explicit movement deletions
+// even when its expense/income arrays are empty. Those are not clean accounts.
+function growthTestSourceCheckV2(): boolean {
+  return fbDb?.app?.options?.projectId === "fainance-test-20260823195207";
+}
+export function hasLegacyMovementTombstonesV2(value: any): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value).some(([key, tombstone]) =>
+    (key.startsWith("expense:") || key.startsWith("income:")) &&
+    isExplicitSyncTombstone(tombstone));
+}
+export function legacyCloudRepresentedLocallyV2(
+  uid: string, localExpenses: any[], localIncomes: any[], localTombstones: any,
+  cloudExpenses: any[], cloudIncomes: any[], cloudTombstones: any,
+): boolean {
+  const local = buildLegacyMigrationRecordsV2(uid, localExpenses, localIncomes, localTombstones);
+  const cloud = buildLegacyMigrationRecordsV2(uid, cloudExpenses, cloudIncomes, cloudTombstones);
+  const indexed = new Map(local.map(record => [record.recordId, record]));
+  return cloud.every(expected => {
+    const actual = indexed.get(expected.recordId);
+    return !!actual && Number.isSafeInteger(actual.updatedAtMs) &&
+      actual.updatedAtMs >= expected.updatedAtMs &&
+      !(actual.updatedAtMs === expected.updatedAtMs && expected.deleted && !actual.deleted);
+  });
+}
+async function testCloudLegacyReadinessV2(
+  uid: string, expenses: any[], incomes: any[], tombstones: any,
+): Promise<{ hasLegacy: boolean; representedLocally: boolean }> {
+  // Server-only read of the account's own legacy source, never a new writer.
+  const snapshot = await readWithDeadline(getDocFromServer(doc(fbDb, "userData", uid)));
+  if (!snapshot.exists()) return { hasLegacy: false, representedLocally: true };
+  const saved: any = await fainanceExpandAccountCloudDataV5(snapshot.data() || {});
+  const cloudExpenses = Array.isArray(saved.expenses) ? saved.expenses : [];
+  const cloudIncomes = Array.isArray(saved.incomes) ? saved.incomes : [];
+  const cloudDeleted = saved.accountDeletedRecords || {};
+  const hasLegacy = cloudExpenses.length > 0 || cloudIncomes.length > 0 ||
+    hasLegacyMovementTombstonesV2(cloudDeleted);
+  const representedLocally = !hasLegacy || legacyCloudRepresentedLocallyV2(
+    uid, expenses, incomes, tombstones, cloudExpenses, cloudIncomes, cloudDeleted);
+  return { hasLegacy, representedLocally };
+}
+
 export async function movementSyncV2AccountStatus(
   uidValue: string,
   localExpenses: any[],
@@ -173,8 +216,32 @@ export async function movementSyncV2AccountStatus(
     // account-scoped device acknowledgement below.
   }
 
+  if (state === "enabled-clean" && growthTestSourceCheckV2()) {
+    // Recover a clean marker created by an old Test build before legacy cloud
+    // movements or deletions were fully hydrated. Never assume an empty array
+    // proves an empty cloud source, and never overwrite an unverified source.
+    try {
+      const readiness = await testCloudLegacyReadinessV2(
+        uid, localExpenses || [], localIncomes || [], localTombstones || {});
+      if (readiness.hasLegacy && !readiness.representedLocally)
+        return { active: false, reason: "status-check-unavailable" };
+      if (readiness.hasLegacy || hasLegacyMovementTombstonesV2(localTombstones)) {
+        const alreadyRepresented = await legacySnapshotAlreadyRepresentedOnServerV2(
+          uid, localExpenses || [], localIncomes || [], localTombstones);
+        if (alreadyRepresented) {
+          await completeMovementSyncV2Migration(uid);
+          return { active: true, reason: "migrated-server-confirmed" };
+        }
+        return { active: false, reason: "legacy-migration-required" };
+      }
+    } catch (_error) {
+      return { active: false, reason: "status-check-unavailable" };
+    }
+  }
+
   if (state === "enabled-clean" || state === "enabled-migrated") {
-    const hasLegacyLocal = (localExpenses || []).length > 0 || (localIncomes || []).length > 0;
+    const hasLegacyLocal = (localExpenses || []).length > 0 || (localIncomes || []).length > 0 ||
+      (growthTestSourceCheckV2() && hasLegacyMovementTombstonesV2(localTombstones));
     if (state === "enabled-migrated" && hasLegacyLocal && !deviceAcknowledged) {
       try {
         const alreadyRepresented = await legacySnapshotAlreadyRepresentedOnServerV2(
@@ -233,7 +300,8 @@ export async function movementSyncV2AccountStatus(
 
   // Existing local movements mean this is a legacy account. Do not block the
   // app: it stays on the old path while the background migrator is prepared.
-  if ((localExpenses || []).length || (localIncomes || []).length) {
+  if ((localExpenses || []).length || (localIncomes || []).length ||
+    (growthTestSourceCheckV2() && hasLegacyMovementTombstonesV2(localTombstones))) {
     return { active: false, reason: "legacy-migration-required" };
   }
 
@@ -241,7 +309,8 @@ export async function movementSyncV2AccountStatus(
   if (!legacySnap) return { active: false, reason: "status-check-unavailable" };
   if (legacySnap.exists()) {
     const expanded: any = await fainanceExpandAccountCloudDataV5(legacySnap.data() || {});
-    if ((expanded.expenses || []).length || (expanded.incomes || []).length) {
+    if ((expanded.expenses || []).length || (expanded.incomes || []).length ||
+      (growthTestSourceCheckV2() && hasLegacyMovementTombstonesV2(expanded.accountDeletedRecords))) {
       return { active: false, reason: "legacy-migration-required" };
     }
   }
@@ -367,8 +436,19 @@ export function watchMovementSyncV2(
   let latest: MovementRecordV2[] | null = null;
   const byDocument = new Map<string, MovementRecordV2>();
   let latestMeta: MovementWatchMeta = { fromCache: true, hasPendingWrites: true };
+  let emitted: MovementRecordV2[] | null = null;
+  let emittedMeta: MovementWatchMeta | null = null;
   const emit = () => {
-    if (latest) listener(overlayPendingMovementRecordsV2(uid, latest, latestMeta), latestMeta);
+    if (!latest) return;
+    const next = overlayPendingMovementRecordsV2(uid, latest, latestMeta);
+    // Individual ACKs do not change the financial view. Keep real data changes
+    // immediate, and still emit the first server view and final pending ACK.
+    if (emitted && emittedMeta && emittedMeta.fromCache === latestMeta.fromCache &&
+        emittedMeta.hasPendingWrites === latestMeta.hasPendingWrites &&
+        emitted.length === next.length && emitted.every((row,index) => row === next[index])) return;
+    emitted = next;
+    emittedMeta = latestMeta;
+    listener(next, latestMeta);
   };
   const observers = pendingObserversV2.get(uid) || new Set<() => void>();
   pendingObserversV2.set(uid, observers);
@@ -385,8 +465,10 @@ export function watchMovementSyncV2(
           if (change.type === 'removed') byDocument.delete(change.doc.id);
           else {
             const record = normalizeRecord(change.doc.data());
-            if (record && record.uid === uid) byDocument.set(change.doc.id, record);
-            else byDocument.delete(change.doc.id);
+            if (record && record.uid === uid) {
+              const previous = byDocument.get(change.doc.id);
+              if (!sameMovementVersionV2(previous || null, record)) byDocument.set(change.doc.id, record);
+            } else byDocument.delete(change.doc.id);
           }
         });
       } else {
@@ -477,6 +559,7 @@ export function writeMovementDiffV2(
     operation.then(() => {
       const entry = pending.get(record.recordId);
       if (entry?.record.mutationId === record.mutationId) entry.committed = true;
+      notifyGrowthSourceCommitted(uid, "MOVEMENTS", "ORDINARY");
       notifyPendingV2(uid);
     }, (error) => {
       const entry = pending.get(record.recordId);
@@ -707,6 +790,7 @@ export async function replaceMovementSetsV2(
   if (active.size !== desired.size || [...desired].some(([id, record]) =>
     !active.has(id) || canonicalMovementPayloadV2(active.get(id)!.payload) !== canonicalMovementPayloadV2(record.payload)))
     throw new Error('SYNC_V2_CONCURRENT_EDIT_OR_VERIFY_FAILED');
+  notifyGrowthSourceCommitted(uid, "MOVEMENTS", "REPLACEMENT");
   return target;
 }
 
@@ -810,6 +894,14 @@ export async function migrateLegacyMovementSnapshotV2(
 ): Promise<{ total: number }> {
   const uid = String(uidValue || "").trim();
   if (!uid) return { total: 0 };
+  if (growthTestSourceCheckV2()) {
+    // A client with an empty or stale cache must not declare a server legacy
+    // migration complete before its cloud movements AND deletions are hydrated.
+    // This check precedes any migration marker or movement mutation.
+    const source = await testCloudLegacyReadinessV2(
+      uid, expensesValue, incomesValue, tombstonesValue);
+    if (!source.representedLocally) throw new Error("SYNC_V2_LEGACY_CLOUD_NOT_HYDRATED");
+  }
   const records = buildLegacyMigrationRecordsV2(uid, expensesValue, incomesValue, tombstonesValue);
   const announce = options?.announceMigration !== false;
   const startedAtMs = Date.now();
@@ -869,6 +961,7 @@ export async function migrateLegacyMovementSnapshotV2(
   if (missing.length) {
     throw new Error(`MOVEMENT_V2_MIGRATION_VERIFY_FAILED:${missing.length}`);
   }
+  notifyGrowthSourceCommitted(uid, "MOVEMENTS", "MIGRATION");
   return { total: records.length };
 }
 
@@ -885,6 +978,7 @@ export async function completeMovementSyncV2Migration(uidValue: string): Promise
   }, { merge: true });
   await waitForPendingWrites(fbDb);
   await saveLocalActiveMarker(uid);
+  notifyGrowthSourceCommitted(uid, "MOVEMENTS", "MIGRATION");
 }
 
 function movementPayloadWithCanonicalRecordId(record: MovementRecordV2): any {

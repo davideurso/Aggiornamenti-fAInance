@@ -1,3 +1,4 @@
+import { incomeReceiptExportName } from "./finance/incomeReceipt";
 // ═══════════════════════════════════════════════════════════════════════════════
 // CORE.TSX — Costanti, utilità, hook, contesto Firebase
 // Base di tutti gli altri moduli.
@@ -467,7 +468,8 @@ export function amountForBalancePeriodMonth(item,monthKey,viewMode,periodMode,st
   if(String(viewMode||"rateizzato")==="reale"||!item.rateizzato)return inside(itemDate)?amount:0;
   var rateCount=Math.max(0,Math.floor(Number(item.rate)||0));
   if(!rateCount||!itemDate)return 0;
-  var cents=Math.round(amount*100);
+  var scale=10**(Number.isInteger(item.minorUnitDigits)&&item.minorUnitDigits>=0&&item.minorUnitDigits<=4?item.minorUnitDigits:2);
+  var cents=Math.round(amount*scale);
   var base=Math.floor(cents/rateCount);
   var total=0;
   for(var i=0;i<rateCount;i++){
@@ -477,7 +479,7 @@ export function amountForBalancePeriodMonth(item,monthKey,viewMode,periodMode,st
     var installmentDate=new Date(targetMonth.getFullYear(),targetMonth.getMonth(),Math.min(itemDate.getDate(),last),12,0,0,0);
     if(!inside(installmentDate))continue;
     var share=i===rateCount-1?cents-base*(rateCount-1):base;
-    total+=share/100;
+    total+=share/scale;
   }
   return total;
 }
@@ -565,7 +567,7 @@ export function androidDownload(filename,blob,onDone){
   }
 }
 
-export function exportToCSV(expenses,incomes,cats,methods,dateFmt,cb,filename){var rows=[["Tipo","Data","Importo","Categoria","Metodo","Descrizione","Rateizzato","Rate"]];for(var i=0;i<expenses.length;i++){var e=expenses[i];var c=cats.find(function(x){return x.id===e.catId;})||{name:""};var m=methods.find(function(x){return x.id===e.methodId;})||{name:""};rows.push(["Uscita",fmtDate(e.date,dateFmt),e.amount,c.name,m.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);}for(var j=0;j<incomes.length;j++){var inc=incomes[j];var it=getAllIncomeTypes().find(function(x){return x.id===inc.type;})||{name:inc.type||""};rows.push(["Entrata",fmtDate(inc.date,dateFmt),inc.amount,it.name,"",inc.desc||"",inc.rateizzato?"SI":"NO",inc.rateizzato?inc.rate:""]);}var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c==null?"":c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");androidDownload(filename||"fainance.csv",new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}),cb);}
+export function exportToCSV(expenses,incomes,cats,methods,dateFmt,cb,filename){var rows=[["Tipo","Data","Importo","Categoria","Metodo","Descrizione","Rateizzato","Rate"]];for(var i=0;i<expenses.length;i++){var e=expenses[i];var c=cats.find(function(x){return x.id===e.catId;})||{name:""};var m=methods.find(function(x){return x.id===e.methodId;})||{name:""};rows.push(["Uscita",fmtDate(e.date,dateFmt),e.amount,c.name,m.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);}for(var j=0;j<incomes.length;j++){var inc=incomes[j];var it=getAllIncomeTypes().find(function(x){return x.id===inc.type;})||{name:inc.type||""};rows.push(["Entrata",fmtDate(inc.date,dateFmt),inc.amount,it.name,incomeReceiptExportName(inc,methods),inc.desc||"",inc.rateizzato?"SI":"NO",inc.rateizzato?inc.rate:""]);}var csv=rows.map(function(r){return r.map(function(c){return '"'+String(c==null?"":c).replace(/"/g,'""')+'"';}).join(",");}).join("\n");androidDownload(filename||"fainance.csv",new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}),cb);}
 export function exportToXLSX(expenses,incomes,cats,methods,dateFmt,cb,filename){
   function xmlText(value){
     var s=String(value==null?"":value);
@@ -606,11 +608,11 @@ export function exportToXLSX(expenses,incomes,cats,methods,dateFmt,cb,filename){
     var em=(methods||[]).find(function(x){return x.id===e.methodId;})||{name:""};
     eRows.push([fmtDate(e.date,dateFmt),Number(e.amount)||0,ec.name,em.name,e.desc||"",e.rateizzato?"SI":"NO",e.rateizzato?e.rate:""]);
   }
-  var iRows=[["Data","Importo","Tipo","Descrizione","Rateizzato","Rate"]];
+  var iRows=[["Data","Importo","Tipo","Ricezione","Descrizione","Rateizzato","Rate"]];
   for(var ii=0;ii<(incomes||[]).length;ii++){
     var inc2=incomes[ii];
     var iit=getAllIncomeTypes().find(function(x){return x.id===inc2.type;})||{name:inc2.type||""};
-    iRows.push([fmtDate(inc2.date,dateFmt),Number(inc2.amount)||0,iit.name,inc2.desc||"",inc2.rateizzato?"SI":"NO",inc2.rateizzato?inc2.rate:""]);
+    iRows.push([fmtDate(inc2.date,dateFmt),Number(inc2.amount)||0,iit.name,incomeReceiptExportName(inc2,methods),inc2.desc||"",inc2.rateizzato?"SI":"NO",inc2.rateizzato?inc2.rate:""]);
   }
   var fname=String(filename||"fainance.xlsx").toLowerCase();
   var hasExpenses=(expenses||[]).length>0;
