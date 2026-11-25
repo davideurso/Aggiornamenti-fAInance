@@ -1,12 +1,13 @@
 {
-  "version": "2.2.2",
-  "build": 274,
-  "acceptedAndroid": 2026111703,
+  "version": "2.2.3",
+  "build": 275,
+  "acceptedAndroid": 2026112501,
+  "candidateAndroid": 2026112501,
   "files": [
     {
       "path": "src/app.tsx",
-      "sha256": "d006ee5feacdce0abc3ce7927696dc608a2b1ab7361342897c8924a96fa6d2b7",
-      "normalizedSha256": "d006ee5feacdce0abc3ce7927696dc608a2b1ab7361342897c8924a96fa6d2b7"
+      "sha256": "26f6ae71b07a043fe9b80647d59d6c962bf9d6803d81714ca82461ce1f013e9e",
+      "normalizedSha256": "26f6ae71b07a043fe9b80647d59d6c962bf9d6803d81714ca82461ce1f013e9e"
     },
     {
       "path": "src/assistantLogic.ts",
@@ -227,11 +228,6 @@
       "path": "src/data/attachmentStorage.ts",
       "sha256": "bed5419aba4ac8f1d9a800bc02605ab1aa259d73000842cc428f8023ed8b869e",
       "normalizedSha256": "bed5419aba4ac8f1d9a800bc02605ab1aa259d73000842cc428f8023ed8b869e"
-    },
-    {
-      "path": "src/data/automaticBackups.ts",
-      "sha256": "e9d6c2df487f5dfb110e025433c75ddf6d42f8a859d81f140e1de8429fff9df3",
-      "normalizedSha256": "e9d6c2df487f5dfb110e025433c75ddf6d42f8a859d81f140e1de8429fff9df3"
     },
     {
       "path": "src/data/automaticRuleAccountSync.js",
@@ -640,8 +636,8 @@
     },
     {
       "path": "src/firebase/shareActivityCommit.ts",
-      "sha256": "b994fa6e96371ba2a88256f1e7fdc00664a14a4738462ec25e860dc75b9191e4",
-      "normalizedSha256": "eab66577e8b10ea2dffebe2cae91c8f100344610213a44b133e0282b65374bf1"
+      "sha256": "adabb1a6bb9492bdc4e3810eb2eaaa8d9bcc4296a396a5124b0d40a623ce368a",
+      "normalizedSha256": "7d09df57376772b5caed8aa6b44a1ebf399d31eb61dd95ea7a3c79ba3e607a4d"
     },
     {
       "path": "src/i18n/appTranslationPatches.ts",
@@ -712,6 +708,11 @@
       "path": "src/i18n/installmentRuleTranslations.ts",
       "sha256": "805b4e0aae7f8455713c4854a6bb8b7f72908456b4e79943a4b8d395fe71862f",
       "normalizedSha256": "805b4e0aae7f8455713c4854a6bb8b7f72908456b4e79943a4b8d395fe71862f"
+    },
+    {
+      "path": "src/i18n/mundelyBudgetText.ts",
+      "sha256": "382a0a83cabc9bf599c97b6f8b0288d3923a4f56ccd08ff94e3fff281bc4b477",
+      "normalizedSha256": "382a0a83cabc9bf599c97b6f8b0288d3923a4f56ccd08ff94e3fff281bc4b477"
     },
     {
       "path": "src/i18n/patrimonyLinkTranslations.ts",
@@ -835,8 +836,13 @@
     },
     {
       "path": "src/integrations/mundelyBridge.ts",
-      "sha256": "75639a700fdd559e5d9449eba8be122c105357cec6d9d6aa282fc52e06338c17",
-      "normalizedSha256": "d11143f997ea900c4ebe90d4a021319c3f9da5baf3977e5df99f60fb444556c2"
+      "sha256": "7d102598143e348e40df71eff3943bda2f9adab3e088d2475a9f7e65b836ac53",
+      "normalizedSha256": "7d102598143e348e40df71eff3943bda2f9adab3e088d2475a9f7e65b836ac53"
+    },
+    {
+      "path": "src/integrations/MundelyBudgetPanel.tsx",
+      "sha256": "afba4ea9cef41b121baa3171ca12d69dfe4c2bf10aacaec48a4041a7044e4e4f",
+      "normalizedSha256": "afba4ea9cef41b121baa3171ca12d69dfe4c2bf10aacaec48a4041a7044e4e4f"
     },
     {
       "path": "src/integrations/storeSubscriptions.js",
@@ -1085,8 +1091,8 @@
     },
     {
       "path": "src/sections/SharePanel.tsx",
-      "sha256": "7ed6a72adef28e10ee34bfbaf78c067908d76cc7fa37e847cbd5173d01049058",
-      "normalizedSha256": "721fac07b1dd4049aac5b815deb428464a05d723755705a19d3c0347963fd498"
+      "sha256": "74832678cfb333a7f2239a7e8221b3f60d9f8989862080e98aeca6f3d4e6097c",
+      "normalizedSha256": "74832678cfb333a7f2239a7e8221b3f60d9f8989862080e98aeca6f3d4e6097c"
     },
     {
       "path": "src/sections/ShoppingPanel.tsx",
@@ -1145,8 +1151,8 @@
     },
     {
       "path": "src/settings/SettingsPanel.tsx",
-      "sha256": "2d2282b7869e4fbe90b9932afeb73545f2978ea3c5a476cd6ed5debdbf98fd75",
-      "normalizedSha256": "bed79ab30506c2ed143620a37cd87bb0e009c433e7c15fa78768d77dadd63774"
+      "sha256": "e76788016c5a4ed01db94eee574cc0abed214da0a152f8447e5bf8558ca27347",
+      "normalizedSha256": "fb864ace5809cb71fa6de3c3597d3c1aeaa3839599ded8955a8606a83be266f2"
     },
     {
       "path": "src/share/firestore-share-categories.rules.fragment",
@@ -1299,11 +1305,6 @@
       "normalizedSha256": "1260a965b7d7a6b102608280705fabc722f8d76226ed385a7f7f803f7c2fcc3f"
     },
     {
-      "path": "src/utils/optionalCategoryBackups.ts",
-      "sha256": "f0cb57be26ded3667c5593a4944e1d4fb5af9e50c46908935f5d1d58df38174f",
-      "normalizedSha256": "f0cb57be26ded3667c5593a4944e1d4fb5af9e50c46908935f5d1d58df38174f"
-    },
-    {
       "path": "src/utils/pendingVoiceLaunch.ts",
       "sha256": "9d112103d9c62ea999f7ebc6817e20c6384af0c579f2d7b33f0464f224d57744",
       "normalizedSha256": "9d112103d9c62ea999f7ebc6817e20c6384af0c579f2d7b33f0464f224d57744"
@@ -1344,21 +1345,6 @@
       "normalizedSha256": "f21d685d756d49950cbe36effebe93cce2fb844f534ba5131864873d68c03e70"
     },
     {
-      "path": "src/assets/social215/facebook.svg",
-      "sha256": "9828719f42ef1c5ecf1e53c9682f5dfa19eb978d1732cef0cc344f0a70e8a123",
-      "normalizedSha256": "9828719f42ef1c5ecf1e53c9682f5dfa19eb978d1732cef0cc344f0a70e8a123"
-    },
-    {
-      "path": "src/assets/social215/instagram.svg",
-      "sha256": "e4971a7ce8ffc6b4400dd4a0f2627c2290c1e275f54647dc8bf882d597cf5e3f",
-      "normalizedSha256": "e4971a7ce8ffc6b4400dd4a0f2627c2290c1e275f54647dc8bf882d597cf5e3f"
-    },
-    {
-      "path": "src/assets/social215/youtube.svg",
-      "sha256": "26f2ce61378ba27909ae138be71e36a3bdcc833bb125810511c4926c2e85df25",
-      "normalizedSha256": "26f2ce61378ba27909ae138be71e36a3bdcc833bb125810511c4926c2e85df25"
-    },
-    {
       "path": "src/icons/runtime/CanonicalSelect.ts",
       "sha256": "199a4139d8e818db49eb325641e9d46a87d96a28c4ea48787298fc810e389648",
       "normalizedSha256": "63caafaca07825f2443c9c30b7dc35c803173e88464ed11afda1ee1ef933b2c9"
@@ -1377,6 +1363,26 @@
       "path": "src/icons/runtime/jsx-runtime.ts",
       "sha256": "2a786e50777339b547c8c6e82fc539f34c49bbb6f369d163efb4bedf40a3962c",
       "normalizedSha256": "2a786e50777339b547c8c6e82fc539f34c49bbb6f369d163efb4bedf40a3962c"
+    },
+    {
+      "path": "src/assets/social215/facebook.svg",
+      "sha256": "9828719f42ef1c5ecf1e53c9682f5dfa19eb978d1732cef0cc344f0a70e8a123",
+      "normalizedSha256": "9828719f42ef1c5ecf1e53c9682f5dfa19eb978d1732cef0cc344f0a70e8a123"
+    },
+    {
+      "path": "src/assets/social215/instagram.svg",
+      "sha256": "e4971a7ce8ffc6b4400dd4a0f2627c2290c1e275f54647dc8bf882d597cf5e3f",
+      "normalizedSha256": "e4971a7ce8ffc6b4400dd4a0f2627c2290c1e275f54647dc8bf882d597cf5e3f"
+    },
+    {
+      "path": "src/assets/social215/youtube.svg",
+      "sha256": "26f2ce61378ba27909ae138be71e36a3bdcc833bb125810511c4926c2e85df25",
+      "normalizedSha256": "26f2ce61378ba27909ae138be71e36a3bdcc833bb125810511c4926c2e85df25"
+    },
+    {
+      "path": "public/assets/index-DOtuFPKE.js",
+      "sha256": "26a90c20e94f49cdfb28a5526c5cdfd9787ebeb4f5d97121fc74745befff7e33",
+      "normalizedSha256": "26a90c20e94f49cdfb28a5526c5cdfd9787ebeb4f5d97121fc74745befff7e33"
     },
     {
       "path": "public/email-verification/fainance.png",
@@ -21474,6 +21480,16 @@
       "normalizedSha256": "1f6ebf996e7b00a8a0ffe8cd9b3eb7de16b94a8b6031dbd898f3efe2f04181c5"
     },
     {
+      "path": "public/chatgpt-review/20261117/demo.mp4",
+      "sha256": "05f092e4278f1702240d927f6894dffabf3d825f09904e7678f6c581e8014829",
+      "normalizedSha256": "6200098994fabfa8e3b6ead15dc1c8a72870fab50a03952953952df86a3edd5a"
+    },
+    {
+      "path": "public/chatgpt-review/20261117/import-201.csv",
+      "sha256": "76312c343ffc7bddab245f1dd15296bb0ba664a6bc71159aa3e26074b964a3c6",
+      "normalizedSha256": "c8a434d57ba7974719d46b8357d8ea62b5d0c631290d29a89bf70bb1e128a511"
+    },
+    {
       "path": "assets/ai_grillo_mascot.png",
       "sha256": "39c81dd3639f6e45605e583c56b205df98fa4a91bd774d540495f99343c937c7",
       "normalizedSha256": "be8eb5b0120dc6a2b8d11c99b7d9c8d88b6157e193122b5587321133b04f14d4"
@@ -21514,6 +21530,21 @@
       "normalizedSha256": "4838938a72b913b99cfda54a43bbe73f05893071dc6e3702b0adc44794b64272"
     },
     {
+      "path": "ios/capacitor-cordova-ios-plugins/CordovaPluginsResources.podspec",
+      "sha256": "6ace787f88f8c8da88526ed2ecdf0b9bd659cdb64f56bd5e73a684e0d26b7e06",
+      "normalizedSha256": "6ace787f88f8c8da88526ed2ecdf0b9bd659cdb64f56bd5e73a684e0d26b7e06"
+    },
+    {
+      "path": "ios/capacitor-cordova-ios-plugins/resources/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "normalizedSha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "ios/capacitor-cordova-ios-plugins/sources/.gitkeep",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "normalizedSha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
       "path": "ios/App/App/App.entitlements",
       "sha256": "3d806398b2490570b9d33cee9ed597451baa807fd2b90da0679c8389d625be6b",
       "normalizedSha256": "3d806398b2490570b9d33cee9ed597451baa807fd2b90da0679c8389d625be6b"
@@ -21522,6 +21553,16 @@
       "path": "ios/App/App/AppDelegate.swift",
       "sha256": "a0cbff8c272c375bbeddb6bc8d97b6ad494bbb3b8e84b2c783f813b5b3e8376d",
       "normalizedSha256": "83b71c5aefcfd031346c7c383444e41b129bbeb349d2ed9789bf2fdfe51195e3"
+    },
+    {
+      "path": "ios/App/App/capacitor.config.json",
+      "sha256": "116dfb1287f3a6ba8cd3390903e4810edfd5fbefcd5a7071fbace4f5547db4a3",
+      "normalizedSha256": "116dfb1287f3a6ba8cd3390903e4810edfd5fbefcd5a7071fbace4f5547db4a3"
+    },
+    {
+      "path": "ios/App/App/config.xml",
+      "sha256": "e9dcda493e663c5c4db9e3cb3bd968477a6e90aa8840bcbba40d72ed54b767ce",
+      "normalizedSha256": "e9dcda493e663c5c4db9e3cb3bd968477a6e90aa8840bcbba40d72ed54b767ce"
     },
     {
       "path": "ios/App/App/FainanceAdsPlugin.m",
@@ -21535,8 +21576,8 @@
     },
     {
       "path": "ios/App/App/FainanceAnalyticsGuardPlugin.swift",
-      "sha256": "fa1bb686aa1ad79780dcb6d249da2e8cf9b44e48f09867094a78827477b0e0e4",
-      "normalizedSha256": "fa1bb686aa1ad79780dcb6d249da2e8cf9b44e48f09867094a78827477b0e0e4"
+      "sha256": "bb31f51d277cd102d82ad118b2bbc3dce874a8c68f16620efed5070120529576",
+      "normalizedSha256": "bb31f51d277cd102d82ad118b2bbc3dce874a8c68f16620efed5070120529576"
     },
     {
       "path": "ios/App/App/FainanceBillingPlugin.m",
@@ -21560,13 +21601,13 @@
     },
     {
       "path": "ios/App/App/FainanceWidgetBridgePlugin.m",
-      "sha256": "bc8b7547c5ea717f0fba13ac87ef329fcb838ac2f937a646fe0b521c79a77e56",
-      "normalizedSha256": "54ebbc76dd459dc2c6d2f91b48601de87eb3b3bff14e7964734f0b4590e8dbfa"
+      "sha256": "7d053d4c3b34f27c9c70d3450c22218505becf93e435bbe32ac42b905ff971b8",
+      "normalizedSha256": "8f69f271678fbe98b7f153d4ea78e18cd1fb15b94a64cbc988c90a4abfd3b61d"
     },
     {
       "path": "ios/App/App/FainanceWidgetBridgePlugin.swift",
-      "sha256": "f52d07ff0aec2195deb1c4e221ef521dfd91a4a2ab9958a3831d1a314d29b859",
-      "normalizedSha256": "2cc33e22499593e1c7397b660c41d4c77cd7151944279c2c2a75932386164689"
+      "sha256": "dc4d58ba77c21d00b193f8d40aedbb84fd8efc1be98bce0b7cb2a77d6abba312",
+      "normalizedSha256": "5db97de4e7c5ab2623864a6f2b80da8c26844446efc42ce16291b564d76b0bca"
     },
     {
       "path": "ios/App/App/GoogleService-Info.plist",
@@ -21575,13 +21616,13 @@
     },
     {
       "path": "ios/App/App/Info.plist",
-      "sha256": "2be316edd5c4d6d42361dfa27e5c0ed356a6c5ee7e898688edd6d3dd81a4cc5d",
-      "normalizedSha256": "2be316edd5c4d6d42361dfa27e5c0ed356a6c5ee7e898688edd6d3dd81a4cc5d"
+      "sha256": "dbc4794ba967496ffe8288c5de005461a452a82c1117b083e8c4f19d4d7a01d0",
+      "normalizedSha256": "dbc4794ba967496ffe8288c5de005461a452a82c1117b083e8c4f19d4d7a01d0"
     },
     {
       "path": "ios/App/App.xcodeproj/project.pbxproj",
-      "sha256": "f656bee34619718d2ad63262cbb405e0a30e42fb3bacc511af6a99996cf63302",
-      "normalizedSha256": "6ce7910a6f83831efebc7637bc872a044648f1f129a75c286601aa14aaff28b3"
+      "sha256": "0f9796a102834b1b07edca3bdcb92b845875ca4607b8999a5522726ffffd9fe6",
+      "normalizedSha256": "d33d3786170f14f9a63a90962abd81c48361d77b89f9942c0b7a0be96f40b1fa"
     },
     {
       "path": "ios/App/CapApp-SPM/.gitignore",
@@ -21605,68 +21646,13 @@
     },
     {
       "path": "ios/App/FainanceWidgets/FainanceWidgets.swift",
-      "sha256": "89d58cc67a2ede2dbf5f409dc837de11643c1d9200e66621482d6261130686c6",
-      "normalizedSha256": "397996f4a3a25aa6267a37f3e2b46d7fb8cf2eda0490b9ecea8f1ea324ed4a0d"
+      "sha256": "e7923d0dead7c1a5659d2e228bf022eb0cd0d2aa122cd779e738e3f4b0d18c73",
+      "normalizedSha256": "dbe7570b2ef51cf0de0be14a884ab994ae6fec4b6be50e55c708d45152946594"
     },
     {
       "path": "ios/App/FainanceWidgets/Info.plist",
-      "sha256": "f67ed3a378b22ba2b1c03f575207c5b3fbdacfa6bdddca579fe2e6adc1ae310c",
-      "normalizedSha256": "f67ed3a378b22ba2b1c03f575207c5b3fbdacfa6bdddca579fe2e6adc1ae310c"
-    },
-    {
-      "path": "ios/App/App/Assets.xcassets/Contents.json",
-      "sha256": "972ec1fd42325872438eb085ac29e94f51c10788ec18ec5549439950866c541d",
-      "normalizedSha256": "972ec1fd42325872438eb085ac29e94f51c10788ec18ec5549439950866c541d"
-    },
-    {
-      "path": "ios/App/App/Base.lproj/LaunchScreen.storyboard",
-      "sha256": "87a42e842164d75f39cca56a2cf743652f4d8e858f2eba12ae21a8ddcd9a21c6",
-      "normalizedSha256": "87a42e842164d75f39cca56a2cf743652f4d8e858f2eba12ae21a8ddcd9a21c6"
-    },
-    {
-      "path": "ios/App/App/Base.lproj/Main.storyboard",
-      "sha256": "f61196c55c1017ca8ea8a8e214a8502c348155706921e616dfdedef9ad831d0c",
-      "normalizedSha256": "18770126f6519105e0d16c21ec693f22e15ff827d6293e311a2e702ac92d87f8"
-    },
-    {
-      "path": "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png",
-      "sha256": "7807f5fd48cc9ecd0ef1b25e9851715575e052abe915ba01ec422e28f1f45b71",
-      "normalizedSha256": "00dd775083ece44a55f0122fe86c73ffaca292e306693a26d74b9f33676d388c"
-    },
-    {
-      "path": "ios/App/App/Assets.xcassets/AppIcon.appiconset/Contents.json",
-      "sha256": "5c09bec6eede599b14fa9e4c44b03e7febebc930615a0cd70f02981c09dfe48a",
-      "normalizedSha256": "5c09bec6eede599b14fa9e4c44b03e7febebc930615a0cd70f02981c09dfe48a"
-    },
-    {
-      "path": "ios/App/App/Assets.xcassets/Splash.imageset/Contents.json",
-      "sha256": "041481917eb249533ac6dd63d283bc6190b2d0642a93deda11b2ed0f6f7b605a",
-      "normalizedSha256": "041481917eb249533ac6dd63d283bc6190b2d0642a93deda11b2ed0f6f7b605a"
-    },
-    {
-      "path": "ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png",
-      "sha256": "1b5002b74a5500e697298ced06ca2811ac33f2771f236f3c720ff23243890530",
-      "normalizedSha256": "b0424b8b9e69fbff7f7f45ee890bca99cdd8aa3011ccb6c793d6eb5f6fb17f9e"
-    },
-    {
-      "path": "ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png",
-      "sha256": "1b5002b74a5500e697298ced06ca2811ac33f2771f236f3c720ff23243890530",
-      "normalizedSha256": "b0424b8b9e69fbff7f7f45ee890bca99cdd8aa3011ccb6c793d6eb5f6fb17f9e"
-    },
-    {
-      "path": "ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png",
-      "sha256": "1b5002b74a5500e697298ced06ca2811ac33f2771f236f3c720ff23243890530",
-      "normalizedSha256": "b0424b8b9e69fbff7f7f45ee890bca99cdd8aa3011ccb6c793d6eb5f6fb17f9e"
-    },
-    {
-      "path": "ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist",
-      "sha256": "dfa0f9bb85b95ccba9c6811adadf8cb407fb5d52088e89db83ebc308ec448542",
-      "normalizedSha256": "dfa0f9bb85b95ccba9c6811adadf8cb407fb5d52088e89db83ebc308ec448542"
-    },
-    {
-      "path": "ios/App/CapApp-SPM/Sources/CapApp-SPM/CapApp-SPM.swift",
-      "sha256": "70bf9dafddc35e3877dfb133a996f5be7ccd1e132897a98fdbf4869ff605ece9",
-      "normalizedSha256": "70bf9dafddc35e3877dfb133a996f5be7ccd1e132897a98fdbf4869ff605ece9"
+      "sha256": "c90adaede34f1896c4a4935d8ee045eb25d6263fee918f5558a4c5eed2c33d54",
+      "normalizedSha256": "c90adaede34f1896c4a4935d8ee045eb25d6263fee918f5558a4c5eed2c33d54"
     },
     {
       "path": "ios/App/FainanceWidgets/CanonicalIcons.xcassets/Contents.json",
@@ -21744,6 +21730,111 @@
       "normalizedSha256": "4ec17eb3810129886dd1ae3eb27a4411a5d5b0fdd6d342b3e049f8faad355ebf"
     },
     {
+      "path": "ios/App/CapApp-SPM/Sources/CapApp-SPM/CapApp-SPM.swift",
+      "sha256": "70bf9dafddc35e3877dfb133a996f5be7ccd1e132897a98fdbf4869ff605ece9",
+      "normalizedSha256": "70bf9dafddc35e3877dfb133a996f5be7ccd1e132897a98fdbf4869ff605ece9"
+    },
+    {
+      "path": "ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist",
+      "sha256": "dfa0f9bb85b95ccba9c6811adadf8cb407fb5d52088e89db83ebc308ec448542",
+      "normalizedSha256": "dfa0f9bb85b95ccba9c6811adadf8cb407fb5d52088e89db83ebc308ec448542"
+    },
+    {
+      "path": "ios/App/App/Assets.xcassets/Contents.json",
+      "sha256": "972ec1fd42325872438eb085ac29e94f51c10788ec18ec5549439950866c541d",
+      "normalizedSha256": "972ec1fd42325872438eb085ac29e94f51c10788ec18ec5549439950866c541d"
+    },
+    {
+      "path": "ios/App/App/Base.lproj/LaunchScreen.storyboard",
+      "sha256": "87a42e842164d75f39cca56a2cf743652f4d8e858f2eba12ae21a8ddcd9a21c6",
+      "normalizedSha256": "87a42e842164d75f39cca56a2cf743652f4d8e858f2eba12ae21a8ddcd9a21c6"
+    },
+    {
+      "path": "ios/App/App/Base.lproj/Main.storyboard",
+      "sha256": "f61196c55c1017ca8ea8a8e214a8502c348155706921e616dfdedef9ad831d0c",
+      "normalizedSha256": "18770126f6519105e0d16c21ec693f22e15ff827d6293e311a2e702ac92d87f8"
+    },
+    {
+      "path": "ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png",
+      "sha256": "7807f5fd48cc9ecd0ef1b25e9851715575e052abe915ba01ec422e28f1f45b71",
+      "normalizedSha256": "00dd775083ece44a55f0122fe86c73ffaca292e306693a26d74b9f33676d388c"
+    },
+    {
+      "path": "ios/App/App/Assets.xcassets/AppIcon.appiconset/Contents.json",
+      "sha256": "5c09bec6eede599b14fa9e4c44b03e7febebc930615a0cd70f02981c09dfe48a",
+      "normalizedSha256": "5c09bec6eede599b14fa9e4c44b03e7febebc930615a0cd70f02981c09dfe48a"
+    },
+    {
+      "path": "ios/App/App/Assets.xcassets/Splash.imageset/Contents.json",
+      "sha256": "041481917eb249533ac6dd63d283bc6190b2d0642a93deda11b2ed0f6f7b605a",
+      "normalizedSha256": "041481917eb249533ac6dd63d283bc6190b2d0642a93deda11b2ed0f6f7b605a"
+    },
+    {
+      "path": "ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-1.png",
+      "sha256": "1b5002b74a5500e697298ced06ca2811ac33f2771f236f3c720ff23243890530",
+      "normalizedSha256": "b0424b8b9e69fbff7f7f45ee890bca99cdd8aa3011ccb6c793d6eb5f6fb17f9e"
+    },
+    {
+      "path": "ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732-2.png",
+      "sha256": "1b5002b74a5500e697298ced06ca2811ac33f2771f236f3c720ff23243890530",
+      "normalizedSha256": "b0424b8b9e69fbff7f7f45ee890bca99cdd8aa3011ccb6c793d6eb5f6fb17f9e"
+    },
+    {
+      "path": "ios/App/App/Assets.xcassets/Splash.imageset/splash-2732x2732.png",
+      "sha256": "1b5002b74a5500e697298ced06ca2811ac33f2771f236f3c720ff23243890530",
+      "normalizedSha256": "b0424b8b9e69fbff7f7f45ee890bca99cdd8aa3011ccb6c793d6eb5f6fb17f9e"
+    },
+    {
+      "path": "package.json",
+      "sha256": "2908e27504154f4e241313d6ca046b90bccb594ac534a8cfcaa1ecd72c179dfa",
+      "normalizedSha256": "536c8147ed16c8a46ab2149f09b7f2b6753618f7debe69424136ddac1713c41f"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "36681b56f513b71dd8de85e4a39085f92104a65876fb83bc76df46f2c643d512",
+      "normalizedSha256": "215c5476abc0a268b89d44b68ea72f523e3533f8e91a4ef44660c43c6024f9ab"
+    },
+    {
+      "path": "index.html",
+      "sha256": "51d9c7938e89180fc23e52dfd9b3b58f3eee1161bed17c688607e51b0aad19d3",
+      "normalizedSha256": "c7f6fec55b35dd5ed4fc44cad6ce9d775aca2ffb8f65cb49d223755f0f8e549b"
+    },
+    {
+      "path": "vite.config.ts",
+      "sha256": "57b071cd7f9442affb0e4fd6166ec793f04dc3087f85c4e156caff05e9b9a5ae",
+      "normalizedSha256": "64bfed579391f275e0a9cfea90d1a180604fc317a4e2b829cc39bc9400e356f1"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "96791959ef1ab3546b055254797b669747dfa9d1ae60a9dac8af8992998ec5fe",
+      "normalizedSha256": "96791959ef1ab3546b055254797b669747dfa9d1ae60a9dac8af8992998ec5fe"
+    },
+    {
+      "path": "capacitor.config.ts",
+      "sha256": "8fa1a73a2de286ff9831524c0f153ea99bb063fcfc781765090a33a95349b568",
+      "normalizedSha256": "a0716f93070521ddc15352690c4932e9fab8c7b8fd3b9ffbc9649a3023a4274b"
+    },
+    {
+      "path": "codemagic.yaml",
+      "sha256": "2ce104036a81e92340bac5c61d0015b9f5f6fe7a9edec69c24add748ba8e0960",
+      "normalizedSha256": "791a5da870442b86b84a397bb7e5677cf3a9bdf8ad875bb078d56c5795be24b2"
+    },
+    {
+      "path": "tools/verify-testflight-source.mjs",
+      "sha256": "86c1677bd9cbe92d80cfe4b6624b000b76a4c83225c02404464b2fd314f3511f",
+      "normalizedSha256": "41fc3e37a8558aaba92b9db9db27d0b016eb21aed91faef1c7aa52690459c255"
+    },
+    {
+      "path": "tools/verify-testflight-ipa.py",
+      "sha256": "990ee4418d56c8ca99f494f7be0a941672b7be0a488a4d3749166d79d8d122f6",
+      "normalizedSha256": "c114abd25713f9ee137ed544bbeb5d4156d0a86e31667866ffff9ceb88f7bc41"
+    },
+    {
+      "path": "tools/CHECK_FAINANCE_ICON_PARITY.cjs",
+      "sha256": "3697dc9c59e9447bf70ee3d5d8bdfbd986fabff2a108dceb00a48791b3be95f7",
+      "normalizedSha256": "3697dc9c59e9447bf70ee3d5d8bdfbd986fabff2a108dceb00a48791b3be95f7"
+    },
+    {
       "path": "android/app/src/main/res/drawable-xxxhdpi/canonical_1f1ea_1f1fa.png",
       "sha256": "d4eef4b1c941717d39fa21bc5d74bab04bf277edbbc3488c8e421c8990f526c3",
       "normalizedSha256": "b3d9b189fb055334e595b683d56cddb88db34bc467fce2d6c2ffd10c5b4fca2d"
@@ -21814,77 +21905,19 @@
       "normalizedSha256": "6f13a6c4c0cf7013940f543832cf439debf9bd29c011ea3e4fffbecfe009907f"
     },
     {
-      "path": "package.json",
-      "sha256": "2908e27504154f4e241313d6ca046b90bccb594ac534a8cfcaa1ecd72c179dfa",
-      "normalizedSha256": "536c8147ed16c8a46ab2149f09b7f2b6753618f7debe69424136ddac1713c41f"
+      "path": "src/data/automaticBackups.ts",
+      "sha256": "e9d6c2df487f5dfb110e025433c75ddf6d42f8a859d81f140e1de8429fff9df3",
+      "normalizedSha256": "e9d6c2df487f5dfb110e025433c75ddf6d42f8a859d81f140e1de8429fff9df3"
     },
     {
-      "path": "package-lock.json",
-      "sha256": "36681b56f513b71dd8de85e4a39085f92104a65876fb83bc76df46f2c643d512",
-      "normalizedSha256": "215c5476abc0a268b89d44b68ea72f523e3533f8e91a4ef44660c43c6024f9ab"
+      "path": "src/utils/optionalCategoryBackups.ts",
+      "sha256": "f0cb57be26ded3667c5593a4944e1d4fb5af9e50c46908935f5d1d58df38174f",
+      "normalizedSha256": "f0cb57be26ded3667c5593a4944e1d4fb5af9e50c46908935f5d1d58df38174f"
     },
     {
-      "path": "index.html",
-      "sha256": "51d9c7938e89180fc23e52dfd9b3b58f3eee1161bed17c688607e51b0aad19d3",
-      "normalizedSha256": "c7f6fec55b35dd5ed4fc44cad6ce9d775aca2ffb8f65cb49d223755f0f8e549b"
-    },
-    {
-      "path": "vite.config.ts",
-      "sha256": "57b071cd7f9442affb0e4fd6166ec793f04dc3087f85c4e156caff05e9b9a5ae",
-      "normalizedSha256": "64bfed579391f275e0a9cfea90d1a180604fc317a4e2b829cc39bc9400e356f1"
-    },
-    {
-      "path": "tsconfig.json",
-      "sha256": "96791959ef1ab3546b055254797b669747dfa9d1ae60a9dac8af8992998ec5fe",
-      "normalizedSha256": "96791959ef1ab3546b055254797b669747dfa9d1ae60a9dac8af8992998ec5fe"
-    },
-    {
-      "path": "capacitor.config.ts",
-      "sha256": "8fa1a73a2de286ff9831524c0f153ea99bb063fcfc781765090a33a95349b568",
-      "normalizedSha256": "a0716f93070521ddc15352690c4932e9fab8c7b8fd3b9ffbc9649a3023a4274b"
-    },
-    {
-      "path": "codemagic.yaml",
-      "sha256": "3294025f1cdbbdbcc2d217cd52ee0d24dc3e8c4139bf6de79fea7b891a65ff13",
-      "normalizedSha256": "7e7490c95b3c2d3a691a7ba67395b8b5d9336c8c61c5e3e04b4096fcc9bb0640"
-    },
-    {
-      "path": "functions/notificationMedia.mjs",
-      "sha256": "2c7316d4ced880923a0f070a16669b879bbc4e113306041b2ba4bf8483c30576",
-      "normalizedSha256": "2c7316d4ced880923a0f070a16669b879bbc4e113306041b2ba4bf8483c30576"
-    },
-    {
-      "path": "tools/CHECK_FAINANCE_ICON_PARITY.cjs",
-      "sha256": "3697dc9c59e9447bf70ee3d5d8bdfbd986fabff2a108dceb00a48791b3be95f7",
-      "normalizedSha256": "3697dc9c59e9447bf70ee3d5d8bdfbd986fabff2a108dceb00a48791b3be95f7"
-    },
-    {
-      "path": "tools/verify-testflight-ipa.py",
-      "sha256": "57ccfefcabc995bd3a2ea0ae7ff9882df8e562ef108e8711ca6f93362142919c",
-      "normalizedSha256": "242a4a7a9ef0ae0202f588f07e835d06c3441540dda89cda11bac1e80f532774"
-    },
-    {
-      "path": "tools/verify-testflight-source.mjs",
-      "sha256": "86c1677bd9cbe92d80cfe4b6624b000b76a4c83225c02404464b2fd314f3511f",
-      "normalizedSha256": "41fc3e37a8558aaba92b9db9db27d0b016eb21aed91faef1c7aa52690459c255"
+      "path": "public/chatgpt-review/20261117/backup-demo-v5.json",
+      "sha256": "426b089dacf64f8998dc025cddd4db8d0a72e7f7448e4fef9a32fbd6b950fee1",
+      "normalizedSha256": "ea6b9b0902eb1bcda4a45c954cd983a4e74b8d5ef903202221f800973f0aa7c9"
     }
-  ],
-  "generatedByCapacitorExcluded": [
-    "ios/capacitor-cordova-ios-plugins/CordovaPluginsResources.podspec",
-    "ios/App/App/capacitor.config.json",
-    "ios/App/App/config.xml",
-    "ios/App/App/public/cordova.js",
-    "ios/App/App/public/cordova_plugins.js",
-    "ios/App/App/public/index.html",
-    "ios/App/App/public/assets/ai_grillo_mascot_transparent-CtxFswAu.png",
-    "ios/App/App/public/assets/index-0nUMsONV.js",
-    "ios/App/App/public/assets/index-JZ0Vrv5m.css",
-    "ios/App/App/public/assets/Logo 512-BwPoxH1K.png",
-    "ios/App/App/public/assets/logo-V42MZ_B1.png",
-    "ios/App/App/public/assets/splash-omrT-Dke.png",
-    "ios/App/App/public/fainance-email/logo-512.png",
-    "ios/App/App/public/fainance-email/splash.png",
-    "ios/capacitor-cordova-ios-plugins/resources/.gitkeep",
-    "ios/capacitor-cordova-ios-plugins/sources/.gitkeep"
   ]
 }

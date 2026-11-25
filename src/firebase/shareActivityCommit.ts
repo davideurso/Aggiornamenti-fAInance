@@ -1,6 +1,12 @@
 import {Capacitor,CapacitorHttp} from '@capacitor/core';
 
 const TEST_PROJECT = 'fainance-test-20260823195207';
+const PRODUCTION_PROJECT = 'fainance-a7794';
+function projectEnvironment(project: string) {
+ if (project === TEST_PROJECT) return 'test';
+ if (project === PRODUCTION_PROJECT) return 'production';
+ throw Error('SHARE_PROJECT_ENVIRONMENT_MISMATCH');
+}
 type WireValue = Record<string, any>;
 const recentWrites = new Map<string, { name: string; updateTime: string; fields: Record<string, WireValue> }>();
 
@@ -11,8 +17,8 @@ function recordShareTiming(start: number, readMs: number, commitMs: number) {
  host.__FAINANCE_SHARE_COMMIT_TIMINGS__ = [...rows, { totalMs: Math.round(performance.now() - start), readMs, commitMs }].slice(-20);
 }
 
-export function useNativeShareCommit(project: string) {
- return project === TEST_PROJECT && Capacitor.getPlatform() === 'android';
+export function useNativeShareCommit(project: string, allowProduction = false) {
+ return (project === TEST_PROJECT || (allowProduction && project === PRODUCTION_PROJECT)) && Capacitor.getPlatform() === 'android';
 }
 
 function decode(value: WireValue): any {
@@ -40,13 +46,14 @@ function pack(fields: Record<string,any>){
 }
 
 // Versioned Firestore REST commit keeps the activity and the private method atomic.
-export async function commitNativeShareActivity({projectId,activityId,uid,token,apply,privateMethod}){
- const database = 'projects/'+TEST_PROJECT+'/databases/(default)/documents';
+export async function commitNativeShareActivity({projectId,activityId,uid,token,apply,privateMethod,firebaseProjectId=TEST_PROJECT}){
+ projectEnvironment(firebaseProjectId);
+ const database = 'projects/'+firebaseProjectId+'/databases/(default)/documents';
  const path = 'shareProjects/'+encodeURIComponent(projectId);
  const url = 'https://firestore.googleapis.com/v1/'+database;
  const headers = {Authorization:'Bearer '+token,'Content-Type':'application/json'};
  const options = {headers,responseType:'json' as const,connectTimeout:6000,readTimeout:8000};
- const key = JSON.stringify([uid, projectId]);
+ const key = JSON.stringify([firebaseProjectId, uid, projectId]);
  const start = performance.now();
  let readMs = 0;
  let commitMs = 0;
@@ -109,10 +116,10 @@ function nativeShareFailure(code: string, retryable = false) {
 }
 
 function nativeShareProjectRequest(context: NativeShareProjectContext) {
- if (!useNativeShareCommit(context.firebaseProjectId)) throw Error('SHARE_NATIVE_TEST_ONLY');
+ if (!useNativeShareCommit(context.firebaseProjectId, true)) throw Error('SHARE_NATIVE_ENVIRONMENT_MISMATCH');
  if (!context.uid || !context.token || !context.projectId || context.projectId.includes('/')) throw Error('SHARE_PROJECT_INVALID');
  context.assertSession();
- const database = 'projects/'+TEST_PROJECT+'/databases/(default)/documents';
+ const database = 'projects/'+context.firebaseProjectId+'/databases/(default)/documents';
  const name = database+'/shareProjects/'+context.projectId;
  const url = 'https://firestore.googleapis.com/v1/'+database;
  const options = {headers:{Authorization:'Bearer '+context.token,'Content-Type':'application/json'},
@@ -158,7 +165,7 @@ export async function readNativeShareProject(context: NativeShareProjectContext)
 // first created. Keep this optional read off the WebView Firestore stream too.
 export async function readNativeShareOwnerProfile(context: NativeShareProjectContext): Promise<Record<string,any> | null> {
  const request = nativeShareProjectRequest(context);
- const name = 'projects/'+TEST_PROJECT+'/databases/(default)/documents/users/'+context.uid;
+ const name = 'projects/'+context.firebaseProjectId+'/databases/(default)/documents/users/'+context.uid;
  const mask = ['name','firstName','lastName','email'].map(field=>'mask.fieldPaths='+field).join('&');
  const response = await CapacitorHttp.get({...request.options,url:request.url+'/users/'+encodeURIComponent(context.uid)+'?'+mask})
   .catch(()=>{throw nativeShareFailure('SHARE_OWNER_READ_UNCONFIRMED',true);});
@@ -175,7 +182,7 @@ export async function updateNativeShareProject(context: NativeShareProjectContex
  apply: (project: Record<string,any> | null) => Promise<Record<string,any> | void> | Record<string,any> | void;
 }): Promise<Record<string,any> | null> {
  const request = nativeShareProjectRequest(context);
- const cacheKey = JSON.stringify([context.uid,context.projectId]);
+ const cacheKey = JSON.stringify([context.firebaseProjectId,context.uid,context.projectId]);
  for (let attempt=0;attempt<3;attempt++) {
   const document = await readNativeShareDocument(context);
   const remote = document ? nativeShareProjectData(context,document) : null;
@@ -213,12 +220,12 @@ export async function upsertNativeShareProject(context: NativeShareProjectContex
  const request = nativeShareProjectRequest(context);
  if (context.create.ownerUid!==context.uid || context.update.ownerUid!==context.uid) throw Error('SHARE_PROJECT_ACCESS_DENIED');
  const expected = context.update;
- if (expected.sourceApp!=='mundely' || expected.sourceEnvironment!=='test'
+ if (expected.sourceApp!=='mundely' || expected.sourceEnvironment!==projectEnvironment(context.firebaseProjectId)
      || !String(expected.mundelyUid || '') || !String(expected.mundelyTripId || '')
      || ['sourceApp','sourceEnvironment','mundelyUid','mundelyTripId'].some(key=>context.create[key]!==expected[key])) {
   throw Error('SHARE_PROJECT_LINK_MISMATCH');
  }
- recentWrites.delete(JSON.stringify([context.uid,context.projectId]));
+ recentWrites.delete(JSON.stringify([context.firebaseProjectId,context.uid,context.projectId]));
  const result = await CapacitorHttp.post({...request.options,url:request.url+':commit',data:{writes:[{
   update:{name:request.name,fields:pack(context.create)},currentDocument:{exists:false}
  }]}}).catch(()=>{throw nativeShareFailure('SHARE_PROJECT_COMMIT_UNCONFIRMED',true);});

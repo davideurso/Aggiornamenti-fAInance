@@ -1,3 +1,4 @@
+import { MundelyBudgetPanel } from "../integrations/MundelyBudgetPanel";
 import { readableDarkText } from '../ui/textContrast';
 import { useState, useEffect, useRef } from "react";
 import { incomeReceiptText } from '../i18n/incomeReceiptTranslations';
@@ -4661,6 +4662,7 @@ export function SharePanel() {
       )}
       {selected && (
         <>
+          {selectedIsMundelyLinked && <MundelyBudgetPanel key={String(selected.mundelyTripId || "")} tripId={String(selected.mundelyTripId || "")} inputStyle={sinp} />}
           <div
             style={{
               background: cardBg,

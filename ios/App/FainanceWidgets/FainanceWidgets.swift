@@ -25,22 +25,38 @@ struct FainanceEntry: TimelineEntry {
     let secondaryLabel: String
     let secondaryValue: String
     let url: String
+    var debtBackground: Color? = nil
 }
 
 struct FainanceProvider: TimelineProvider {
     let entry: FainanceEntry
+
+    private func currentEntry() -> FainanceEntry {
+        var result = entry
+        if entry.url == "fainance://debts",
+           let style = UserDefaults(suiteName: "group.it.fainanceapp.app")?.dictionary(forKey: "fainance_debt_widget_appearance"),
+           let hex = style["bgColor"] as? String, hex.count == 7, hex.first == "#",
+           let rgb = UInt32(hex.dropFirst(), radix: 16), let alpha = style["bgAlpha"] as? Int {
+            result.debtBackground = Color(.sRGB,
+                red: Double((rgb >> 16) & 255) / 255,
+                green: Double((rgb >> 8) & 255) / 255,
+                blue: Double(rgb & 255) / 255,
+                opacity: 1 - Double(min(100, max(0, alpha))) / 100)
+        }
+        return result
+    }
 
     func placeholder(in context: Context) -> FainanceEntry {
         entry
     }
 
     func getSnapshot(in context: Context, completion: @escaping (FainanceEntry) -> Void) {
-        completion(entry)
+        completion(currentEntry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<FainanceEntry>) -> Void) {
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 30, to: Date()) ?? Date().addingTimeInterval(1800)
-        completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
+        completion(Timeline(entries: [currentEntry()], policy: .after(nextUpdate)))
     }
 }
 
@@ -48,16 +64,33 @@ struct FainanceCardView: View {
     @Environment(\.widgetFamily) private var family
     let entry: FainanceEntry
 
+    @ViewBuilder
     var body: some View {
+        if let background = entry.debtBackground {
+            if #available(iOS 17.0, *) {
+                card.containerBackground(for: .widget) { background }
+            } else {
+                card.background(background)
+            }
+        } else {
+            card
+        }
+    }
+
+    private var card: some View {
         ZStack {
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color(red: 0.18, green: 0.35, blue: 0.98),
-                    Color(red: 0.54, green: 0.29, blue: 0.96)
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            if entry.debtBackground == nil {
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.18, green: 0.35, blue: 0.98),
+                        Color(red: 0.54, green: 0.29, blue: 0.96)
+                    ]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                Color.clear
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {

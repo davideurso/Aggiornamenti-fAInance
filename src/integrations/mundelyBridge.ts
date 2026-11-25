@@ -5,8 +5,8 @@ import { createSingleFlightWriter } from "../data/singleFlightWrite.js";
 import { useNativeShareCommit, readNativeShareProject, updateNativeShareProject, readNativeShareOwnerProfile, upsertNativeShareProject } from "../firebase/shareActivityCommit";
 import { CapacitorHttp } from "@capacitor/core";
 
-const MUNDELY_TEST_PROJECT_ID = "tripai-test-ccb16";
-const FAINANCE_TEST_PROJECT_ID = "fainance-test-20260823195207";
+const MUNDELY_PROJECT_ID = appEnvironment === "production" ? "mundely-47cc8" : "tripai-test-ccb16";
+const FAINANCE_PROJECT_ID = appEnvironment === "production" ? "fainance-a7794" : "fainance-test-20260823195207";
 const BRIDGE_VERSION = 13;
 
 export interface MundelyLinkRequest {
@@ -34,6 +34,8 @@ export interface MundelyTripSync {
 
 
 export interface MundelyExpenseSync {
+  payer?: string; payerId?: string; splitMode?: string;
+  split?: Array<{ participantId: string; participantName: string; value: number; amount: number }>;
   id: string;
   mundelyUid: string;
   tripId: string;
@@ -78,18 +80,19 @@ interface BridgePullResponse {
   linkedTrips?: MundelyLinkedTrip[];
   removeShareActivityKeys?: string[];
   error?: string;
+  finance?: MundelyTripFinance;
 }
 
 function bridgeAvailable(): boolean {
-  return appEnvironment === "test" && firebaseConfig.projectId === FAINANCE_TEST_PROJECT_ID;
+  return (appEnvironment === "test" || appEnvironment === "production") && firebaseConfig.projectId === FAINANCE_PROJECT_ID;
 }
 
 function bridgeUrl(): string {
-  return `https://${functionsRegion}-${MUNDELY_TEST_PROJECT_ID}.cloudfunctions.net/fainanceBridgeExchange`;
+  return `https://${functionsRegion}-${MUNDELY_PROJECT_ID}.cloudfunctions.net/fainanceBridgeExchange`;
 }
 
 async function bridgeRequest(body: Record<string, unknown>): Promise<BridgePullResponse> {
-  if (!bridgeAvailable()) throw new Error("MUNDELY_BRIDGE_TEST_ONLY");
+  if (!bridgeAvailable()) throw new Error("MUNDELY_BRIDGE_ENVIRONMENT_MISMATCH");
   const currentUser = fbAuth.currentUser;
   if (!currentUser) throw new Error("FAINANCE_AUTH_REQUIRED");
   const token = await currentUser.getIdToken();
@@ -98,7 +101,7 @@ async function bridgeRequest(body: Record<string, unknown>): Promise<BridgePullR
   const requestBody = { ...body, bridgeVersion: BRIDGE_VERSION };
   let payload: BridgePullResponse;
   let responseOk: boolean;
-  if (useNativeShareCommit(firebaseConfig.projectId)) {
+  if (useNativeShareCommit(firebaseConfig.projectId, true)) {
     const response = await CapacitorHttp.post({
       url: bridgeUrl(), headers, data: requestBody, responseType: "json", connectTimeout: 6000, readTimeout: body.action === "convertCurrency" ? 15000 : 8000,
     }).catch(() => { throw nativeBridgeRetryableError("MUNDELY_BRIDGE_REQUEST_UNCONFIRMED"); });
@@ -112,7 +115,7 @@ async function bridgeRequest(body: Record<string, unknown>): Promise<BridgePullR
     responseOk = response.ok;
   }
   if (!responseOk || payload.ok !== true) throw new Error(String(payload.error || "MUNDELY_BRIDGE_UNAVAILABLE"));
-  if (payload.environment !== "test" || payload.targetProjectId !== FAINANCE_TEST_PROJECT_ID || Number(payload.bridgeVersion || 0) < BRIDGE_VERSION) {
+  if (payload.environment !== appEnvironment || payload.targetProjectId !== FAINANCE_PROJECT_ID || Number(payload.bridgeVersion || 0) < BRIDGE_VERSION) {
     throw new Error("MUNDELY_BRIDGE_ENVIRONMENT_MISMATCH");
   }
   return payload;
@@ -194,7 +197,7 @@ async function nativeBridgeProjectContext(projectId: string) {
 }
 
 async function readBridgeShareProject(projectRef: DocumentReference) {
-  if (!useNativeShareCommit(firebaseConfig.projectId)) return getDoc(projectRef);
+  if (!useNativeShareCommit(firebaseConfig.projectId, true)) return getDoc(projectRef);
   const project = await readNativeShareProject(await nativeBridgeProjectContext(projectRef.id));
   return { exists: () => project !== null, data: () => project };
 }
@@ -203,7 +206,7 @@ async function updateBridgeShareProject(
   projectRef: DocumentReference,
   apply: (project: Record<string, unknown> | null) => Promise<Record<string, unknown> | void> | Record<string, unknown> | void,
 ): Promise<void> {
-  if (useNativeShareCommit(firebaseConfig.projectId)) {
+  if (useNativeShareCommit(firebaseConfig.projectId, true)) {
     const context = await nativeBridgeProjectContext(projectRef.id);
     const committed = await updateNativeShareProject({ ...context, apply });
     context.assertSession();
@@ -283,7 +286,7 @@ async function upsertShareProjectFromMundely(sync: MundelyTripSync): Promise<str
   const projectId = clean(sync.targetShareProjectId);
   if (!projectId || !clean(sync.tripId) || !clean(sync.name)) throw new Error("MUNDELY_SYNC_PAYLOAD_INVALID");
 
-  const nativeContext = useNativeShareCommit(firebaseConfig.projectId) ? await nativeBridgeProjectContext(projectId) : null;
+  const nativeContext = useNativeShareCommit(firebaseConfig.projectId, true) ? await nativeBridgeProjectContext(projectId) : null;
   const userProfileSnap = nativeContext ? null : await getDoc(doc(fbDb, "users", user.uid)).catch(() => null);
   const userProfile = nativeContext
     ? await readNativeShareOwnerProfile(nativeContext).catch(() => null)
@@ -306,7 +309,7 @@ async function upsertShareProjectFromMundely(sync: MundelyTripSync): Promise<str
     ownerEmail,
     memberUids: [user.uid],
     sourceApp: "mundely",
-    sourceEnvironment: "test",
+    sourceEnvironment: appEnvironment,
     mundelyTripId: clean(sync.tripId),
     mundelyUid: clean(sync.mundelyUid),
     mundelyDestination: clean(sync.destination),
@@ -567,6 +570,7 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
   if (sync.deleted) deletedActivityIds.add(activityKey);
   const categories = Array.isArray(project.categories) ? [...project.categories] as Array<Record<string, unknown>> : [];
   let nextCategories = categories;
+  let nextParticipants = Array.isArray(project.participants) ? project.participants : [];
 
   if (!sync.deleted) {
     const amount = Math.round(Number(sync.amount || 0) * 100) / 100;
@@ -575,7 +579,19 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
     const category = mundelyCategoryMeta(sync.category, sync.categoryName, sync.categoryIcon, sync.categoryColor);
     const projectBaseCurrency = clean(project.baseCurrency || project.currency || "EUR").toUpperCase() || "EUR";
     const fx = await resolveBridgeBaseAmount(amount, sync.currency, projectBaseCurrency);
-    const nextShares = rebalanceShareAmounts(existing?.shares, fx.baseAmount);
+    const participants = Array.isArray(project.participants) ? [...project.participants] as Array<Record<string, unknown>> : [];
+    const participantId = (mundelyUid: string, name: string) => {
+      if (mundelyUid === clean(sync.mundelyUid)) return "me";
+      const match = participants.find(row => clean(row.mundelyUid) === mundelyUid);
+      if (match) return clean(match.id);
+      const id = "mundely_member_" + mundelyUid;
+      participants.push({ id, name, mundelyUid, kind: "guest", type: "guest", role: "participant", status: "active" });
+      return id;
+    };
+    const sourceShares = sync.split?.length ? Object.fromEntries(sync.split.map(row => [participantId(row.participantId, row.participantName), row.amount])) : existing?.shares;
+    const nextShares = rebalanceShareAmounts(sourceShares, fx.baseAmount);
+    if (sync.payerId) participantId(sync.payerId, sync.payer || sync.payerId);
+    nextParticipants = participants;
     const categoryIndex = categories.findIndex((item) => clean(item?.id) === category.id || clean(item?.mundelyCategoryKey) === category.key);
     if (categoryIndex >= 0) {
       nextCategories = categories.map((item, index) => index === categoryIndex ? {
@@ -586,7 +602,7 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
         color: category.color,
         status: "active",
         sourceApp: "mundely",
-        sourceEnvironment: "test",
+        sourceEnvironment: appEnvironment,
         mundelyCategoryKey: category.key,
         updatedAt: nowIso,
       } : item);
@@ -598,7 +614,7 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
         color: category.color,
         status: "active",
         sourceApp: "mundely",
-        sourceEnvironment: "test",
+        sourceEnvironment: appEnvironment,
         mundelyCategoryKey: category.key,
         createdAt: nowIso,
         updatedAt: nowIso,
@@ -612,12 +628,12 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
       // MUNDELY_52_BASE_AMOUNT
       amount: fx.baseAmount,
       desc: clean(sync.description) || "Spesa viaggio",
-      paidBy: clean(existing?.paidBy) || "me",
+      paidBy: sync.payerId ? participantId(sync.payerId, sync.payer || sync.payerId) : clean(existing?.paidBy) || "me",
       date: clean(sync.date) || nowIso.slice(0, 10),
       time: clean(sync.time) || clean(existing?.time) || nowIso.slice(11, 16),
       shares: nextShares,
-      splitMode: clean(existing?.splitMode) || "equal",
-      sharedWith: Array.isArray(existing?.sharedWith) ? existing?.sharedWith : ["me"],
+      splitMode: sync.split?.length ? "amount" : clean(existing?.splitMode) || "equal",
+      sharedWith: sync.split?.length ? Object.keys(nextShares) : Array.isArray(existing?.sharedWith) ? existing?.sharedWith : ["me"],
       category: category.name,
       categoryName: category.name,
       categoryId: category.id,
@@ -627,7 +643,7 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
       createdAt: clean(existing?.createdAt) || nowIso,
       updatedAt: nowIso,
       sourceApp: clean(sync.origin) === "fainance" ? (clean(existing?.sourceApp) || "fainance") : "mundely",
-      sourceEnvironment: "test",
+      sourceEnvironment: appEnvironment,
       mundelyTripId: clean(sync.tripId),
       mundelyExpenseId: clean(sync.expenseId),
       mundelyCategory: clean(sync.category),
@@ -652,6 +668,7 @@ async function upsertShareExpenseFromMundely(sync: MundelyExpenseSync): Promise<
   return {
     activities: filtered,
     categories: nextCategories,
+    participants: nextParticipants,
     deletedActivityIds: [...deletedActivityIds],
     updatedAt: new Date().toISOString(),
     updatedAtMs: Date.now(),
@@ -722,7 +739,7 @@ export async function syncMundelyCategoryCatalogToShare(items: MundelyLinkedTrip
         color: meta.color,
         status: "active",
         sourceApp: "mundely",
-        sourceEnvironment: "test",
+        sourceEnvironment: appEnvironment,
         mundelyCategoryKey: meta.key,
         updatedAt: nowIso,
       };
@@ -814,7 +831,7 @@ async function reconcileFainanceShareProjectToMundely(uid: string, linked: Munde
       if (requiredDeletionKey) throw new Error("SHARE_PROJECT_ACCESS_DENIED");
       return;
     }
-    if (requiredDeletionKey && (project.sourceApp !== "mundely" || project.sourceEnvironment !== "test"
+    if (requiredDeletionKey && (project.sourceApp !== "mundely" || project.sourceEnvironment !== appEnvironment
         || clean(project.mundelyUid) !== mundelyUid || clean(project.mundelyTripId) !== tripId)) {
       throw new Error("MUNDELY_SHARE_PROJECT_LINK_MISMATCH");
     }
@@ -859,6 +876,15 @@ async function reconcileFainanceShareProjectToMundely(uid: string, linked: Munde
           currency: clean(item?.currency || item?.originalCurrency || item?.mundelyCurrency || "EUR"),
           date: clean(item?.date),
           time: clean(item?.time),
+          payerId: clean(item.paidBy) === "me" ? mundelyUid : clean((Array.isArray(project.participants) ? project.participants as Array<Record<string, unknown>> : []).find(row => clean(row.id) === clean(item.paidBy))?.mundelyUid),
+          payer: clean((Array.isArray(project.participants) ? project.participants as Array<Record<string, unknown>> : []).find(row => clean(row.id) === clean(item.paidBy))?.name),
+          splitMode: "shares",
+          split: Object.entries(item.shares && typeof item.shares === "object" ? item.shares as Record<string, unknown> : {}).map(([id, amount]) => {
+            const participant = (Array.isArray(project.participants) ? project.participants as Array<Record<string, unknown>> : []).find(row => clean(row.id) === id);
+            const participantId = id === "me" ? mundelyUid : clean(participant?.mundelyUid);
+            if (!participantId) throw new Error("MUNDELY_PARTICIPANT_MAPPING_REQUIRED");
+            return { participantId, participantName: clean(participant?.name) || participantId, value: Number(amount), amount: Number(amount) };
+          }),
           updatedAt: clean(item?.mundelyShareEditedAt || item?.updatedAt),
         };
       })
@@ -908,10 +934,10 @@ export async function reconcileFainanceShareExpensesToMundely(items: MundelyLink
 // projects and other platforms unchanged; the server rechecks the live link.
 export async function syncMundelyShareDeletionToMundely(project: Record<string, unknown>, activityId: string): Promise<void> {
   const user = fbAuth.currentUser;
-  if (!bridgeAvailable() || !useNativeShareCommit(firebaseConfig.projectId) || !user || !project) return;
+  if (!bridgeAvailable() || !useNativeShareCommit(firebaseConfig.projectId, true) || !user || !project) return;
   const projectId = clean(project.id), tripId = clean(project.mundelyTripId), mundelyUid = clean(project.mundelyUid);
   const key = shareActivityKey(activityId);
-  if (project.sourceApp !== "mundely" || project.sourceEnvironment !== "test"
+  if (project.sourceApp !== "mundely" || project.sourceEnvironment !== appEnvironment
       || !projectId.startsWith("mundely_") || !tripId || !mundelyUid || !key) return;
   if (clean(project.ownerUid) !== user.uid && !(Array.isArray(project.memberUids) ? project.memberUids : []).map(String).includes(user.uid)) return;
   if (!(Array.isArray(project.deletedActivityIds) ? project.deletedActivityIds : []).map(shareActivityKey).includes(key)
@@ -1009,4 +1035,43 @@ export function syncMundelyBridgeNow(onPull?: MundelyBridgePullObserver): Promis
 
 export function isMundelyBridgeEnabled(): boolean {
   return bridgeAvailable();
+}
+
+export interface MundelyTripFinance {
+  tripId: string; uid: string; organizer: boolean; archived: boolean; startDate: string; endDate: string;
+  commonExpenses: Array<Record<string, any>>;
+  sections: Record<string, { data: any; revision: number }>;
+}
+export async function readMundelyTripFinance(tripId: string): Promise<MundelyTripFinance> {
+  const result = await bridgeRequest({ action: "readTripFinance", tripId });
+  if (!result.finance) throw new Error("FINANCE_UNAVAILABLE");
+  return result.finance;
+}
+export async function saveMundelyTripFinance(snapshot: MundelyTripFinance, section: string, data: unknown): Promise<MundelyTripFinance> {
+  const result = await bridgeRequest({ action: "saveTripFinance", tripId: snapshot.tripId, section, data, baseRevision: snapshot.sections[section]?.revision || 0 });
+  if (!result.finance) throw new Error("FINANCE_UNAVAILABLE");
+  return result.finance;
+}
+
+export async function mundelyBudgetConsumption(snapshot: MundelyTripFinance, section: string): Promise<number | null> {
+  const budget = snapshot.sections[section]?.data;
+  if (!budget) return null;
+  let total = 0;
+  const personal = section === "individualBudget";
+  try {
+    for (const expense of snapshot.commonExpenses) {
+      let amount = Number(expense.amount);
+      if (personal) {
+        if (!Array.isArray(expense.split) || !expense.split.length) return null;
+        amount = expense.split.filter((row: any) => row.participantId === snapshot.uid).reduce((sum: number, row: any) => sum + Number(row.amount), 0);
+      }
+      if (!amount) continue;
+      total += (await resolveBridgeBaseAmount(amount, expense.currency, budget.currency)).baseAmount;
+    }
+    if (personal) for (const expense of snapshot.sections.personalExpenses.data || []) {
+      total += (await resolveBridgeBaseAmount(expense.amount, expense.currency, budget.currency)).baseAmount;
+    }
+    const scale = 10 ** (new Intl.NumberFormat("en", {style:"currency",currency:budget.currency}).resolvedOptions().maximumFractionDigits || 0);
+    return Math.round((total + Number.EPSILON) * scale) / scale;
+  } catch { return null; }
 }

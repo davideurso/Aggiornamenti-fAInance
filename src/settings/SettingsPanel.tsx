@@ -509,6 +509,7 @@ export function SettingsPanel() {
     setWidgetBgColor,
     setWidgetButtonStyle,
     setWidgetDebtCreditsAutoUpdate,
+    setWidgetDebtCreditsBgColor,
     setWidgetDebtCreditsBgAlpha,
     setWidgetDebtCreditsIconColor,
     setWidgetDebtCreditsTextColor,
@@ -601,6 +602,7 @@ export function SettingsPanel() {
     widgetBgColor,
     widgetButtonStyle,
     widgetDebtCreditsAutoUpdate,
+    widgetDebtCreditsBgColor,
     widgetDebtCreditsBgAlpha,
     widgetDebtCreditsIconColor,
     widgetDebtCreditsTextColor,
@@ -4053,6 +4055,7 @@ export function SettingsPanel() {
         debtCreditsWidget: {
           ...widgetSettingsPayload().debtCreditsWidget,
           textSize: extra.textSize,
+          bgColor: extra.bgColor,
           bgAlpha: extra.bgAlpha,
           iconColor: extra.iconColor,
           titleColor: extra.titleColor,
@@ -4065,6 +4068,7 @@ export function SettingsPanel() {
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <StableNestedFormHost key={"stable-WidgetGenericStylePanel"} render={WidgetGenericStylePanel} formProps={{"kind":("debtCredits"),"showIntro":(false),"icon":("📉"),"title":("Aspetto Debiti / Crediti"),"description":("Personalizza testo, colori e aggiornamento del widget."),"values":({
             textSize: widgetDebtCreditsTextSize,
+            bgColor: widgetDebtCreditsBgColor,
             bgAlpha: widgetDebtCreditsBgAlpha,
             iconColor: widgetDebtCreditsIconColor,
             titleColor: widgetDebtCreditsTitleColor,
@@ -4072,6 +4076,7 @@ export function SettingsPanel() {
             autoUpdate: widgetDebtCreditsAutoUpdate,
           }),"setters":({
             setTextSize: setWidgetDebtCreditsTextSize,
+            setBgColor: setWidgetDebtCreditsBgColor,
             setBgAlpha: setWidgetDebtCreditsBgAlpha,
             setIconColor: setWidgetDebtCreditsIconColor,
             setTitleColor: setWidgetDebtCreditsTitleColor,

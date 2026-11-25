@@ -244,6 +244,7 @@ import {
 } from "./widget";
 import { StatsPanel } from "./statistiche";
 import { parseFainanceShareVoiceCommand } from "./voiceParser";
+const FainanceWidgetBridge: any = registerPlugin("FainanceWidgetBridge");
 const FainanceFileNative: any = registerPlugin("FainanceFile");
 import {
   HomePanel,
@@ -5976,6 +5977,10 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     userKey("widget_debt_credits_text_color_v1"),
     "#EDEDF7"
   );
+  var [widgetDebtCreditsBgColor, setWidgetDebtCreditsBgColor] = useStorage(
+    userKey("widget_debt_credits_bg_color_v1"),
+    "#1E1E30"
+  );
   var [widgetDebtCreditsBgAlpha, setWidgetDebtCreditsBgAlpha] = useStorage(
     userKey("widget_debt_credits_bg_alpha_v1"),
     65
@@ -6539,7 +6544,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         if (!usedDirectRead || !snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) applyAssignments(snapshot.docs);
       }, error => console.warn("Share cash method listener unavailable", error.code));
     }
-    if (useNativeShareCommit(fbDb.app.options.projectId) && fbAuth.currentUser?.uid === uid) {
+    if (useNativeShareCommit(fbDb.app.options.projectId, true) && fbAuth.currentUser?.uid === uid) {
       void import("firebase/firestore/lite").then(async lite => {
         const db = lite.getFirestore(fbDb.app);
         const result = await fainancePromiseTimeout(lite.getDocs(lite.collection(db, "users", uid, "shareCashMethods")), 4000, "SHARE_METHOD_READ_TIMEOUT");
@@ -13775,12 +13780,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       });
   }
   useEffect(function () {
-    if (!userId || !useNativeShareCommit(fbDb.app.options.projectId)) return;
+    if (!userId || !useNativeShareCommit(fbDb.app.options.projectId, true)) return;
     const onCommitted = event => acceptMundelyShareProjectCommit(event);
     window.addEventListener("fainance:share-project-committed", onCommitted);
     return () => window.removeEventListener("fainance:share-project-committed", onCommitted);
   }, [userId]);
-  const shareListenerReady = firestoreReady || useNativeShareCommit(fbDb.app.options.projectId);
+  const shareListenerReady = firestoreReady || useNativeShareCommit(fbDb.app.options.projectId, true);
   useEffect(
     function () {
       if (!shareListenerReady || !userId || fbAuth.currentUser?.uid !== userId) return;
@@ -13907,7 +13912,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         )
       );
       }
-      if (useNativeShareCommit(fbDb.app.options.projectId)) {
+      if (useNativeShareCommit(fbDb.app.options.projectId, true)) {
         void import("firebase/firestore/lite").then(async lite => {
           const projects = lite.collection(lite.getFirestore(fbDb.app), "shareProjects");
           const [member, owner] = await fainancePromiseTimeout(Promise.all([
@@ -17319,7 +17324,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     });
   }
 
-  var FAINANCE_CURRENT_VERSION = "2.2.2";
+  var FAINANCE_CURRENT_VERSION = "2.2.3";
   var FAINANCE_CURRENT_VERSION_CODE = 239;
   var FAINANCE_ANDROID_PACKAGE_ID = "it.fainanceapp.app";
   var FAINANCE_PLAY_STORE_MARKET_URL =
@@ -24745,6 +24750,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         titleColor: widgetDebtCreditsTitleColor || "#FFFFFF",
         textColor: widgetDebtCreditsTextColor || "#EDEDF7",
         textSize: Number(widgetDebtCreditsTextSize) || 13,
+        bgColor: widgetDebtCreditsBgColor || "#1E1E30",
         bgAlpha: numOr(widgetDebtCreditsBgAlpha, 65),
         autoUpdate: !!widgetDebtCreditsAutoUpdate,
         mode: widgetDebtCreditsMode || "open",
@@ -24848,7 +24854,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     };
   }
 
-  function saveWidgetSettingsToNative(showMessage, overridePayload) {
+  async function saveWidgetSettingsToNative(showMessage, overridePayload) {
     var payload = enforceWidgetPlanPayload(
       overridePayload || widgetSettingsPayload()
     );
@@ -25000,6 +25006,12 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       var shoppingListString = JSON.stringify(payload.shoppingListWidget || {});
       var fidelityString = JSON.stringify(payload.fidelityWidget || {});
       var debtCreditsString = JSON.stringify(payload.debtCreditsWidget || {});
+      if (window.Capacitor?.getPlatform?.() === "ios" && payload.debtCreditsWidget) {
+        await FainanceWidgetBridge.saveDebtAppearance({
+          bgColor: payload.debtCreditsWidget.bgColor,
+          bgAlpha: payload.debtCreditsWidget.bgAlpha,
+        });
+      }
       var toolsString = JSON.stringify(payload.toolsWidget || {});
       var afterNativeUpdate = function () {
         if (showMessage) setToast("Widget aggiornato");
@@ -25457,6 +25469,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         setWidgetDebtCreditsIconColor("#7F77DD");
         setWidgetDebtCreditsTitleColor("#FFFFFF");
         setWidgetDebtCreditsTextColor("#EDEDF7");
+        setWidgetDebtCreditsBgColor("#1E1E30");
         setWidgetDebtCreditsBgAlpha(65);
         setWidgetDebtCreditsAutoUpdate(true);
 
@@ -25700,6 +25713,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       widgetDebtCreditsIconColor,
       widgetDebtCreditsTitleColor,
       widgetDebtCreditsTextColor,
+      widgetDebtCreditsBgColor,
       widgetDebtCreditsBgAlpha,
       widgetDebtCreditsAutoUpdate,
       shoppingItems,
@@ -27172,11 +27186,11 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
   function acceptMundelyShareProjectCommit(event) {
     const uid = String(event?.detail?.uid || "");
     const project = event?.detail?.project;
-    if (!useNativeShareCommit(fbDb.app.options.projectId) || !uid || uid !== String(userId || "") || fbAuth.currentUser?.uid !== uid) return;
+    if (!useNativeShareCommit(fbDb.app.options.projectId, true) || !uid || uid !== String(userId || "") || fbAuth.currentUser?.uid !== uid) return;
     if (!project || typeof project !== "object" || !String(project.id || "")) return;
     if (String(project.ownerUid || "") !== uid && !(Array.isArray(project.memberUids) ? project.memberUids : []).map(String).includes(uid)) return;
     const known = shareProjectsRef.current.some(p => String(p.id) === String(project.id));
-    const linked = project.sourceApp === "mundely" && project.sourceEnvironment === "test"
+    const linked = project.sourceApp === "mundely" && project.sourceEnvironment === chatgptAppEnvironment
       && String(project.id).startsWith("mundely_") && !!String(project.mundelyTripId || "");
     if (!known && !linked) return;
     applyCommittedShareProject(uid, project.id, project, linked);
@@ -27202,8 +27216,8 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       key: shareCashMovementKey(pid, activityId),
       data: {projectId:String(pid),activityId:String(activityId),methodId:cashMethod.methodId,direction:cashMethod.direction},
     } : null;
-    const committed = useNativeShareCommit(fbDb.app.options.projectId)
-      ? await commitNativeShareActivity({projectId:String(pid),activityId:String(activityId),uid,
+    const committed = useNativeShareCommit(fbDb.app.options.projectId, true)
+      ? await commitNativeShareActivity({firebaseProjectId:fbDb.app.options.projectId,projectId:String(pid),activityId:String(activityId),uid,
           token:await fbAuth.currentUser.getIdToken(),apply:preparePatch,privateMethod})
       : await runTransaction(fbDb, async tx => {
           const snapshot = await tx.get(ref);
@@ -27227,7 +27241,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
       }}));
     }
     try {
-      if (useNativeShareCommit(fbDb.app.options.projectId)
+      if (useNativeShareCommit(fbDb.app.options.projectId, true)
           && (committed.deletedActivityIds || []).map(String).includes(String(activityId))
           && !(committed.activities || []).some(a => String(a.id) === String(activityId))) {
         await syncMundelyShareDeletionToMundely(committed, String(activityId));
@@ -28719,6 +28733,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     setSupportContactFormOpen,
     setWidget2SelectedCreditCardId,
     setWidgetDebtCreditsAutoUpdate,
+    setWidgetDebtCreditsBgColor,
     setWidgetDebtCreditsBgAlpha,
     setWidgetDebtCreditsIconColor,
     setWidgetDebtCreditsTextColor,
@@ -28749,6 +28764,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     unlockRewardedFeature,
     widget2SelectedCreditCardId,
     widgetDebtCreditsAutoUpdate,
+    widgetDebtCreditsBgColor,
     widgetDebtCreditsBgAlpha,
     widgetDebtCreditsIconColor,
     widgetDebtCreditsTextColor,

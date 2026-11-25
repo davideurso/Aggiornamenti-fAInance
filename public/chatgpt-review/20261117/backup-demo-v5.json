@@ -1,0 +1,37 @@
+{
+  "incomes": [],
+  "methods": [
+    {
+      "name": "Contanti demo",
+      "id": 7
+    }
+  ],
+  "currency": "EUR",
+  "expenses": [
+    {
+      "date": "2026-10-21",
+      "id": "review-backup-expense",
+      "amount": 12,
+      "desc": "Backup dimostrativo sintetico",
+      "catId": 1,
+      "methodId": 7
+    }
+  ],
+  "financeEvolution": {
+    "period": {
+      "startDay": 1,
+      "mode": "calendar"
+    }
+  },
+  "cats": [
+    {
+      "name": "Casa demo",
+      "id": 1
+    },
+    {
+      "name": "Alimentari demo",
+      "id": 2
+    }
+  ],
+  "backupSchemaVersion": 5
+}

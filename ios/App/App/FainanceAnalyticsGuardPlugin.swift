@@ -43,5 +43,6 @@ class FainanceAnalyticsViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(FainanceAnalyticsGuardPlugin())
+        bridge?.registerPluginInstance(FainanceWidgetBridgePlugin())
     }
 }
