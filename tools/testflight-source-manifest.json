@@ -1,13 +1,13 @@
 {
-  "version": "2.2.3",
-  "build": 275,
-  "acceptedAndroid": 2026112501,
-  "candidateAndroid": 2026112501,
+  "version": "2.2.4",
+  "build": 276,
+  "acceptedAndroid": 2026112701,
+  "candidateAndroid": 2026112701,
   "files": [
     {
       "path": "src/app.tsx",
-      "sha256": "26f6ae71b07a043fe9b80647d59d6c962bf9d6803d81714ca82461ce1f013e9e",
-      "normalizedSha256": "26f6ae71b07a043fe9b80647d59d6c962bf9d6803d81714ca82461ce1f013e9e"
+      "sha256": "1d212cffbbaabf1cab95f398a4b49de5de35b4e7d8cfc7803c83b96cb693e0a0",
+      "normalizedSha256": "9045d677d03cfa29cb8873764092751c9568a32214d3104bc9e0671975fc6a30"
     },
     {
       "path": "src/assistantLogic.ts",
@@ -26,8 +26,8 @@
     },
     {
       "path": "src/financeCalculations.js",
-      "sha256": "36732dd1eee418c5390c85b7901a3a74abb09eca61d9dbdf2c5c2debcf945bad",
-      "normalizedSha256": "c59fd895b54d252374d66a312dc164cba97e6f123edf6142264be76b385875fd"
+      "sha256": "ca81ae599b1633269f1ce152fbd8723a99f421a674782f798cd65791bce26122",
+      "normalizedSha256": "4e2378dbe051706a2341a6549937c8fcf66925dc49cdbc8f299b89615cc366bb"
     },
     {
       "path": "src/main.tsx",
@@ -61,8 +61,8 @@
     },
     {
       "path": "src/widget.tsx",
-      "sha256": "762ae2ae16eef50107590087b24a0ac45de7b5806940559234f5915e64853df8",
-      "normalizedSha256": "d92460303c3874fa827a52f63021e14f346e153d7f86485940bcac3d073b9577"
+      "sha256": "6a27b5c4c4ba250a63c7fa4fd5326886681894ddc8247d38e9d4d1a9656fd37b",
+      "normalizedSha256": "906fcd613ca302d002f2f0f4897a032ec5a2c138712b3d9dd1d16aea77c16039"
     },
     {
       "path": "src/account/AccountScreens.tsx",
@@ -876,8 +876,8 @@
     },
     {
       "path": "src/notifications/appNotifications.ts",
-      "sha256": "bb76f27b7723705c4a0470a1de1af92c5e070c2f24d1961e49965781a8b12ef0",
-      "normalizedSha256": "bb76f27b7723705c4a0470a1de1af92c5e070c2f24d1961e49965781a8b12ef0"
+      "sha256": "b064a557e3b0a2121f9276c8ac404340b8cc44bbcd0852e3eec82f9769dcccf2",
+      "normalizedSha256": "b064a557e3b0a2121f9276c8ac404340b8cc44bbcd0852e3eec82f9769dcccf2"
     },
     {
       "path": "src/notifications/localCustomReminders.d.mts",
@@ -1151,8 +1151,8 @@
     },
     {
       "path": "src/settings/SettingsPanel.tsx",
-      "sha256": "e76788016c5a4ed01db94eee574cc0abed214da0a152f8447e5bf8558ca27347",
-      "normalizedSha256": "fb864ace5809cb71fa6de3c3597d3c1aeaa3839599ded8955a8606a83be266f2"
+      "sha256": "aac8ea5bc229286bc9a4852c1b36c78745f3fd4181b2ad08b29aee260c89c649",
+      "normalizedSha256": "cc61a1348b8897e679d6ddbb47bf84e173f70b601369798a99b83af3e3b59ee2"
     },
     {
       "path": "src/share/firestore-share-categories.rules.fragment",
@@ -21616,13 +21616,13 @@
     },
     {
       "path": "ios/App/App/Info.plist",
-      "sha256": "dbc4794ba967496ffe8288c5de005461a452a82c1117b083e8c4f19d4d7a01d0",
-      "normalizedSha256": "dbc4794ba967496ffe8288c5de005461a452a82c1117b083e8c4f19d4d7a01d0"
+      "sha256": "2c58b32b2a72e5976518cb3264d9ec01386fccc449b080c2d7b2feb2822c3aa7",
+      "normalizedSha256": "fb2c48c2376554717cfbf0eec6d67980ab08a8b990e75e92c4642c70981687b6"
     },
     {
       "path": "ios/App/App.xcodeproj/project.pbxproj",
-      "sha256": "0f9796a102834b1b07edca3bdcb92b845875ca4607b8999a5522726ffffd9fe6",
-      "normalizedSha256": "d33d3786170f14f9a63a90962abd81c48361d77b89f9942c0b7a0be96f40b1fa"
+      "sha256": "d07198d43b72b04031b1d58a0659dfe0d6331ae0bb579b124798b2eb450a2a19",
+      "normalizedSha256": "bddc972216544df35178276cb96c2544fc36ae80ae58401b37eb2e7b0e706e59"
     },
     {
       "path": "ios/App/CapApp-SPM/.gitignore",
@@ -21651,8 +21651,8 @@
     },
     {
       "path": "ios/App/FainanceWidgets/Info.plist",
-      "sha256": "c90adaede34f1896c4a4935d8ee045eb25d6263fee918f5558a4c5eed2c33d54",
-      "normalizedSha256": "c90adaede34f1896c4a4935d8ee045eb25d6263fee918f5558a4c5eed2c33d54"
+      "sha256": "a615dea072d17c5ebd3efdacd55c2badf2774ed4dfa0bd3795a28789c14cd26c",
+      "normalizedSha256": "17e8493a356d2f11828b5a690bc6808ff294d70e5d11dbdac2989a6801bdee54"
     },
     {
       "path": "ios/App/FainanceWidgets/CanonicalIcons.xcassets/Contents.json",
@@ -21796,8 +21796,8 @@
     },
     {
       "path": "index.html",
-      "sha256": "51d9c7938e89180fc23e52dfd9b3b58f3eee1161bed17c688607e51b0aad19d3",
-      "normalizedSha256": "c7f6fec55b35dd5ed4fc44cad6ce9d775aca2ffb8f65cb49d223755f0f8e549b"
+      "sha256": "837d3da0bf2f592bf9306b85baa0500db09cb5d2f4bd04402ae07f9350134960",
+      "normalizedSha256": "9fb7be10d097770ece7b4ddda24cbd8064f4d1ee77687c2bacbf3f5bb204f6e6"
     },
     {
       "path": "vite.config.ts",
@@ -21816,8 +21816,8 @@
     },
     {
       "path": "codemagic.yaml",
-      "sha256": "2ce104036a81e92340bac5c61d0015b9f5f6fe7a9edec69c24add748ba8e0960",
-      "normalizedSha256": "791a5da870442b86b84a397bb7e5677cf3a9bdf8ad875bb078d56c5795be24b2"
+      "sha256": "5df560d3c2a84ec9e53137847bb6d3630c8137d497d675c1fc286979a39532ad",
+      "normalizedSha256": "500da163b4b0fbb745b5066d25dbe4450473e280fba862c19a381d4a0fdcc17e"
     },
     {
       "path": "tools/verify-testflight-source.mjs",
@@ -21826,8 +21826,8 @@
     },
     {
       "path": "tools/verify-testflight-ipa.py",
-      "sha256": "990ee4418d56c8ca99f494f7be0a941672b7be0a488a4d3749166d79d8d122f6",
-      "normalizedSha256": "c114abd25713f9ee137ed544bbeb5d4156d0a86e31667866ffff9ceb88f7bc41"
+      "sha256": "f805cdb5f6e96c77b90ab5874484c79635560ba7b62cfbe40010124c4cff6a97",
+      "normalizedSha256": "ec10a8d485e77a01aafa9b11f6d582881d64f5bf8412a1b31fe1960d1aa851a3"
     },
     {
       "path": "tools/CHECK_FAINANCE_ICON_PARITY.cjs",
@@ -21918,6 +21918,11 @@
       "path": "public/chatgpt-review/20261117/backup-demo-v5.json",
       "sha256": "426b089dacf64f8998dc025cddd4db8d0a72e7f7448e4fef9a32fbd6b950fee1",
       "normalizedSha256": "ea6b9b0902eb1bcda4a45c954cd983a4e74b8d5ef903202221f800973f0aa7c9"
+    },
+    {
+      "path": "public/favicon.ico",
+      "sha256": "45d94b17a3d139eac8aeb600e40741b5a35485793d6c09d5dcc6fe5ff77b2a4c",
+      "normalizedSha256": "f7c1a0cc9686fb1eede2f548629f61ea6a7fcf17930fd7b09a5424d2b5270a4e"
     }
   ]
 }

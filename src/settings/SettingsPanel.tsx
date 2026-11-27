@@ -971,6 +971,15 @@ export function SettingsPanel() {
       .toLowerCase();
     if (!raw) return raw;
     var widgetExactAlias = {
+      "Spesa": { es: settingsPage === "sections" || settingsPage === "shopping_settings" ? "Compra" : undefined },
+      "Spesa / Liste": { es: "Compra / Listas" },
+      "Spesa / Aree": { es: "Compra / Áreas" },
+      "Spesa / Unità di misura": { es: "Compra / Unidades de medida" },
+      "Liste": { es: settingsPage === "shopping_settings" ? "Listas" : undefined },
+      "Liste, aree, unità di misura, fidelity card e prepagate": { es: "Listas, áreas, unidades de medida y tarjetas de fidelización y prepago" },
+      "Lista, modifica ed eliminazione delle liste spesa": { es: "Consulta, edita y elimina tus listas de la compra" },
+      "Lista, riordino e default delle aree spesa": { es: "Ordena las áreas de compra y elige la predeterminada" },
+      "Lista, riordino, modifica e unità predefinita": { es: "Edita y ordena las unidades de medida y elige la predeterminada" },
       "Icon Color": {
         it: "Colore icona",
         en: "Icon color",

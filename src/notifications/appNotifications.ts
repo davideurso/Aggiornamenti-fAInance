@@ -7,6 +7,7 @@ import {
   query,
   setDoc,
   where,
+  updateDoc,
 } from "firebase/firestore";
 import { fbDb } from "../firebase/client";
 import { isSystemCommunication } from "./notificationChannels.mjs";
@@ -33,6 +34,7 @@ export interface AppNotificationRecord {
   createdAt?: string;
   createdAtMs?: number;
   expiresAtMs?: number;
+  inboxDismissedAt?: string;
   read?: boolean;
   readAt?: string;
   status?: string;
@@ -62,8 +64,8 @@ export function watchAppNotifications(
     (snapshot) => {
       const now = Date.now();
       const items = snapshot.docs
-        .map((row) => ({ id: row.id, ...row.data() }) as AppNotificationRecord)
-        .filter((item) => item.status !== "deleted" && (!item.expiresAtMs || item.expiresAtMs > now))
+        .map((row) => ({ ...row.data(), id: row.id }) as AppNotificationRecord)
+        .filter((item) => !item.inboxDismissedAt && item.status !== "deleted" && (!item.expiresAtMs || item.expiresAtMs > now))
         .sort((a, b) => Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0));
       onChange(items);
     },
@@ -99,8 +101,17 @@ export async function deleteAppNotification(
   const id = String(notificationId || "").trim();
   if (!targetUid || !id) return;
 
-  const snapshot = await getDoc(doc(fbDb, "appNotifications", id));
-  if (snapshot.exists() && isSystemCommunication(snapshot.data().type)) {
+  const ref = doc(fbDb, "appNotifications", id);
+  const snapshot = await getDoc(ref);
+  if (!snapshot.exists()) return;
+  const notice = snapshot.data();
+  if (notice.targetUid !== targetUid) throw new Error("Recipient mismatch.");
+  if (notice.type === "share_project_deleted") {
+    // The separate decision about keeping personal expenses must remain actionable.
+    if (!notice.inboxDismissedAt) await updateDoc(ref, { inboxDismissedAt: new Date().toISOString() });
+    return;
+  }
+  if (isSystemCommunication(notice.type)) {
     throw new Error("System communications cannot be deleted.");
   }
   // The authenticated callable keeps a tombstone for dismissible personal notices.

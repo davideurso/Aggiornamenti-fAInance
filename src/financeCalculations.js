@@ -13,9 +13,13 @@ export function parseMoneyValue(value){
   var n=parseFloat(raw);
   return isFinite(n)?n:0;
 }
+function movementAmount(item){
+  const value = Number(item.amount);
+  return Number.isFinite(value) ? value : parseMoneyValue(item.amount);
+}
 export function itemAmountForMonth(item, monthKey, settings){
   if(!item||!monthKey)return 0;
-  var amount=Number(item.amount||0);
+  var amount=movementAmount(item);
   var scale=10**(Number.isInteger(item.minorUnitDigits)&&item.minorUnitDigits>=0&&item.minorUnitDigits<=4?item.minorUnitDigits:2);
   if(!item.rateizzato)return dateInPeriod(item.date,monthKey,settings)?amount:0;
   var rate=Number(item.rate||0);
@@ -60,7 +64,7 @@ export function totalForMonth(items, monthKey, mode, settings){
   var list=Array.isArray(items)?items:[];
   if(mode==="reale"){
     return list.filter(function(item){return dateInPeriod(item&&item.date,monthKey,settings);})
-      .reduce(function(sum,item){return sum+Number(item.amount||0);},0);
+      .reduce(function(sum,item){return sum+movementAmount(item);},0);
   }
   return list.reduce(function(sum,item){return sum+itemAmountForMonth(item,monthKey,settings);},0);
 }

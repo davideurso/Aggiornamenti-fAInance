@@ -19,7 +19,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.2.3</string>
+	<string>2.2.4</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -93,6 +93,6 @@
 	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
 	<false/>
 	<key>CFBundleVersion</key>
-	<string>275</string>
+	<string>276</string>
 </dict>
 </plist>
