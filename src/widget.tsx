@@ -1,3 +1,4 @@
+import { incomeTypeName, incomeTypeTitle } from "./i18n/movementShoppingLabels";
 import {recurringMissingFields} from './finance/recurringValidation.js';
 import {validInstallmentCount, validateInstallmentInput} from './finance/installmentInput.js';
 import {recurringValidationMessage} from './i18n/recurringValidation.js';
@@ -4004,19 +4005,10 @@ export function MovementExpenseSelectors({value:f,setValue:setF,categories,metho
   </MovementSelectorGrid>;
 }
 export function MovementIncomeSelectors({value:f,setValue:setF,incomeTypes,methods,fieldId}:any) {
-  const ctx:any=useApp(),t=TRANSLATIONS[ctx.lang||"it"]||TRANSLATIONS.it;
-  const spanish = String(ctx.lang || "").split("-")[0] === "es";
-  const labels: Record<string, string> = {
-    salario: "Sueldo", bonus: "Bonificación", dividendi: "Dividendos", interessi: "Intereses",
-    regali: "Regalos", rimborsi: "Reembolsos", extra: "Ingresos extra", altro_inc: "Otros",
-  };
-  const options = spanish ? incomeTypes.map(item => {
-    const original = INCOME_TYPES.find(base => base.id === item.id);
-    return original && original.name === item.name && labels[item.id]
-      ? { ...item, name: labels[item.id] } : item;
-  }) : incomeTypes;
+  const ctx = useApp();
+  const options = incomeTypes.map(item => ({ ...item, name: incomeTypeName(item, ctx.lang) }));
   return <MovementSelectorGrid>
-    <MovementSelectionCard labelText={spanish ? "Tipo de ingreso" : t.incomeType} fieldId={fieldId+"-income-type"} selectionKey="itype" value={f.itype} options={options} onChange={v=>setF(p=>({...p,itype:v,_ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=="type")}))}/>
+    <MovementSelectionCard labelText={incomeTypeTitle(ctx.lang)} fieldId={fieldId+"-income-type"} selectionKey="itype" value={f.itype} options={options} onChange={v=>setF(p=>({...p,itype:v,_ruleDefaultFields:(p._ruleDefaultFields||[]).filter(k=>k!=="type")}))}/>
     <MovementSelectionCard labelText={incomeReceiptText(ctx.lang,"label")} fieldId={fieldId+"-income-receipt"} selectionKey="receivedInMethodId" value={f.receivedInMethodId||""} options={methods} emptyLabel={incomeReceiptText(ctx.lang,"unspecified")} missingLabel={f.receivedInMethodName||incomeReceiptText(ctx.lang,"unavailable")} onChange={v=>setF(p=>({...p,...incomeReceiptFields({...p,receivedInMethodId:v},methods)}))}/>
   </MovementSelectorGrid>;
 }
@@ -14183,7 +14175,7 @@ export function DeleteDataPanel() {
                       style={{ accentColor: "#1D9E75", width: 16, height: 16 }}
                     />
                     <span style={{ fontSize: 16 }}>{ti.icon}</span>
-                    <span style={{ fontSize: 14, color: tc }}>{ti.name}</span>
+                    <span style={{ fontSize: 14, color: tc }}>{incomeTypeName(ti, lang)}</span>
                     <span
                       style={{ marginLeft: "auto", fontSize: 12, color: sc }}
                     >

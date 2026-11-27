@@ -1,13 +1,13 @@
 {
   "version": "2.2.4",
-  "build": 276,
-  "acceptedAndroid": 2026112701,
-  "candidateAndroid": 2026112701,
+  "build": 277,
+  "acceptedAndroid": 2026112702,
+  "candidateAndroid": 2026112702,
   "files": [
     {
       "path": "src/app.tsx",
-      "sha256": "1d212cffbbaabf1cab95f398a4b49de5de35b4e7d8cfc7803c83b96cb693e0a0",
-      "normalizedSha256": "9045d677d03cfa29cb8873764092751c9568a32214d3104bc9e0671975fc6a30"
+      "sha256": "b83932c7a7e82e06aef0b8ef5b44f7051b62af0973e065dfd8ab80e72d1a0924",
+      "normalizedSha256": "b83932c7a7e82e06aef0b8ef5b44f7051b62af0973e065dfd8ab80e72d1a0924"
     },
     {
       "path": "src/assistantLogic.ts",
@@ -16,8 +16,8 @@
     },
     {
       "path": "src/core.tsx",
-      "sha256": "5c1159a061bc640951b9833be7bdfebb0cb82a41ad415d193123be7c699e37cc",
-      "normalizedSha256": "9f4a9ad644c8e1e858b338e9d4a2c0b217372ffbc79d306b38a2e69aea28cc06"
+      "sha256": "4bc065e34cbdc45a2486d2c19417dcb7b6fc615adc0542967a9e68fe4581896a",
+      "normalizedSha256": "4bc065e34cbdc45a2486d2c19417dcb7b6fc615adc0542967a9e68fe4581896a"
     },
     {
       "path": "src/financeCalculations.d.ts",
@@ -36,13 +36,13 @@
     },
     {
       "path": "src/sezioni.tsx",
-      "sha256": "311df18981ef8fdde8411d70f1a1a8bf3ca70a08e61356fcc0f8797738318f63",
-      "normalizedSha256": "72f454a03704c9787a3ce25abf140920ddf522287b6d5a08858929de00ec4080"
+      "sha256": "34266a14fe2062ba0a3f68c8dade2bc5871c0130b93f762ceb0c487fd1711ea5",
+      "normalizedSha256": "34266a14fe2062ba0a3f68c8dade2bc5871c0130b93f762ceb0c487fd1711ea5"
     },
     {
       "path": "src/statistiche.tsx",
-      "sha256": "12ee00a2687a3726ed9563d31a25698ef8d69066e39ed523e16695b5e3894d4d",
-      "normalizedSha256": "12ee00a2687a3726ed9563d31a25698ef8d69066e39ed523e16695b5e3894d4d"
+      "sha256": "d77a4016597273678bf022b98473b6fb850957140399907de5e029f30e4b6b5b",
+      "normalizedSha256": "d77a4016597273678bf022b98473b6fb850957140399907de5e029f30e4b6b5b"
     },
     {
       "path": "src/traduzioni.tsx",
@@ -61,8 +61,8 @@
     },
     {
       "path": "src/widget.tsx",
-      "sha256": "6a27b5c4c4ba250a63c7fa4fd5326886681894ddc8247d38e9d4d1a9656fd37b",
-      "normalizedSha256": "906fcd613ca302d002f2f0f4897a032ec5a2c138712b3d9dd1d16aea77c16039"
+      "sha256": "914ed940d5a023f78b5004ee8e05f1c65326c76905c0e0cf5065cb5f9b28dc36",
+      "normalizedSha256": "4d58e36d421ed70ed4a3965086a7a88688d968a2d91b5784778ca38555f16540"
     },
     {
       "path": "src/account/AccountScreens.tsx",
@@ -1151,8 +1151,8 @@
     },
     {
       "path": "src/settings/SettingsPanel.tsx",
-      "sha256": "aac8ea5bc229286bc9a4852c1b36c78745f3fd4181b2ad08b29aee260c89c649",
-      "normalizedSha256": "cc61a1348b8897e679d6ddbb47bf84e173f70b601369798a99b83af3e3b59ee2"
+      "sha256": "94b466bc06bc3cb5b5a93ba33a8e64fcb9f710c89adb8f845585e226d9bd353c",
+      "normalizedSha256": "7189051e37fec83209be2b6653861a4804b08ebc83ed3ef8fa78ea0f85493b99"
     },
     {
       "path": "src/share/firestore-share-categories.rules.fragment",
@@ -21616,13 +21616,13 @@
     },
     {
       "path": "ios/App/App/Info.plist",
-      "sha256": "2c58b32b2a72e5976518cb3264d9ec01386fccc449b080c2d7b2feb2822c3aa7",
-      "normalizedSha256": "fb2c48c2376554717cfbf0eec6d67980ab08a8b990e75e92c4642c70981687b6"
+      "sha256": "787ee24b0a2fac5c76efd37f1eb2058c0e402a377c87fcd78e2e36fd85f466f7",
+      "normalizedSha256": "831b74fb470752df4c1fe7d38d451edd9f2bca0c9f1778a8b41bc0afca35036a"
     },
     {
       "path": "ios/App/App.xcodeproj/project.pbxproj",
-      "sha256": "d07198d43b72b04031b1d58a0659dfe0d6331ae0bb579b124798b2eb450a2a19",
-      "normalizedSha256": "bddc972216544df35178276cb96c2544fc36ae80ae58401b37eb2e7b0e706e59"
+      "sha256": "0061b69d08a45d7f25cf2f05b0af6fbd63367dbdb1d0ab1411e18913beff1d74",
+      "normalizedSha256": "b6dc154f3ac01c756e2872aaad8401161f86704484e08c33cd863b10fea10ab1"
     },
     {
       "path": "ios/App/CapApp-SPM/.gitignore",
@@ -21651,8 +21651,8 @@
     },
     {
       "path": "ios/App/FainanceWidgets/Info.plist",
-      "sha256": "a615dea072d17c5ebd3efdacd55c2badf2774ed4dfa0bd3795a28789c14cd26c",
-      "normalizedSha256": "17e8493a356d2f11828b5a690bc6808ff294d70e5d11dbdac2989a6801bdee54"
+      "sha256": "8c410fe95e34e9fa0cf5e5f6e26e1ccb9d02fb374913929d91e870e503316352",
+      "normalizedSha256": "568a905bc7e10e25d67f7ce85cb038f5eecd92b7ff336a18b6879c911f0a106a"
     },
     {
       "path": "ios/App/FainanceWidgets/CanonicalIcons.xcassets/Contents.json",
@@ -21816,8 +21816,8 @@
     },
     {
       "path": "codemagic.yaml",
-      "sha256": "5df560d3c2a84ec9e53137847bb6d3630c8137d497d675c1fc286979a39532ad",
-      "normalizedSha256": "500da163b4b0fbb745b5066d25dbe4450473e280fba862c19a381d4a0fdcc17e"
+      "sha256": "8e96653844688ce8fe3a7b9985829dd3227020f307f6701e4bf4187f3f5aa920",
+      "normalizedSha256": "fac74781b74664b6071300a233823ef57d7031f909c53745b0f5a9b3b11c1556"
     },
     {
       "path": "tools/verify-testflight-source.mjs",
@@ -21826,8 +21826,8 @@
     },
     {
       "path": "tools/verify-testflight-ipa.py",
-      "sha256": "f805cdb5f6e96c77b90ab5874484c79635560ba7b62cfbe40010124c4cff6a97",
-      "normalizedSha256": "ec10a8d485e77a01aafa9b11f6d582881d64f5bf8412a1b31fe1960d1aa851a3"
+      "sha256": "d85e774838bdbae8f2b2827a604386e3d609c82c3b7b58b4203a4a405c6d25df",
+      "normalizedSha256": "7c2c17147b0ad0212d36f7ea8034e654c0b9061086e2a60078ccba60e11203db"
     },
     {
       "path": "tools/CHECK_FAINANCE_ICON_PARITY.cjs",
@@ -21923,6 +21923,16 @@
       "path": "public/favicon.ico",
       "sha256": "45d94b17a3d139eac8aeb600e40741b5a35485793d6c09d5dcc6fe5ff77b2a4c",
       "normalizedSha256": "f7c1a0cc9686fb1eede2f548629f61ea6a7fcf17930fd7b09a5424d2b5270a4e"
+    },
+    {
+      "path": "src/i18n/movementShoppingLabels.ts",
+      "sha256": "609d6d86d5b7e8ff92d7a2877943fa8bf50a7e91d68f0c762db94df059028c98",
+      "normalizedSha256": "609d6d86d5b7e8ff92d7a2877943fa8bf50a7e91d68f0c762db94df059028c98"
+    },
+    {
+      "path": "tests/languageCoverage.test.mjs",
+      "sha256": "fa6c8e6d1692ebac2d60ed357bc24c66acaa3e56eb330711f7ae5caccb6eaa5c",
+      "normalizedSha256": "3c9972d061257b6c665d4ffd79da9918aa21f0d5980df17b8f15c2c5d64d3808"
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { incomeTypeName } from "./i18n/movementShoppingLabels";
 import { readableDarkText } from './ui/textContrast';
 // ═══════════════════════════════════════════════════════════════════════════════
 // STATISTICHE.TSX — StatsPanel
@@ -196,7 +197,7 @@ export function StatsPanel(){
     rows.push({value:g.total,color:g.color,label:g.name||L("Altro")});
     return rows;
   },[]);
-  var incByType=incomeTypes.map(function(it){return{icon:it&&it.icon?it.icon:"💰",label:it&&it.name?it.name:L("Altro"),labelNode:plainOrCatalogLabel(it, "💰", it&&it.name?it.name:L("Altro")),value:(effectiveStatsView==="rateizzato"?countedIncomes:fInc).filter(function(i){return i.type===it.id;}).reduce(function(a,i){return a+(effectiveStatsView==="rateizzato"?rateInPeriod(i):(Number(i.amount)||0));},0),color:it&&it.color?it.color:incomeColor};}).filter(function(x){return x.value>0;});
+  var incByType=incomeTypes.map(function(it){return{icon:it&&it.icon?it.icon:"💰",label:incomeTypeName(it, _ctx.lang)||L("Altro"),labelNode:plainOrCatalogLabel(it, "💰", incomeTypeName(it, _ctx.lang)||L("Altro")),value:(effectiveStatsView==="rateizzato"?countedIncomes:fInc).filter(function(i){return i.type===it.id;}).reduce(function(a,i){return a+(effectiveStatsView==="rateizzato"?rateInPeriod(i):(Number(i.amount)||0));},0),color:it&&it.color?it.color:incomeColor};}).filter(function(x){return x.value>0;});
   var titleLabel=effectiveStatMode==="last12"?L("Ultimi 12 mesi"):(effectiveStatMode==="year"?statYear:effectiveStatMode==="month"?MONTHS_FULL[parseInt(statMonth.split("-")[1])-1]+" "+statMonth.split("-")[0]:rangeFrom+" - "+rangeTo);
   var statsMonthlyTotals=useMemo(function(){return periodMonths.map(function(mk){var exp=effectiveStatsView==="rateizzato"?countedExpenses.reduce(function(a,e){return a+rateMonth(e,mk);},0):countedExpenses.filter(function(e){return e.date&&accountingPeriod.matches(e.date, mk);}).reduce(function(a,e){return a+(parseFloat(e.amount)||0);},0);var inc=effectiveStatsView==="rateizzato"?countedIncomes.reduce(function(a,i){return a+rateMonth(i,mk);},0):countedIncomes.filter(function(i){return i.date&&accountingPeriod.matches(i.date, mk);}).reduce(function(a,i){return a+(parseFloat(i.amount)||0);},0);return{label:monthKeyLabel(mk),exp:exp,inc:inc,value:inc-exp};});},[periodMonths.join("|"),countedExpenses,countedIncomes,effectiveStatsView,effectiveStatMode, accountingPeriod]);
 

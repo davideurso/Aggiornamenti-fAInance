@@ -1,3 +1,4 @@
+import { incomeTypeName } from "./i18n/movementShoppingLabels";
 import {withAiRequestIdentity} from "./analytics/aiRequestIdentity";
 import { patrimonyTransferHistory, revisePatrimonyTransfer } from './finance/patrimonyTransfers.js';
 import { cashFlowText, transferText } from './i18n/cashFlowTranslations';
@@ -18200,7 +18201,7 @@ function QuickVoiceEntryModal() {
                       {(incomeTypes || []).map(function (it) {
                         return (
                           <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
-                            {it.name}
+                            {incomeTypeName(it, _c.lang)}
                           </option>
                         );
                       })}

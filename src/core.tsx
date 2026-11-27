@@ -51,16 +51,16 @@ export const CURRENCIES=[
 export const DATE_FORMATS=[{id:"dmy",label:"GG/MM/AAAA",example:"31/12/2025"},{id:"mdy",label:"MM/GG/AAAA",example:"12/31/2025"},{id:"ymd",label:"AAAA-MM-GG",example:"2025-12-31"}];
 export const IMPORT_DATE_FORMATS=[{id:"dmy",label:"GG/MM/AAAA (es. 31/12/2025)"},{id:"mdy",label:"MM/GG/AAAA (es. 12/31/2025)"},{id:"ymd",label:"AAAA-MM-GG (es. 2025-12-31)"},{id:"dmyShort",label:"GG/MM/AA (es. 31/12/25)"},{id:"auto",label:"Automatico"}];
 export const LANGUAGES=[
-  {code:"it",label:"Italiano"},
-  {code:"en",label:"English"},
-  {code:"es",label:"Español"},
-  {code:"fr",label:"Français"},
-  {code:"de",label:"Deutsch"},
-  {code:"pt",label:"Português"},
-  {code:"pl",label:"Polski"},
-  {code:"nl",label:"Nederlands"},
-  {code:"ro",label:"Română"},
-  {code:"el",label:"Ελληνικά"}
+  {code:"it",icon:"🇮🇹",label:"Italiano"},
+  {code:"en",icon:"🇬🇧",label:"English"},
+  {code:"es",icon:"🇪🇸",label:"Español"},
+  {code:"fr",icon:"🇫🇷",label:"Français"},
+  {code:"de",icon:"🇩🇪",label:"Deutsch"},
+  {code:"pt",icon:"🇵🇹",label:"Português"},
+  {code:"pl",icon:"🇵🇱",label:"Polski"},
+  {code:"nl",icon:"🇳🇱",label:"Nederlands"},
+  {code:"ro",icon:"🇷🇴",label:"Română"},
+  {code:"el",icon:"🇬🇷",label:"Ελληνικά"}
 ];
 
 export const PLAN_IDS=["free","base","premium"];

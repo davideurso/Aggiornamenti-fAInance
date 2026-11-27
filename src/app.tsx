@@ -1,3 +1,4 @@
+import { incomeTypeName } from "./i18n/movementShoppingLabels";
 import {chatgptEnvironmentEnabled,chatgptProjectEnabled} from './integrations/chatgptEnvironment.js';
 import {purchaseWithStoreVerification,restoreWithStoreVerification,storeSubscriptionNotice} from './integrations/storeSubscriptions.js';
 import { VerifyEmailPending } from './auth/VerifyEmailPending';
@@ -18851,7 +18852,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     }
     function setupOptionLabel(item: any, kind: any) {
       var icon = setupOptionIcon(item, kind);
-      var name = cleanSetupOptionName(SL(item && item.name));
+      var name = cleanSetupOptionName(kind === "income" ? incomeTypeName(item, setupLang) : SL(item && item.name));
       return (icon ? icon + " " : "") + name;
     }
     function dateFormatChoice(id: any, example: any) {
@@ -18912,7 +18913,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
     function pickerOptions() {
       if (setupPicker === "language")
         return LANGUAGES.map(function (x) {
-          return { value: String(x.code), label: String(x.label) };
+          return { value: String(x.code), label: x.icon + " " + x.label };
         });
       if (setupPicker === "currency")
         return CURRENCIES.map(function (x) {
@@ -18970,7 +18971,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
         var l = LANGUAGES.find(function (x) {
           return String(x.code) === String(value);
         });
-        return l ? l.label : String(value);
+        return l ? l.icon + " " + l.label : String(value);
       }
       if (id === "currency") {
         var c = CURRENCIES.find(function (x) {
@@ -20318,7 +20319,7 @@ function App({ currentUser, onLogout, fbUser, onProfileUpdate }) {
               >
                 {LANGUAGES.map(function (x) {
                   return (
-                    <option key={x.code} value={x.code} data-fainance-icon-ref={(x as any).icon || "\u{1F4C1}"}>
+                    <option key={x.code} value={x.code} data-fainance-icon-ref={x.icon}>
                       {x.label}
                     </option>
                   );

@@ -1,3 +1,4 @@
+import { incomeTypeName, shoppingSettingsText } from "../i18n/movementShoppingLabels";
 import { cashFlowText, transferText } from '../i18n/cashFlowTranslations';
 import {catalogRemapText} from '../i18n/catalogRemapTranslations';
 import {SettingsSegmented, secondarySettingsStyle, settingsActionStyle} from '../ui/SettingsControls';
@@ -971,15 +972,6 @@ export function SettingsPanel() {
       .toLowerCase();
     if (!raw) return raw;
     var widgetExactAlias = {
-      "Spesa": { es: settingsPage === "sections" || settingsPage === "shopping_settings" ? "Compra" : undefined },
-      "Spesa / Liste": { es: "Compra / Listas" },
-      "Spesa / Aree": { es: "Compra / Áreas" },
-      "Spesa / Unità di misura": { es: "Compra / Unidades de medida" },
-      "Liste": { es: settingsPage === "shopping_settings" ? "Listas" : undefined },
-      "Liste, aree, unità di misura, fidelity card e prepagate": { es: "Listas, áreas, unidades de medida y tarjetas de fidelización y prepago" },
-      "Lista, modifica ed eliminazione delle liste spesa": { es: "Consulta, edita y elimina tus listas de la compra" },
-      "Lista, riordino e default delle aree spesa": { es: "Ordena las áreas de compra y elige la predeterminada" },
-      "Lista, riordino, modifica e unità predefinita": { es: "Edita y ordena las unidades de medida y elige la predeterminada" },
       "Icon Color": {
         it: "Colore icona",
         en: "Icon color",
@@ -2462,7 +2454,7 @@ export function SettingsPanel() {
     return translateUiRuntimeText(raw);
   }
   function L(s) {
-    return generalPeriodTranslation(s,lang) ?? translateWidgetSettingsText(s);
+    return shoppingSettingsText(s, lang, settingsPage) ?? generalPeriodTranslation(s,lang) ?? translateWidgetSettingsText(s);
   }
 
   function useWidgetDraftState(key, initialValue) {
@@ -5831,7 +5823,7 @@ export function SettingsPanel() {
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {translateUiRuntimeText(it.name)}
+                      {incomeTypeName(it, lang)}
                     </span>
                     {it.archived && (
                       <span
@@ -5867,7 +5859,7 @@ export function SettingsPanel() {
                 .map(function (it) {
                   return (
                     <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
-                      {it.icon} {translateUiRuntimeText(it.name)}
+                      {it.icon} {incomeTypeName(it, lang)}
                     </option>
                   );
                 })}
@@ -5901,7 +5893,7 @@ export function SettingsPanel() {
                     .map(function (it) {
                       return (
                         <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
-                          {it.icon || "💰"} {translateUiRuntimeText(it.name)}
+                          {it.icon || "💰"} {incomeTypeName(it, lang)}
                         </option>
                       );
                     })}
@@ -5935,7 +5927,7 @@ export function SettingsPanel() {
                     .map(function (it) {
                       return (
                         <option key={it.id} value={it.id} data-fainance-icon-ref={(it as any).icon || "\u{1F4C1}"}>
-                          {it.icon || "💰"} {translateUiRuntimeText(it.name)}
+                          {it.icon || "💰"} {incomeTypeName(it, lang)}
                         </option>
                       );
                     })}
@@ -6486,7 +6478,7 @@ export function SettingsPanel() {
                     >
                       {LANGUAGES.map(function (l) {
                         return (
-                          <option key={l.code} value={l.code} data-fainance-icon-ref={(l as any).icon || "\u{1F4C1}"}>
+                          <option key={l.code} value={l.code} data-fainance-icon-ref={l.icon}>
                             {l.label}
                           </option>
                         );
@@ -8733,7 +8725,7 @@ export function SettingsPanel() {
                     }}
                   />
                   <span style={{ flex: 1, fontSize: 14, color: textC }}>
-                    {translateUiRuntimeText(it.name)}
+                    {incomeTypeName(it, lang)}
                   </span>
                 </div>
               );
